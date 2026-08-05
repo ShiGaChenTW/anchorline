@@ -1,13 +1,15 @@
 {
-  "name": "specforge",
-  "version": "0.9.0",
+  "name": "pm-spec-scvb",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "track": "bun run src/cli/track-tui.ts",
+    "track:once": "bun run src/cli/track-tui.ts --once"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
