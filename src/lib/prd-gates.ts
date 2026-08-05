@@ -1,0 +1,183 @@
+/**
+ * PRD 結構 gate（程式判定，非 LLM）
+ * 概念來自 S.CodingFlow SpecGate：Non-Goals ≥ 3、可量測 Outcomes 等。
+ */
+import type { AppState } from "../data/types";
+
+export type GateLevel = "pass" | "warn" | "block";
+
+export type GateFinding = {
+  id: string;
+  level: GateLevel;
+  label: string;
+  detail: string;
+};
+
+export type GateReport = {
+  findings: GateFinding[];
+  blocks: number;
+  warns: number;
+  /** 可送審：無 block */
+  canSubmit: boolean;
+  /** 可核准：無 block（可另加更嚴規則） */
+  canApprove: boolean;
+  score: number;
+};
+
+function bullets(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => /^[-*•]/.test(l) || /^\d+[\.\)]/.test(l))
+    .map((l) => l.replace(/^[-*•]\s*/, "").replace(/^\d+[\.\)]\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function fieldJoin(state: AppState, sectionId: string): string {
+  const vals = state.sectionValues[sectionId] ?? {};
+  return Object.values(vals).join("\n");
+}
+
+/** 量測/數字啟發式（對應 vague-outcome WARN） */
+const METRIC_RE =
+  /\d+\s*%|\d+\s*ms|\d+\s*天|≥|<=|>=|p95|p99|Q[1-4]|覆蓋率|完成率|歸零|少於|大於|至少/;
+
+export function evaluatePrdGates(state: AppState): GateReport {
+  const findings: GateFinding[] = [];
+  const { sections, sectionValues } = state;
+
+  // Summary three fields
+  const summary = sectionValues["summary"] ?? {};
+  const missingSummary = ["what", "who", "why"].filter((k) => !(summary[k] ?? "").trim());
+  if (missingSummary.length) {
+    findings.push({
+      id: "summary-incomplete",
+      level: "block",
+      label: "三行摘要不完整",
+      detail: `缺少欄位：${missingSummary.join(", ")}（做什麼／給誰／為何現在）`,
+    });
+  } else {
+    findings.push({
+      id: "summary-ok",
+      level: "pass",
+      label: "三行摘要完整",
+      detail: "做什麼／給誰／為何現在皆有內容",
+    });
+  }
+
+  // Non-Goals ≥ 3（SpecGate no-non-goals）
+  const nongoalsText = (sectionValues["goals"]?.nongoals ?? "").trim();
+  const ngBullets = bullets(nongoalsText);
+  const ngCount = ngBullets.length || (nongoalsText ? nongoalsText.split(/[;；\n]/).filter((x) => x.trim().length > 4).length : 0);
+  if (ngCount < 3) {
+    findings.push({
+      id: "non-goals-min",
+      level: "block",
+      label: "Non-Goals 不足 3 條",
+      detail: `目前約 ${ngCount} 條。至少 3 條「刻意不做」才能擋 scope 膨脹（S.CodingFlow 契約）。`,
+    });
+  } else {
+    findings.push({
+      id: "non-goals-ok",
+      level: "pass",
+      label: "Non-Goals 達標",
+      detail: `已有 ${ngCount} 條非目標`,
+    });
+  }
+
+  // Goals present
+  const goalsText = (sectionValues["goals"]?.goals ?? "").trim();
+  if (goalsText.length < 20) {
+    findings.push({
+      id: "goals-thin",
+      level: "block",
+      label: "目標過薄",
+      detail: "目標欄需可驗收描述（建議列點）",
+    });
+  } else {
+    findings.push({
+      id: "goals-ok",
+      level: "pass",
+      label: "目標有內容",
+      detail: "目標欄已填寫",
+    });
+  }
+
+  // Metrics / Desired Outcomes 可量測
+  const metrics = fieldJoin(state, "metrics");
+  if (metrics.trim().length < 30) {
+    findings.push({
+      id: "metrics-missing",
+      level: "block",
+      label: "成功指標空白",
+      detail: "需填寫指標／目標／量測（Desired Outcomes）",
+    });
+  } else if (!METRIC_RE.test(metrics)) {
+    findings.push({
+      id: "metrics-vague",
+      level: "warn",
+      label: "成功指標可能不可量測",
+      detail: "建議加入數字、%、期限或 p95 等可驗證門檻",
+    });
+  } else {
+    findings.push({
+      id: "metrics-ok",
+      level: "pass",
+      label: "成功指標含可量測訊號",
+      detail: "偵測到數字或量測用語",
+    });
+  }
+
+  // Problem not empty
+  const problem = (sectionValues["problem"]?.problem ?? "").trim();
+  if (problem.length < 40) {
+    findings.push({
+      id: "problem-thin",
+      level: "warn",
+      label: "問題陳述偏短",
+      detail: "建議補足痛點、對象與佐證",
+    });
+  }
+
+  // Open questions without deadline
+  const oq = (sectionValues["open"]?.oq ?? "").trim();
+  if (oq && !/\d{1,2}\/\d{1,2}|Q\d|週|前|deadline|期限/.test(oq)) {
+    findings.push({
+      id: "open-no-deadline",
+      level: "warn",
+      label: "開放問題缺少期限",
+      detail: "建議每題有負責人與決策期限",
+    });
+  }
+
+  // Section status empty count
+  const emptySecs = sections.filter((s) => s.status === "empty").length;
+  if (emptySecs >= 3) {
+    findings.push({
+      id: "many-empty",
+      level: "warn",
+      label: "多個章節仍空白",
+      detail: `${emptySecs} 個章節標記為空白`,
+    });
+  }
+
+  const blocks = findings.filter((f) => f.level === "block").length;
+  const warns = findings.filter((f) => f.level === "warn").length;
+  const passes = findings.filter((f) => f.level === "pass").length;
+  const score = Math.max(0, Math.min(100, Math.round((passes / Math.max(1, findings.length)) * 100 - blocks * 15 - warns * 5)));
+
+  return {
+    findings,
+    blocks,
+    warns,
+    canSubmit: blocks === 0,
+    canApprove: blocks === 0,
+    score,
+  };
+}
+
+export function gateSummaryLine(report: GateReport): string {
+  if (report.blocks) return `結構檢查：${report.blocks} 項阻擋 · ${report.warns} 警告`;
+  if (report.warns) return `結構檢查通過（${report.warns} 則建議）`;
+  return "結構檢查全部通過";
+}

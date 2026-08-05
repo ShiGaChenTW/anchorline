@@ -4,6 +4,7 @@ import type { Section } from "../data/types";
 import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
 import { exportMarkdownFile } from "../lib/export";
 import { canEditContent } from "../lib/permissions";
+import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
@@ -153,6 +154,7 @@ function renderCoach() {
   const passN = checks.filter((c) => c.pass).length;
   const settings = store.get().settings;
 
+  const gate = evaluatePrdGates(store.get());
   const coach = document.getElementById("coach-body");
   if (!coach) return;
   coach.innerHTML = `
@@ -168,6 +170,31 @@ function renderCoach() {
           <div class="mono" style="margin-top:4px">${passN}/${checks.length} 檢查通過</div>
         </div>
       </div>
+    </div>
+
+    <div class="card" data-od-id="prd-gate-card">
+      <h4>結構 gate（SCVB）</h4>
+      <div class="mono" style="font-size:11px;color:var(--muted);margin-bottom:8px">${escapeHtml(gateSummaryLine(gate))} · score ${gate.score}</div>
+      <div class="check-list">
+        ${gate.findings
+          .map((f) => {
+            const icon = f.level === "pass" ? "✔" : f.level === "warn" ? "!" : "✗";
+            const color =
+              f.level === "pass" ? "var(--success)" : f.level === "warn" ? "var(--warn)" : "var(--danger)";
+            return `<div style="display:flex;gap:8px;margin-bottom:6px;font-size:12px">
+              <span style="color:${color};width:14px">${icon}</span>
+              <span><strong style="color:var(--fg)">${escapeHtml(f.label)}</strong>
+              <span style="color:var(--muted)"> — ${escapeHtml(f.detail)}</span></span>
+            </div>`;
+          })
+          .join("")}
+      </div>
+      ${
+        !gate.canSubmit
+          ? `<div style="margin-top:8px;font-size:12px;color:var(--danger)">有 BLOCK 項時無法送審</div>`
+          : `<div style="margin-top:8px;font-size:12px;color:var(--success)">可送審</div>`
+      }
+      <div style="margin-top:8px"><a href="tracking.html" style="color:var(--accent);font-size:12px">開啟計劃追蹤 →</a></div>
     </div>
 
     <!-- AI Coach Tools -->
@@ -368,8 +395,14 @@ document.getElementById("btn-submit")?.addEventListener("click", () => {
     toast("目前身分無法送出編輯成果");
     return;
   }
+  const gate = evaluatePrdGates(store.get());
+  if (!gate.canSubmit) {
+    toast(gateSummaryLine(gate) + " — 請先補齊 BLOCK 項");
+    renderCoach();
+    return;
+  }
   store.submitForReview();
-  toast("已送出審閱佇列");
+  toast("結構檢查通過，已送出審閱佇列");
   window.setTimeout(() => {
     location.href = "review.html";
   }, 600);

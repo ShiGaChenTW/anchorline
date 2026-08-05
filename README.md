@@ -1,67 +1,51 @@
-# SpecForge · PRD 引導工作台
+# PM-SPEC+SCVB
 
-多頁桌面原型（Open Design handoff → production）。
+**SpecForge PRD 引導工作台** + **S.CodingFlow（SCVB）** 結構 gate 與計劃追蹤整合版。
 
-## 架構
+- 來源基底：SpecForge（`Pm-Spec-Final`）
+- 整合參考：S.CodingFlow / scvb-dashboard / SpecGate 方法論
+- **原 SpecForge repo 保持獨立、未改動**
+
+## 與純 SpecForge 的差異
+
+| 能力 | 說明 |
+|------|------|
+| **結構 gate** | Non-Goals ≥ 3、摘要完整、成功指標等（程式判定）→ 擋送審／核准 |
+| **計劃追蹤頁** | `tracking.html`：解析 `plans/*.md` checkbox、完成度、下一步（SCVB tracking 概念） |
+| **L1–L6** | 追蹤頁側欄粗推導流程層 |
+
+## 畫面
 
 | 畫面 | 角色 |
 |------|------|
-| `index.html` | Launcher / 總覽 |
+| `login.html` | 登入（Scott + Agents，密碼 `demo`） |
 | `projects.html` | 專案列表 |
-| `editor.html` | 引導式編輯工作台 |
-| `templates.html` | 章節範本庫 |
-| `review.html` | 審閱簽核 |
-
-- **Tokens / 主題**：`shared.css`（Warp · kami · GitHub · Claude）
-- **邏輯**：`src/` TypeScript（Vite MPA）
-- **狀態**：`localStorage` key `specforge:state:v1` + `specforge:theme`
-
-## 角色與登入（本機原型）
-
-| 角色 | 權限 |
-|------|------|
-| **管理員** | 全部（含人員管理） |
-| **核准人員** | 讀取、簽核、匯出；**不可**編輯內文 |
-| **編輯人員** | 撰寫／維護／編輯／讀取／移除；可覆核**他人**檔案，不可覆核自己的；不可正式簽核 |
-
-- 人員可任一種角色；**Agent 僅可為編輯或核准**
-- 同一 **Agent 族系**撰寫的文件，不可再由同族系 Agent 核准
-- 示範密碼一律：`demo`（管理員 `系統管理員`、編輯 `林可晴`、核准 `周承翰`、Claude 編輯／核准、GPT 核准…）
-- App 啟動 → `login.html`；工作頁未登入會導回登入
-
-### 匯出與範例
-
-- 專案／審閱／設定：匯出 **Markdown / JSON / HTML**
-- **一鍵隱藏／展示範例文件**（清空示範內文與隱藏種子專案，可還原）
-
-### 管理中心（`admin.html`，僅管理員）
-
-| 分頁 | 功能 |
-|------|------|
-| **人員權限名單** | 新增／編輯／異動角色／停用／刪除 |
-| **簽核流程設計** | 關卡排序、預設簽核人、必簽設定 |
-| **個案調整** | 異動關卡人員、抽單、重開、套用流程 |
+| `editor.html` | 引導編輯 + **結構 gate 面板** |
+| `templates.html` | 範本庫 |
+| `review.html` | 審閱簽核（gate 擋核准） |
+| `tracking.html` | **SCVB 計劃追蹤** |
+| `admin.html` | 人員／流程／個案 |
+| `agents.html` | Agent prompt / 啟停 / 進場 |
 
 ## 開發
 
 ```bash
 bun install
 bun run dev
+# 開啟 login.html 或 tracking.html
 ```
 
-## 建置
+## 建置 / macOS App
 
 ```bash
 bun run build
-bun run preview
-```
-
-`vite.config.ts` 使用 `base: "./"`，讓 macOS App（WKWebView `file://`）能載入 `./assets/*` CSS/JS。不要改回 `base: "/"`，否則安裝後畫面會黑底、文字幾乎看不見。
-
-## macOS App
-
-```bash
 bash mac-app-build/build-dmg.sh
-# 產出 SpecForge.app + SpecForge-1.0.0-macOS.dmg
-open SpecForge.app
 ```
+
+`vite.config.ts` 使用 `base: "./"`（file:// 相容）。
+
+## 文件
+
+- 整合分析：`plans/Pm-Spec__2026-08-05-integration-S-CodingFlow.md`
+- 上游 SpecForge：https://github.com/ShiGaChenTW/Pm-Spec-Final
+- 本整合 repo：https://github.com/ShiGaChenTW/PM-SPEC-SCVB
