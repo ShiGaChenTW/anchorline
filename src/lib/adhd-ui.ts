@@ -107,6 +107,7 @@ function ensureFocusStrip(step: NextStep) {
   if (!main) return;
 
   let strip = document.getElementById("adhd-focus-strip");
+  const isNew = !strip;
   if (!strip) {
     strip = document.createElement("div");
     strip.id = "adhd-focus-strip";
@@ -117,6 +118,9 @@ function ensureFocusStrip(step: NextStep) {
     if (toolbar) toolbar.insertAdjacentElement("afterend", strip);
     else main.prepend(strip);
   }
+
+  const prevLabel = strip.querySelector(".adhd-focus-label")?.textContent ?? "";
+  const labelChanged = prevLabel !== step.label;
 
   strip.innerHTML = `
     <div class="adhd-focus-text">
@@ -135,6 +139,15 @@ function ensureFocusStrip(step: NextStep) {
   if (step.action) {
     document.getElementById("adhd-focus-action")?.addEventListener("click", () => step.action?.());
   }
+
+  // 注意力：首次入場，或下一步標籤變更時 flash
+  import("./attention-motion")
+    .then((m) => {
+      m.syncMotionPreferenceClass();
+      if (isNew) m.enter(strip);
+      else if (labelChanged) m.flashFocus(strip);
+    })
+    .catch(() => {});
 }
 
 function escape(s: string): string {
@@ -348,6 +361,10 @@ function enhanceEmptyState() {
 export function initAdhdUi() {
   document.documentElement.classList.add("adhd-calm");
   document.body?.classList.add("adhd-calm");
+
+  import("./attention-motion")
+    .then((m) => m.syncMotionPreferenceClass())
+    .catch(() => {});
 
   const page = detectRailPage();
   ensureFocusStrip(nextStepForPage(page));

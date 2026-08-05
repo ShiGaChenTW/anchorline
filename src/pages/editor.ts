@@ -5,6 +5,12 @@ import { projectDisplayName } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { syncRailContext } from "../lib/rail-projects";
 import {
+  expandEnter,
+  flashFocus,
+  pulseSubmitWhenBecameReady,
+  syncMotionPreferenceClass,
+} from "../lib/attention-motion";
+import {
   EDITOR_BEGINNER_TRACK,
   isBeginnerMode,
   setBeginnerMode,
@@ -43,6 +49,8 @@ initHelpOverlay();
 }
 
 let idx = 0;
+/** 用於章節切換時 flash 視線錨定 */
+let prevIdx = -1;
 
 function editable(): boolean {
   return canEditContent(store.get().currentUser) && !store.get().locked;
@@ -546,6 +554,7 @@ function render() {
   const activeId = store.get().activeSectionId;
   const found = sections().findIndex((s) => s.id === activeId);
   if (found >= 0) idx = found;
+  const sectionChanged = prevIdx >= 0 && prevIdx !== idx;
   syncProjectChrome();
   renderOutline();
   renderEditor();
@@ -557,6 +566,19 @@ function render() {
     const hasPlanSteps = Object.values(planModules).some((raw) => /^- \[[ xXvV]\]/m.test(raw));
     host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps }));
   }
+
+  // Phase A：章節切換視線錨定；送審就緒單次 pulse
+  if (sectionChanged) {
+    const head = document.querySelector(".adhd-sec-header") ?? document.getElementById("editor-body");
+    flashFocus(head);
+    flashFocus(document.querySelector(".adhd-coach-now"));
+  }
+  prevIdx = idx;
+
+  const gate = evaluatePrdGates(store.get());
+  const submitBtn = document.getElementById("btn-submit");
+  pulseSubmitWhenBecameReady(submitBtn, gate.canSubmit && editable());
+  syncMotionPreferenceClass();
 }
 
 // Apply pending template insert into current section first field
@@ -637,6 +659,26 @@ document.addEventListener("keydown", (e) => {
     toast("已儲存");
   }
 });
+
+// Phase B：教練 / 章節指南 details 展開淡入（動態重建，用委派）
+document.getElementById("coach-body")?.addEventListener(
+  "toggle",
+  (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLDetailsElement) || !t.open) return;
+    expandEnter(t.querySelector(":scope > :not(summary)") ?? t);
+  },
+  true,
+);
+document.getElementById("editor-body")?.addEventListener(
+  "toggle",
+  (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLDetailsElement) || !t.open) return;
+    expandEnter(t.querySelector(":scope > :not(summary)") ?? t);
+  },
+  true,
+);
 
 render();
 } // end __authed

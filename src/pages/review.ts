@@ -11,6 +11,13 @@ import { applySemanticHighlight } from "../lib/markamd/semantic-highlight";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { initTheme } from "../lib/theme";
 import { syncRailContext } from "../lib/rail-projects";
+import {
+  expandEnter,
+  flashFocus,
+  markHighlightEnter,
+  pulseWhenBecameReady,
+  syncMotionPreferenceClass,
+} from "../lib/attention-motion";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
 const planModules = import.meta.glob("../../plans/*.md", {
@@ -259,11 +266,12 @@ function renderSecNav() {
       focusSectionId = btn.dataset.sec ?? "";
       renderDoc();
       renderSecNav();
-      if (focusSectionId) {
-        document.getElementById(`review-sec-${focusSectionId}`)?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
+      const target = focusSectionId
+        ? document.getElementById(`review-sec-${focusSectionId}`)
+        : document.getElementById("review-doc-body");
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        flashFocus(target);
       }
     };
   });
@@ -345,6 +353,7 @@ function renderDoc() {
   const enabled = ed?.semanticHighlight !== false;
   body.querySelectorAll<HTMLElement>(".review-sec-md").forEach((el) => {
     applySemanticHighlight(el, { enabled, intensity, todosOnly: false });
+    markHighlightEnter(el);
   });
 }
 
@@ -552,9 +561,11 @@ function expandComments(open: boolean) {
   const chev = toggle.querySelector(".review-comments-chevron");
   if (chev) chev.textContent = open ? "▾" : "▸";
   document.querySelector(".review-layout")?.classList.toggle("comments-open", open);
+  if (open) expandEnter(body);
 }
 
 function render() {
+  syncMotionPreferenceClass();
   syncProjectChrome();
   renderApprovals();
   renderFocusBar();
@@ -572,6 +583,12 @@ function render() {
       deriveFlowLayers(store.get(), { hasPlanSteps }),
     );
   }
+
+  // Phase A：核准從不可→可時 pulse 一次
+  const approveBtn = document.getElementById("btn-approve");
+  const ready =
+    approveBtn instanceof HTMLButtonElement && !approveBtn.disabled;
+  pulseWhenBecameReady(approveBtn, ready);
 }
 
 document.getElementById("btn-comments-toggle")?.addEventListener("click", () => {
@@ -665,8 +682,14 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// 預設留言收合
+// 預設留言收合；簽核 details 展開淡入
 expandComments(false);
+document.querySelector(".review-approvals-wrap")?.addEventListener("toggle", (e) => {
+  const d = e.currentTarget;
+  if (!(d instanceof HTMLDetailsElement) || !d.open) return;
+  expandEnter(d.querySelector(".approval-strip") ?? d);
+});
+
 render();
 store.subscribe(render);
 } // end __authed

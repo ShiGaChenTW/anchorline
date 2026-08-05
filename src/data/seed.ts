@@ -610,6 +610,7 @@ export const DEFAULT_SETTINGS: AISettings = {
     defaultMode: "split",
     semanticHighlight: true,
     highlightIntensity: "soft",
+    reduceMotion: false,
   },
 };
 
