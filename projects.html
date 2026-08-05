@@ -103,6 +103,7 @@
           <button type="button" class="btn" id="btn-export-md">匯出 MD</button>
           <button type="button" class="btn" id="btn-export-json">匯出 JSON</button>
           <button type="button" class="btn" id="btn-export-html">匯出 HTML</button>
+          <button type="button" class="btn" id="btn-export-openspec" title="PRD.md + tasks.md + proposal.md">匯出 OpenSpec</button>
         </div>
         <button type="button" class="btn" id="btn-import" data-od-id="btn-import">匯入 Markdown</button>
         <button type="button" class="btn btn-primary" id="btn-new" data-od-id="btn-new">＋ 新建 PRD</button>
@@ -116,6 +117,8 @@
           <div class="stat"><div class="k">已核准</div><div class="v">0</div></div>
           <div class="stat"><div class="k">預估剩餘</div><div class="v">0 <small>天</small></div></div>
         </div>
+
+        <div id="plan-workspace-bar" class="plan-workspace-bar mono" aria-live="polite"></div>
 
         <div class="filters" data-od-id="filters">
           <button type="button" class="chip on" data-filter="all">全部</button>
@@ -134,6 +137,7 @@
                 <th>標題</th>
                 <th>狀態</th>
                 <th>完成度</th>
+                <th>計劃</th>
                 <th>擁有者</th>
                 <th>更新</th>
                 <th></th>

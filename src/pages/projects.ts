@@ -1,9 +1,10 @@
 import { store } from "../data/store";
 import type { Project, ProjectStatus } from "../data/types";
 import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
-import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
+import { exportHtmlFile, exportJsonFile, exportMarkdownFile, exportOpenspecBundle } from "../lib/export";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
 import { initHelpOverlay } from "../lib/help-overlay";
+import { parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
 import { canDelete, canEditContent, canExport } from "../lib/permissions";
 import { initTheme } from "../lib/theme";
 import {
@@ -111,6 +112,63 @@ if (!requireAuth()) {
     eager: true,
   }) as Record<string, string>;
 
+  type PlanHit = { name: string; meta: PlanMeta; pct: number };
+
+  function loadPlanHits(): PlanHit[] {
+    return Object.entries(planModules).map(([path, raw]) => {
+      const name = path.split("/").pop() ?? path;
+      const meta = parsePlanMeta(raw, name);
+      return { name, meta, pct: planProgressPct(meta) };
+    });
+  }
+
+  /** 依標題／tag／檔名模糊對應 plan（簽核狀態仍以 case 為準，不覆寫） */
+  function matchPlan(project: Project, plans: PlanHit[]): PlanHit | null {
+    if (!plans.length) return null;
+    let best: PlanHit | null = null;
+    let bestScore = 0;
+    const title = project.title.toLowerCase();
+    const tag = project.tag.toLowerCase();
+    const id = project.id.toLowerCase();
+    for (const pl of plans) {
+      let score = 0;
+      const pt = pl.meta.title.toLowerCase();
+      const pn = pl.name.toLowerCase();
+      if (pt && (pt.includes(title.slice(0, 6)) || title.includes(pt.slice(0, 6)))) score += 4;
+      if (pn.includes(tag) || pn.includes(id)) score += 3;
+      if (project.isSample && pn.includes("prod-app")) score += 1;
+      if (project.status === "review" && pl.meta.status.includes("進行")) score += 1;
+      if (score > bestScore) {
+        bestScore = score;
+        best = pl;
+      }
+    }
+    // 無明確對應時：焦點專案掛「最新一筆有 steps 的 plan」作工作區提示
+    if (bestScore < 2) {
+      if (project.id === store.get().activeProjectId || project.id === "p1") {
+        return plans.find((p) => p.meta.total_steps > 0) ?? plans[0] ?? null;
+      }
+      return null;
+    }
+    return best;
+  }
+
+  function renderPlanBar(plans: PlanHit[]) {
+    const bar = document.getElementById("plan-workspace-bar");
+    if (!bar) return;
+    if (!plans.length) {
+      bar.innerHTML = `工作區計劃：0 檔 · <a href="tracking.html" style="color:var(--accent)">開啟追蹤</a> · <span class="muted">bun run track</span>`;
+      return;
+    }
+    const withSteps = plans.filter((p) => p.meta.total_steps > 0);
+    const avg =
+      withSteps.length === 0
+        ? 0
+        : Math.round(withSteps.reduce((a, p) => a + p.pct, 0) / withSteps.length);
+    const pending = withSteps.reduce((a, p) => a + p.meta.pending_steps, 0);
+    bar.innerHTML = `工作區計劃：<strong>${plans.length}</strong> 檔 · 平均完成 <strong>${avg}%</strong> · 待辦步驟 <strong>${pending}</strong> · <a href="tracking.html" style="color:var(--accent)">計劃追蹤</a> · <span style="color:var(--muted)">終端 bun run track</span>`;
+  }
+
   function renderFlow() {
     const host = document.getElementById("flow-strip-host");
     if (!host) return;
@@ -125,6 +183,9 @@ if (!requireAuth()) {
     if (!tbody) return;
     const user = store.get().currentUser;
     const projects = store.visibleProjects();
+    const planHits = loadPlanHits();
+    renderPlanBar(planHits);
+
     const rows = projects.filter((p) => {
       if (filter === "mine" && !p.mine) return false;
       if (filter !== "all" && filter !== "mine" && p.status !== filter) return false;
@@ -173,6 +234,13 @@ if (!requireAuth()) {
         const agentTag = p.authorAgentFamily
           ? `<span class="mono" style="color:var(--muted);font-size:11px"> · agent:${escapeHtml(p.authorAgentFamily)}</span>`
           : "";
+        const plan = matchPlan(p, planHits);
+        const planCell = plan
+          ? `<a href="tracking.html" class="plan-link" title="${escapeHtml(plan.meta.title)} (${escapeHtml(plan.name)})">
+              <span class="plan-pct">${plan.meta.done_steps}/${plan.meta.total_steps || "—"}</span>
+              <span class="mono" style="color:var(--muted)">${plan.pct}%</span>
+            </a>`
+          : `<span class="mono" style="color:var(--meta)">—</span>`;
         const del =
           canDelete(user)
             ? `<button type="button" class="btn btn-sm btn-ghost btn-del" data-id="${p.id}" title="移除">移除</button>`
@@ -181,6 +249,7 @@ if (!requireAuth()) {
       <td><a href="editor.html">${escapeHtml(p.title)}</a>${sampleTag}<div class="mono">#${escapeHtml(p.tag)}${agentTag}</div></td>
       <td><span class="pill ${s.cls}">${s.label}</span></td>
       <td><div class="progress"><div class="progress-bar ${barCls}"><i style="width:${p.pct}%"></i></div><span>${p.pct}%</span></div></td>
+      <td>${planCell}</td>
       <td>${escapeHtml(p.owner)}</td>
       <td class="mono">${escapeHtml(p.updated)}</td>
       <td style="display:flex;gap:6px;flex-wrap:wrap">
@@ -392,6 +461,18 @@ if (!requireAuth()) {
     }
     exportHtmlFile(store.get());
     toast("已下載 HTML（可列印）");
+  });
+
+  document.getElementById("btn-export-openspec")?.addEventListener("click", () => {
+    if (!canExport(store.get().currentUser)) {
+      toast("無權匯出");
+      return;
+    }
+    const st = store.get();
+    const active =
+      st.projects.find((p) => p.id === st.activeProjectId) ?? st.projects[0] ?? null;
+    exportOpenspecBundle(st, active);
+    toast("已匯出 OpenSpec：PRD.md · tasks.md · proposal.md");
   });
 
   document.getElementById("btn-import")?.addEventListener("click", () => {
