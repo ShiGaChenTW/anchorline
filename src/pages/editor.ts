@@ -1,7 +1,12 @@
 import { critiqueSectionWithAI, generateAIDraft, polishTextWithAI } from "../lib/ai-coach";
 import { evaluateChecks, liveScore, store } from "../data/store";
 import type { Section } from "../data/types";
-import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
+import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
+import {
+  EDITOR_BEGINNER_TRACK,
+  isBeginnerMode,
+  setBeginnerMode,
+} from "../lib/beginner-flow";
 import { exportMarkdownFile } from "../lib/export";
 import { canEditContent } from "../lib/permissions";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
@@ -39,11 +44,7 @@ function editable(): boolean {
 
 function syncUser() {
   const u = store.get().currentUser;
-  updateUserRailFooter({
-    name: u.name,
-    role: `${roleBadge(u.accessRole)} · ${u.title}`,
-    avatar: u.avatar,
-  });
+  updateUserRailFooter(toRailUser(u));
   const banner = document.getElementById("perm-banner");
   if (banner) {
     if (!canEditContent(u)) {
@@ -362,6 +363,82 @@ function renderCoach() {
   }
 }
 
+function sectionFilled(sectionId: string): boolean {
+  const vals = store.get().sectionValues[sectionId] ?? {};
+  return Object.values(vals).some((v) => String(v).trim().length > 0);
+}
+
+function renderBeginnerCoach() {
+  const params = new URLSearchParams(location.search);
+  if (params.get("beginner") === "1") setBeginnerMode(true);
+  if (!isBeginnerMode()) {
+    document.getElementById("beginner-coach")?.remove();
+    return;
+  }
+
+  let bar = document.getElementById("beginner-coach");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "beginner-coach";
+    bar.className = "beginner-coach";
+    bar.setAttribute("role", "region");
+    bar.setAttribute("aria-label", "PRD 新手教練");
+    const host = document.getElementById("flow-strip-host");
+    const toolbar = document.querySelector(".toolbar");
+    if (host) host.insertAdjacentElement("afterend", bar);
+    else toolbar?.insertAdjacentElement("afterend", bar);
+  }
+
+  const activeId = store.get().activeSectionId;
+  const track = EDITOR_BEGINNER_TRACK;
+  const doneCount = track.filter((t) => sectionFilled(t.sectionId)).length;
+  const next = track.find((t) => !sectionFilled(t.sectionId));
+
+  bar.innerHTML = `
+    <div class="beginner-coach-head">
+      <strong>🌱 新手教練</strong>
+      <span class="mono">${doneCount}/${track.length} 核心章節已有內容</span>
+      <button type="button" class="btn btn-sm btn-ghost" id="btn-beginner-dismiss">結束教練</button>
+    </div>
+    <div class="beginner-coach-track">
+      ${track
+        .map((t) => {
+          const done = sectionFilled(t.sectionId);
+          const on = t.sectionId === activeId;
+          return `<button type="button" class="beginner-step ${done ? "done" : ""} ${on ? "on" : ""}" data-sec="${escapeHtml(t.sectionId)}" title="${escapeHtml(t.hint)}">
+            <span class="beginner-step-mark">${done ? "✓" : "·"}</span>
+            <span>${escapeHtml(t.label)}</span>
+          </button>`;
+        })
+        .join("")}
+    </div>
+    <p class="beginner-coach-hint">
+      ${
+        next
+          ? `下一步：補齊「<strong>${escapeHtml(next.label)}</strong>」— ${escapeHtml(next.hint)}`
+          : "核心骨架已齊，可補使用者故事／開放問題，通過結構 gate 後送審。"
+      }
+    </p>
+  `;
+
+  bar.querySelectorAll("[data-sec]").forEach((btn) => {
+    (btn as HTMLButtonElement).onclick = () => {
+      const id = (btn as HTMLElement).dataset.sec!;
+      const i = sections().findIndex((s) => s.id === id);
+      if (i >= 0) {
+        idx = i;
+        store.setActiveSection(id);
+        render();
+      }
+    };
+  });
+  document.getElementById("btn-beginner-dismiss")?.addEventListener("click", () => {
+    setBeginnerMode(false);
+    bar?.remove();
+    toast("已關閉新手教練（可從專案列表再開新手引導）");
+  });
+}
+
 function render() {
   // restore idx from active section
   const activeId = store.get().activeSectionId;
@@ -370,6 +447,7 @@ function render() {
   renderOutline();
   renderEditor();
   renderCoach();
+  renderBeginnerCoach();
   syncUser();
   const host = document.getElementById("flow-strip-host");
   if (host) {

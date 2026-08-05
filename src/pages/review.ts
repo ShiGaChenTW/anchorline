@@ -1,6 +1,6 @@
 import { store } from "../data/store";
 import type { Comment } from "../data/types";
-import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
+import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
 import { canApproveProject, canEditContent, canPeerReview } from "../lib/permissions";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
@@ -45,11 +45,7 @@ function activeProject() {
 
 function syncUser() {
   const u = store.get().currentUser;
-  updateUserRailFooter({
-    name: u.name,
-    role: `${roleBadge(u.accessRole)} · ${u.title}`,
-    avatar: u.avatar,
-  });
+  updateUserRailFooter(toRailUser(u));
 }
 
 function renderApprovals() {

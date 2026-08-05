@@ -12,12 +12,14 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>SpecForge</string>
+	<key>CFBundleDisplayName</key>
+	<string>SpecForge</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.1.0</string>
 	<key>CFBundleVersion</key>
-	<string>3</string>
+	<string>1.1.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>11.0</string>
 	<key>NSHighResolutionCapable</key>

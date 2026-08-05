@@ -1,11 +1,26 @@
 import { store } from "../data/store";
-import { updateUserRailFooter } from "./ui";
+import type { Employee } from "../data/types";
+import { summarizePermissions } from "./permissions";
+import { updateUserRailFooter, type RailUserInfo } from "./ui";
 
 const SESSION_KEY = "specforge:session:v1";
 
 export function isLoginPage(): boolean {
   const path = location.pathname.replace(/\\/g, "/");
   return path.endsWith("login.html") || path.endsWith("/login");
+}
+
+/** 把 Employee 轉成側欄使用者面板資料 */
+export function toRailUser(user: Employee): RailUserInfo {
+  return {
+    name: user.name,
+    avatar: user.avatar,
+    title: user.title,
+    accessRole: user.accessRole,
+    kind: user.kind,
+    agentFamily: user.agentFamily,
+    perms: summarizePermissions(user),
+  };
 }
 
 export function requireAuth(): boolean {
@@ -17,11 +32,7 @@ export function requireAuth(): boolean {
       if (store.get().currentUser.id !== user.id) {
         store.setCurrentUser(user.id);
       }
-      updateUserRailFooter({
-        name: user.name,
-        role: `${roleBadge(user.accessRole)} · ${user.title}`,
-        avatar: user.avatar,
-      });
+      updateUserRailFooter(toRailUser(user));
       return true;
     }
   }
@@ -57,13 +68,25 @@ export function roleBadge(role: string): string {
   return role;
 }
 
+function doLogout() {
+  store.logout();
+  location.href = "login.html";
+}
+
+let logoutDelegationBound = false;
+
+/**
+ * 以 document 事件委派綁定登出，側欄 rebuild 後仍有效、不重複掛載。
+ */
 export function bindLogout(btnId = "btn-logout") {
-  const handler = () => {
-    store.logout();
-    location.href = "login.html";
-  };
-  // 支援多顆登出鈕；避免重複 id 時只綁到第一顆
-  document.querySelectorAll(`#${btnId}, [data-logout], .btn-logout`).forEach((el) => {
-    el.addEventListener("click", handler);
+  if (logoutDelegationBound) return;
+  logoutDelegationBound = true;
+  document.addEventListener("click", (e) => {
+    const t = e.target as HTMLElement | null;
+    if (!t) return;
+    if (t.closest(`#${btnId}, [data-logout], .btn-logout`)) {
+      e.preventDefault();
+      doLogout();
+    }
   });
 }

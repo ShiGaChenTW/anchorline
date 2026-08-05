@@ -15,11 +15,16 @@ function stripCrossoriginForFileApp(): Plugin {
   };
 }
 
+const appVariant = process.env.VITE_APP_VARIANT === "test" ? "test" : "prod";
+
 export default defineConfig({
   root: ".",
   // Relative base so macOS WKWebView (file://) can load CSS/JS from dist/
   base: "./",
   publicDir: "public",
+  define: {
+    "import.meta.env.VITE_APP_VARIANT": JSON.stringify(appVariant),
+  },
   plugins: [stripCrossoriginForFileApp()],
   build: {
     outDir: "dist",

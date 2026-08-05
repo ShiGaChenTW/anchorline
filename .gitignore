@@ -4,5 +4,7 @@ dist/
 *.local
 .vite/
 SpecForge.app
+SpecForge Test.app
 *.dmg
 mac-app-build/SpecForge
+mac-app-build/SpecForgeTest

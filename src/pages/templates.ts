@@ -1,6 +1,6 @@
 import { store } from "../data/store";
 import type { Template, TemplateCat } from "../data/types";
-import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
+import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { canEditContent } from "../lib/permissions";
 import { initTheme } from "../lib/theme";
 import { bindModalDismiss, closeModal, escapeHtml, initMobileNav, openModal, toast, updateUserRailFooter } from "../lib/ui";
@@ -13,11 +13,7 @@ bindModalDismiss("modal");
 bindLogout();
 {
   const u = store.get().currentUser;
-  updateUserRailFooter({
-    name: u.name,
-    role: `${roleBadge(u.accessRole)} · ${u.title}`,
-    avatar: u.avatar,
-  });
+  updateUserRailFooter(toRailUser(u));
 }
 
 const CAT_LABEL: Record<TemplateCat, string> = {

@@ -1,4 +1,5 @@
 import {
+  APP_VARIANT,
   buildSeedCase,
   DEFAULT_SETTINGS,
   SEED_APPROVALS,
@@ -34,8 +35,9 @@ import {
   validateEmployeeRole,
 } from "../lib/permissions";
 
-const KEY = "specforge:state:v4";
-const LEGACY_KEY = "specforge:state:v3";
+/** v5：依建置變體分 key，避免正式／測試 App 共用 localStorage 互相污染 */
+const KEY = `specforge:state:v5:${APP_VARIANT}`;
+const LEGACY_KEY = "specforge:state:v4";
 const SESSION_KEY = "specforge:session:v1";
 
 /** 從 section.fields.value 帶入種子正文 */

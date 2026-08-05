@@ -10,16 +10,144 @@ import type {
   WorkflowStageDef,
 } from "./types";
 
-export const SEED_PROJECTS: Project[] = [
-  { id: "p1", title: "SaaS 雙重驗證（2FA）", status: "review", pct: 82, owner: "Scott", ownerId: "scott", authorId: "scott", authorAgentFamily: null, mine: true, updated: "今天 14:22", tag: "identity", isSample: true },
-  { id: "p2", title: "工作區角色權限重構", status: "draft", pct: 41, owner: "Scott", ownerId: "scott", authorId: "scott", authorAgentFamily: null, mine: true, updated: "昨天", tag: "platform", isSample: true },
-  { id: "p3", title: "稽核日誌匯出 API", status: "approved", pct: 100, owner: "Scott", ownerId: "scott", authorId: "claude-edit", authorAgentFamily: "claude", mine: true, updated: "3 天前", tag: "security", isSample: true },
-  { id: "p4", title: "自助帳單與發票", status: "draft", pct: 18, owner: "Scott", ownerId: "scott", authorId: "codex-edit", authorAgentFamily: "codex", mine: true, updated: "5 天前", tag: "growth", isSample: true },
-  { id: "p5", title: "行動端離線草稿同步", status: "review", pct: 67, owner: "Scott", ownerId: "scott", authorId: "scott", authorAgentFamily: null, mine: true, updated: "今天 09:10", tag: "mobile", isSample: true },
-  { id: "p6", title: "SOC 2 證據自動化收集", status: "review", pct: 74, owner: "Scott", ownerId: "scott", authorId: "grok-edit", authorAgentFamily: "grok", mine: true, updated: "2 天前", tag: "security", isSample: true },
-  { id: "p7", title: "多區域資料落地選項", status: "draft", pct: 29, owner: "Scott", ownerId: "scott", authorId: "agy-edit", authorAgentFamily: "agy", mine: true, updated: "1 週前", tag: "platform", isSample: true },
-  { id: "p8", title: "引導式 onboarding 改版", status: "approved", pct: 100, owner: "Scott", ownerId: "scott", authorId: "scott", authorAgentFamily: null, mine: true, updated: "2 週前", tag: "growth", isSample: true },
-];
+/**
+ * 正式版唯一範例（章節正文／留言／簽核皆對齊此專案）。
+ * 獨立定義，避免 prod bundle 被 SEED_PROJECTS_ALL 拖入其餘 7 筆。
+ */
+export const SAMPLE_PROJECT_2FA: Project = {
+  id: "p1",
+  title: "SaaS 雙重驗證（2FA）",
+  status: "review",
+  pct: 82,
+  owner: "Scott",
+  ownerId: "scott",
+  authorId: "scott",
+  authorAgentFamily: null,
+  mine: true,
+  updated: "今天 14:22",
+  tag: "identity",
+  isSample: true,
+};
+
+const appVariant = (import.meta as ImportMeta & { env?: Record<string, string> }).env
+  ?.VITE_APP_VARIANT;
+
+export const APP_VARIANT: "prod" | "test" = appVariant === "test" ? "test" : "prod";
+
+/** 正式版：僅 1 範例 */
+export const SEED_PROJECTS_PROD: Project[] = [SAMPLE_PROJECT_2FA];
+
+/**
+ * 測試版完整示範列表（僅在 VITE_APP_VARIANT=test 時掛入 SEED_PROJECTS，
+ * 以 if 分支協助 bundler 做 dead-code elimination）。
+ */
+function buildTestProjects(): Project[] {
+  return [
+    SAMPLE_PROJECT_2FA,
+    {
+      id: "p2",
+      title: "工作區角色權限重構",
+      status: "draft",
+      pct: 41,
+      owner: "Scott",
+      ownerId: "scott",
+      authorId: "scott",
+      authorAgentFamily: null,
+      mine: true,
+      updated: "昨天",
+      tag: "platform",
+      isSample: true,
+    },
+    {
+      id: "p3",
+      title: "稽核日誌匯出 API",
+      status: "approved",
+      pct: 100,
+      owner: "Scott",
+      ownerId: "scott",
+      authorId: "claude-edit",
+      authorAgentFamily: "claude",
+      mine: true,
+      updated: "3 天前",
+      tag: "security",
+      isSample: true,
+    },
+    {
+      id: "p4",
+      title: "自助帳單與發票",
+      status: "draft",
+      pct: 18,
+      owner: "Scott",
+      ownerId: "scott",
+      authorId: "codex-edit",
+      authorAgentFamily: "codex",
+      mine: true,
+      updated: "5 天前",
+      tag: "growth",
+      isSample: true,
+    },
+    {
+      id: "p5",
+      title: "行動端離線草稿同步",
+      status: "review",
+      pct: 67,
+      owner: "Scott",
+      ownerId: "scott",
+      authorId: "scott",
+      authorAgentFamily: null,
+      mine: true,
+      updated: "今天 09:10",
+      tag: "mobile",
+      isSample: true,
+    },
+    {
+      id: "p6",
+      title: "SOC 2 證據自動化收集",
+      status: "review",
+      pct: 74,
+      owner: "Scott",
+      ownerId: "scott",
+      authorId: "grok-edit",
+      authorAgentFamily: "grok",
+      mine: true,
+      updated: "2 天前",
+      tag: "security",
+      isSample: true,
+    },
+    {
+      id: "p7",
+      title: "多區域資料落地選項",
+      status: "draft",
+      pct: 29,
+      owner: "Scott",
+      ownerId: "scott",
+      authorId: "agy-edit",
+      authorAgentFamily: "agy",
+      mine: true,
+      updated: "1 週前",
+      tag: "platform",
+      isSample: true,
+    },
+    {
+      id: "p8",
+      title: "引導式 onboarding 改版",
+      status: "approved",
+      pct: 100,
+      owner: "Scott",
+      ownerId: "scott",
+      authorId: "scott",
+      authorAgentFamily: null,
+      mine: true,
+      updated: "2 週前",
+      tag: "growth",
+      isSample: true,
+    },
+  ];
+}
+
+/** 依建置變體：test=多範例，其餘（正式／dev）=僅 1 範例 */
+export const SEED_PROJECTS: Project[] =
+  APP_VARIANT === "test" ? buildTestProjects() : SEED_PROJECTS_PROD;
 
 export const SEED_SECTIONS: Section[] = [
   {

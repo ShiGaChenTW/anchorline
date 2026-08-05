@@ -1,6 +1,12 @@
 import { store } from "../data/store";
+import { APP_VARIANT } from "../data/seed";
 import type { Project, ProjectStatus } from "../data/types";
-import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
+import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
+import {
+  BEGINNER_EXAMPLES,
+  BEGINNER_STEPS,
+  setBeginnerMode,
+} from "../lib/beginner-flow";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile, exportOpenspecBundle } from "../lib/export";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
 import { initHelpOverlay } from "../lib/help-overlay";
@@ -49,11 +55,7 @@ if (!requireAuth()) {
 
   function syncChrome() {
     const u = store.get().currentUser;
-    updateUserRailFooter({
-      name: u.name,
-      role: `${roleBadge(u.accessRole)} · ${u.title}`,
-      avatar: u.avatar,
-    });
+    updateUserRailFooter(toRailUser(u));
     const sampleBtn = document.getElementById("btn-toggle-samples");
     if (sampleBtn) {
       sampleBtn.textContent = store.get().showSamples ? "隱藏範例文件" : "展示範例文件";
@@ -243,7 +245,7 @@ if (!requireAuth()) {
           : `<span class="mono" style="color:var(--meta)">—</span>`;
         const del =
           canDelete(user)
-            ? `<button type="button" class="btn btn-sm btn-ghost btn-del" data-id="${p.id}" title="移除">移除</button>`
+            ? `<button type="button" class="btn btn-sm btn-ghost btn-del" data-id="${p.id}" title="移除專案" aria-label="移除 ${escapeHtml(p.title)}">移除</button>`
             : "";
         return `<tr data-id="${p.id}" data-od-id="row-${p.id}">
       <td><a href="editor.html">${escapeHtml(p.title)}</a>${sampleTag}<div class="mono">#${escapeHtml(p.tag)}${agentTag}</div></td>
@@ -252,9 +254,11 @@ if (!requireAuth()) {
       <td>${planCell}</td>
       <td>${escapeHtml(p.owner)}</td>
       <td class="mono">${escapeHtml(p.updated)}</td>
-      <td style="display:flex;gap:6px;flex-wrap:wrap">
-        <a class="btn btn-sm" href="${actionHref}">${actionLabel}</a>
-        ${del}
+      <td class="col-actions">
+        <div class="row-actions" role="group" aria-label="專案操作">
+          <a class="btn btn-sm btn-primary row-action-main" href="${actionHref}">${actionLabel}</a>
+          ${del}
+        </div>
       </td>
     </tr>`;
       })
@@ -275,6 +279,7 @@ if (!requireAuth()) {
     renderStats(projects);
     renderFlow();
     syncChrome();
+    syncBeginnerCta();
     const navCount = document.querySelector('[data-od-id="nav-projects"] .count');
     if (navCount) navCount.textContent = String(projects.length);
   }
@@ -293,9 +298,67 @@ if (!requireAuth()) {
     render();
   });
 
-  /* ─── 4-step PRD wizard ─── */
+  /* ─── PRD 新手撰寫流程（7 步） ─── */
   let wizStep = 0;
-  const WIZ_MAX = 3;
+  const WIZ_MAX = BEGINNER_STEPS.length - 1;
+  let beginnerPath = true; // true=新手引導；false=快速新建（仍走同精靈，可跳過說明）
+
+  function renderWizardChrome() {
+    const stepsEl = document.getElementById("wizard-steps");
+    if (stepsEl) {
+      stepsEl.innerHTML = BEGINNER_STEPS.map(
+        (s) =>
+          `<span data-ws="${s.n}" class="${s.n === wizStep ? "on" : s.n < wizStep ? "done" : ""}">${s.n + 1} ${escapeHtml(s.label)}</span>`,
+      ).join("");
+    }
+    const step = BEGINNER_STEPS[wizStep];
+    const titleEl = document.getElementById("wiz-coach-title");
+    const bodyEl = document.getElementById("wiz-coach-body");
+    const tipsEl = document.getElementById("wiz-coach-tips");
+    if (step && titleEl) titleEl.textContent = step.title;
+    if (step && bodyEl) bodyEl.textContent = step.coach;
+    if (step && tipsEl) {
+      tipsEl.innerHTML = step.tips.map((t) => `<li>${escapeHtml(t)}</li>`).join("");
+    }
+    const modeLabel = document.getElementById("wiz-mode-label");
+    if (modeLabel) {
+      modeLabel.textContent = beginnerPath
+        ? "新手引導 · 7 步完成可送審骨架"
+        : "快速新建 · 同一套骨架，可略過提示直接填";
+    }
+  }
+
+  function renderConfirmSummary() {
+    const dl = document.getElementById("wiz-confirm-dl");
+    if (!dl) return;
+    const title =
+      (document.getElementById("new-title") as HTMLInputElement | null)?.value.trim() || "（未填標題）";
+    const what =
+      (document.getElementById("wiz-what") as HTMLInputElement | null)?.value.trim() || "—";
+    const who =
+      (document.getElementById("wiz-who") as HTMLInputElement | null)?.value.trim() || "—";
+    const why =
+      (document.getElementById("wiz-why") as HTMLTextAreaElement | null)?.value.trim() || "—";
+    const ngs = ["wiz-ng1", "wiz-ng2", "wiz-ng3"]
+      .map((id) => (document.getElementById(id) as HTMLInputElement).value.trim())
+      .filter(Boolean);
+    const metrics =
+      (document.getElementById("wiz-metrics") as HTMLTextAreaElement | null)?.value.trim() || "—";
+    const rows: [string, string][] = [
+      ["標題", title],
+      ["做什麼", what],
+      ["給誰", who],
+      ["為何現在", why],
+      ["Non-Goals", ngs.length ? ngs.map((x, i) => `${i + 1}. ${x}`).join("\n") : "（未滿 3 條）"],
+      ["成功指標", metrics],
+    ];
+    dl.innerHTML = rows
+      .map(
+        ([k, v]) =>
+          `<div class="wiz-confirm-row"><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`,
+      )
+      .join("");
+  }
 
   function setWizardStep(step: number) {
     wizStep = Math.max(0, Math.min(WIZ_MAX, step));
@@ -303,9 +366,8 @@ if (!requireAuth()) {
       const n = Number((p as HTMLElement).dataset.pane);
       (p as HTMLElement).hidden = n !== wizStep;
     });
-    document.querySelectorAll("#wizard-steps [data-ws]").forEach((s) => {
-      s.classList.toggle("on", Number((s as HTMLElement).dataset.ws) === wizStep);
-    });
+    renderWizardChrome();
+    if (wizStep === WIZ_MAX) renderConfirmSummary();
     const prev = document.getElementById("wizard-prev") as HTMLButtonElement | null;
     const next = document.getElementById("wizard-next") as HTMLButtonElement | null;
     const create = document.getElementById("modal-create") as HTMLButtonElement | null;
@@ -315,7 +377,7 @@ if (!requireAuth()) {
   }
 
   function validateWizardStep(): boolean {
-    if (wizStep === 0) {
+    if (wizStep === 1) {
       const title = (document.getElementById("new-title") as HTMLInputElement).value.trim();
       const what = (document.getElementById("wiz-what") as HTMLInputElement).value.trim();
       if (!title || !what) {
@@ -324,11 +386,33 @@ if (!requireAuth()) {
       }
     }
     if (wizStep === 2) {
+      const who = (document.getElementById("wiz-who") as HTMLInputElement).value.trim();
+      const why = (document.getElementById("wiz-why") as HTMLTextAreaElement).value.trim();
+      if (!who || !why) {
+        toast("請填「給誰」與「為何現在」");
+        return false;
+      }
+    }
+    if (wizStep === 3) {
+      const problem = (document.getElementById("wiz-problem") as HTMLTextAreaElement).value.trim();
+      if (problem.length < 20) {
+        toast("問題陳述請再具體一些（至少約 20 字）");
+        return false;
+      }
+    }
+    if (wizStep === 4) {
       const ngs = ["wiz-ng1", "wiz-ng2", "wiz-ng3"].map(
         (id) => (document.getElementById(id) as HTMLInputElement).value.trim(),
       );
       if (ngs.filter(Boolean).length < 3) {
-        toast("Non-Goals 需滿 3 條（SCVB 契約）");
+        toast("Non-Goals 需滿 3 條（送審結構契約）");
+        return false;
+      }
+    }
+    if (wizStep === 5) {
+      const metrics = (document.getElementById("wiz-metrics") as HTMLTextAreaElement).value.trim();
+      if (!metrics) {
+        toast("請至少填一條成功指標");
         return false;
       }
     }
@@ -336,7 +420,6 @@ if (!requireAuth()) {
   }
 
   function resetWizard() {
-    setWizardStep(0);
     const ids = [
       "new-title",
       "wiz-what",
@@ -355,22 +438,63 @@ if (!requireAuth()) {
     }
     const target = document.getElementById("new-target") as HTMLInputElement | null;
     if (target) target.value = "Q3 · 2026-09";
+    setWizardStep(0);
   }
 
-  document.getElementById("btn-new")?.addEventListener("click", () => {
+  function openWizard(asBeginner: boolean) {
     if (!canEditContent(store.get().currentUser)) {
       toast("核准人員無法新建或編輯內文");
       return;
     }
+    beginnerPath = asBeginner;
+    setBeginnerMode(asBeginner);
     resetWizard();
+    if (!asBeginner) {
+      // 快速新建：跳過說明，直達一句話
+      setWizardStep(1);
+    }
     openModal("modal");
-  });
+  }
+
+  document.getElementById("btn-new")?.addEventListener("click", () => openWizard(false));
+  document.getElementById("btn-beginner")?.addEventListener("click", () => openWizard(true));
+  document.getElementById("btn-beginner-cta")?.addEventListener("click", () => openWizard(true));
   document.getElementById("modal-close")?.addEventListener("click", () => closeModal("modal"));
   document.getElementById("modal-cancel")?.addEventListener("click", () => closeModal("modal"));
   document.getElementById("wizard-prev")?.addEventListener("click", () => setWizardStep(wizStep - 1));
   document.getElementById("wizard-next")?.addEventListener("click", () => {
     if (!validateWizardStep()) return;
     setWizardStep(wizStep + 1);
+  });
+
+  // 範例句填入
+  document.querySelectorAll("[data-fill]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const kind = (btn as HTMLElement).dataset.fill;
+      const ex = BEGINNER_EXAMPLES;
+      if (kind === "oneliner") {
+        const t = document.getElementById("new-title") as HTMLInputElement;
+        const w = document.getElementById("wiz-what") as HTMLInputElement;
+        if (t && !t.value.trim()) t.value = ex.title;
+        if (w) w.value = ex.what;
+      } else if (kind === "who") {
+        const who = document.getElementById("wiz-who") as HTMLInputElement;
+        const why = document.getElementById("wiz-why") as HTMLTextAreaElement;
+        if (who) who.value = ex.who;
+        if (why) why.value = ex.why;
+      } else if (kind === "problem") {
+        const p = document.getElementById("wiz-problem") as HTMLTextAreaElement;
+        if (p) p.value = ex.problem;
+      } else if (kind === "goals") {
+        (document.getElementById("wiz-ng1") as HTMLInputElement).value = ex.ng1;
+        (document.getElementById("wiz-ng2") as HTMLInputElement).value = ex.ng2;
+        (document.getElementById("wiz-ng3") as HTMLInputElement).value = ex.ng3;
+        (document.getElementById("wiz-goals") as HTMLTextAreaElement).value = ex.goals;
+      } else if (kind === "metrics") {
+        (document.getElementById("wiz-metrics") as HTMLTextAreaElement).value = ex.metrics;
+      }
+      toast("已填入範例句，請改成你的場景");
+    });
   });
 
   document.getElementById("modal-create")?.addEventListener("click", () => {
@@ -399,7 +523,7 @@ if (!requireAuth()) {
       id: `p${Date.now()}`,
       title,
       status: "draft",
-      pct: 12,
+      pct: 18,
       owner: user.name,
       ownerId: user.id,
       authorId: user.id,
@@ -412,7 +536,6 @@ if (!requireAuth()) {
     store.addProject(p);
     store.setActiveProject(p.id);
 
-    // 寫入精靈產出的章節初稿
     store.setSectionValues("summary", {
       what: what || title,
       who: who || user.name,
@@ -425,11 +548,38 @@ if (!requireAuth()) {
     });
     if (metrics) store.setSectionField("metrics", "m1", metrics);
     store.updateSection("summary", { status: "warn" });
+    store.updateSection("problem", { status: problem ? "warn" : "empty" });
     store.updateSection("goals", { status: "warn" });
+    store.updateSection("metrics", { status: metrics ? "warn" : "empty" });
 
-    toast(`已建立「${title}」（含精靈初稿）`);
-    location.href = "editor.html";
+    setBeginnerMode(true);
+    toast(beginnerPath ? `已建立「${title}」· 進入新手教練編輯` : `已建立「${title}」`);
+    location.href = "editor.html?beginner=1";
   });
+
+  // 新手 CTA：尚無自建專案時顯示
+  function syncBeginnerCta() {
+    const cta = document.getElementById("beginner-cta");
+    if (!cta) return;
+    const nonSample = store.visibleProjects().filter((p) => !p.isSample).length;
+    cta.hidden = nonSample > 0;
+  }
+
+  // 初始化步驟列（關閉時也有正確 DOM）
+  renderWizardChrome();
+
+  // 正式版隱藏「隱藏範例」意義較弱時仍保留；標題列可顯示變體提示
+  if (APP_VARIANT === "test") {
+    const meta = document.querySelector(".titlebar-meta");
+    if (meta && !document.getElementById("variant-badge")) {
+      const b = document.createElement("span");
+      b.id = "variant-badge";
+      b.className = "pill pill-warn";
+      b.textContent = "TEST";
+      b.title = "測試版：多筆範例專案";
+      meta.insertBefore(b, meta.firstChild);
+    }
+  }
 
   document.getElementById("btn-toggle-samples")?.addEventListener("click", () => {
     const next = !store.get().showSamples;

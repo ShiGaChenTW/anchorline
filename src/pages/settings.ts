@@ -1,7 +1,7 @@
 import { store } from "../data/store";
 import type { AccessRole, ActorKind, AgentFamily, AISettings, AppState, Employee } from "../data/types";
 import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL } from "../data/types";
-import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
+import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
 import { canManageUsers } from "../lib/permissions";
 import { initTheme } from "../lib/theme";
@@ -15,11 +15,7 @@ bindLogout();
 
 function syncUser() {
   const u = store.get().currentUser;
-  updateUserRailFooter({
-    name: u.name,
-    role: `${roleBadge(u.accessRole)} · ${u.title}`,
-    avatar: u.avatar,
-  });
+  updateUserRailFooter(toRailUser(u));
 }
 
 function populateSettings() {

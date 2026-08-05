@@ -68,13 +68,25 @@
           偏好設定
         </a>
       </nav>
-      <div class="rail-foot">
-        <div class="avatar">S</div>
-        <div class="rail-foot-meta" data-user-meta>
-          <div class="rail-foot-name" style="font-weight:600;color:var(--fg);font-size:12.5px">—</div>
-          <div class="rail-foot-role">—</div>
-          <div style="font-weight:600;color:var(--fg);font-size:12.5px">—</div>
-          <div>—</div>
+      <div class="rail-foot rail-foot--user" aria-label="目前使用者">
+        <div class="rail-user">
+          <div class="avatar" data-user-avatar aria-hidden="true">S</div>
+          <div class="rail-user-body">
+            <div class="rail-user-top">
+              <div class="rail-foot-meta" data-user-meta>
+                <div class="rail-foot-name">—</div>
+                <div class="rail-foot-title">—</div>
+              </div>
+              <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout title="登出">登出</button>
+            </div>
+            <div class="rail-user-role-row">
+              <span class="role-badge role-tone-editor" data-user-role-badge>—</span>
+              <span class="rail-user-kind" data-user-kind>人員</span>
+            </div>
+            <div class="rail-user-perms" data-user-perms role="list" aria-label="權限摘要">
+              <span class="perm-chip" role="listitem">—</span>
+            </div>
+          </div>
         </div>
       </div>
     </aside>

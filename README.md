@@ -61,8 +61,37 @@ Web 版追蹤頁：`tracking.html`（App 內）。終端版：`bun run track`。
 
 ```bash
 bun run build
-bash mac-app-build/build-dmg.sh
+
+# 正式版 → SpecForge.app + SpecForge-{version}-macOS.dmg
+bun run app:prod
+
+# 測試版 → SpecForge Test.app + SpecForge-Test-{version}-macOS.dmg
+bun run app:test
+
+# 一次打兩包
+bun run app:all
 ```
+
+| 變體 | App 名稱 | Bundle ID | 範例專案 | DMG |
+|------|----------|-----------|----------|-----|
+| **正式** | `SpecForge.app` | `com.specforge.prd.workbench` | **僅 1 份**（SaaS 2FA） | `SpecForge-{ver}-macOS.dmg` |
+| **測試** | `SpecForge Test.app` | `com.specforge.prd.workbench.test` | 8 份示範列表 | `SpecForge-Test-{ver}-macOS.dmg` |
+
+測試版在 Dock／選單列／Finder 顯示名稱含 **Test**，可與正式版並存。
+
+### PRD 新手撰寫流程
+
+專案列表 → **🌱 新手引導**（或空狀態 CTA）：
+
+1. 認識 PRD  
+2. 一句話交付物  
+3. 給誰 · 為何現在  
+4. 問題陳述  
+5. 目標 / Non-Goals≥3  
+6. 成功指標  
+7. 確認建立 → 編輯台 **新手教練列**
+
+快速路徑：**＋ 新建 PRD**（略過說明，同一套骨架）。
 
 `vite.config.ts` 使用 `base: "./"`（file:// 相容）。
 
