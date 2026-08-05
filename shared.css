@@ -2016,3 +2016,23 @@ a.is-disabled {
   color: var(--muted);
   font-size: 11px;
 }
+
+/* Plan progress on projects list */
+.plan-workspace-bar {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--fg-2);
+}
+.plan-workspace-bar strong { color: var(--fg); font-weight: var(--weight-em); }
+.plan-link {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  text-decoration: none;
+  color: var(--fg);
+  font-size: 12px;
+}
+.plan-link:hover { color: var(--accent); }
+.plan-pct { font-variant-numeric: tabular-nums; font-weight: var(--weight-em); }
