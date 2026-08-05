@@ -1,8 +1,10 @@
 import { initTheme } from "../lib/theme";
+import { initHelpOverlay } from "../lib/help-overlay";
 import { toast } from "../lib/ui";
 import { store } from "../data/store";
 
 initTheme();
+initHelpOverlay();
 // Hub 可免登入瀏覽；進入工作區由各頁 requireAuth
 
 const routes: Record<string, string> = {
@@ -10,6 +12,7 @@ const routes: Record<string, string> = {
   "2": "editor.html",
   "3": "templates.html",
   "4": "review.html",
+  "5": "tracking.html",
 };
 
 const toastEl = document.getElementById("kbd-toast");

@@ -2,6 +2,7 @@ import { store } from "../data/store";
 import type { AgentTaskType, Employee } from "../data/types";
 import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL, AGENT_TASK_LABEL } from "../data/types";
 import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
+import { initHelpOverlay } from "../lib/help-overlay";
 import { canManageUsers } from "../lib/permissions";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
@@ -11,6 +12,7 @@ if (__authed) {
   initTheme();
   initMobileNav("admin");
   bindLogout();
+  initHelpOverlay();
 
   let selectedId: string | null = null;
 

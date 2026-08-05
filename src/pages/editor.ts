@@ -4,6 +4,8 @@ import type { Section } from "../data/types";
 import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
 import { exportMarkdownFile } from "../lib/export";
 import { canEditContent } from "../lib/permissions";
+import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
+import { initHelpOverlay } from "../lib/help-overlay";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
@@ -13,6 +15,15 @@ if (__authed) {
 initTheme();
 initMobileNav("editor");
 bindLogout();
+initHelpOverlay();
+{
+  const toolbar = document.querySelector(".toolbar");
+  if (toolbar && !document.getElementById("flow-strip-host")) {
+    const wrap = document.createElement("div");
+    wrap.id = "flow-strip-host";
+    toolbar.insertAdjacentElement("afterend", wrap);
+  }
+}
 
 let idx = 0;
 
@@ -354,6 +365,8 @@ function render() {
   renderEditor();
   renderCoach();
   syncUser();
+  const host = document.getElementById("flow-strip-host");
+  if (host) host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps: true }));
 }
 
 // Apply pending template insert into current section first field
