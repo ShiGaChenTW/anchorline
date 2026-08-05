@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SpecForge · PRD 引導工作台</title>
+<link rel="stylesheet" href="shared.css" />
+<style>
+  /* Launcher hub — shippable polish */
+  html, body.hub-body {
+    background: var(--bg);
+    color: var(--fg);
+    overflow-x: hidden;
+    overflow-y: auto;
+    min-height: 100%;
+  }
+  body.hub-body { background: var(--bg); }
+
+  .skip-link {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    z-index: 100;
+    padding: 10px 14px;
+    background: var(--accent);
+    color: var(--accent-on);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: var(--weight-em);
+    text-decoration: none;
+    transform: translateY(-120%);
+    transition: transform var(--motion-fast) var(--ease-standard);
+  }
+  .skip-link:focus {
+    transform: none;
+    outline: none;
+    box-shadow: var(--focus-ring);
+  }
+
+  .hub {
+    min-height: 100vh;
+    max-width: var(--container-max, 1120px);
+    margin: 0 auto;
+    padding: 0 0 56px;
+    background: var(--bg);
+    color: var(--fg);
+  }
+
+  .hub-chrome {
+    display: flex;
+    align-items: center;
+    gap: 8px 10px;
+    flex-wrap: wrap;
+    padding: 10px clamp(12px, 3vw, 24px);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--fg);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+  .hub-chrome .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    text-decoration: none;
+    color: inherit;
+  }
+  .hub-chrome .brand:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-radius: var(--radius-sm);
+  }
+  .hub-chrome .brand strong {
+    font-weight: var(--weight-em);
+    font-size: 14px;
+    color: var(--fg);
+  }
+  .hub-chrome .brand span {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .hub-chrome nav {
+    display: flex;
+    gap: 2px;
+    margin-left: 8px;
+  }
+  .hub-chrome nav a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: var(--weight-em);
+    padding: 10px 12px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--radius-sm);
+    transition: color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
+  }
+  .hub-chrome nav a:hover { color: var(--fg); background: var(--inset); }
+  .hub-chrome nav a:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    color: var(--fg);
+  }
+  .hub-chrome nav a[aria-current="page"] {
+    color: var(--fg);
+    background: var(--inset);
+  }
+  .hub-chrome .spacer { flex: 1 1 8px; min-width: 4px; }
+  .hub-chrome .theme-switch {
+    max-width: 100%;
+  }
+  .hub-chrome .theme-switch button {
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    padding: 8px 10px;
+    min-height: 36px;
+  }
+  .hub-chrome [data-theme-label] {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+  .hub-chrome .btn {
+    min-height: 40px;
+    padding: 8px 14px;
+  }
+  .hub-chrome .btn:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+  }
+
+  .hub-main {
+    padding: clamp(24px, 4vw, 40px) clamp(14px, 3vw, 28px) 0;
+  }
+
+  .hub-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.9fr);
+    gap: clamp(20px, 3vw, 28px);
+    align-items: end;
+    margin-bottom: 32px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 0 0 12px;
+    font-weight: var(--weight-em);
+  }
+  .hub-hero h1 {
+    margin: 0 0 12px;
+    font-family: var(--font-display);
+    font-size: clamp(30px, 5vw, 48px);
+    font-weight: var(--weight-em);
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    color: var(--fg);
+    max-width: 12ch;
+  }
+  .hub-hero .lede {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--fg-2);
+    max-width: 52ch;
+  }
+  .hub-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 22px;
+  }
+  .hub-actions .btn {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+  .hub-actions .btn:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+  }
+  .hub-actions .btn:active {
+    transform: translateY(1px);
+  }
+
+  .hub-side {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    padding: 16px 16px 14px;
+    box-shadow: var(--elev-ring);
+  }
+  .hub-side h2 {
+    margin: 0 0 12px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: var(--weight-em);
+  }
+  .continue-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    padding: 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg);
+    transition: border-color var(--motion-base) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard);
+    min-height: 44px;
+  }
+  .continue-card:hover {
+    border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+    box-shadow: var(--elev-raised);
+  }
+  .continue-card:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-color: var(--accent);
+  }
+  .continue-card .t {
+    font-size: 15px;
+    color: var(--fg);
+    margin: 0 0 8px;
+    font-weight: var(--weight-em);
+  }
+  .continue-card .m {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    align-items: center;
+  }
+  .side-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .side-stats div {
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-muted);
+    background: var(--inset);
+    min-width: 0;
+  }
+  .side-stats .k {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: var(--weight-em);
+  }
+  .side-stats .v {
+    font-size: 20px;
+    color: var(--fg);
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--weight-em);
+    letter-spacing: -0.02em;
+  }
+
+  .flow { margin-bottom: 28px; }
+  .flow h2 {
+    margin: 0 0 12px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: var(--weight-em);
+  }
+  .flow-track {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--surface);
+    box-shadow: var(--elev-ring);
+  }
+  .flow-step {
+    display: block;
+    padding: 14px 14px 16px;
+    border-right: 1px solid var(--border);
+    text-decoration: none;
+    color: inherit;
+    min-height: 96px;
+    transition: background var(--motion-fast) var(--ease-standard);
+  }
+  .flow-step:last-child { border-right: 0; }
+  .flow-step:hover { background: var(--inset); }
+  .flow-step:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--accent);
+    background: var(--inset);
+  }
+  .flow-step .n {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+  }
+  .flow-step .t {
+    font-size: 14px;
+    color: var(--fg);
+    font-weight: var(--weight-em);
+  }
+  .flow-step .d {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+
+  .screens-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .screens-head h2 {
+    margin: 0;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-weight: var(--weight-em);
+  }
+  .screens-head .hint {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--meta, var(--muted));
+  }
+  .screen-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .screen-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 12px 14px;
+    align-items: start;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    color: inherit;
+    box-shadow: var(--elev-ring);
+    min-height: 44px;
+    transition: border-color var(--motion-base) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard);
+  }
+  .screen-card:hover {
+    border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+    box-shadow: var(--elev-raised);
+  }
+  .screen-card:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-color: var(--accent);
+  }
+  .screen-card .num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in oklab, var(--accent) 22%, var(--border));
+    background: var(--accent-soft);
+    display: grid;
+    place-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .screen-card h3 {
+    margin: 0 0 4px;
+    font-size: 15px;
+    font-weight: var(--weight-em);
+    color: var(--fg);
+  }
+  .screen-card p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.45;
+    max-width: 42ch;
+  }
+  .screen-card .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .screen-card .go {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding-top: 4px;
+    white-space: nowrap;
+  }
+  .screen-card .go .kbd {
+    margin-left: 4px;
+  }
+
+  .hub-foot {
+    margin-top: 36px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .kbd-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(12px);
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    font-size: 13px;
+    box-shadow: var(--elev-raised);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--motion-base) var(--ease-standard), transform var(--motion-base) var(--ease-standard);
+    z-index: 50;
+  }
+  .kbd-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  @media (max-width: 900px) {
+    .hub-hero { grid-template-columns: 1fr; align-items: stretch; }
+    .hub-chrome nav { display: none; }
+    .flow-track { grid-template-columns: 1fr 1fr; }
+    .flow-step:nth-child(2n) { border-right: 0; }
+    .flow-step:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+  }
+  @media (max-width: 560px) {
+    .screen-grid { grid-template-columns: 1fr; }
+    .flow-track { grid-template-columns: 1fr; }
+    .flow-step {
+      border-right: 0;
+      border-bottom: 1px solid var(--border);
+      min-height: 0;
+    }
+    .flow-step:last-child { border-bottom: 0; }
+    .hub-hero h1 { max-width: none; }
+    .side-stats { grid-template-columns: 1fr; }
+    .hub-chrome [data-theme-label] { display: none; }
+    .screen-card {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+    .screen-card .go {
+      grid-column: 2;
+      padding-top: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+    .hub-actions .btn:active { transform: none; }
+  }
+
+  /* Theme surfaces — tokens only */
+  html[data-theme="kami"] body.hub-body,
+  html[data-theme="claude"] body.hub-body,
+  html[data-theme="github"] body.hub-body,
+  html[data-theme="warp"] body.hub-body,
+  html[data-theme="kami"] .hub,
+  html[data-theme="claude"] .hub,
+  html[data-theme="github"] .hub,
+  html[data-theme="warp"] .hub {
+    background: var(--bg) !important;
+    color: var(--fg);
+  }
+  html[data-theme="kami"] .side-stats .v,
+  html[data-theme="claude"] .side-stats .v,
+  html[data-theme="github"] .side-stats .v {
+    color: var(--accent);
+  }
+  html[data-theme="kami"] .side-stats div,
+  html[data-theme="claude"] .side-stats div,
+  html[data-theme="github"] .side-stats div,
+  html[data-theme="warp"] .side-stats div {
+    background: var(--accent-soft);
+    border-color: transparent;
+  }
+  html[data-theme="github"] .flow-step .n,
+  html[data-theme="kami"] .flow-step .n,
+  html[data-theme="claude"] .flow-step .n {
+    color: var(--accent);
+  }
+  html[data-theme="claude"] .hub-hero h1,
+  html[data-theme="kami"] .hub-hero h1 { font-weight: 500; }
+  html[data-theme="github"] .hub-hero h1 { font-weight: 600; }
+  html[data-theme="kami"] .btn-ghost,
+  html[data-theme="claude"] .btn-ghost,
+  html[data-theme="github"] .btn-ghost { color: var(--accent); }
+</style>
+<script>(function(){try{var t=localStorage.getItem("specforge:theme");var m={warp:["dark","#161412"],kami:["light","#f5f4ed"],github:["dark","#0d1117"],claude:["light","#f5f4ed"]};if(!m[t])t="warp";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","warp");}})();</script>
+</head>
+<body class="hub-body">
+<a class="skip-link" href="#main">跳到主要內容</a>
+<div class="hub" data-od-id="launcher">
+  <header class="hub-chrome" data-od-id="hub-chrome">
+    <a class="brand" href="index.html" aria-label="SpecForge 首頁">
+      <div class="rail-logo" aria-hidden="true">PR</div>
+      <div>
+        <strong>SpecForge</strong>
+        <span>prd.local · 桌面原型</span>
+      </div>
+    </a>
+    <nav aria-label="主要導覽">
+      <a href="projects.html">專案</a>
+      <a href="editor.html">編輯</a>
+      <a href="templates.html">範本</a>
+      <a href="review.html">審閱</a>
+      <a href="settings.html">設定</a>
+    </nav>
+    <div class="spacer" aria-hidden="true"></div>
+    <div class="theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
+      <button type="button" data-theme-value="warp" aria-pressed="true">Warp</button>
+      <button type="button" data-theme-value="kami" aria-pressed="false">kami</button>
+      <button type="button" data-theme-value="github" aria-pressed="false">GitHub</button>
+      <button type="button" data-theme-value="claude" aria-pressed="false">Claude</button>
+    </div>
+    <span class="pill pill-review" data-theme-label aria-live="polite">Warp · 終端</span>
+    <a class="btn btn-sm btn-primary" href="login.html" data-od-id="chrome-open">登入 / 進入工作區</a>
+  </header>
+
+  <main id="main" class="hub-main" data-od-id="hub-main">
+    <section class="hub-hero" data-od-id="hub-hero" aria-labelledby="launcher-title">
+      <div>
+        <p class="eyebrow">產品 · 工程 · 設計 · 資安</p>
+        <h1 id="launcher-title" data-od-id="launcher-title">把 PRD 從空白頁寫到可簽核。</h1>
+        <p class="lede" data-od-id="launcher-lede">
+          給產品、工程、設計與資安的協作工作台：結構化章節、即時品質檢查、範本插入，以及錨點留言的審閱簽核流——把規格從空白頁寫到可鎖定。
+        </p>
+        <div class="hub-actions" role="group" aria-label="主要操作">
+          <a class="btn btn-primary" href="projects.html" data-od-id="cta-primary">開啟專案列表</a>
+          <a class="btn" href="review.html" data-od-id="cta-review">繼續 2FA 審閱</a>
+          <a class="btn btn-ghost" href="editor.html" data-od-id="cta-editor">直接寫作</a>
+        </div>
+      </div>
+
+      <aside class="hub-side" data-od-id="hub-continue" aria-labelledby="continue-heading">
+        <h2 id="continue-heading">最近工作階段</h2>
+        <a class="continue-card" href="review.html" data-od-id="continue-card">
+          <p class="t">SaaS 雙重驗證（2FA）</p>
+          <div class="m">
+            <span class="pill pill-review">審閱中</span>
+            <span>v0.4</span>
+            <span>2 / 4 已簽</span>
+            <span>3 則留言</span>
+          </div>
+        </a>
+        <div class="side-stats" data-od-id="hub-stats" aria-label="工作區摘要">
+          <div><div class="k">進行中</div><div class="v">5</div></div>
+          <div><div class="k">待審</div><div class="v">3</div></div>
+          <div><div class="k">本季核</div><div class="v">11</div></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="flow" data-od-id="hub-flow" aria-labelledby="flow-heading">
+      <h2 id="flow-heading">工作流</h2>
+      <div class="flow-track" role="list">
+        <a class="flow-step" href="projects.html" data-od-id="flow-01" role="listitem">
+          <div class="n">01</div>
+          <div class="t">列出與建立</div>
+          <div class="d">狀態篩選、完成度、新建 PRD</div>
+        </a>
+        <a class="flow-step" href="editor.html" data-od-id="flow-02" role="listitem">
+          <div class="n">02</div>
+          <div class="t">引導撰寫</div>
+          <div class="d">大綱 · 畫布 · 品質教練</div>
+        </a>
+        <a class="flow-step" href="templates.html" data-od-id="flow-03" role="listitem">
+          <div class="n">03</div>
+          <div class="t">範本插入</div>
+          <div class="d">核心／資安／成長區塊</div>
+        </a>
+        <a class="flow-step" href="review.html" data-od-id="flow-04" role="listitem">
+          <div class="n">04</div>
+          <div class="t">審閱簽核</div>
+          <div class="d">錨點留言 · 角色核准</div>
+        </a>
+      </div>
+    </section>
+
+    <section data-od-id="screen-list" aria-labelledby="screens-heading">
+      <div class="screens-head">
+        <h2 id="screens-heading">畫面</h2>
+        <p class="hint" id="kbd-hint">快捷鍵 <kbd class="kbd">1</kbd>–<kbd class="kbd">4</kbd></p>
+      </div>
+      <div class="screen-grid">
+        <a class="screen-card" href="projects.html" data-od-id="link-projects" aria-describedby="kbd-hint">
+          <span class="num" aria-hidden="true">01</span>
+          <div>
+            <h3>專案列表</h3>
+            <p>規格庫首頁：篩選、搜尋、擁有者與快速建立。</p>
+            <div class="meta">
+              <span class="tag">列表</span>
+              <span class="tag">篩選</span>
+              <span class="tag">新建</span>
+            </div>
+          </div>
+          <span class="go">開啟 <span class="kbd">1</span></span>
+        </a>
+        <a class="screen-card" href="editor.html" data-od-id="link-editor" aria-describedby="kbd-hint">
+          <span class="num" aria-hidden="true">02</span>
+          <div>
+            <h3>引導式編輯工作台</h3>
+            <p>三欄：章節大綱、寫作畫布、即時品質教練。</p>
+            <div class="meta">
+              <span class="tag">大綱</span>
+              <span class="tag">教練</span>
+              <span class="tag">⌘S</span>
+            </div>
+          </div>
+          <span class="go">開啟 <span class="kbd">2</span></span>
+        </a>
+        <a class="screen-card" href="templates.html" data-od-id="link-templates" aria-describedby="kbd-hint">
+          <span class="num" aria-hidden="true">03</span>
+          <div>
+            <h3>章節範本庫</h3>
+            <p>問題、目標、指標、威脅模型等可插入骨架。</p>
+            <div class="meta">
+              <span class="tag">12 範本</span>
+              <span class="tag">Markdown</span>
+            </div>
+          </div>
+          <span class="go">開啟 <span class="kbd">3</span></span>
+        </a>
+        <a class="screen-card" href="review.html" data-od-id="link-review" aria-describedby="kbd-hint">
+          <span class="num" aria-hidden="true">04</span>
+          <div>
+            <h3>審閱與協作</h3>
+            <p>文件紙面、簽核列、錨點留言與核准鎖定。</p>
+            <div class="meta">
+              <span class="tag">簽核</span>
+              <span class="tag">留言</span>
+              <span class="tag">英雄屏</span>
+            </div>
+          </div>
+          <span class="go">開啟 <span class="kbd">4</span></span>
+        </a>
+      </div>
+    </section>
+
+    <footer class="hub-foot" data-od-id="hub-foot">
+      <span>主題 · Warp / kami / GitHub / Claude</span>
+      <span>文案 · 繁體中文 · 桌面 App 原型</span>
+      <span>鍵盤 · 1–4 開啟畫面 · ? 說明</span>
+    </footer>
+  </main>
+</div>
+
+<div class="kbd-toast" id="kbd-toast" role="status" aria-live="polite"></div>
+<p class="sr-only" id="kbd-help">按數字鍵 1 到 4 可開啟對應畫面。按問號可再次聽到此說明。</p>
+
+<script type="module" src="/src/pages/hub.ts"></script>
+</body>
+</html>

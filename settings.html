@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>偏好與 AI 設定 · PRD 引導工作台</title>
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .settings-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 24px 20px 48px;
+  }
+  .settings-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    box-shadow: var(--elev-ring);
+  }
+  .settings-section h2 {
+    font-size: 16px;
+    font-weight: var(--weight-em);
+    margin: 0 0 6px;
+    color: var(--fg);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .settings-section p.sub {
+    margin: 0 0 18px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .form-grid.full {
+    grid-template-columns: 1fr;
+  }
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .form-group label {
+    font-size: 13px;
+    font-weight: var(--weight-em);
+    color: var(--fg);
+  }
+  .form-group .hint {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .form-group input[type="text"],
+  .form-group input[type="password"],
+  .form-group select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    color: var(--fg);
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .form-group input:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: var(--focus-ring);
+  }
+  .switch-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .switch-group span {
+    font-size: 13px;
+    color: var(--fg);
+  }
+  .range-val {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    margin-left: 8px;
+  }
+  .actions-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+</style>
+<script>(function(){try{var t=localStorage.getItem("specforge:theme");var m={warp:["dark","#161412"],kami:["light","#f5f4ed"],github:["dark","#0d1117"],claude:["light","#f5f4ed"]};if(!m[t])t="warp";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","warp");}})();</script>
+</head>
+<body>
+<div class="app" data-od-id="app-settings">
+  <div class="titlebar" data-od-id="titlebar">
+    <div class="traffic" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+    <div class="titlebar-title">SpecForge — 偏好與 AI 系統設定</div>
+    <div class="titlebar-meta">
+      <div class="theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
+        <button type="button" data-theme-value="warp" aria-pressed="true">Warp</button>
+        <button type="button" data-theme-value="kami" aria-pressed="false">kami</button>
+        <button type="button" data-theme-value="github" aria-pressed="false">GitHub</button>
+        <button type="button" data-theme-value="claude" aria-pressed="false">Claude</button>
+      </div>
+      <span class="pill pill-review">設定</span>
+    </div>
+  </div>
+
+  <div class="shell">
+    <aside class="rail" data-od-id="rail">
+      <div class="rail-brand">
+        <div class="rail-logo">PR</div>
+        <div>
+          <strong>SpecForge</strong>
+          <span>prd.local</span>
+        </div>
+      </div>
+      <nav class="rail-nav">
+        <div class="nav-label">工作區</div>
+        <a class="nav-item" href="projects.html" data-od-id="nav-projects">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 2.5a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75z"/></svg>
+          專案列表
+        </a>
+        <a class="nav-item" href="editor.html" data-od-id="nav-editor">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086zM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064l6.286-6.286z"/></svg>
+          編輯工作台
+        </a>
+        <a class="nav-item" href="templates.html" data-od-id="nav-templates">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v3.5A1.75 1.75 0 0 1 14.25 7H1.75A1.75 1.75 0 0 1 0 5.25v-3.5zM1.75 1a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25H1.75zM0 10.75C0 9.784.784 9 1.75 9h12.5c.966 0 1.75.784 1.75 1.75v3.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25v-3.5zm1.75-.75a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25H1.75z"/></svg>
+          章節範本
+        </a>
+        <a class="nav-item" href="review.html" data-od-id="nav-review">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 8a6.5 6.5 0 1 1 13 0 6.5 6.5 0 0 1-13 0zM8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm.75 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .471.696l2.5 1a.75.75 0 0 0 .557-1.392l-2.028-.811V4.75z"/></svg>
+          審閱佇列
+        </a>
+                <a class="nav-item" href="admin.html" data-od-id="nav-admin">
+          管理中心
+        </a>
+        <a class="nav-item" href="agents.html" data-od-id="nav-agents">
+          Agent 管理
+        </a>
+
+<a class="nav-item active" href="settings.html" data-od-id="nav-settings">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm0 14.5a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13zM6.5 8a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z"/></svg>
+          偏好設定
+        </a>
+      </nav>
+      <div class="rail-foot">
+        <div class="avatar">林</div>
+        <div>
+          <div style="font-weight:600;color:var(--fg);font-size:12.5px">林可晴</div>
+          <div>產品 · Identity</div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main" data-od-id="main-settings">
+      <div class="toolbar" data-od-id="toolbar">
+        <div>
+          <h1 data-od-id="page-title">系統偏好與 AI 教練設定</h1>
+          <div class="sub">設定專案品質檢查規範、AI 模型金鑰與工作區資料備份</div>
+        </div>
+        <div class="spacer"></div>
+        <button type="button" class="btn btn-primary" id="btn-save-settings">儲存設定</button>
+      </div>
+
+      <div class="content" style="overflow-y:auto">
+        <div class="settings-container">
+
+          <!-- Section 1: AI Model & Key -->
+          <div class="settings-section">
+            <h2>🤖 AI 寫作教練模型與金鑰設定</h2>
+            <p class="sub">選擇 AI 引擎並設定 API Key，可解鎖一鍵生稿、語調潤色與智慧教練重構功能。</p>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="ai-model">首選 AI 模型</label>
+                <select id="ai-model">
+                  <option value="gemini-1.5-pro">Google Gemini 1.5 Pro (推薦)</option>
+                  <option value="gemini-1.5-flash">Google Gemini 1.5 Flash (極速)</option>
+                  <option value="claude-3-5-sonnet">Anthropic Claude 3.5 Sonnet</option>
+                  <option value="gpt-4o">OpenAI GPT-4o</option>
+                  <option value="local-smart">Local Smart Engine (零延遲本機引擎)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="ai-temp">發想創意度 (Temperature)<span class="range-val" id="temp-val">0.7</span></label>
+                <input type="range" id="ai-temp" min="0" max="1" step="0.1" value="0.7" style="margin-top:8px" />
+              </div>
+              <div class="form-group">
+                <label for="ai-key">API Key (選擇性填寫)</label>
+                <input type="password" id="ai-key" placeholder="AI-xxxxxxxxxxxx" />
+                <span class="hint">僅安全儲存於您的本機瀏覽器 localStorage，不會傳送至中間伺服器。</span>
+              </div>
+              <div class="form-group">
+                <label for="ai-endpoint">API Proxy 端點</label>
+                <input type="text" id="ai-endpoint" value="https://generativelanguage.googleapis.com/v1beta" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 2: Multi-Employee / Agent RBAC -->
+          <div class="settings-section">
+            <h2>👥 人員簽核與角色管理</h2>
+            <p class="sub">管理員／核准人員／編輯人員。Agent 僅可為編輯或核准；同一 Agent 族系撰寫之文件不可由同族系核准。</p>
+
+            <div class="form-grid" style="margin-bottom:16px">
+              <div class="form-group">
+                <label for="active-user-select">切換當前登入身分</label>
+                <select id="active-user-select"></select>
+                <span class="hint">切換後權限、簽核與編輯鎖定會立即生效。密碼示範皆為 demo。</span>
+              </div>
+              <div class="form-group" style="justify-content:flex-end">
+                <button type="button" class="btn" id="btn-logout">登出並回登入頁</button>
+              </div>
+            </div>
+
+            <h4 style="margin:16px 0 10px;font-size:14px;color:var(--fg)">人員與 Agent 列表</h4>
+            <div id="employee-list-container" style="display:flex;flex-direction:column;gap:8px"></div>
+
+            <div id="add-employee-panel" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+              <h4 style="margin:0 0 10px;font-size:14px;color:var(--fg)">➕ 新增人員 / Agent</h4>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="new-emp-name">姓名</label>
+                  <input type="text" id="new-emp-name" placeholder="例如：張立威" />
+                </div>
+                <div class="form-group">
+                  <label for="new-emp-role">職稱</label>
+                  <input type="text" id="new-emp-role" placeholder="例如：法務與風控顧問" />
+                </div>
+                <div class="form-group">
+                  <label for="new-emp-email">Email</label>
+                  <input type="text" id="new-emp-email" placeholder="name@northwind.io" />
+                </div>
+                <div class="form-group">
+                  <label for="new-emp-pass">登入密碼</label>
+                  <input type="text" id="new-emp-pass" placeholder="demo" value="demo" />
+                </div>
+                <div class="form-group">
+                  <label for="new-emp-kind">類型</label>
+                  <select id="new-emp-kind">
+                    <option value="human">人員</option>
+                    <option value="agent">Agent</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="new-emp-access">系統角色</label>
+                  <select id="new-emp-access">
+                    <option value="editor">編輯人員</option>
+                    <option value="approver">核准人員</option>
+                    <option value="admin">管理員</option>
+                  </select>
+                  <span class="hint">Agent 不可設為管理員</span>
+                </div>
+                <div class="form-group" id="family-group" style="display:none">
+                  <label for="new-emp-family">Agent 族系</label>
+                  <select id="new-emp-family">
+                    <option value="claude">Claude 系</option>
+                    <option value="gpt">GPT 系</option>
+                    <option value="gemini">Gemini 系</option>
+                    <option value="local">本地 Agent</option>
+                    <option value="other">其他</option>
+                  </select>
+                  <span class="hint">同族系撰寫後不可再由同族系核准</span>
+                </div>
+              </div>
+              <button type="button" class="btn btn-sm btn-primary" id="btn-add-employee" style="margin-top:12px">新增</button>
+            </div>
+          </div>
+
+          <!-- Section 2: Persona & Style -->
+          <div class="settings-section">
+            <h2>✍️ 寫作風範與團隊視角</h2>
+            <p class="sub">控制 AI 助教輸出的語調 style 與審閱重點。</p>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="ai-persona">寫作視角 (Persona)</label>
+                <select id="ai-persona">
+                  <option value="executive">高階審閱 (Executive-Ready — 重視業務效益與風險)</option>
+                  <option value="technical">技術架構 (Technical-Focused — 重視 API 與邊界條件)</option>
+                  <option value="concise">極簡精準 (Concise & Bulleted — 精簡列點少贅字)</option>
+                  <option value="detailed">詳細完整 (Detailed Specification — 包含範例與情境)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="ai-lang">規格預設語言</label>
+                <select id="ai-lang">
+                  <option value="zh-TW">繁體中文 (Traditional Chinese)</option>
+                  <option value="en-US">English (US)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: Linters -->
+          <div class="settings-section">
+            <h2>🛡️ PRD 品質檢查器 (Linter Rules)</h2>
+            <p class="sub">啟用即時品質規則，在編輯畫布自動標示潛在風險與缺漏。</p>
+            <div class="form-grid full">
+              <label class="switch-group">
+                <span>標示非目標 (Warn Missing Non-Goals) — 防止範疇蔓延</span>
+                <input type="checkbox" id="linter-nongoals" checked />
+              </label>
+              <label class="switch-group">
+                <span>強制要求量化成功指標 (Require Quantitative Metrics) — 拒絕虛榮描述</span>
+                <input type="checkbox" id="linter-metrics" checked />
+              </label>
+              <label class="switch-group">
+                <span>檢查使用者故事驗收條件 (Story Acceptance Criteria)</span>
+                <input type="checkbox" id="linter-stories" checked />
+              </label>
+              <label class="switch-group">
+                <span>警告模糊非量化字詞 (Flag Vague Words: 優化、儘快、大幅)</span>
+                <input type="checkbox" id="linter-vague" checked />
+              </label>
+            </div>
+          </div>
+
+          <!-- Section 4: Data Management -->
+          <div class="settings-section">
+            <h2>💾 工作區資料控制與備份</h2>
+            <p class="sub">匯出目前所有專案與草稿狀態，或重置為預設範本種子資料。</p>
+            <div class="actions-row">
+              <button type="button" class="btn" id="btn-export-md">匯出 Markdown</button>
+              <button type="button" class="btn" id="btn-export-json">匯出 JSON 備份</button>
+              <button type="button" class="btn" id="btn-export-html">匯出 HTML</button>
+              <button type="button" class="btn" id="btn-import-json">匯入 JSON 備份</button>
+              <button type="button" class="btn" id="btn-toggle-samples">一鍵隱藏範例文件</button>
+              <button type="button" class="btn btn-ghost" id="btn-reset-data" style="color:var(--warn,#d9534f)">重置至預設範例資料</button>
+              <input type="file" id="file-import" accept=".json" style="display:none" />
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module" src="/src/pages/settings.ts"></script>
+</body>
+</html>

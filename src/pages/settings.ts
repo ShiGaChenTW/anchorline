@@ -1,0 +1,342 @@
+import { store } from "../data/store";
+import type { AccessRole, ActorKind, AgentFamily, AISettings, AppState, Employee } from "../data/types";
+import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL } from "../data/types";
+import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
+import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
+import { canManageUsers } from "../lib/permissions";
+import { initTheme } from "../lib/theme";
+import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+
+const __authed = requireAuth();
+if (__authed) {
+initTheme();
+initMobileNav("settings");
+bindLogout();
+
+function syncUser() {
+  const u = store.get().currentUser;
+  updateUserRailFooter({
+    name: u.name,
+    role: `${roleBadge(u.accessRole)} · ${u.title}`,
+    avatar: u.avatar,
+  });
+}
+
+function populateSettings() {
+  const s = store.get().settings;
+  const modelEl = document.getElementById("ai-model") as HTMLSelectElement | null;
+  const tempEl = document.getElementById("ai-temp") as HTMLInputElement | null;
+  const tempValEl = document.getElementById("temp-val");
+  const keyEl = document.getElementById("ai-key") as HTMLInputElement | null;
+  const endpointEl = document.getElementById("ai-endpoint") as HTMLInputElement | null;
+  const personaEl = document.getElementById("ai-persona") as HTMLSelectElement | null;
+  const langEl = document.getElementById("ai-lang") as HTMLSelectElement | null;
+
+  const ngEl = document.getElementById("linter-nongoals") as HTMLInputElement | null;
+  const metEl = document.getElementById("linter-metrics") as HTMLInputElement | null;
+  const stEl = document.getElementById("linter-stories") as HTMLInputElement | null;
+  const vagEl = document.getElementById("linter-vague") as HTMLInputElement | null;
+
+  if (modelEl) modelEl.value = s.model;
+  if (tempEl) tempEl.value = String(s.temperature);
+  if (tempValEl) tempValEl.textContent = String(s.temperature);
+  if (keyEl) keyEl.value = s.apiKey || "";
+  if (endpointEl) endpointEl.value = s.endpoint || "";
+  if (personaEl) personaEl.value = s.persona;
+  if (langEl) langEl.value = s.language;
+
+  if (ngEl) ngEl.checked = s.enableLinters.requireNonGoals;
+  if (metEl) metEl.checked = s.enableLinters.requireMetrics;
+  if (stEl) stEl.checked = s.enableLinters.requireStoriesAC;
+  if (vagEl) vagEl.checked = s.enableLinters.warnVagueTerms;
+
+  renderEmployees();
+  syncUser();
+
+  const sampleBtn = document.getElementById("btn-toggle-samples") as HTMLButtonElement | null;
+  if (sampleBtn) {
+    sampleBtn.textContent = store.get().showSamples ? "一鍵隱藏範例文件" : "一鍵展示範例文件";
+  }
+}
+
+function renderEmployees() {
+  const { employees, currentUser } = store.get();
+  const canManage = canManageUsers(currentUser);
+  const selectEl = document.getElementById("active-user-select") as HTMLSelectElement | null;
+  const listEl = document.getElementById("employee-list-container");
+  const addPanel = document.getElementById("add-employee-panel");
+  if (addPanel) addPanel.style.opacity = canManage ? "1" : "0.55";
+  if (addPanel) addPanel.style.pointerEvents = canManage ? "auto" : "none";
+
+  if (selectEl) {
+    selectEl.innerHTML = employees
+      .map(
+        (e) => `<option value="${e.id}" ${e.id === currentUser.id ? "selected" : ""}>
+        ${escapeHtml(e.name)} — ${ACCESS_ROLE_LABEL[e.accessRole]} · ${escapeHtml(e.title)}
+      </option>`,
+      )
+      .join("");
+
+    selectEl.onchange = () => {
+      store.setCurrentUser(selectEl.value);
+      const updatedUser = store.get().currentUser;
+      toast(`已切換身分為「${updatedUser.name}」（${ACCESS_ROLE_LABEL[updatedUser.accessRole]}）`);
+      populateSettings();
+    };
+  }
+
+  if (listEl) {
+    listEl.innerHTML = employees
+      .map((e) => {
+        const isCur = e.id === currentUser.id;
+        const kind = e.kind === "agent" ? "Agent" : "人員";
+        const family =
+          e.kind === "agent" && e.agentFamily
+            ? AGENT_FAMILY_LABEL[e.agentFamily]
+            : "—";
+        const roleOpts = (["admin", "approver", "editor"] as AccessRole[])
+          .filter((r) => !(e.kind === "agent" && r === "admin"))
+          .map(
+            (r) =>
+              `<option value="${r}" ${e.accessRole === r ? "selected" : ""}>${ACCESS_ROLE_LABEL[r]}</option>`,
+          )
+          .join("");
+        return `
+        <div class="emp-card" style="display:flex;flex-direction:column;gap:10px;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div class="avatar" style="width:28px;height:28px;font-size:12px">${escapeHtml(e.avatar || e.name.slice(0, 1))}</div>
+              <div>
+                <div style="font-weight:600;font-size:13.5px;color:var(--fg)">
+                  ${escapeHtml(e.name)}
+                  ${isCur ? '<span class="pill pill-approved" style="font-size:10px;margin-left:6px">目前登入</span>' : ""}
+                  <span class="pill" style="font-size:10px;margin-left:4px">${kind}</span>
+                </div>
+                <div style="font-size:12px;color:var(--muted)">${escapeHtml(e.title)} · <span class="mono">${escapeHtml(e.email)}</span></div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px">角色：${ACCESS_ROLE_LABEL[e.accessRole]} · 族系：${escapeHtml(family)}</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              ${
+                !isCur
+                  ? `<button type="button" class="btn btn-sm btn-ghost btn-switch-emp" data-id="${e.id}">切換登入</button>`
+                  : ""
+              }
+              ${
+                canManage && !isCur
+                  ? `<button type="button" class="btn btn-sm btn-ghost btn-del-emp" data-id="${e.id}" style="color:var(--muted)">✕ 刪除</button>`
+                  : ""
+              }
+            </div>
+          </div>
+          ${
+            canManage
+              ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                  <label style="font-size:12px;color:var(--muted)">系統角色
+                    <select class="emp-role" data-id="${e.id}" style="margin-left:6px;background:var(--surface);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:4px 8px">
+                      ${roleOpts}
+                    </select>
+                  </label>
+                </div>`
+              : ""
+          }
+        </div>
+      `;
+      })
+      .join("");
+
+    listEl.querySelectorAll(".btn-switch-emp").forEach((btn) => {
+      (btn as HTMLButtonElement).onclick = () => {
+        store.setCurrentUser((btn as HTMLElement).dataset.id!);
+        toast(`已切換至「${store.get().currentUser.name}」`);
+        populateSettings();
+      };
+    });
+
+    listEl.querySelectorAll(".btn-del-emp").forEach((btn) => {
+      (btn as HTMLButtonElement).onclick = () => {
+        const id = (btn as HTMLElement).dataset.id!;
+        const target = employees.find((x) => x.id === id);
+        if (target && confirm(`確定刪除「${target.name}」？`)) {
+          const r = store.deleteEmployee(id);
+          if (!r.ok) toast(r.reason ?? "無法刪除");
+          else toast(`已刪除「${target.name}」`);
+          populateSettings();
+        }
+      };
+    });
+
+    listEl.querySelectorAll(".emp-role").forEach((sel) => {
+      (sel as HTMLSelectElement).onchange = () => {
+        const id = (sel as HTMLElement).dataset.id!;
+        const accessRole = (sel as HTMLSelectElement).value as AccessRole;
+        const r = store.updateEmployee(id, { accessRole });
+        if (!r.ok) toast(r.reason ?? "更新失敗");
+        else toast("已更新角色");
+        populateSettings();
+      };
+    });
+  }
+}
+
+document.getElementById("btn-add-employee")?.addEventListener("click", () => {
+  if (!canManageUsers(store.get().currentUser)) {
+    toast("僅管理員可新增人員／Agent");
+    return;
+  }
+  const nameInput = document.getElementById("new-emp-name") as HTMLInputElement | null;
+  const titleInput = document.getElementById("new-emp-role") as HTMLInputElement | null;
+  const emailInput = document.getElementById("new-emp-email") as HTMLInputElement | null;
+  const kindEl = document.getElementById("new-emp-kind") as HTMLSelectElement | null;
+  const accessEl = document.getElementById("new-emp-access") as HTMLSelectElement | null;
+  const familyEl = document.getElementById("new-emp-family") as HTMLSelectElement | null;
+  const passInput = document.getElementById("new-emp-pass") as HTMLInputElement | null;
+
+  const name = nameInput?.value.trim();
+  const title = titleInput?.value.trim() || "成員";
+  const email = emailInput?.value.trim() || `${Date.now()}@northwind.io`;
+  const kind = (kindEl?.value as ActorKind) || "human";
+  const accessRole = (accessEl?.value as AccessRole) || "editor";
+  const agentFamily = (familyEl?.value as AgentFamily) || "other";
+  const password = passInput?.value.trim() || "demo";
+
+  if (!name) {
+    toast("請輸入姓名");
+    return;
+  }
+
+  const emp: Employee = {
+    id: `e_${Date.now()}`,
+    name,
+    title,
+    avatar: name.slice(0, 1),
+    email,
+    accessRole,
+    kind,
+    agentFamily: kind === "agent" ? agentFamily : null,
+    password,
+    isCurrent: false,
+    active: true,
+  };
+
+  const r = store.addEmployee(emp);
+  if (!r.ok) {
+    toast(r.reason ?? "新增失敗");
+    return;
+  }
+  toast(`已新增「${name}」（${ACCESS_ROLE_LABEL[accessRole]} · ${kind === "agent" ? "Agent" : "人員"}）`);
+  if (nameInput) nameInput.value = "";
+  if (titleInput) titleInput.value = "";
+  if (emailInput) emailInput.value = "";
+  populateSettings();
+});
+
+document.getElementById("ai-temp")?.addEventListener("input", (e) => {
+  const v = (e.target as HTMLInputElement).value;
+  const tempValEl = document.getElementById("temp-val");
+  if (tempValEl) tempValEl.textContent = v;
+});
+
+document.getElementById("btn-save-settings")?.addEventListener("click", () => {
+  const model = (document.getElementById("ai-model") as HTMLSelectElement).value as AISettings["model"];
+  const temperature = Number((document.getElementById("ai-temp") as HTMLInputElement).value);
+  const apiKey = (document.getElementById("ai-key") as HTMLInputElement).value.trim();
+  const endpoint = (document.getElementById("ai-endpoint") as HTMLInputElement).value.trim();
+  const persona = (document.getElementById("ai-persona") as HTMLSelectElement).value as AISettings["persona"];
+  const language = (document.getElementById("ai-lang") as HTMLSelectElement).value as AISettings["language"];
+
+  const requireNonGoals = (document.getElementById("linter-nongoals") as HTMLInputElement).checked;
+  const requireMetrics = (document.getElementById("linter-metrics") as HTMLInputElement).checked;
+  const requireStoriesAC = (document.getElementById("linter-stories") as HTMLInputElement).checked;
+  const warnVagueTerms = (document.getElementById("linter-vague") as HTMLInputElement).checked;
+
+  store.updateSettings({
+    model,
+    temperature,
+    apiKey,
+    endpoint,
+    persona,
+    language,
+    enableLinters: {
+      requireNonGoals,
+      requireMetrics,
+      requireStoriesAC,
+      warnVagueTerms,
+    },
+  });
+
+  toast("已成功儲存偏好與 AI 教練設定");
+});
+
+document.getElementById("btn-export-json")?.addEventListener("click", () => {
+  exportJsonFile(store.get());
+  toast("已匯出 JSON 備份");
+});
+
+document.getElementById("btn-export-md")?.addEventListener("click", () => {
+  exportMarkdownFile(store.get());
+  toast("已匯出 Markdown");
+});
+
+document.getElementById("btn-export-html")?.addEventListener("click", () => {
+  exportHtmlFile(store.get());
+  toast("已匯出 HTML");
+});
+
+const fileInput = document.getElementById("file-import") as HTMLInputElement | null;
+document.getElementById("btn-import-json")?.addEventListener("click", () => {
+  fileInput?.click();
+});
+
+fileInput?.addEventListener("change", (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const parsed = JSON.parse(event.target?.result as string) as Partial<AppState> & {
+        state?: Partial<AppState>;
+      };
+      store.importState(parsed.state ?? parsed);
+      populateSettings();
+      toast("已成功匯入工作區狀態");
+    } catch {
+      toast("匯入失敗：檔案格式無效");
+    }
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById("btn-reset-data")?.addEventListener("click", () => {
+  if (confirm("確定要將所有專案與草稿重置為預設範例資料嗎？此操作無法復原。")) {
+    store.reset();
+    populateSettings();
+    toast("已重置為預設範例資料");
+  }
+});
+
+document.getElementById("btn-toggle-samples")?.addEventListener("click", () => {
+  const next = !store.get().showSamples;
+  store.setShowSamples(next);
+  toast(next ? "已展示範例文件內容" : "已移除範例文件內容");
+  populateSettings();
+});
+
+document.getElementById("btn-logout")?.addEventListener("click", () => {
+  store.logout();
+  location.href = "login.html";
+});
+
+// kind change toggles family visibility
+document.getElementById("new-emp-kind")?.addEventListener("change", () => {
+  const kind = (document.getElementById("new-emp-kind") as HTMLSelectElement).value;
+  const familyGroup = document.getElementById("family-group");
+  const accessEl = document.getElementById("new-emp-access") as HTMLSelectElement | null;
+  if (familyGroup) familyGroup.style.display = kind === "agent" ? "" : "none";
+  if (accessEl && kind === "agent" && accessEl.value === "admin") accessEl.value = "editor";
+});
+
+populateSettings();
+store.subscribe(populateSettings);
+} // end __authed
+

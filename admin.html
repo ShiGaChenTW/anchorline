@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>管理中心 · SpecForge</title>
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .admin-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 10px 16px 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-wrap: wrap;
+  }
+  .admin-tabs button {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 13px;
+    font-weight: var(--weight-em);
+    padding: 10px 14px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  }
+  .admin-tabs button:hover { color: var(--fg); }
+  .admin-tabs button[aria-selected="true"] {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .admin-panel { display: none; padding: 16px 16px 40px; overflow: auto; }
+  .admin-panel.active { display: block; }
+  .admin-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .admin-head h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: var(--weight-em);
+  }
+  .admin-head p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .admin-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .admin-card .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .admin-card .meta {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .admin-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .admin-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: var(--weight-em);
+  }
+  .admin-form input,
+  .admin-form select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    color: var(--fg);
+    font: inherit;
+    font-size: 13px;
+  }
+  .stage-list { display: flex; flex-direction: column; gap: 8px; }
+  .stage-item {
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+  .stage-item .ord {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--accent);
+    font-weight: var(--weight-em);
+  }
+  .stage-item .fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+    flex: 1;
+  }
+  .stage-item .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .case-stages {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-muted);
+  }
+  .case-stage-row {
+    display: grid;
+    grid-template-columns: 28px 100px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    font-size: 13px;
+  }
+  .denied {
+    max-width: 520px;
+    margin: 48px auto;
+    text-align: center;
+    padding: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+  .denied h2 { margin: 0 0 8px; }
+  .denied p { color: var(--muted); font-size: 13px; }
+  @media (max-width: 720px) {
+    .case-stage-row { grid-template-columns: 1fr; }
+    .stage-item { grid-template-columns: 1fr; }
+  }
+</style>
+<script>(function(){try{var t=localStorage.getItem("specforge:theme");var m={warp:["dark","#161412"],kami:["light","#f5f4ed"],github:["dark","#0d1117"],claude:["light","#f5f4ed"]};if(!m[t])t="warp";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","warp");}})();</script>
+</head>
+<body>
+<div class="app" data-od-id="app-admin">
+  <div class="titlebar" data-od-id="titlebar">
+    <div class="traffic" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+    <div class="titlebar-title">SpecForge — 管理中心</div>
+    <div class="titlebar-meta">
+      <div class="theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
+        <button type="button" data-theme-value="warp" aria-pressed="true">Warp</button>
+        <button type="button" data-theme-value="kami" aria-pressed="false">kami</button>
+        <button type="button" data-theme-value="github" aria-pressed="false">GitHub</button>
+        <button type="button" data-theme-value="claude" aria-pressed="false">Claude</button>
+      </div>
+      <span class="pill pill-review">Admin</span>
+    </div>
+  </div>
+
+  <div class="shell">
+    <aside class="rail" data-od-id="rail">
+      <div class="rail-brand">
+        <div class="rail-logo">PR</div>
+        <div>
+          <strong>SpecForge</strong>
+          <span>prd.local</span>
+        </div>
+      </div>
+      <nav class="rail-nav">
+        <div class="nav-label">工作區</div>
+        <a class="nav-item" href="projects.html">專案列表</a>
+        <a class="nav-item" href="editor.html">編輯工作台</a>
+        <a class="nav-item" href="templates.html">章節範本</a>
+        <a class="nav-item" href="review.html">審閱佇列</a>
+        <a class="nav-item active" href="admin.html" data-od-id="nav-admin">管理中心</a>
+        <a class="nav-item" href="agents.html" data-od-id="nav-agents">
+          Agent 管理
+        </a>
+
+        <a class="nav-item" href="settings.html">偏好設定</a>
+      </nav>
+      <div class="rail-foot">
+        <div class="avatar">管</div>
+        <div>
+          <div style="font-weight:600;color:var(--fg);font-size:12.5px">—</div>
+          <div>—</div>
+        </div>
+        <button type="button" class="btn btn-sm btn-ghost" id="btn-logout" style="margin-left:auto">登出</button>
+      </div>
+    </aside>
+
+    <main class="main" data-od-id="main-admin">
+      <div class="toolbar">
+        <div>
+          <h1>管理中心</h1>
+          <div class="sub">人員權限 · 簽核流程 · 個案調整（異動關卡／抽單）</div>
+        </div>
+        <div class="spacer"></div>
+        <button type="button" class="btn btn-ghost" id="btn-logout-2">登出</button>
+      </div>
+
+      <div id="admin-denied" class="denied" hidden>
+        <h2>需要管理員權限</h2>
+        <p>此介面僅限<strong>管理員</strong>操作。請以系統管理員身分登入，或請管理員調整您的角色。</p>
+        <p style="margin-top:16px">
+          <a class="btn btn-primary" href="login.html">切換登入</a>
+          <a class="btn" href="projects.html">回專案列表</a>
+        </p>
+      </div>
+
+      <div id="admin-root">
+        <div class="admin-tabs" role="tablist" aria-label="管理分頁">
+          <button type="button" role="tab" data-tab="people" aria-selected="true">人員權限名單</button>
+          <button type="button" role="tab" data-tab="workflow" aria-selected="false">簽核流程設計</button>
+          <button type="button" role="tab" data-tab="cases" aria-selected="false">個案調整</button>
+        </div>
+
+        <!-- People -->
+        <section class="admin-panel active" id="panel-people" role="tabpanel">
+          <div class="admin-head">
+            <div>
+              <h2>人員權限名單</h2>
+              <p>新增、編輯、異動角色；Agent 僅可為編輯或核准。</p>
+            </div>
+          </div>
+          <div id="people-list"></div>
+          <div class="admin-card" style="margin-top:16px">
+            <strong>➕ 新增人員 / Agent</strong>
+            <div class="admin-form" id="form-add-person">
+              <label>姓名<input id="p-name" type="text" placeholder="姓名" /></label>
+              <label>職稱<input id="p-title" type="text" placeholder="職稱" /></label>
+              <label>Email<input id="p-email" type="text" placeholder="email" /></label>
+              <label>密碼<input id="p-pass" type="text" value="demo" /></label>
+              <label>類型
+                <select id="p-kind">
+                  <option value="human">人員</option>
+                  <option value="agent">Agent</option>
+                </select>
+              </label>
+              <label>系統角色
+                <select id="p-role">
+                  <option value="editor">編輯人員</option>
+                  <option value="approver">核准人員</option>
+                  <option value="admin">管理員</option>
+                </select>
+              </label>
+              <label id="p-family-wrap" style="display:none">Agent 族系
+                <select id="p-family">
+                  <option value="claude">Claude 系</option>
+                  <option value="gpt">GPT 系</option>
+                  <option value="gemini">Gemini 系</option>
+                  <option value="local">本地</option>
+                  <option value="other">其他</option>
+                </select>
+              </label>
+            </div>
+            <div style="margin-top:12px">
+              <button type="button" class="btn btn-primary" id="btn-add-person">新增</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Workflow -->
+        <section class="admin-panel" id="panel-workflow" role="tabpanel">
+          <div class="admin-head">
+            <div>
+              <h2>簽核流程設計</h2>
+              <p>定義有序關卡、預設簽核人與是否必簽。套用至個案後可再個案異動。</p>
+            </div>
+            <button type="button" class="btn btn-primary" id="btn-add-stage">＋ 新增關卡</button>
+          </div>
+          <div class="stage-list" id="workflow-list"></div>
+          <p style="font-size:12px;color:var(--muted);margin-top:12px">
+            提示：流程變更不會自動覆寫已在審閱中的個案，請在「個案調整」中手動「套用目前流程」。
+          </p>
+        </section>
+
+        <!-- Cases -->
+        <section class="admin-panel" id="panel-cases" role="tabpanel">
+          <div class="admin-head">
+            <div>
+              <h2>個案調整</h2>
+              <p>異動關卡簽核人員、抽單、重開案件。</p>
+            </div>
+          </div>
+          <div id="cases-list"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script type="module" src="/src/pages/admin.ts"></script>
+</body>
+</html>

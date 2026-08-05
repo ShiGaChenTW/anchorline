@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>登入 · SpecForge</title>
+<link rel="stylesheet" href="shared.css" />
+<style>
+  html, body.login-body {
+    min-height: 100%;
+    margin: 0;
+    background: var(--shell-outer, var(--bg));
+    color: var(--fg);
+  }
+  .login-wrap {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px 16px 40px;
+  }
+  .login-card {
+    width: min(440px, 100%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--elev-raised);
+    padding: 28px 28px 24px;
+  }
+  .login-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .login-brand .rail-logo {
+    width: 36px;
+    height: 36px;
+    font-size: 12px;
+  }
+  .login-brand h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: var(--weight-em);
+  }
+  .login-brand p {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .login-card label {
+    display: block;
+    font-size: 12px;
+    font-weight: var(--weight-em);
+    color: var(--muted);
+    margin: 14px 0 6px;
+  }
+  .login-card select,
+  .login-card input[type="password"],
+  .login-card input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    color: var(--fg);
+    font: inherit;
+    font-size: 14px;
+  }
+  .login-card select:focus,
+  .login-card input:focus {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-color: var(--accent);
+  }
+  .role-chip {
+    display: inline-flex;
+    margin-top: 8px;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    background: var(--inset);
+  }
+  .login-actions {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .login-actions .btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+  .login-hint {
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+  .login-hint code {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--inset);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  .login-error {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--danger);
+    min-height: 1.2em;
+  }
+  .quick-roles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .quick-roles button {
+    font-size: 11px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--fg);
+    cursor: pointer;
+  }
+  .quick-roles button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  /* 避開 macOS 左上角系統紅綠燈；固定右上且不蓋住燈號 */
+  .login-theme {
+    position: fixed;
+    top: 14px;
+    right: 16px;
+    left: auto;
+    z-index: 50;
+    max-width: calc(100vw - 100px);
+  }
+  /* 全寬拖曳區：左上 90px 留給系統 traffic lights，不放互動元件 */
+  .login-drag-safe {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 90px;
+    height: 40px;
+    z-index: 40;
+    pointer-events: none;
+  }
+</style>
+<script>(function(){try{var t=localStorage.getItem("specforge:theme");var m={warp:["dark","#161412"],kami:["light","#f5f4ed"],github:["dark","#0d1117"],claude:["light","#f5f4ed"]};if(!m[t])t="warp";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","warp");}})();</script>
+</head>
+<body class="login-body">
+  <div class="login-drag-safe" aria-hidden="true"></div>
+  <div class="login-theme theme-switch" data-theme-switch role="group" aria-label="設計主題">
+    <button type="button" data-theme-value="warp" aria-pressed="true">Warp</button>
+    <button type="button" data-theme-value="kami" aria-pressed="false">kami</button>
+    <button type="button" data-theme-value="github" aria-pressed="false">GitHub</button>
+    <button type="button" data-theme-value="claude" aria-pressed="false">Claude</button>
+  </div>
+
+  <div class="login-wrap">
+    <form class="login-card" id="login-form" data-od-id="login-card" autocomplete="on">
+      <div class="login-brand">
+        <div class="rail-logo" aria-hidden="true">PR</div>
+        <div>
+          <h1>SpecForge 登入</h1>
+          <p>人員簽核與角色權限工作台</p>
+        </div>
+      </div>
+
+      <label for="user-select">身分</label>
+      <select id="user-select" name="user" required aria-describedby="role-preview"></select>
+      <div id="role-preview" class="role-chip">—</div>
+
+      <label for="password">密碼</label>
+      <input id="password" name="password" type="password" placeholder="示範密碼 demo" required />
+
+      <p class="login-error" id="login-error" role="alert"></p>
+
+      <div class="login-actions">
+        <button type="submit" class="btn btn-primary" id="btn-login">進入工作區</button>
+      </div>
+
+      <div class="quick-roles" aria-label="快速選取示範身分">
+        <button type="button" data-quick="scott">Scott 管理員</button>
+        <button type="button" data-quick="claude-approve">Claude 核准</button>
+        <button type="button" data-quick="claude-edit">Claude 編輯</button>
+        <button type="button" data-quick="codex-approve">Codex 核准</button>
+        <button type="button" data-quick="codex-edit">Codex 編輯</button>
+        <button type="button" data-quick="grok-approve">Grok 核准</button>
+        <button type="button" data-quick="grok-edit">Grok 編輯</button>
+        <button type="button" data-quick="agy-approve">Agy 核准</button>
+        <button type="button" data-quick="agy-edit">Agy 編輯</button>
+      </div>
+
+      <div class="login-hint">
+        示範環境：所有帳號密碼為 <code>demo</code>。<br />
+        人員：<strong>Scott</strong>（管理員）+ Claude Code / Codex / Grok / Agy 各「核准」「編輯」Agent。<br />
+        同一 Agent 族系撰寫的文件不可再由同族系核准。Agent 設定與呼叫見「Agent 管理」。
+      </div>
+    </form>
+  </div>
+
+  <script type="module" src="/src/pages/login.ts"></script>
+</body>
+</html>

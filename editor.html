@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>引導式編輯 · PRD 引導工作台</title>
+<link rel="stylesheet" href="shared.css" />
+<script>(function(){try{var t=localStorage.getItem("specforge:theme");var m={warp:["dark","#161412"],kami:["light","#f5f4ed"],github:["dark","#0d1117"],claude:["light","#f5f4ed"]};if(!m[t])t="warp";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","warp");}})();</script>
+</head>
+<body>
+<div class="app" data-od-id="app-editor">
+  <div class="titlebar" data-od-id="titlebar">
+    <div class="traffic" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
+    <div class="titlebar-title">SpecForge — SaaS 雙重驗證（2FA）</div>
+    <div class="titlebar-meta">
+      <div class="theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
+        <button type="button" data-theme-value="warp" aria-pressed="true">Warp</button>
+        <button type="button" data-theme-value="kami" aria-pressed="false">kami</button>
+        <button type="button" data-theme-value="github" aria-pressed="false">GitHub</button>
+        <button type="button" data-theme-value="claude" aria-pressed="false">Claude</button>
+      </div>
+
+      <span class="pill pill-review">審閱中</span>
+      <span class="kbd">⌘S</span>
+    </div>
+  </div>
+
+  <div class="shell">
+    <aside class="rail" data-od-id="rail">
+      <div class="rail-brand">
+        <div class="rail-logo">PR</div>
+        <div>
+          <strong>SpecForge</strong>
+          <span>prd.local</span>
+        </div>
+      </div>
+      <nav class="rail-nav">
+        <div class="nav-label">工作區</div>
+        <a class="nav-item" href="projects.html" data-od-id="nav-projects">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 2.5a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75z"/></svg>
+          專案列表
+        </a>
+        <a class="nav-item active" href="editor.html" data-od-id="nav-editor">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086zM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064l6.286-6.286z"/></svg>
+          編輯工作台
+        </a>
+        <a class="nav-item" href="templates.html" data-od-id="nav-templates">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v3.5A1.75 1.75 0 0 1 14.25 7H1.75A1.75 1.75 0 0 1 0 5.25v-3.5zM1.75 1a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25H1.75zM0 10.75C0 9.784.784 9 1.75 9h12.5c.966 0 1.75.784 1.75 1.75v3.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25v-3.5zm1.75-.75a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25H1.75z"/></svg>
+          章節範本
+        </a>
+        <a class="nav-item" href="review.html" data-od-id="nav-review">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 8a6.5 6.5 0 1 1 13 0 6.5 6.5 0 0 1-13 0zM8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm.75 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .471.696l2.5 1a.75.75 0 0 0 .557-1.392l-2.028-.811V4.75z"/></svg>
+          審閱佇列
+        </a>
+                <a class="nav-item" href="admin.html" data-od-id="nav-admin">
+          管理中心
+        </a>
+        <a class="nav-item" href="agents.html" data-od-id="nav-agents">
+          Agent 管理
+        </a>
+
+<a class="nav-item" href="settings.html" data-od-id="nav-settings">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm0 14.5a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13zM6.5 8a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z"/></svg>
+          偏好設定
+        </a>
+      </nav>
+      <div class="rail-foot">
+        <div class="avatar">林</div>
+        <div>
+          <div style="font-weight:600;color:var(--fg);font-size:12.5px">林可晴</div>
+          <div>產品 · Identity</div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main" data-od-id="main-editor">
+      <div class="toolbar" data-od-id="toolbar">
+        <div>
+          <h1 data-od-id="page-title">SaaS 雙重驗證（2FA）</h1>
+          <div class="sub">identity / prd-2fa · 自動儲存 14:22</div>
+        </div>
+        <div class="spacer"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-toggle-samples">隱藏範例</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-export-md">匯出 MD</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-outline" data-od-id="btn-outline">大綱檢視</button>
+        <a class="btn" href="review.html" data-od-id="btn-preview">預覽審閱</a>
+        <button type="button" class="btn btn-accent" id="btn-submit" data-od-id="btn-submit">送出審閱</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-logout">登出</button>
+      </div>
+      <p id="perm-banner" hidden class="sub" style="margin:0;padding:8px 16px;background:var(--warn-bg);color:var(--fg);border-bottom:1px solid var(--border);font-size:13px"></p>
+
+      <div class="content" style="overflow:hidden;display:flex;flex-direction:column">
+        <div class="wb" data-od-id="workbench">
+          <!-- Outline -->
+          <div class="wb-col" data-od-id="outline-col">
+            <div class="wb-head">
+              <h2>章節大綱</h2>
+              <span class="mono" id="outline-pct">82%</span>
+            </div>
+            <div class="section-list" id="outline" role="listbox" aria-label="章節"></div>
+          </div>
+
+          <!-- Editor -->
+          <div class="wb-col editor-pane" data-od-id="editor-col">
+            <div class="wb-head">
+              <h2 id="sec-label">撰寫</h2>
+              <div style="display:flex;gap:6px">
+                <button type="button" class="btn btn-sm" id="btn-prev">上一節</button>
+                <button type="button" class="btn btn-sm btn-primary" id="btn-next">下一節</button>
+              </div>
+            </div>
+            <div class="editor-body" id="editor-body" data-od-id="editor-body"></div>
+          </div>
+
+          <!-- Coach -->
+          <div class="wb-col coach" data-od-id="coach-col">
+            <div class="wb-head">
+              <h2>寫作教練</h2>
+              <span class="pill pill-review">即時</span>
+            </div>
+            <div class="coach-body" id="coach-body"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module" src="/src/pages/editor.ts"></script>
+</body>
+</html>
