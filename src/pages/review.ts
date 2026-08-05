@@ -3,6 +3,8 @@ import type { Comment } from "../data/types";
 import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
 import { canApproveProject, canEditContent, canPeerReview } from "../lib/permissions";
+import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
+import { initHelpOverlay } from "../lib/help-overlay";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
@@ -12,6 +14,15 @@ if (__authed) {
 initTheme();
 initMobileNav("review");
 bindLogout();
+initHelpOverlay();
+{
+  const toolbar = document.querySelector(".toolbar");
+  if (toolbar && !document.getElementById("flow-strip-host")) {
+    const wrap = document.createElement("div");
+    wrap.id = "flow-strip-host";
+    toolbar.insertAdjacentElement("afterend", wrap);
+  }
+}
 
 let openOnly = false;
 let activeId = "c1";
@@ -251,6 +262,8 @@ function render() {
   renderDocSections();
   activate(activeId);
   syncUser();
+  const host = document.getElementById("flow-strip-host");
+  if (host) host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps: true }));
 }
 
 document.querySelectorAll(".hl").forEach((h) => {

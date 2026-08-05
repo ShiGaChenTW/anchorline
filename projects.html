@@ -147,36 +147,89 @@
 </div>
 
 <div class="modal-back" id="modal" data-od-id="modal-new">
-  <div class="modal" role="dialog" aria-labelledby="modal-title">
+  <div class="modal modal-wizard" role="dialog" aria-labelledby="modal-title">
     <header>
-      <h3 id="modal-title">新建 PRD</h3>
+      <h3 id="modal-title">新建 PRD 精靈</h3>
       <button type="button" class="btn btn-ghost btn-sm" id="modal-close">關閉</button>
     </header>
+    <div class="wizard-steps" id="wizard-steps" aria-label="精靈步驟">
+      <span data-ws="0" class="on">1 基本</span>
+      <span data-ws="1">2 問題</span>
+      <span data-ws="2">3 非目標</span>
+      <span data-ws="3">4 成果</span>
+    </div>
     <div class="body">
-      <div class="field">
-        <label>標題</label>
-        <input type="text" id="new-title" placeholder="例如：企業版 SSO 強制政策" value="新功能規格" />
-      </div>
-      <div class="field-row">
+      <div class="wizard-pane" data-pane="0">
         <div class="field">
-          <label>範本</label>
-          <select id="new-tpl">
-            <option>標準功能 PRD</option>
-            <option>平台／基礎設施</option>
-            <option>資安與合規</option>
-            <option>成長實驗</option>
-          </select>
+          <label>標題</label>
+          <input type="text" id="new-title" placeholder="例如：企業版 SSO 強制政策" value="" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>範本</label>
+            <select id="new-tpl">
+              <option>標準功能 PRD</option>
+              <option>平台／基礎設施</option>
+              <option>資安與合規</option>
+              <option>成長實驗</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>目標發布</label>
+            <input type="text" id="new-target" placeholder="Q3 · 2026-09" value="Q3 · 2026-09" />
+          </div>
         </div>
         <div class="field">
-          <label>目標發布</label>
-          <input type="text" id="new-target" placeholder="Q3 · 2026-09" value="Q3 · 2026-09" />
+          <label>做什麼（一句話）</label>
+          <input type="text" id="wiz-what" placeholder="交付物一句話" />
+        </div>
+        <div class="field">
+          <label>給誰</label>
+          <input type="text" id="wiz-who" placeholder="主要受益角色" />
         </div>
       </div>
-      <p class="hint">建立後會套用引導式章節大綱，並開啟編輯工作台。</p>
+      <div class="wizard-pane" data-pane="1" hidden>
+        <div class="field">
+          <label>為何現在</label>
+          <textarea id="wiz-why" rows="3" placeholder="外部壓力／內部期限"></textarea>
+        </div>
+        <div class="field">
+          <label>問題陳述</label>
+          <textarea id="wiz-problem" rows="5" placeholder="痛點、對象、佐證（勿先寫解法）"></textarea>
+        </div>
+      </div>
+      <div class="wizard-pane" data-pane="2" hidden>
+        <p class="hint" style="margin-top:0">至少 <strong>3 條</strong> Non-Goals（SCVB 結構契約，否則無法送審）</p>
+        <div class="field">
+          <label>非目標 1</label>
+          <input type="text" id="wiz-ng1" placeholder="這次刻意不做…" />
+        </div>
+        <div class="field">
+          <label>非目標 2</label>
+          <input type="text" id="wiz-ng2" placeholder="這次刻意不做…" />
+        </div>
+        <div class="field">
+          <label>非目標 3</label>
+          <input type="text" id="wiz-ng3" placeholder="這次刻意不做…" />
+        </div>
+        <div class="field">
+          <label>目標（可列點）</label>
+          <textarea id="wiz-goals" rows="3" placeholder="• 可驗收目標…"></textarea>
+        </div>
+      </div>
+      <div class="wizard-pane" data-pane="3" hidden>
+        <div class="field">
+          <label>成功指標（建議含數字）</label>
+          <textarea id="wiz-metrics" rows="4" placeholder="指標 | 目標 | 量測&#10;覆蓋率 | ≥ 80% | …"></textarea>
+        </div>
+        <p class="hint">建立後會寫入摘要／問題／目標／指標章節，並開啟編輯工作台。可按 ? 查看快捷鍵。</p>
+      </div>
     </div>
     <footer>
       <button type="button" class="btn" id="modal-cancel">取消</button>
-      <button type="button" class="btn btn-primary" id="modal-create">建立並開啟</button>
+      <button type="button" class="btn" id="wizard-prev" hidden>上一步</button>
+      <button type="button" class="btn btn-primary" id="wizard-next">下一步</button>
+      <button type="button" class="btn btn-primary" id="modal-create" hidden>建立並開啟</button>
     </footer>
   </div>
 </div>

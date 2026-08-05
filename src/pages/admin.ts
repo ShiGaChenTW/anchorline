@@ -8,6 +8,7 @@ import type {
 } from "../data/types";
 import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL } from "../data/types";
 import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
+import { initHelpOverlay } from "../lib/help-overlay";
 import { canManageUsers } from "../lib/permissions";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
@@ -17,6 +18,7 @@ if (__authed) {
   initTheme();
   initMobileNav("admin");
   bindLogout();
+  initHelpOverlay();
   document.getElementById("btn-logout-2")?.addEventListener("click", () => {
     store.logout();
     location.href = "login.html";

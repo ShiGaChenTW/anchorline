@@ -1,7 +1,9 @@
 import { store } from "../data/store";
 import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
+import { deriveFlowLayers } from "../lib/flow-layers";
+import { initHelpOverlay } from "../lib/help-overlay";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
-import { FLOW_LAYERS, parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
+import { parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
@@ -19,6 +21,7 @@ if (__authed) {
   initTheme();
   initMobileNav("admin");
   bindLogout();
+  initHelpOverlay();
 
   let plans: PlanEntry[] = [];
   let idx = 0;
@@ -130,29 +133,19 @@ if (__authed) {
   function renderLayers() {
     const el = document.getElementById("layer-panel");
     if (!el) return;
-    const report = evaluatePrdGates(store.get());
-    const st = store.get();
-    // 粗推導：摘要+目標 → L1/L2；有 plan steps → L3；簽核 → L5/L6
-    const hasSpec = report.canSubmit;
     const hasPlan = plans.some((p) => p.meta.total_steps > 0);
-    const locked = st.locked;
-    const map: Record<string, boolean> = {
-      l1: !!(st.sectionValues.summary?.what || st.sectionValues.problem?.problem),
-      l2: hasSpec,
-      l3: hasPlan,
-      l4: st.projects.some((p) => p.status === "review" || p.status === "approved"),
-      l5: st.projects.some((p) => p.status === "review"),
-      l6: locked || st.projects.some((p) => p.status === "approved"),
-    };
-    el.innerHTML = FLOW_LAYERS.map((l) => {
-      const on = map[l.id];
-      return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border-muted)">
+    const layers = deriveFlowLayers(store.get(), { hasPlanSteps: hasPlan });
+    el.innerHTML = layers
+      .map((l) => {
+        const mark = l.done ? "●" : l.active ? "▶" : "○";
+        const color = l.done ? "var(--success)" : l.active ? "var(--accent)" : "var(--meta)";
+        return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border-muted)" title="${escapeHtml(l.hint)}">
         <span>${l.code} ${l.name}</span>
-        <span style="color:${on ? "var(--success)" : "var(--meta)"}">${on ? "●" : "○"}</span>
+        <span style="color:${color}">${mark}</span>
       </div>`;
-    }).join("");
+      })
+      .join("");
 
-    // side meta cards
     const p = plans[idx];
     if (p) {
       el.innerHTML += `

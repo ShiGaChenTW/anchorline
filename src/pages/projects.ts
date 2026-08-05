@@ -3,6 +3,8 @@ import type { Project, ProjectStatus } from "../data/types";
 import { ACCESS_ROLE_LABEL } from "../data/types";
 import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
+import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
+import { initHelpOverlay } from "../lib/help-overlay";
 import { canDelete, canEditContent, canExport } from "../lib/permissions";
 import { initTheme } from "../lib/theme";
 import {
@@ -22,6 +24,18 @@ if (!requireAuth()) {
   initMobileNav("projects");
   bindModalDismiss("modal");
   bindLogout();
+  initHelpOverlay();
+
+  // L1–L6 strip under toolbar
+  {
+    const main = document.querySelector(".main");
+    const toolbar = document.querySelector(".toolbar");
+    if (main && toolbar && !document.querySelector(".flow-strip")) {
+      const wrap = document.createElement("div");
+      wrap.id = "flow-strip-host";
+      toolbar.insertAdjacentElement("afterend", wrap);
+    }
+  }
 
   const STATUS: Record<ProjectStatus, { label: string; cls: string }> = {
     draft: { label: "草稿", cls: "pill-draft" },
@@ -61,6 +75,13 @@ if (!requireAuth()) {
     if (nodes[0]) nodes[0].textContent = String(open);
     if (nodes[1]) nodes[1].textContent = String(pending);
     if (nodes[2]) nodes[2].textContent = String(approved);
+  }
+
+  function renderFlow() {
+    const host = document.getElementById("flow-strip-host");
+    if (!host) return;
+    // plan steps presence unknown without fetch; mark true if any plan file name in plans list later
+    host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps: true }));
   }
 
   function render() {
@@ -147,6 +168,7 @@ if (!requireAuth()) {
     });
 
     renderStats(projects);
+    renderFlow();
     syncChrome();
     const navCount = document.querySelector('[data-od-id="nav-projects"] .count');
     if (navCount) navCount.textContent = String(projects.length);
@@ -166,15 +188,85 @@ if (!requireAuth()) {
     render();
   });
 
+  /* ─── 4-step PRD wizard ─── */
+  let wizStep = 0;
+  const WIZ_MAX = 3;
+
+  function setWizardStep(step: number) {
+    wizStep = Math.max(0, Math.min(WIZ_MAX, step));
+    document.querySelectorAll(".wizard-pane").forEach((p) => {
+      const n = Number((p as HTMLElement).dataset.pane);
+      (p as HTMLElement).hidden = n !== wizStep;
+    });
+    document.querySelectorAll("#wizard-steps [data-ws]").forEach((s) => {
+      s.classList.toggle("on", Number((s as HTMLElement).dataset.ws) === wizStep);
+    });
+    const prev = document.getElementById("wizard-prev") as HTMLButtonElement | null;
+    const next = document.getElementById("wizard-next") as HTMLButtonElement | null;
+    const create = document.getElementById("modal-create") as HTMLButtonElement | null;
+    if (prev) prev.hidden = wizStep === 0;
+    if (next) next.hidden = wizStep === WIZ_MAX;
+    if (create) create.hidden = wizStep !== WIZ_MAX;
+  }
+
+  function validateWizardStep(): boolean {
+    if (wizStep === 0) {
+      const title = (document.getElementById("new-title") as HTMLInputElement).value.trim();
+      const what = (document.getElementById("wiz-what") as HTMLInputElement).value.trim();
+      if (!title || !what) {
+        toast("請填標題與「做什麼」");
+        return false;
+      }
+    }
+    if (wizStep === 2) {
+      const ngs = ["wiz-ng1", "wiz-ng2", "wiz-ng3"].map(
+        (id) => (document.getElementById(id) as HTMLInputElement).value.trim(),
+      );
+      if (ngs.filter(Boolean).length < 3) {
+        toast("Non-Goals 需滿 3 條（SCVB 契約）");
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function resetWizard() {
+    setWizardStep(0);
+    const ids = [
+      "new-title",
+      "wiz-what",
+      "wiz-who",
+      "wiz-why",
+      "wiz-problem",
+      "wiz-ng1",
+      "wiz-ng2",
+      "wiz-ng3",
+      "wiz-goals",
+      "wiz-metrics",
+    ];
+    for (const id of ids) {
+      const el = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
+      if (el) el.value = "";
+    }
+    const target = document.getElementById("new-target") as HTMLInputElement | null;
+    if (target) target.value = "Q3 · 2026-09";
+  }
+
   document.getElementById("btn-new")?.addEventListener("click", () => {
     if (!canEditContent(store.get().currentUser)) {
       toast("核准人員無法新建或編輯內文");
       return;
     }
+    resetWizard();
     openModal("modal");
   });
   document.getElementById("modal-close")?.addEventListener("click", () => closeModal("modal"));
   document.getElementById("modal-cancel")?.addEventListener("click", () => closeModal("modal"));
+  document.getElementById("wizard-prev")?.addEventListener("click", () => setWizardStep(wizStep - 1));
+  document.getElementById("wizard-next")?.addEventListener("click", () => {
+    if (!validateWizardStep()) return;
+    setWizardStep(wizStep + 1);
+  });
 
   document.getElementById("modal-create")?.addEventListener("click", () => {
     const user = store.get().currentUser;
@@ -182,15 +274,27 @@ if (!requireAuth()) {
       toast("無編輯權限");
       return;
     }
+    if (!validateWizardStep()) return;
+
     const title =
       (document.getElementById("new-title") as HTMLInputElement | null)?.value.trim() ||
       "新功能規格";
     const tpl = (document.getElementById("new-tpl") as HTMLSelectElement | null)?.value ?? "";
+    const what = (document.getElementById("wiz-what") as HTMLInputElement).value.trim();
+    const who = (document.getElementById("wiz-who") as HTMLInputElement).value.trim();
+    const why = (document.getElementById("wiz-why") as HTMLTextAreaElement).value.trim();
+    const problem = (document.getElementById("wiz-problem") as HTMLTextAreaElement).value.trim();
+    const ngs = ["wiz-ng1", "wiz-ng2", "wiz-ng3"]
+      .map((id) => (document.getElementById(id) as HTMLInputElement).value.trim())
+      .filter(Boolean);
+    const goals = (document.getElementById("wiz-goals") as HTMLTextAreaElement).value.trim();
+    const metrics = (document.getElementById("wiz-metrics") as HTMLTextAreaElement).value.trim();
+
     const p: Project = {
       id: `p${Date.now()}`,
       title,
       status: "draft",
-      pct: 8,
+      pct: 12,
       owner: user.name,
       ownerId: user.id,
       authorId: user.id,
@@ -201,7 +305,24 @@ if (!requireAuth()) {
       isSample: false,
     };
     store.addProject(p);
-    toast(`已建立「${title}」`);
+    store.setActiveProject(p.id);
+
+    // 寫入精靈產出的章節初稿
+    store.setSectionValues("summary", {
+      what: what || title,
+      who: who || user.name,
+      why: why || "",
+    });
+    if (problem) store.setSectionField("problem", "problem", problem);
+    store.setSectionValues("goals", {
+      goals: goals || `• ${what || title}`,
+      nongoals: ngs.map((x) => `• ${x}`).join("\n"),
+    });
+    if (metrics) store.setSectionField("metrics", "m1", metrics);
+    store.updateSection("summary", { status: "warn" });
+    store.updateSection("goals", { status: "warn" });
+
+    toast(`已建立「${title}」（含精靈初稿）`);
     location.href = "editor.html";
   });
 
