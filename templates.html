@@ -5,32 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>章節範本庫 · PRD 引導工作台</title>
 <link rel="stylesheet" href="shared.css" />
-<script>(function(){try{var t=localStorage.getItem("specforge:theme");var m={warp:["dark","#161412"],kami:["light","#f5f4ed"],github:["dark","#0d1117"],claude:["light","#f5f4ed"]};if(!m[t])t="warp";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","warp");}})();</script>
+<script>(function(){try{var t=localStorage.getItem("specforge:theme");if(t==="warp")t="github";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
 </head>
 <body>
 <div class="app" data-od-id="app-templates">
-  <div class="titlebar" data-od-id="titlebar">
-    <div class="traffic" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
-    <div class="titlebar-title">SpecForge — 章節範本庫</div>
-    <div class="titlebar-meta">
-      <div class="theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
-        <button type="button" data-theme-value="warp" aria-pressed="true">Warp</button>
-        <button type="button" data-theme-value="kami" aria-pressed="false">kami</button>
-        <button type="button" data-theme-value="github" aria-pressed="false">GitHub</button>
-        <button type="button" data-theme-value="claude" aria-pressed="false">Claude</button>
-      </div>
-<span class="kbd">/</span> 篩選</div>
-  </div>
-
   <div class="shell">
     <aside class="rail" data-od-id="rail">
-      <div class="rail-brand">
+            <div class="rail-brand">
         <div class="rail-logo">PR</div>
-        <div>
-          <strong>SpecForge</strong>
+        <div class="rail-brand-text">
+          <strong>PRD開發監控台</strong>
           <span>prd.local</span>
         </div>
       </div>
+      <div class="rail-theme-row">
+        <div class="theme-switch rail-theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
+          <button type="button" data-theme-value="kami" aria-pressed="false">kami</button>
+          <button type="button" data-theme-value="github" aria-pressed="true">GitHub</button>
+        </div>
+      </div>
+
       <nav class="rail-nav">
         <div class="nav-label">工作區</div>
         <a class="nav-item" href="projects.html" data-od-id="nav-projects">

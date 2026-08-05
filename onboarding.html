@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>首次使用引導 · SpecForge</title>
+<link rel="stylesheet" href="shared.css" />
+<script>(function(){try{var t=localStorage.getItem("specforge:theme");if(t==="warp")t="github";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
+</head>
+<body class="onboard-body">
+  <div class="login-drag-safe" aria-hidden="true"></div>
+    <div class="login-theme theme-switch" data-theme-switch role="group" aria-label="設計主題">
+    <button type="button" data-theme-value="kami" aria-pressed="false">kami</button>
+    <button type="button" data-theme-value="github" aria-pressed="true">GitHub</button>
+  </div>
+<div class="onboard-wrap">
+    <div class="onboard-card" data-od-id="onboard-card">
+      <header class="onboard-head">
+        <div class="login-brand" style="margin-bottom:0">
+          <div class="rail-logo" aria-hidden="true">PR</div>
+          <div>
+            <h1>SpecForge 首次設定</h1>
+            <p>正式版 · 無示範資料 · 三步開始協作</p>
+          </div>
+        </div>
+        <nav class="onboard-steps" id="onboard-steps" aria-label="引導步驟">
+          <span data-step="0" class="on">1 管理員</span>
+          <span data-step="1">2 專案導入</span>
+          <span data-step="2">3 Agent 互動</span>
+        </nav>
+      </header>
+
+      <!-- Step 0: Admin -->
+      <section class="onboard-pane" data-pane="0" aria-labelledby="ob-t0">
+        <h2 id="ob-t0">建立工作區管理員</h2>
+        <p class="onboard-lead">第一位管理員擁有帳號管理、簽核流程與匯出全權限。密碼僅存於此裝置的本機資料。</p>
+        <div class="field">
+          <label for="ob-name">姓名</label>
+          <input id="ob-name" type="text" autocomplete="name" placeholder="例如：陳小明" required />
+        </div>
+        <div class="field">
+          <label for="ob-email">Email</label>
+          <input id="ob-email" type="email" autocomplete="email" placeholder="you@company.com" required />
+        </div>
+        <div class="field">
+          <label for="ob-title">職稱（可選）</label>
+          <input id="ob-title" type="text" placeholder="工作區管理員" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="ob-pass">密碼</label>
+            <input id="ob-pass" type="password" autocomplete="new-password" placeholder="至少 4 字元" required />
+          </div>
+          <div class="field">
+            <label for="ob-pass2">確認密碼</label>
+            <input id="ob-pass2" type="password" autocomplete="new-password" placeholder="再輸入一次" required />
+          </div>
+        </div>
+        <p class="login-error" id="ob-err-0" role="alert"></p>
+      </section>
+
+      <!-- Step 1: Project import -->
+      <section class="onboard-pane" data-pane="1" hidden aria-labelledby="ob-t1">
+        <h2 id="ob-t1">專案導入方式</h2>
+        <p class="onboard-lead">正式版不附示範 PRD。請選擇你如何開始第一份規格：</p>
+        <div class="onboard-choices" role="radiogroup" aria-label="導入方式">
+          <label class="onboard-choice">
+            <input type="radio" name="import-mode" value="beginner" checked />
+            <span class="onboard-choice-body">
+              <strong>新手撰寫流程</strong>
+              <em>7 步精靈：摘要 → 問題 → 邊界 → 指標，適合第一次寫 PRD</em>
+            </span>
+          </label>
+          <label class="onboard-choice">
+            <input type="radio" name="import-mode" value="import" />
+            <span class="onboard-choice-body">
+              <strong>匯入 Markdown</strong>
+              <em>從既有 .md 檔建立草稿（標題取自 # 標題或檔名）</em>
+            </span>
+          </label>
+          <label class="onboard-choice">
+            <input type="radio" name="import-mode" value="blank" />
+            <span class="onboard-choice-body">
+              <strong>空白工作區</strong>
+              <em>稍後在專案列表用「新建 PRD」或「新手引導」建立</em>
+            </span>
+          </label>
+        </div>
+        <div class="field" id="ob-import-wrap" hidden>
+          <label for="ob-file">選擇 Markdown 檔</label>
+          <input id="ob-file" type="file" accept=".md,text/markdown,text/plain" />
+          <p class="hint" id="ob-file-hint">尚未選擇檔案</p>
+        </div>
+        <p class="login-error" id="ob-err-1" role="alert"></p>
+      </section>
+
+      <!-- Step 2: Agent -->
+      <section class="onboard-pane" data-pane="2" hidden aria-labelledby="ob-t2">
+        <h2 id="ob-t2">Agent 如何互動</h2>
+        <p class="onboard-lead">SpecForge 把 Agent 當「可登入的角色」：有編輯／核准權限、可被指派簽核，也可在 Agent 管理頁調整 prompt 與進場作業。</p>
+        <ul class="onboard-list">
+          <li><strong>人員 vs Agent</strong>：人員負責真實決策；Agent 可撰寫或簽核，但同一 Agent 族系不可既寫又核。</li>
+          <li><strong>進場作業</strong>：在「Agent 管理」選 Agent → 指定專案與任務（編輯／覆核／核准）→ 佇列執行。</li>
+          <li><strong>簽核鏈</strong>：管理中心可設定工程／設計／資安／法務關卡與預設指派。</li>
+          <li><strong>密碼</strong>：Agent 也有登入密碼；安裝入門包時會沿用你剛設的管理員密碼，之後可在管理中心改。</li>
+        </ul>
+        <label class="onboard-check">
+          <input type="checkbox" id="ob-install-agents" checked />
+          <span>安裝入門 Agent 包（Claude / Codex / Grok / Agy 的編輯＋核准角色）</span>
+        </label>
+        <p class="hint">可略過；之後仍可在 Agent 管理或管理中心新增。</p>
+        <p class="login-error" id="ob-err-2" role="alert"></p>
+      </section>
+
+      <footer class="onboard-foot">
+        <button type="button" class="btn" id="ob-prev" hidden>上一步</button>
+        <div class="spacer"></div>
+        <button type="button" class="btn btn-primary" id="ob-next">下一步</button>
+        <button type="button" class="btn btn-primary" id="ob-finish" hidden>完成並進入工作區</button>
+      </footer>
+    </div>
+  </div>
+
+  <script type="module" src="/src/pages/onboarding.ts"></script>
+</body>
+</html>

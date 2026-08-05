@@ -1,0 +1,65 @@
+.mdv-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  height: var(--statusbar-h);
+}
+
+.mdv-statusbar__group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mdv-statusbar__help {
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 4px;
+  color: var(--muted);
+}
+
+.mdv-statusbar__help:hover {
+  color: var(--accent);
+  background: transparent;
+}
+
+.mdv-vim-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  color: var(--muted);
+  border: 1px solid color-mix(in srgb, var(--muted) 25%, transparent);
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.mdv-vim-pill--insert {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.mdv-vim-pill--visual {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.mdv-vim-pill--replace {
+  background: color-mix(in srgb, #e74c3c 18%, transparent);
+  color: #e74c3c;
+  border-color: color-mix(in srgb, #e74c3c 35%, transparent);
+}
+

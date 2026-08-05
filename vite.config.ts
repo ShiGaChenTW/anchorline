@@ -35,6 +35,7 @@ export default defineConfig({
       input: {
         index: resolve(root, "index.html"),
         login: resolve(root, "login.html"),
+        onboarding: resolve(root, "onboarding.html"),
         projects: resolve(root, "projects.html"),
         editor: resolve(root, "editor.html"),
         templates: resolve(root, "templates.html"),

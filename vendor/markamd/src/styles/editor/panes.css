@@ -1,0 +1,515 @@
+/* main shell */
+.mdv-shell {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: row;
+}
+
+.mdv-shell > .mdv-splitter {
+  flex: 1;
+  min-width: 0;
+}
+
+.mdv-workspace {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mdv-workspace > .mdv-splitter,
+.mdv-workspace > .mdv-shell__editor-solo {
+  flex: 1;
+  min-height: 0;
+}
+
+/* open file tabs */
+.mdv-tabs {
+  flex: 0 0 auto;
+  min-width: 0;
+  height: 34px;
+  display: flex;
+  align-items: end;
+  gap: 2px;
+  padding: 4px 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  scroll-padding-inline: 8px;
+  mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%);
+  background: color-mix(in srgb, var(--surface) 74%, var(--bg));
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: no-drag;
+}
+
+.mdv-tab {
+  flex: 0 0 clamp(118px, 18vw, 200px);
+  min-width: 0;
+  height: 30px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  color: var(--muted);
+  background: transparent;
+  transition:
+    background-color var(--dur-fast) var(--easing),
+    border-color var(--dur-fast) var(--easing),
+    color var(--dur-fast) var(--easing);
+}
+
+.mdv-tab:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+}
+
+.mdv-tab.is-active {
+  color: var(--fg);
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.mdv-tab__select {
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 6px 0 10px;
+}
+
+.mdv-tab__dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.mdv-tab.is-dirty .mdv-tab__dot {
+  background: var(--accent);
+}
+
+.mdv-tab__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.mdv-tab__close {
+  width: 24px;
+  height: 24px;
+  margin-right: 2px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--muted);
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--easing),
+    color var(--dur-fast) var(--easing),
+    background-color var(--dur-fast) var(--easing);
+}
+
+.mdv-tab:hover .mdv-tab__close,
+.mdv-tab.is-active .mdv-tab__close {
+  opacity: 1;
+}
+
+.mdv-tab__close:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+}
+
+.mdv-tabs.is-reordering {
+  user-select: none;
+  cursor: grabbing;
+}
+
+.mdv-tab.is-dragging {
+  opacity: 0.5;
+}
+
+.mdv-tab.is-drag-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* editor-only mode (#28) — preview pane hidden, editor fills remaining width */
+.mdv-shell__editor-solo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* splitter */
+.mdv-splitter {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+}
+
+.mdv-splitter__pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.mdv-splitter__handle {
+  position: relative;
+  background: var(--border);
+  cursor: col-resize;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+.mdv-splitter__handle::before {
+  content: "";
+  position: absolute;
+  inset: 0 -5px;
+}
+
+.mdv-splitter__handle:hover,
+.mdv-splitter__handle:active {
+  background: var(--accent);
+  transition: background var(--dur-fast) var(--easing);
+}
+
+/* editor */
+.mdv-editor {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.mdv-editor .cm-editor {
+  height: 100%;
+}
+
+/* find/replace panel */
+.mdv-editor .cm-panels {
+  background: var(--surface);
+  color: var(--fg);
+  border-color: var(--border);
+}
+
+.mdv-editor .cm-panels.cm-panels-top {
+  border-bottom: 1px solid var(--border);
+}
+
+.mdv-editor .cm-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.mdv-editor .cm-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mdv-editor .cm-search input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+.mdv-editor .cm-textfield {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+  transition: border-color var(--dur-fast) var(--easing);
+}
+
+.mdv-editor .cm-textfield:focus {
+  border-color: var(--accent);
+}
+
+.mdv-editor .cm-button {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  cursor: pointer;
+  text-transform: none;
+  background-image: none;
+  transition: border-color var(--dur-fast) var(--easing),
+    color var(--dur-fast) var(--easing);
+}
+
+.mdv-editor .cm-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.mdv-editor .cm-panel.cm-search [name="close"] {
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.mdv-editor .cm-panel.cm-search [name="close"]:hover {
+  color: var(--fg);
+}
+
+.mdv-editor .cm-searchMatch {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 2px;
+}
+
+.mdv-editor .cm-searchMatch-selected {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* preview pane wrapper */
+.mdv-preview {
+  position: relative;
+  height: 100%;
+  overflow: auto;
+  padding: 20px 28px 80px;
+  user-select: text;
+}
+
+.mdv-preview__floating-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.mdv-preview__float-button.mdv-btn {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 76%, transparent);
+  color: var(--muted);
+  opacity: 0.72;
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
+}
+
+.mdv-preview__float-button.mdv-btn:focus-visible,
+.mdv-preview__float-button.mdv-btn:hover {
+  background: var(--bg);
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  opacity: 1;
+}
+
+/* scrollbars — CSS standard (Firefox) */
+.mdv-preview {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(128, 128, 128, 0.35) transparent;
+}
+
+.mdv-editor .cm-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(128, 128, 128, 0.35) transparent;
+}
+
+/* scrollbars — WebKit / Chromium (macOS WebView, Windows WebView2) */
+.mdv-preview::-webkit-scrollbar,
+.mdv-editor .cm-scroller::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.mdv-preview::-webkit-scrollbar-track,
+.mdv-editor .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mdv-preview::-webkit-scrollbar-thumb,
+.mdv-editor .cm-scroller::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.35);
+  border-radius: 4px;
+}
+
+.mdv-preview::-webkit-scrollbar-thumb:hover,
+.mdv-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.6);
+}
+
+.mdv-preview__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  color: var(--muted);
+  text-align: center;
+  user-select: none;
+  animation: mdv-fade-up 320ms var(--easing);
+}
+
+@keyframes mdv-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mdv-preview__empty-art {
+  opacity: 0.9;
+  filter: drop-shadow(0 2px 10px color-mix(in srgb, var(--accent) 14%, transparent));
+}
+
+.mdv-preview__empty-title {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.mdv-preview__empty-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+/* csv preview */
+.mdv-csv {
+  max-width: 100%;
+  margin: 0 auto;
+  color: var(--fg);
+  font-family: var(--font-ui);
+  animation: mdv-fade-up 260ms var(--easing);
+}
+
+.mdv-csv__header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  max-width: 980px;
+  margin: 0 auto 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mdv-csv__eyebrow {
+  margin: 0 0 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.mdv-csv__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.mdv-csv__meta,
+.mdv-csv__notice {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.mdv-csv__notice {
+  max-width: 980px;
+  margin: 0 auto 10px;
+}
+
+.mdv-csv__table-wrap {
+  max-width: 980px;
+  margin: 0 auto;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+.mdv-csv__table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mdv-csv__table th,
+.mdv-csv__table td {
+  max-width: 260px;
+  padding: 7px 10px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mdv-csv__table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-solid, var(--bg));
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.mdv-csv__table tr:last-child td {
+  border-bottom: 0;
+}
+
+.mdv-csv__table th:last-child,
+.mdv-csv__table td:last-child {
+  border-right: 0;
+}
+
+.mdv-csv__empty {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .mdv-csv__header {
+    align-items: start;
+    flex-direction: column;
+    gap: 8px;
+  }
+}

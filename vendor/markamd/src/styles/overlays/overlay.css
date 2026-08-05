@@ -1,0 +1,53 @@
+.mdv-overlay__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(2px);
+  z-index: 1000;
+  animation: mdv-overlay-fade 140ms var(--easing);
+}
+
+.mdv-overlay {
+  position: fixed;
+  top: 14vh;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 48px);
+  max-height: 76vh;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35), 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1001;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: mdv-overlay-in 160ms var(--easing);
+  -webkit-app-region: no-drag;
+}
+
+.mdv-overlay--palette {
+  width: 560px;
+  top: 16vh;
+}
+
+.mdv-overlay--modal {
+  width: 580px;
+  top: 12vh;
+}
+
+@keyframes mdv-overlay-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mdv-overlay-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}

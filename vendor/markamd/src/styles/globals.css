@@ -1,0 +1,238 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+@import "./tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--fg);
+  background: var(--bg);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss01", "ss03";
+  overflow: hidden;
+  user-select: none;
+  transition:
+    background-color var(--dur-base) var(--easing),
+    color var(--dur-base) var(--easing);
+}
+
+/* when user opts into transparency: html/body let vibrancy show through */
+:root[data-transparency="on"],
+:root[data-transparency="on"] body {
+  background: transparent;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* hide scrollbars entirely — content still scrolls, just no visible bar */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+* {
+  scrollbar-width: none;
+}
+
+/* global tooltip — rendered absolutely by <TooltipRoot/>, triggered by [data-tooltip] */
+.mdv-tooltip {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--fg) 28%, transparent);
+  white-space: nowrap;
+  max-width: 280px;
+  animation: mdv-tooltip-in 140ms var(--easing);
+  transform-origin: center top;
+}
+
+.mdv-tooltip--below {
+  transform: translateX(-50%);
+}
+
+.mdv-tooltip--above {
+  transform: translate(-50%, -100%);
+  transform-origin: center bottom;
+}
+
+@keyframes mdv-tooltip-in {
+  from {
+    opacity: 0;
+    margin-top: -2px;
+  }
+  to {
+    opacity: 1;
+    margin-top: 0;
+  }
+}
+
+/* themed text selection — accent-tinted across editor, preview, and chrome */
+::selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: var(--fg);
+}
+
+::-moz-selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+  color: var(--fg);
+}
+
+/* CodeMirror sometimes scopes selection per-editor — keep it consistent */
+.cm-editor .cm-selectionBackground,
+.cm-editor.cm-focused .cm-selectionBackground {
+  background: color-mix(in srgb, var(--accent) 32%, transparent) !important;
+}
+
+/* print-to-pdf — body.mdv-print is added before window.print() so the DOM is
+   reshaped *before* the webview snapshots. WKWebView often renders the live
+   screen layout (not @media print) into the PDF; class-based is the reliable path. */
+body.mdv-print .mdv-titlebar,
+body.mdv-print .mdv-breadcrumb,
+body.mdv-print .mdv-statusbar,
+body.mdv-print .mdv-sidebar,
+body.mdv-print .mdv-tabs,
+body.mdv-print .mdv-splitter__handle,
+body.mdv-print .mdv-splitter__pane:first-child,
+body.mdv-print .mdv-toast,
+body.mdv-print .mdv-overlay,
+body.mdv-print .mdv-overlay__backdrop,
+body.mdv-print .mdv-drop,
+body.mdv-print .mdv-tooltip,
+body.mdv-print .mdv-popover {
+  display: none !important;
+}
+
+body.mdv-print,
+body.mdv-print .mdv-app,
+body.mdv-print .mdv-shell,
+body.mdv-print .mdv-splitter,
+body.mdv-print .mdv-splitter__pane:last-child,
+body.mdv-print .mdv-preview {
+  display: block !important;
+  height: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: visible !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  padding: 0 !important;
+}
+
+body.mdv-print .mdv-prose {
+  max-width: 100% !important;
+  padding: 24px 32px !important;
+  color: #000000 !important;
+  background: #ffffff !important;
+}
+
+body.mdv-print .mdv-prose a {
+  color: #0a4d8c !important;
+}
+
+@media print {
+  @page {
+    margin: 16mm 16mm 20mm;
+    /* Clear browser-generated headers/footers (date, title, URL) */
+    @top-left    { content: ''; }
+    @top-center  { content: ''; }
+    @top-right   { content: ''; }
+    @bottom-left { content: ''; }
+    @bottom-right { content: ''; }
+    /* Page number centered at bottom */
+    @bottom-center {
+      content: counter(page);
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 10px;
+      color: #888888;
+    }
+  }
+  body { background: #fff !important; }
+
+  .mdv-titlebar,
+  .mdv-breadcrumb,
+  .mdv-statusbar,
+  .mdv-sidebar,
+  .mdv-tabs,
+  .mdv-splitter__handle,
+  .mdv-splitter__pane:first-child,
+  .mdv-toast,
+  .mdv-overlay,
+  .mdv-overlay__backdrop,
+  .mdv-drop,
+  .mdv-tooltip,
+  .mdv-popover {
+    display: none !important;
+  }
+
+  .mdv-app,
+  .mdv-shell,
+  .mdv-splitter,
+  .mdv-splitter__pane:last-child,
+  .mdv-preview {
+    display: block !important;
+    height: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+  }
+
+  .mdv-prose {
+    max-width: 100% !important;
+    padding: 24px 32px !important;
+    color: #000000 !important;
+    background: #ffffff !important;
+  }
+}

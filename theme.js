@@ -1,15 +1,20 @@
 (function () {
   var KEY = "specforge:theme";
   var THEMES = {
-    warp: { label: "Warp · 終端", scheme: "dark", bg: "#0c0b0a" },
     kami: { label: "kami · 紙", scheme: "light", bg: "#f5f4ed" },
-    github: { label: "GitHub · Dark", scheme: "dark", bg: "#0d1117" },
-    claude: { label: "Claude · 陶土", scheme: "light", bg: "#f5f4ed" }
+    github: { label: "GitHub · Dark", scheme: "dark", bg: "#0d1117" }
   };
   var root = document.documentElement;
 
+  function migrate(theme) {
+    if (theme === "kami" || theme === "github") return theme;
+    if (theme === "warp") return "github";
+    if (theme === "claude") return "kami";
+    return null;
+  }
+
   function normalize(theme) {
-    return THEMES[theme] ? theme : "warp";
+    return migrate(theme) || "github";
   }
 
   function apply(theme) {
@@ -38,7 +43,8 @@
   function current() {
     try {
       var s = localStorage.getItem(KEY);
-      if (THEMES[s]) return s;
+      var m = migrate(s);
+      if (m) return m;
     } catch (_) {}
     return normalize(root.getAttribute("data-theme"));
   }

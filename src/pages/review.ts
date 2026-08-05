@@ -1,12 +1,16 @@
 import { store } from "../data/store";
-import type { Comment } from "../data/types";
+import type { Comment, Section } from "../data/types";
+import { projectDisplayName } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
 import { canApproveProject, canEditContent, canPeerReview } from "../lib/permissions";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
 import { initHelpOverlay } from "../lib/help-overlay";
+import { renderMarkdown } from "../lib/markamd/markdown";
+import { applySemanticHighlight } from "../lib/markamd/semantic-highlight";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { initTheme } from "../lib/theme";
+import { syncRailContext } from "../lib/rail-projects";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
 const planModules = import.meta.glob("../../plans/*.md", {
@@ -31,13 +35,17 @@ initHelpOverlay();
 }
 
 let openOnly = false;
-let activeId = "c1";
+let activeId = "";
+/** 空字串 = 顯示全部章節；否則只顯示該 section id */
+let focusSectionId = "";
 
 function activeProject() {
   const st = store.get();
+  const visible = st.projects.filter((p) => (st.showSamples ? true : !p.isSample));
   return (
+    visible.find((p) => p.id === st.activeProjectId) ??
+    visible[0] ??
     st.projects.find((p) => p.id === st.activeProjectId) ??
-    st.projects.find((p) => p.id === "p1") ??
     st.projects[0] ??
     null
   );
@@ -46,6 +54,298 @@ function activeProject() {
 function syncUser() {
   const u = store.get().currentUser;
   updateUserRailFooter(toRailUser(u));
+}
+
+function syncProjectChrome() {
+  const p = activeProject();
+  const name = p ? projectDisplayName(p) : "未選擇專案";
+  const meta =
+    (p?.sourceFolder && p.sourceFolder.trim()) ||
+    (p?.tag && p.tag.trim()) ||
+    (p?.id ?? "—");
+  const owner = p?.owner?.trim() || "—";
+
+  const statusMap: Record<string, { label: string; tone: "draft" | "review" | "ok" | "warn"; cls: string }> = {
+    draft: { label: "草稿", tone: "draft", cls: "pill pill-draft" },
+    review: { label: "審閱中", tone: "review", cls: "pill pill-review" },
+    approved: { label: "已核准", tone: "ok", cls: "pill pill-approved" },
+    withdrawn: { label: "已抽單", tone: "warn", cls: "pill pill-draft" },
+  };
+  const stInfo = (p && statusMap[p.status]) || statusMap.draft;
+
+  // 專案名／審閱狀態 → 左側欄（不再塞 titlebar）
+  syncRailContext({
+    mode: "審閱佇列",
+    projectName: name,
+    statusLabel: stInfo.label,
+    statusTone: stInfo.tone,
+    meta: p ? `負責人 ${owner}` : undefined,
+  });
+
+  const h1 = document.querySelector<HTMLElement>('[data-od-id="page-title"]');
+  if (h1) h1.textContent = "審閱規格";
+
+  const sub = document.querySelector<HTMLElement>('[data-od-id="page-sub"], .toolbar .sub');
+  if (sub) {
+    sub.textContent = p
+      ? `${name} · ${meta}`
+      : "回到專案列表選擇一個專案";
+  }
+
+  const docTitle = document.querySelector<HTMLElement>('[data-od-id="doc-title"]');
+  if (docTitle) docTitle.textContent = name;
+
+  const docSlug = document.querySelector<HTMLElement>('[data-od-id="doc-slug"]');
+  if (docSlug) docSlug.textContent = meta;
+
+  const docStatus = document.querySelector<HTMLElement>('[data-od-id="doc-status"]');
+  if (docStatus && p) {
+    docStatus.className = stInfo.cls;
+    docStatus.textContent = stInfo.label;
+  }
+
+  document.title = `審閱 · ${name} · PRD開發監控台`;
+}
+
+/** 章節欄位 → Markdown 字串 */
+function fieldsToMarkdown(s: Section, values: Record<string, string>): string {
+  const parts: string[] = [];
+  for (const f of s.fields) {
+    const v = (values[f.key] ?? "").trim();
+    if (!v) continue;
+    // 單欄章節直接輸出；多欄加小標
+    if (s.fields.length === 1) {
+      parts.push(v);
+    } else {
+      parts.push(`**${f.label}**\n\n${v}`);
+    }
+  }
+  return parts.join("\n\n");
+}
+
+function sectionFilled(s: Section, values: Record<string, string>): boolean {
+  return s.fields.some((f) => (values[f.key] ?? "").trim().length > 0);
+}
+
+/** 一句話摘要：summary.what → problem 首段 → 尚無 */
+function deriveLede(sectionValues: Record<string, Record<string, string>>): string {
+  const what = (sectionValues["summary"]?.what ?? "").trim();
+  if (what) return what.split("\n").map((l) => l.trim()).filter(Boolean)[0] || what;
+
+  const who = (sectionValues["summary"]?.who ?? "").trim();
+  const why = (sectionValues["summary"]?.why ?? "").trim();
+  if (who || why) {
+    return [who && `給：${who}`, why && `為何：${why.split("\n")[0]}`].filter(Boolean).join(" · ");
+  }
+
+  const problem = (sectionValues["problem"]?.problem ?? "").trim();
+  if (problem) {
+    // 取第一個非標題段落
+    const line = problem
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l && !l.startsWith("#") && !l.startsWith("|") && !l.startsWith("---"));
+    if (line) return line.replace(/\*\*/g, "").slice(0, 220);
+  }
+  return "尚無一句話摘要 — 請至編輯台補「三行摘要 · 做什麼」";
+}
+
+function deriveMeta(): { label: string; value: string }[] {
+  const p = activeProject();
+  if (!p) return [];
+  const items: { label: string; value: string }[] = [];
+  items.push({ label: "負責人", value: p.owner || "—" });
+  if (p.sourceFolder) items.push({ label: "來源", value: p.sourceFolder });
+  else if (p.tag) items.push({ label: "標籤", value: p.tag });
+  if (p.isImported) items.push({ label: "類型", value: "資料夾匯入" });
+  if (p.updated) items.push({ label: "更新", value: p.updated });
+  if (p.importSummary) {
+    items.push({
+      label: "匯入評分",
+      value: `${Math.round(p.importSummary.overallScore)} 分 · 覆蓋 ${p.importSummary.coveragePct}%`,
+    });
+  }
+  return items;
+}
+
+function extractOpenItems(text: string): string[] {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (/待決|待定|TBD|TODO|開放|未定|？\s*$|\?\s*$/i.test(line)) {
+      const clean = line
+        .replace(/^[-*•]\s+/, "")
+        .replace(/^\d+\.\s+/, "")
+        .replace(/\*\*/g, "")
+        .slice(0, 120);
+      if (clean) out.push(clean);
+    }
+  }
+  return out.slice(0, 5);
+}
+
+function renderFocusBar() {
+  const bar = document.getElementById("review-focus-bar");
+  if (!bar) return;
+  const st = store.get();
+  const openVals = st.sectionValues["open"] ?? {};
+  const openText = Object.values(openVals).join("\n");
+  const items = extractOpenItems(openText);
+  // 也掃其他章節的待決
+  if (items.length < 3) {
+    for (const s of st.sections) {
+      if (s.id === "open") continue;
+      const t = Object.values(st.sectionValues[s.id] ?? {}).join("\n");
+      for (const it of extractOpenItems(t)) {
+        if (!items.includes(it)) items.push(it);
+        if (items.length >= 5) break;
+      }
+      if (items.length >= 5) break;
+    }
+  }
+
+  const gate = evaluatePrdGates(st);
+  if (!items.length && gate.canApprove) {
+    bar.hidden = true;
+    bar.innerHTML = "";
+    return;
+  }
+
+  bar.hidden = false;
+  const gateLine = gate.canApprove
+    ? `<span class="review-focus-ok">結構 gate 可核准</span>`
+    : `<span class="review-focus-block">${escapeHtml(gateSummaryLine(gate))}</span>`;
+
+  const list =
+    items.length > 0
+      ? `<ul class="review-focus-list">${items
+          .slice(0, 3)
+          .map((t) => `<li>${escapeHtml(t)}</li>`)
+          .join("")}${
+          items.length > 3
+            ? `<li class="review-focus-more">另有 ${items.length - 3} 項待決</li>`
+            : ""
+        }</ul>`
+      : `<p class="review-focus-empty">沒有掃到「待決」句，請人工掃過開放問題章節。</p>`;
+
+  bar.innerHTML = `
+    <div class="review-focus-head">
+      <strong>審閱焦點</strong>
+      ${gateLine}
+    </div>
+    ${list}
+  `;
+}
+
+function renderSecNav() {
+  const nav = document.getElementById("review-sec-nav");
+  if (!nav) return;
+  const st = store.get();
+  const pills = [
+    `<button type="button" class="review-sec-pill${focusSectionId === "" ? " on" : ""}" data-sec="">全部</button>`,
+    ...st.sections.map((s) => {
+      const vals = st.sectionValues[s.id] ?? {};
+      const filled = sectionFilled(s, vals);
+      const on = focusSectionId === s.id ? " on" : "";
+      const empty = filled ? "" : " is-empty";
+      return `<button type="button" class="review-sec-pill${on}${empty}" data-sec="${escapeHtml(s.id)}" title="${escapeHtml(s.desc)}">${escapeHtml(s.n)} ${escapeHtml(s.title)}</button>`;
+    }),
+  ];
+  nav.innerHTML = pills.join("");
+  nav.querySelectorAll<HTMLButtonElement>("[data-sec]").forEach((btn) => {
+    btn.onclick = () => {
+      focusSectionId = btn.dataset.sec ?? "";
+      renderDoc();
+      renderSecNav();
+      if (focusSectionId) {
+        document.getElementById(`review-sec-${focusSectionId}`)?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
+    };
+  });
+}
+
+function renderDoc() {
+  const st = store.get();
+  const p = activeProject();
+  const body = document.getElementById("review-doc-body");
+  const ledeEl = document.querySelector<HTMLElement>('[data-od-id="doc-lede"]');
+  const metaEl = document.querySelector<HTMLElement>('[data-od-id="doc-meta"]');
+  if (!body) return;
+
+  if (ledeEl) ledeEl.textContent = deriveLede(st.sectionValues);
+
+  if (metaEl) {
+    const items = deriveMeta();
+    metaEl.innerHTML = items
+      .map(
+        (it) =>
+          `<span><strong>${escapeHtml(it.label)}</strong>${escapeHtml(it.value)}</span>`,
+      )
+      .join("");
+    metaEl.hidden = items.length === 0;
+  }
+
+  if (!p) {
+    body.innerHTML = `<div class="review-empty-doc">
+      <p>尚未選擇專案。</p>
+      <a class="btn btn-primary" href="projects.html">回專案列表</a>
+    </div>`;
+    return;
+  }
+
+  const sections = st.sections.filter((s) =>
+    focusSectionId ? s.id === focusSectionId : true,
+  );
+
+  let html = "";
+  let filledN = 0;
+  for (const s of st.sections) {
+    if (sectionFilled(s, st.sectionValues[s.id] ?? {})) filledN++;
+  }
+
+  html += `<p class="review-doc-progress">${filledN} / ${st.sections.length} 章節有內容${
+    focusSectionId ? " · 正在聚焦單一章節" : ""
+  }</p>`;
+
+  for (const s of sections) {
+    const values = st.sectionValues[s.id] ?? {};
+    const filled = sectionFilled(s, values);
+    const md = fieldsToMarkdown(s, values);
+    const statusClass =
+      s.status === "done" ? "is-done" : s.status === "warn" ? "is-warn" : "is-empty";
+
+    html += `<section class="review-sec ${statusClass}" id="review-sec-${escapeHtml(s.id)}" data-od-id="sec-${escapeHtml(s.id)}">
+      <header class="review-sec-head">
+        <span class="review-sec-n">${escapeHtml(s.n)}</span>
+        <h2>${escapeHtml(s.title)}</h2>
+        <span class="review-sec-st">${filled ? "有內容" : "未填"}</span>
+      </header>`;
+
+    if (!filled) {
+      html += `<div class="review-sec-empty">
+        <p>此章節尚未填寫。</p>
+        <a class="btn btn-sm" href="editor.html">回編輯台補齊</a>
+      </div>`;
+    } else {
+      html += `<div class="review-sec-md mdv-prose">${renderMarkdown(md)}</div>`;
+    }
+    html += `</section>`;
+  }
+
+  body.innerHTML = html;
+
+  // 語意高亮（與編輯台同一套）
+  const ed = st.settings.editor;
+  const intensity = ed?.highlightIntensity === "medium" ? "medium" : "soft";
+  const enabled = ed?.semanticHighlight !== false;
+  body.querySelectorAll<HTMLElement>(".review-sec-md").forEach((el) => {
+    applySemanticHighlight(el, { enabled, intensity, todosOnly: false });
+  });
 }
 
 function renderApprovals() {
@@ -64,10 +364,12 @@ function renderApprovals() {
     .map((a) => {
       const cls =
         a.state === "approved" ? "is-approved" : a.state === "pending" ? "is-pending" : "is-empty";
+      const stateLabel =
+        a.state === "approved" ? "已簽" : a.state === "pending" ? "審閱中" : "待指派";
       return `<div class="approval-card ${cls}" data-od-id="approval-${a.id}">
         <span class="st" aria-hidden="true"></span>
         <span class="role">${escapeHtml(a.role)}</span>
-        <span class="name">${escapeHtml(a.name)}</span>
+        <span class="name">${escapeHtml(a.name || stateLabel)}</span>
       </div>`;
     })
     .join("");
@@ -79,8 +381,15 @@ function renderApprovals() {
     `<div class="approval-meta" data-od-id="approval-meta">
       <span>${signed} / ${approvals.length} 已簽</span>
       <span>開放留言 ${open}</span>
-      ${withdrawn ? "<span style=\"color:var(--danger)\">已抽單</span>" : ""}
+      ${withdrawn ? '<span style="color:var(--danger)">已抽單</span>' : ""}
     </div>`;
+
+  const sum = document.getElementById("approvals-summary");
+  if (sum) {
+    sum.textContent = `簽核 ${signed}/${approvals.length} · 留言未決 ${open}${
+      withdrawn ? " · 已抽單" : locked ? " · 已鎖定" : ""
+    }`;
+  }
 
   const pill = document.getElementById("status-pill");
   if (pill) {
@@ -117,20 +426,23 @@ function renderApprovals() {
 
   const hint = document.getElementById("approve-hint");
   if (hint) {
+    let text = "";
     if (withdrawn) {
-      hint.textContent = `已抽單${caseRec?.withdrawReason ? `：${caseRec.withdrawReason}` : ""}。管理員可至「管理中心 → 個案調整」重開。`;
+      text = `已抽單${caseRec?.withdrawReason ? `：${caseRec.withdrawReason}` : ""}。管理員可至「管理中心 → 個案調整」重開。`;
     } else if (locked) {
-      hint.textContent = "此規格已核准鎖定。";
+      text = "此規格已核准鎖定。";
     } else if (!prdGate.canApprove) {
-      hint.textContent = gateSummaryLine(prdGate) + "（SCVB 結構 gate 阻擋核准）";
+      text = gateSummaryLine(prdGate) + "（SCVB 結構 gate 阻擋核准）";
     } else if (!gate.ok) {
-      hint.textContent = gate.reason ?? "";
+      text = gate.reason ?? "";
     } else {
       const family = project?.authorAgentFamily
         ? `作者 Agent 族系：${project.authorAgentFamily}。`
         : "";
-      hint.textContent = `以「${user.name}」身分簽核。${family}關卡人員可在管理中心異動。`;
+      text = `以「${user.name}」身分簽核。${family}`;
     }
+    hint.textContent = text;
+    hint.hidden = !text;
   }
 
   const editLink = document.getElementById("btn-edit") as HTMLAnchorElement | null;
@@ -154,19 +466,18 @@ function renderComments() {
   const peer = canPeerReview(store.get().currentUser, project);
   const canResolve = peer.ok || canApproveProject(store.get().currentUser, project).ok;
 
-  document.getElementById("comment-count")!.textContent = String(comments.length);
+  const countEl = document.getElementById("comment-count");
+  if (countEl) countEl.textContent = String(comments.length);
 
   if (visible.length === 0) {
-    list.innerHTML = `<div style="padding:20px;color:var(--muted);font-size:13px;text-align:center">沒有留言</div>`;
-    return;
-  }
-
-  list.innerHTML = visible
-    .map((c) => {
-      const active = c.id === activeId ? " is-active" : "";
-      const resolved = c.resolved ? " is-resolved" : "";
-      const resolveDisabled = c.resolved || !canResolve ? "disabled" : "";
-      return `<div class="comment${active}${resolved}" data-id="${c.id}" data-od-id="comment-${c.id}">
+    list.innerHTML = `<div class="review-comments-empty">尚無留言。有疑慮就寫下一條，一次只盯一件事。</div>`;
+  } else {
+    list.innerHTML = visible
+      .map((c) => {
+        const active = c.id === activeId ? " is-active" : "";
+        const resolved = c.resolved ? " is-resolved" : "";
+        const resolveDisabled = c.resolved || !canResolve ? "disabled" : "";
+        return `<div class="comment${active}${resolved}" data-id="${c.id}" data-od-id="comment-${c.id}">
         <div class="comment-hd">
           <div class="avatar" style="width:22px;height:22px;font-size:9px">${escapeHtml(c.avatar)}</div>
           <strong>${escapeHtml(c.author)}</strong>
@@ -179,12 +490,13 @@ function renderComments() {
           <button type="button" class="btn btn-sm btn-ghost reply">回覆</button>
         </div>
       </div>`;
-    })
-    .join("");
+      })
+      .join("");
+  }
 
-  if (!canResolve) {
+  if (!canResolve && visible.length) {
     const note = document.createElement("div");
-    note.style.cssText = "padding:8px 12px;font-size:12px;color:var(--muted)";
+    note.className = "review-comments-note";
     note.textContent = peer.reason ?? "目前身分無法覆核此檔案";
     list.prepend(note);
   }
@@ -211,75 +523,61 @@ function renderComments() {
   list.querySelectorAll(".reply").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const who = (btn as HTMLElement).closest(".comment")?.querySelector("strong")?.textContent ?? "";
+      const who =
+        (btn as HTMLElement).closest(".comment")?.querySelector("strong")?.textContent ?? "";
       const ta = document.getElementById("compose-text") as HTMLTextAreaElement | null;
       if (!ta) return;
       ta.value = `@${who} `;
       ta.focus();
+      expandComments(true);
     });
   });
 }
 
 function activate(id: string) {
   activeId = id;
-  document.querySelectorAll(".hl").forEach((h) => {
-    h.classList.toggle("active", (h as HTMLElement).dataset.c === id);
-  });
   document.querySelectorAll(".comment").forEach((c) => {
     c.classList.toggle("is-active", (c as HTMLElement).dataset.id === id);
   });
 }
 
-function renderDocSections() {
-  const { sectionValues } = store.get();
-
-  const probVal = sectionValues["problem"];
-  const probSec = document.querySelector<HTMLElement>('[data-od-id="sec-problem"]');
-  if (probSec && probVal && (probVal.problem || probVal.quote)) {
-    let html = `<h2>問題</h2>`;
-    if (probVal.problem) html += `<p>${escapeHtml(probVal.problem)}</p>`;
-    if (probVal.quote) {
-      html += `<blockquote class="quote-block" data-od-id="customer-quote">${escapeHtml(probVal.quote)}</blockquote>`;
-    }
-    probSec.innerHTML = html;
-  } else if (probSec && !store.get().showSamples) {
-    probSec.innerHTML = `<h2>問題</h2><p style="color:var(--muted)">（範例內容已隱藏）</p>`;
-  }
-
-  const goalsVal = sectionValues["goals"];
-  const goalsSec = document.querySelector<HTMLElement>('[data-od-id="sec-goals"]');
-  if (goalsSec && goalsVal && (goalsVal.goals || goalsVal.nongoals)) {
-    let html = `<h2>目標與非目標</h2>`;
-    if (goalsVal.goals)
-      html += `<p><strong>目標</strong> — ${escapeHtml(goalsVal.goals).replace(/\n/g, "<br/>")}</p>`;
-    if (goalsVal.nongoals)
-      html += `<p><strong>非目標</strong> — ${escapeHtml(goalsVal.nongoals).replace(/\n/g, "<br/>")}</p>`;
-    goalsSec.innerHTML = html;
-  }
+function expandComments(open: boolean) {
+  const panel = document.querySelector(".review-comments") as HTMLElement | null;
+  const body = document.getElementById("comments-body");
+  const toggle = document.getElementById("btn-comments-toggle");
+  if (!panel || !body || !toggle) return;
+  panel.dataset.collapsed = open ? "0" : "1";
+  body.hidden = !open;
+  toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  const chev = toggle.querySelector(".review-comments-chevron");
+  if (chev) chev.textContent = open ? "▾" : "▸";
+  document.querySelector(".review-layout")?.classList.toggle("comments-open", open);
 }
 
 function render() {
+  syncProjectChrome();
   renderApprovals();
+  renderFocusBar();
+  renderSecNav();
+  renderDoc();
   renderComments();
-  renderDocSections();
-  activate(activeId);
+  if (activeId) activate(activeId);
   syncUser();
   const host = document.getElementById("flow-strip-host");
   if (host) {
-    const hasPlanSteps = Object.values(planModules).some((raw) => /^- \[[ xXvV]\]/m.test(raw));
-    host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps }));
+    const hasPlanSteps = Object.values(planModules).some((raw) =>
+      /^- \[[ xXvV]\]/m.test(raw),
+    );
+    host.innerHTML = renderFlowStripHtml(
+      deriveFlowLayers(store.get(), { hasPlanSteps }),
+    );
   }
 }
 
-document.querySelectorAll(".hl").forEach((h) => {
-  h.addEventListener("click", () => activate((h as HTMLElement).dataset.c!));
-  h.addEventListener("keydown", (e) => {
-    const ke = e as KeyboardEvent;
-    if (ke.key === "Enter" || ke.key === " ") {
-      ke.preventDefault();
-      activate((h as HTMLElement).dataset.c!);
-    }
-  });
+document.getElementById("btn-comments-toggle")?.addEventListener("click", () => {
+  const panel = document.querySelector(".review-comments") as HTMLElement | null;
+  const open = panel?.dataset.collapsed !== "0";
+  expandComments(open);
 });
 
 document.getElementById("btn-export")?.addEventListener("click", () => {
@@ -312,7 +610,9 @@ document.getElementById("btn-post")?.addEventListener("click", () => {
     authorId: u.id,
     avatar: u.avatar || u.name.slice(0, 1),
     time: "剛剛",
-    anchor: "§ 一般",
+    anchor: focusSectionId
+      ? `§ ${store.get().sections.find((s) => s.id === focusSectionId)?.title ?? "一般"}`
+      : "§ 一般",
     body: text,
     resolved: false,
   };
@@ -320,6 +620,7 @@ document.getElementById("btn-post")?.addEventListener("click", () => {
   activeId = c.id;
   ta.value = "";
   toast("留言已發表");
+  expandComments(true);
   render();
 });
 
@@ -344,6 +645,7 @@ document.getElementById("btn-filter")?.addEventListener("click", () => {
   const btn = document.getElementById("btn-filter");
   if (btn) btn.textContent = openOnly ? "全部" : "未解決";
   toast(openOnly ? "僅顯示未解決留言" : "顯示全部留言");
+  expandComments(true);
   render();
 });
 
@@ -358,11 +660,13 @@ document.addEventListener("keydown", (e) => {
   if ((e.target as HTMLElement).matches("input, textarea")) return;
   if (e.key.toLowerCase() === "r" && !e.metaKey && !e.ctrlKey) {
     e.preventDefault();
+    expandComments(true);
     document.getElementById("compose-text")?.focus();
   }
 });
 
+// 預設留言收合
+expandComments(false);
 render();
 store.subscribe(render);
 } // end __authed
-

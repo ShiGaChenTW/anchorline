@@ -1,0 +1,211 @@
+.mdv-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 8px;
+  height: var(--breadcrumb-h);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  user-select: none;
+  transition:
+    background-color var(--dur-base) var(--easing),
+    border-color var(--dur-base) var(--easing);
+}
+
+.mdv-breadcrumb__path {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mdv-breadcrumb__seg-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  animation: mdv-fade-in-slide 220ms var(--easing);
+}
+
+@keyframes mdv-fade-in-slide {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.mdv-breadcrumb__seg {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  transition: color var(--dur-base) var(--easing);
+}
+
+.mdv-breadcrumb__seg.is-leaf {
+  color: var(--fg);
+}
+
+.mdv-breadcrumb__placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.mdv-breadcrumb__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: lowercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.mdv-breadcrumb__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--muted);
+  transition: background var(--dur-fast) var(--easing);
+}
+
+.mdv-breadcrumb__status[data-status="dirty"] .mdv-breadcrumb__dot {
+  background: var(--accent);
+}
+
+.mdv-breadcrumb__status[data-status="saving"] .mdv-breadcrumb__dot {
+  background: var(--accent);
+  animation: mdv-pulse 1s var(--easing) infinite;
+}
+
+.mdv-breadcrumb__status[data-status="saved"] .mdv-breadcrumb__dot {
+  background: color-mix(in srgb, var(--accent) 35%, var(--muted));
+}
+
+.mdv-breadcrumb__excite {
+  animation: mdv-excite-pop 600ms var(--easing);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 35%, transparent));
+}
+
+.mdv-breadcrumb__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding-left: 8px;
+  margin-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+.mdv-breadcrumb.is-titlebar-hidden .mdv-breadcrumb__actions {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+
+.mdv-breadcrumb__actions .mdv-btn {
+  height: 22px;
+  padding: 0 5px;
+}
+
+.mdv-breadcrumb__file-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding-left: 8px;
+  margin-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+.mdv-breadcrumb__file-actions .mdv-btn {
+  height: 22px;
+  padding: 0 5px;
+}
+
+/* copy-markdown button — crossfade between Copy and Check icons on success */
+.mdv-copybtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--easing),
+    background var(--dur-fast) var(--easing),
+    transform var(--dur-fast) var(--easing);
+}
+
+.mdv-copybtn:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.mdv-copybtn:active {
+  transform: scale(0.92);
+}
+
+.mdv-copybtn__icon {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity 180ms var(--easing),
+    transform 180ms var(--easing);
+}
+
+.mdv-copybtn__icon--copy { opacity: 1; transform: scale(1); }
+.mdv-copybtn__icon--check { opacity: 0; transform: scale(0.5); color: var(--accent); }
+
+.mdv-copybtn.is-copied {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  animation: mdv-copy-pulse 380ms var(--easing);
+}
+
+.mdv-copybtn.is-copied .mdv-copybtn__icon--copy { opacity: 0; transform: scale(0.5); }
+.mdv-copybtn.is-copied .mdv-copybtn__icon--check { opacity: 1; transform: scale(1); }
+
+@keyframes mdv-copy-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent); }
+  100% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+@keyframes mdv-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@keyframes mdv-excite-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}

@@ -1,4 +1,5 @@
-export type ThemeId = "warp" | "kami" | "github" | "claude";
+/** 僅保留 kami（紙）與 github（暗） */
+export type ThemeId = "kami" | "github";
 
 export type ProjectStatus = "draft" | "review" | "approved" | "withdrawn";
 
@@ -29,9 +30,26 @@ export type AgentJob = {
   finishedAt: string | null;
 };
 
+/** 匯入掃描摘要（存於專案，供側欄／列表顯示） */
+export type ProjectImportSummary = {
+  folderName: string;
+  rootPath: string;
+  scannedAt: string;
+  overallScore: number;
+  coveragePct: number;
+  progressPct: number;
+  matchedFiles: { slot: string; path: string; contentScore: number }[];
+  missingRequired: string[];
+};
+
 export type Project = {
   id: string;
   title: string;
+  /**
+   * 使用者自訂顯示名稱。有值時側欄／列表優先顯示；
+   * 未自訂則顯示 title（匯入時通常為資料夾名）。
+   */
+  customName?: string;
   status: ProjectStatus;
   pct: number;
   owner: string;
@@ -40,11 +58,31 @@ export type Project = {
   /** 若作者為 agent，記錄族系以供簽核隔離 */
   authorAgentFamily?: AgentFamily | null;
   mine: boolean;
+  /** 相對時間字串（列表用，如「剛剛」） */
   updated: string;
+  /** ISO 時間：最後一次內容／檔案更新（側欄卡片第二行） */
+  lastFileAt?: string;
   tag: string;
   /** 種子／示範專案，可一鍵隱藏 */
   isSample?: boolean;
+  /** 資料夾匯入產生 */
+  isImported?: boolean;
+  /** 來源資料夾名稱（顯示用） */
+  sourceFolder?: string;
+  /** 匯入評分與對應摘要 */
+  importSummary?: ProjectImportSummary;
 };
+
+/** 側欄／列表顯示名稱：自訂名 → 標題 → 資料夾名 */
+export function projectDisplayName(p: Project): string {
+  const custom = (p.customName ?? "").trim();
+  if (custom) return custom;
+  const title = (p.title ?? "").trim();
+  if (title) return title;
+  const folder = (p.sourceFolder ?? "").trim();
+  if (folder) return folder;
+  return "未命名專案";
+}
 
 /** 簽核流程關卡定義（流程設計） */
 export type WorkflowStageDef = {
@@ -151,6 +189,19 @@ export type AISettings = {
     requireStoriesAC: boolean;
     warnVagueTerms: boolean;
   };
+  /** 編輯台偏好 */
+  editor: {
+    /** 顯示行號（左側 gutter，與文字間距 5px） */
+    showLineNumbers: boolean;
+    /** 顯示 Markdown 工具列 */
+    showToolbar: boolean;
+    /** 預設雙欄 / 寫作 / 預覽 */
+    defaultMode: "split" | "write" | "preview";
+    /** 預覽欄語意高亮（待決／風險等） */
+    semanticHighlight: boolean;
+    /** 高亮強度：soft 僅待決+風險；medium 含指標／完成／引用 */
+    highlightIntensity: "soft" | "medium";
+  };
 };
 
 export type Employee = {
@@ -186,7 +237,13 @@ export type Session = {
 export type AppState = {
   projects: Project[];
   sections: Section[];
+  /** 目前 active 專案的章節正文（編輯／審閱讀此） */
   sectionValues: Record<string, Record<string, string>>;
+  /**
+   * 每專案獨立正文袋。切換 activeProjectId 時與 sectionValues 對調。
+   * key = projectId
+   */
+  projectSectionValues: Record<string, Record<string, Record<string, string>>>;
   /** 隱藏範例時暫存的正文，以便一鍵還原 */
   sampleSectionValues: Record<string, Record<string, string>> | null;
   comments: Comment[];
@@ -210,6 +267,11 @@ export type AppState = {
   showSamples: boolean;
   /** Agent 進場作業佇列 */
   agentJobs: AgentJob[];
+  /**
+   * 首次使用引導是否完成（正式版）。
+   * 測試版預設 true（略過引導、保留示範資料）。
+   */
+  onboardingComplete: boolean;
 };
 
 export const ACCESS_ROLE_LABEL: Record<AccessRole, string> = {

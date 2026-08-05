@@ -34,8 +34,8 @@ const appVariant = (import.meta as ImportMeta & { env?: Record<string, string> }
 
 export const APP_VARIANT: "prod" | "test" = appVariant === "test" ? "test" : "prod";
 
-/** 正式版：僅 1 範例 */
-export const SEED_PROJECTS_PROD: Project[] = [SAMPLE_PROJECT_2FA];
+/** 正式版：不內建示範專案（首次引導後由使用者建立／匯入） */
+export const SEED_PROJECTS_PROD: Project[] = [];
 
 /**
  * 測試版完整示範列表（僅在 VITE_APP_VARIANT=test 時掛入 SEED_PROJECTS，
@@ -145,9 +145,43 @@ function buildTestProjects(): Project[] {
   ];
 }
 
-/** 依建置變體：test=多範例，其餘（正式／dev）=僅 1 範例 */
+/** 依建置變體：test=多範例，正式版=空列表 */
 export const SEED_PROJECTS: Project[] =
   APP_VARIANT === "test" ? buildTestProjects() : SEED_PROJECTS_PROD;
+
+/** 正式版啟動用幽靈使用者（引導完成前不可登入） */
+export const GHOST_USER: Employee = {
+  id: "__setup__",
+  name: "尚未設定",
+  title: "待建立管理員",
+  avatar: "?",
+  email: "",
+  accessRole: "admin",
+  kind: "human",
+  agentFamily: null,
+  password: "",
+  active: false,
+  isCurrent: true,
+};
+
+/** 正式版預設簽核流：不綁示範 Agent */
+export const SEED_WORKFLOW_PROD: WorkflowStageDef[] = [
+  { id: "ws-eng", order: 1, name: "工程", defaultAssigneeId: null, required: true },
+  { id: "ws-design", order: 2, name: "設計", defaultAssigneeId: null, required: true },
+  { id: "ws-sec", order: 3, name: "資安", defaultAssigneeId: null, required: true },
+  { id: "ws-legal", order: 4, name: "法務", defaultAssigneeId: null, required: false },
+];
+
+/** 把章節骨架清空為可填寫空白（正式版用） */
+export function blankSections(sections: Section[]): Section[] {
+  return sections.map((s) => ({
+    ...s,
+    status: "empty" as const,
+    score: 0,
+    fields: s.fields.map((f) => ({ ...f, value: "" })),
+    checks: s.checks.map((c) => ({ ...c, pass: false })),
+  }));
+}
 
 export const SEED_SECTIONS: Section[] = [
   {
@@ -378,8 +412,8 @@ export function buildSeedCase(projectId: string, employees: Employee[]): CaseRec
   };
 }
 
-/** 示範帳號密碼一律 demo */
-export const SEED_EMPLOYEES: Employee[] = [
+/** 測試版示範帳號（密碼一律 demo）；正式版不載入 */
+export const SEED_EMPLOYEES_DEMO: Employee[] = [
   {
     id: "scott",
     name: "Scott",
@@ -539,6 +573,24 @@ export const SEED_EMPLOYEES: Employee[] = [
   },
 ];
 
+/** 正式版無示範帳號；測試版載入完整 demo 名單 */
+export const SEED_EMPLOYEES: Employee[] =
+  APP_VARIANT === "test" ? SEED_EMPLOYEES_DEMO : [];
+
+/**
+ * 正式版引導可選「安裝入門 Agent 包」：僅 Agent、不含 Scott。
+ * 密碼由使用者管理員另行管理；預設仍可用自訂密碼登入 Agent。
+ */
+export function buildStarterAgents(adminPassword: string): Employee[] {
+  return SEED_EMPLOYEES_DEMO.filter((e) => e.kind === "agent").map((e) => ({
+    ...structuredClone(e),
+    password: adminPassword || e.password,
+    isCurrent: false,
+    active: true,
+    agentEnabled: true,
+  }));
+}
+
 export const DEFAULT_SETTINGS: AISettings = {
   model: "gemini-1.5-pro",
   apiKey: "",
@@ -551,6 +603,13 @@ export const DEFAULT_SETTINGS: AISettings = {
     requireMetrics: true,
     requireStoriesAC: true,
     warnVagueTerms: true,
+  },
+  editor: {
+    showLineNumbers: true,
+    showToolbar: true,
+    defaultMode: "split",
+    semanticHighlight: true,
+    highlightIntensity: "soft",
   },
 };
 

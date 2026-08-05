@@ -47,22 +47,46 @@ export function bindModalDismiss(id: string) {
   });
 }
 
-export function initMobileNav(
-  active: "projects" | "editor" | "templates" | "review" | "settings" | "admin",
-) {
+export type MobileNavPage =
+  | "projects"
+  | "editor"
+  | "templates"
+  | "review"
+  | "tracking"
+  | "admin"
+  | "agents"
+  | "settings";
+
+export function initMobileNav(active: MobileNavPage) {
   const app = document.querySelector(".app");
   if (!app || document.querySelector(".mobile-bar")) return;
 
   const bar = document.createElement("nav");
   bar.className = "mobile-bar";
   bar.setAttribute("aria-label", "行動導覽");
-  bar.innerHTML = `
-    <a href="projects.html" data-nav="projects"${active === "projects" ? ' aria-current="page"' : ""}>專案</a>
-    <a href="editor.html" data-nav="editor"${active === "editor" ? ' aria-current="page"' : ""}>編輯</a>
-    <a href="review.html" data-nav="review"${active === "review" ? ' aria-current="page"' : ""}>審閱</a>
-    <a href="admin.html" data-nav="admin"${active === "admin" ? ' aria-current="page"' : ""}>管理</a>
-    <a href="settings.html" data-nav="settings"${active === "settings" ? ' aria-current="page"' : ""}>設定</a>
-  `;
+  // 窄屏 5 鍵：專案 / 編輯 / 審閱 / 追蹤 / 設定（其餘走側欄或專案頁）
+  const items: { page: MobileNavPage; href: string; label: string }[] = [
+    { page: "projects", href: "projects.html", label: "專案" },
+    { page: "editor", href: "editor.html", label: "編輯" },
+    { page: "review", href: "review.html", label: "審閱" },
+    { page: "tracking", href: "tracking.html", label: "追蹤" },
+    { page: "settings", href: "settings.html", label: "設定" },
+  ];
+  // admin / agents / templates 落在「設定」鄰近；若當前是這些頁，高亮設定或對應項
+  const highlight =
+    active === "admin" || active === "agents" || active === "templates"
+      ? active === "templates"
+        ? "editor"
+        : "settings"
+      : active;
+  bar.innerHTML = items
+    .map(
+      (it) =>
+        `<a href="${it.href}" data-nav="${it.page}"${
+          it.page === highlight || it.page === active ? ' aria-current="page"' : ""
+        }>${it.label}</a>`,
+    )
+    .join("");
   app.appendChild(bar);
 }
 
