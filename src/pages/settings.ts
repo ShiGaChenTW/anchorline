@@ -46,6 +46,17 @@ function populateSettings() {
   if (stEl) stEl.checked = s.enableLinters.requireStoriesAC;
   if (vagEl) vagEl.checked = s.enableLinters.warnVagueTerms;
 
+  const lnEl = document.getElementById("editor-line-numbers") as HTMLInputElement | null;
+  const tbEl = document.getElementById("editor-toolbar") as HTMLInputElement | null;
+  const modeEl = document.getElementById("editor-default-mode") as HTMLSelectElement | null;
+  const hlEl = document.getElementById("editor-semantic-hl") as HTMLInputElement | null;
+  const hiEl = document.getElementById("editor-hl-intensity") as HTMLSelectElement | null;
+  if (lnEl) lnEl.checked = s.editor?.showLineNumbers !== false;
+  if (tbEl) tbEl.checked = s.editor?.showToolbar !== false;
+  if (modeEl) modeEl.value = s.editor?.defaultMode ?? "split";
+  if (hlEl) hlEl.checked = s.editor?.semanticHighlight !== false;
+  if (hiEl) hiEl.value = s.editor?.highlightIntensity === "medium" ? "medium" : "soft";
+
   renderEmployees();
   syncUser();
 
@@ -246,6 +257,18 @@ document.getElementById("btn-save-settings")?.addEventListener("click", () => {
   const requireStoriesAC = (document.getElementById("linter-stories") as HTMLInputElement).checked;
   const warnVagueTerms = (document.getElementById("linter-vague") as HTMLInputElement).checked;
 
+  const showLineNumbers = (document.getElementById("editor-line-numbers") as HTMLInputElement).checked;
+  const showToolbar = (document.getElementById("editor-toolbar") as HTMLInputElement).checked;
+  const defaultMode = (document.getElementById("editor-default-mode") as HTMLSelectElement)
+    .value as AISettings["editor"]["defaultMode"];
+  const semanticHighlight =
+    (document.getElementById("editor-semantic-hl") as HTMLInputElement | null)?.checked !== false;
+  const highlightIntensity = (
+    (document.getElementById("editor-hl-intensity") as HTMLSelectElement | null)?.value === "medium"
+      ? "medium"
+      : "soft"
+  ) as AISettings["editor"]["highlightIntensity"];
+
   store.updateSettings({
     model,
     temperature,
@@ -258,6 +281,13 @@ document.getElementById("btn-save-settings")?.addEventListener("click", () => {
       requireMetrics,
       requireStoriesAC,
       warnVagueTerms,
+    },
+    editor: {
+      showLineNumbers,
+      showToolbar,
+      defaultMode,
+      semanticHighlight,
+      highlightIntensity,
     },
   });
 

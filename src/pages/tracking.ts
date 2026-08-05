@@ -19,7 +19,7 @@ type PlanEntry = { id: string; name: string; raw: string; meta: PlanMeta };
 const __authed = requireAuth();
 if (__authed) {
   initTheme();
-  initMobileNav("admin");
+  initMobileNav("tracking");
   bindLogout();
   initHelpOverlay();
 

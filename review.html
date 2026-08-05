@@ -5,35 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>審閱與協作 · PRD 引導工作台</title>
 <link rel="stylesheet" href="shared.css" />
-<script>(function(){try{var t=localStorage.getItem("specforge:theme");var m={warp:["dark","#161412"],kami:["light","#f5f4ed"],github:["dark","#0d1117"],claude:["light","#f5f4ed"]};if(!m[t])t="warp";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","warp");}})();</script>
+<script>(function(){try{var t=localStorage.getItem("specforge:theme");if(t==="warp")t="github";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
 </head>
 <body>
 <div class="app" data-od-id="app-review">
-  <div class="titlebar" data-od-id="titlebar">
-    <div class="traffic" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
-    <div class="titlebar-title">SpecForge — 審閱 · SaaS 雙重驗證（2FA）</div>
-    <div class="titlebar-meta">
-      <div class="theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
-        <button type="button" data-theme-value="warp" aria-pressed="true">Warp</button>
-        <button type="button" data-theme-value="kami" aria-pressed="false">kami</button>
-        <button type="button" data-theme-value="github" aria-pressed="false">GitHub</button>
-        <button type="button" data-theme-value="claude" aria-pressed="false">Claude</button>
-      </div>
-
-      <span class="pill pill-review" id="status-pill">審閱中</span>
-      <span class="kbd">R</span> 回覆
-    </div>
-  </div>
-
   <div class="shell">
     <aside class="rail" data-od-id="rail">
-      <div class="rail-brand">
+            <div class="rail-brand">
         <div class="rail-logo">PR</div>
-        <div>
-          <strong>SpecForge</strong>
+        <div class="rail-brand-text">
+          <strong>PRD開發監控台</strong>
           <span>prd.local</span>
         </div>
       </div>
+      <div class="rail-theme-row">
+        <div class="theme-switch rail-theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
+          <button type="button" data-theme-value="kami" aria-pressed="false">kami</button>
+          <button type="button" data-theme-value="github" aria-pressed="true">GitHub</button>
+        </div>
+      </div>
+
       <nav class="rail-nav">
         <div class="nav-label">工作區</div>
         <a class="nav-item" href="projects.html" data-od-id="nav-projects">
@@ -95,8 +86,8 @@
     <main class="main" data-od-id="main-review">
       <div class="toolbar" data-od-id="toolbar">
         <div>
-          <h1 data-od-id="page-title">審閱 · 2FA PRD</h1>
-          <div class="sub">請求者 — · 審閱者 4 · 截止 2026-08-12</div>
+          <h1 data-od-id="page-title">審閱 · 載入中…</h1>
+          <div class="sub" data-od-id="page-sub">載入專案後顯示審閱狀態</div>
         </div>
         <div class="spacer"></div>
         <button type="button" class="btn btn-ghost" id="btn-toggle-samples">隱藏範例</button>
@@ -107,162 +98,49 @@
         <button type="button" class="btn btn-primary" id="btn-approve" data-od-id="btn-approve">核准並鎖定</button>
         <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
       </div>
-      <p id="approve-hint" class="sub" style="margin:0 0 8px;padding:0 4px;font-size:12px;color:var(--muted)"></p>
+      <p id="approve-hint" class="sub review-approve-hint" hidden></p>
 
-      <div class="approval-strip" data-od-id="approvals">
-        <div class="approval-card is-approved" data-od-id="approval-eng">
-          <span class="st" aria-hidden="true"></span>
-          <span class="role">工程</span>
-          <span class="name">周承翰 · 已簽</span>
-        </div>
-        <div class="approval-card is-approved" data-od-id="approval-design">
-          <span class="st" aria-hidden="true"></span>
-          <span class="role">設計</span>
-          <span class="name">陳宥安 · 已簽</span>
-        </div>
-        <div class="approval-card is-pending" data-od-id="approval-sec">
-          <span class="st" aria-hidden="true"></span>
-          <span class="role">資安</span>
-          <span class="name">黃詩涵 · 審閱中</span>
-        </div>
-        <div class="approval-card is-empty" data-od-id="approval-legal">
-          <span class="st" aria-hidden="true"></span>
-          <span class="role">法務</span>
-          <span class="name">待指派</span>
-        </div>
-        <div class="approval-meta" data-od-id="approval-meta">
-          <span>2 / 4 已簽</span>
-          <span>開放留言 3</span>
-        </div>
-      </div>
+      <!-- ADHD：簽核預設收合 -->
+      <details class="review-approvals-wrap" data-od-id="approvals-wrap">
+        <summary class="review-approvals-summary" id="approvals-summary">簽核進度 · 載入中…</summary>
+        <div class="approval-strip" data-od-id="approvals"></div>
+      </details>
 
-      <div class="content" style="overflow:hidden">
+      <!-- 待決條 + 章節導覽 -->
+      <div class="review-focus-bar" id="review-focus-bar" hidden></div>
+      <nav class="review-sec-nav" id="review-sec-nav" aria-label="章節"></nav>
+
+      <div class="content review-content">
         <div class="review-layout" data-od-id="review-layout">
           <article class="review-doc" data-od-id="review-doc">
             <div class="doc-kicker">
-              <span class="pill pill-review">Draft v0.4</span>
-              <span class="mono">identity / prd-2fa</span>
+              <span class="pill pill-draft" data-od-id="doc-status">—</span>
+              <span class="mono" data-od-id="doc-slug">—</span>
             </div>
-            <h1 data-od-id="doc-title">SaaS 雙重驗證（2FA）</h1>
-            <p class="lede" data-od-id="doc-lede">
-              在 Northwind 登入流程加入 TOTP 與安全金鑰第二因素，讓企業客戶通過內部控制審查，並推動三筆待簽合約從「評估中」到「核准」。
-            </p>
-            <div class="meta-line" data-od-id="doc-meta">
-              <span><strong>Squad</strong>Identity Platform</span>
-              <span><strong>工程負責人</strong>周承翰</span>
-              <span><strong>設計負責人</strong>陳宥安</span>
-              <span><strong>目標上線</strong>2026 Q4（12/18）</span>
-              <span><strong>預估工時</strong>~6 eng-weeks</span>
+            <h1 data-od-id="doc-title">載入中…</h1>
+            <p class="lede" data-od-id="doc-lede">讀取規格內容…</p>
+            <div class="meta-line" data-od-id="doc-meta"></div>
+            <div class="review-doc-body" id="review-doc-body" data-od-id="review-doc-body">
+              <!-- 由 store + Markdown 動態渲染，不再使用靜態 2FA demo -->
             </div>
-
-            <section data-od-id="sec-problem">
-              <h2>問題</h2>
-              <p>近六次企業資安審查中，有三次將缺少第二因素列為阻擋項。今日密碼是釣魚憑證與客戶資料之間的唯一屏障——對需符合 SOC 2 Type II 的租戶，這是控制面缺口。</p>
-              <p>內部同樣受影響：擁有正式環境存取的工程師與行銷檢視者共用同一驗證面，我們依賴政策而非態勢。</p>
-              <blockquote class="quote-block" data-od-id="customer-quote">
-                「我們很喜歡產品，但缺少 TOTP 在三次審查中出現兩次。補上我們就能簽約。」
-                <span class="attr">— Maya Reddy · CTO, Pioneer Robotics</span>
-              </blockquote>
-            </section>
-
-            <section data-od-id="sec-goals">
-              <h2>目標與非目標</h2>
-              <p><strong>目標</strong> — TOTP 全付費方案；WebAuthn 限 Enterprise；工作區強制政策；復原碼；稽核日誌。</p>
-              <p><strong>非目標</strong> — 簡訊 OTP；生物辨識跨裝置漫遊；取代 SSO/SAML；強制免費方案。</p>
-            </section>
-
-            <section data-od-id="sec-metrics">
-              <h2>成功指標</h2>
-              <p>
-                企業租戶 2FA 覆蓋率
-                <mark class="hl active" data-c="c1" tabindex="0" role="button" aria-label="開啟留言 c1">≥ 80%（GA 後 90 天）</mark>
-                ；因缺少 2FA 卡住的資安審查兩季內歸零；設定完成率 ≥ 70%。
-              </p>
-            </section>
-
-            <section data-od-id="sec-stories">
-              <h2>使用者故事</h2>
-              <p>1. 作為成員，我想要綁定 TOTP，以便在密碼外多一層保護。</p>
-              <p>2. 作為工作區管理員，我想要強制全員 2FA，以便通過客戶資安問卷。</p>
-              <p>3. 作為遺失手機的成員，我想要用復原碼登入，以便不中斷工作。</p>
-              <p>4. 作為資安審核員，我想要匯出啟用稽核紀錄，以便佐證控制有效。</p>
-            </section>
-
-            <section data-od-id="sec-scope">
-              <h2>範圍與里程碑</h2>
-              <p>M1 自願 TOTP（3 週）→ M2 復原與稽核（2 週）→ M3 工作區強制（2 週）→ M4 WebAuthn Enterprise（3 週）。</p>
-              <p>
-                強制政策的
-                <mark class="hl" data-c="c2" tabindex="0" role="button" aria-label="開啟留言 c2">寬限期預設值尚未決策</mark>
-                ，影響管理員體驗與支援負載。
-              </p>
-            </section>
-
-            <section data-od-id="sec-open">
-              <h2>開放問題</h2>
-              <p>• 強制 2FA 寬限期預設幾天？— — · 待決</p>
-              <p>• 復原碼用盡後是否走 Zendesk？— 周承翰 · 待決</p>
-              <p>• WebAuthn 是否允許平台驗證器（Touch ID）？—
-                <mark class="hl" data-c="c3" tabindex="0" role="button" aria-label="開啟留言 c3">黃詩涵 · 待決</mark>
-              </p>
-            </section>
           </article>
 
-          <aside class="comments" data-od-id="comments-panel">
+          <aside class="comments review-comments" data-od-id="comments-panel" data-collapsed="1">
             <div class="wb-head">
-              <h2>留言 · <span id="comment-count">3</span></h2>
+              <button type="button" class="review-comments-toggle" id="btn-comments-toggle" aria-expanded="false">
+                留言 · <span id="comment-count">0</span>
+                <span class="review-comments-chevron">▸</span>
+              </button>
               <button type="button" class="btn btn-sm" id="btn-filter" data-od-id="btn-filter-open">未解決</button>
             </div>
-
-            <div class="comments-scroll" id="comments-list">
-              <div class="comment is-active" data-id="c1" data-od-id="comment-c1">
-                <div class="comment-hd">
-                  <div class="avatar" style="width:22px;height:22px;font-size:9px">周</div>
-                  <strong>周承翰</strong>
-                  <time>2 小時前</time>
+            <div class="review-comments-body" id="comments-body" hidden>
+              <div class="comments-scroll" id="comments-list"></div>
+              <div class="compose" data-od-id="compose">
+                <textarea id="compose-text" placeholder="留言… 可用 § 章節名 錨點" rows="3"></textarea>
+                <div class="compose-bar">
+                  <span class="mono">Markdown 可用</span>
+                  <button type="button" class="btn btn-sm btn-accent" id="btn-post" data-od-id="btn-post">發表</button>
                 </div>
-                <div class="anchor">§ 成功指標</div>
-                <p>80% 覆蓋率的分母是「有強制政策的企業租戶」還是「所有企業成員」？建議寫進量測欄，避免實作時爭議。</p>
-                <div class="comment-actions">
-                  <button type="button" class="btn btn-sm resolve">標記已解決</button>
-                  <button type="button" class="btn btn-sm btn-ghost reply">回覆</button>
-                </div>
-              </div>
-
-              <div class="comment" data-id="c2" data-od-id="comment-c2">
-                <div class="comment-hd">
-                  <div class="avatar" style="width:22px;height:22px;font-size:9px">陳</div>
-                  <strong>陳宥安</strong>
-                  <time>昨天</time>
-                </div>
-                <div class="anchor">§ 里程碑 · 寬限期</div>
-                <p>若寬限期是 7 天，管理員設定頁需要倒數與例外名單。14 天則可簡化第一版。我傾向 14，等產品拍板。</p>
-                <div class="comment-actions">
-                  <button type="button" class="btn btn-sm resolve">標記已解決</button>
-                  <button type="button" class="btn btn-sm btn-ghost reply">回覆</button>
-                </div>
-              </div>
-
-              <div class="comment" data-id="c3" data-od-id="comment-c3">
-                <div class="comment-hd">
-                  <div class="avatar" style="width:22px;height:22px;font-size:9px">黃</div>
-                  <strong>黃詩涵</strong>
-                  <time>3 小時前</time>
-                </div>
-                <div class="anchor">§ 開放問題 · WebAuthn</div>
-                <p>平台驗證器（Touch ID / Windows Hello）建議 <strong style="color:var(--fg);font-weight:500">允許</strong>，但 Enterprise 政策要能限制為「僅漫遊金鑰」。我核准前需要這條寫進非目標或目標。</p>
-                <div class="comment-actions">
-                  <button type="button" class="btn btn-sm resolve">標記已解決</button>
-                  <button type="button" class="btn btn-sm btn-ghost reply">回覆</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="compose" data-od-id="compose">
-              <textarea id="compose-text" placeholder="留言… 可用 § 章節名 錨點" rows="3"></textarea>
-              <div class="compose-bar">
-                <span class="mono">Markdown 可用</span>
-                <button type="button" class="btn btn-sm btn-accent" id="btn-post" data-od-id="btn-post">發表</button>
               </div>
             </div>
           </aside>

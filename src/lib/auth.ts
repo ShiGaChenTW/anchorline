@@ -1,7 +1,15 @@
 import { store } from "../data/store";
 import type { Employee } from "../data/types";
 import { summarizePermissions } from "./permissions";
+import { initAdhdUi } from "./adhd-ui";
+import { detectRailPage, initRailNav, refreshNavCounts } from "./rail-nav";
+import { bindRailProjects, renderRailProjects } from "./rail-projects";
+import { initResizablePanels } from "./resize-panels";
 import { updateUserRailFooter, type RailUserInfo } from "./ui";
+
+let railProjectsBound = false;
+let resizeBound = false;
+let adhdBound = false;
 
 const SESSION_KEY = "specforge:session:v1";
 
@@ -25,14 +33,50 @@ export function toRailUser(user: Employee): RailUserInfo {
 
 export function requireAuth(): boolean {
   if (isLoginPage()) return true;
+  // 正式版首次使用：導向引導（onboarding 頁自身會放行）
+  const path = location.pathname.replace(/\\/g, "/");
+  const onOnboarding = path.endsWith("onboarding.html") || path.endsWith("/onboarding");
+  if (store.needsOnboarding() && !onOnboarding) {
+    location.href = "onboarding.html";
+    return false;
+  }
+  if (onOnboarding) return true;
+
   const session = store.get().session;
   if (session?.userId) {
     const user = store.get().employees.find((e) => e.id === session.userId);
-    if (user && user.active !== false) {
+    if (user && user.active !== false && user.id !== "__setup__") {
       if (store.get().currentUser.id !== user.id) {
         store.setCurrentUser(user.id);
       }
       updateUserRailFooter(toRailUser(user));
+      if (document.querySelector(".rail-nav") || document.querySelector(".wb")) {
+        queueMicrotask(() => {
+          // 每頁 load 都重建一次側欄（icon 完整、無重複節點）
+          const page = detectRailPage();
+          if (page && document.querySelector(".rail-nav")) initRailNav(page);
+          if (document.querySelector(".rail-nav")) {
+            if (!railProjectsBound) {
+              railProjectsBound = true;
+              bindRailProjects();
+            } else {
+              renderRailProjects();
+            }
+            refreshNavCounts();
+          }
+          if (!resizeBound) {
+            resizeBound = true;
+            initResizablePanels();
+          } else if (document.querySelector(".wb") && !document.querySelector(".resize-handle--outline")) {
+            initResizablePanels();
+          }
+          if (!adhdBound) {
+            adhdBound = true;
+            // rail 已建完再套 ADHD 層
+            requestAnimationFrame(() => initAdhdUi());
+          }
+        });
+      }
       return true;
     }
   }

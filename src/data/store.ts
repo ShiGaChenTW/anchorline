@@ -1,7 +1,10 @@
 import {
   APP_VARIANT,
+  blankSections,
   buildSeedCase,
+  buildStarterAgents,
   DEFAULT_SETTINGS,
+  GHOST_USER,
   SEED_APPROVALS,
   SEED_COMMENTS,
   SEED_EMPLOYEES,
@@ -9,6 +12,7 @@ import {
   SEED_SECTIONS,
   SEED_TEMPLATES,
   SEED_WORKFLOW,
+  SEED_WORKFLOW_PROD,
 } from "./seed";
 import type {
   AgentFamily,
@@ -22,22 +26,26 @@ import type {
   Comment,
   Employee,
   Project,
+  ProjectImportSummary,
   Section,
   Session,
   Template,
   WorkflowStageDef,
 } from "./types";
 import { emptySectionValues } from "../lib/export";
+import type { ProjectCandidate } from "../lib/folder-import";
+import { mapCandidateToSectionValues } from "../lib/folder-import";
 import {
   canApproveProject,
   canPeerReview,
   normalizeAgentFamily,
   validateEmployeeRole,
 } from "../lib/permissions";
+import { nowIso } from "../lib/time-format";
 
-/** v5：依建置變體分 key，避免正式／測試 App 共用 localStorage 互相污染 */
-const KEY = `specforge:state:v5:${APP_VARIANT}`;
-const LEGACY_KEY = "specforge:state:v4";
+/** v6：正式版無示範內容 + 首次引導；依變體分 key 避免互污染 */
+const KEY = `specforge:state:v6:${APP_VARIANT}`;
+const LEGACY_KEY = `specforge:state:v5:${APP_VARIANT}`;
 const SESSION_KEY = "specforge:session:v1";
 
 /** 從 section.fields.value 帶入種子正文 */
@@ -93,9 +101,13 @@ function caseFromWorkflow(
 }
 
 function seedState(): AppState {
-  const sections = structuredClone(SEED_SECTIONS);
+  const isTest = APP_VARIANT === "test";
+  const sections = isTest
+    ? structuredClone(SEED_SECTIONS)
+    : blankSections(structuredClone(SEED_SECTIONS));
   const employees = structuredClone(SEED_EMPLOYEES);
-  const current = employees.find((e) => e.isCurrent) ?? employees[0];
+  const current =
+    employees.find((e) => e.isCurrent) ?? employees[0] ?? structuredClone(GHOST_USER);
   const projects = structuredClone(SEED_PROJECTS);
   const cases: Record<string, CaseRecord> = {};
   for (const p of projects) {
@@ -103,17 +115,33 @@ function seedState(): AppState {
       cases[p.id] = buildSeedCase(p.id, employees);
     }
   }
-  if (!cases.p1) cases.p1 = buildSeedCase("p1", employees);
+  if (isTest && !cases.p1) cases.p1 = buildSeedCase("p1", employees);
+
+  const workflowStages = structuredClone(isTest ? SEED_WORKFLOW : SEED_WORKFLOW_PROD);
+  const sectionValues = isTest
+    ? valuesFromSections(structuredClone(SEED_SECTIONS))
+    : emptySectionValues(sections);
+
+  const activeId = projects[0]?.id ?? "";
+  const projectSectionValues: AppState["projectSectionValues"] = {};
+  if (activeId) projectSectionValues[activeId] = structuredClone(sectionValues);
+
   return {
     projects,
     sections,
-    sectionValues: valuesFromSections(sections),
+    sectionValues,
+    projectSectionValues,
     sampleSectionValues: null,
-    comments: structuredClone(SEED_COMMENTS),
-    approvals: approvalsFromCase(cases.p1),
-    workflowStages: structuredClone(SEED_WORKFLOW),
+    comments: isTest ? structuredClone(SEED_COMMENTS) : [],
+    approvals: isTest ? approvalsFromCase(cases.p1) : structuredClone(SEED_APPROVALS).map((a) => ({
+      ...a,
+      name: "待指派",
+      state: "empty" as const,
+      assigneeId: undefined,
+    })),
+    workflowStages,
     cases,
-    activeProjectId: "p1",
+    activeProjectId: activeId,
     templates: structuredClone(SEED_TEMPLATES),
     employees,
     currentUser: current,
@@ -122,8 +150,9 @@ function seedState(): AppState {
     pendingInsert: null,
     activeSectionId: "summary",
     settings: structuredClone(DEFAULT_SETTINGS),
-    showSamples: true,
+    showSamples: isTest,
     agentJobs: [],
+    onboardingComplete: isTest,
   };
 }
 
@@ -133,6 +162,7 @@ function migrateProject(raw: Record<string, unknown>, employees: Employee[]): Pr
   return {
     id: String(raw.id ?? `p_${Date.now()}`),
     title: String(raw.title ?? "未命名"),
+    customName: raw.customName ? String(raw.customName) : undefined,
     status: (raw.status as Project["status"]) || "draft",
     pct: Number(raw.pct ?? 0),
     owner,
@@ -141,9 +171,43 @@ function migrateProject(raw: Record<string, unknown>, employees: Employee[]): Pr
     authorAgentFamily: (raw.authorAgentFamily as AgentFamily | null) ?? match?.agentFamily ?? null,
     mine: Boolean(raw.mine),
     updated: String(raw.updated ?? ""),
+    lastFileAt: raw.lastFileAt
+      ? String(raw.lastFileAt)
+      : raw.importSummary && typeof (raw.importSummary as ProjectImportSummary).scannedAt === "string"
+        ? (raw.importSummary as ProjectImportSummary).scannedAt
+        : undefined,
     tag: String(raw.tag ?? "product"),
     isSample: raw.isSample === false ? false : Boolean(raw.isSample ?? true),
+    isImported: Boolean(raw.isImported),
+    sourceFolder: raw.sourceFolder ? String(raw.sourceFolder) : undefined,
+    importSummary: raw.importSummary as ProjectImportSummary | undefined,
   };
+}
+
+function touchProjectMeta(projectId: string | undefined) {
+  if (!projectId) return;
+  const iso = nowIso();
+  state = {
+    ...state,
+    projects: state.projects.map((p) =>
+      p.id === projectId
+        ? { ...p, updated: "剛剛", lastFileAt: iso }
+        : p,
+    ),
+  };
+}
+
+/** 寫回目前 active 的 sectionValues 到 bag */
+function snapshotActiveDocs(s: AppState): AppState["projectSectionValues"] {
+  const bag = { ...s.projectSectionValues };
+  if (s.activeProjectId) {
+    bag[s.activeProjectId] = structuredClone(s.sectionValues);
+  }
+  return bag;
+}
+
+function blankDocsForSections(sections: Section[]): Record<string, Record<string, string>> {
+  return emptySectionValues(sections);
 }
 
 function load(): AppState {
@@ -153,10 +217,17 @@ function load(): AppState {
     if (!raw) return seedState();
     const parsed = JSON.parse(raw) as Partial<AppState> & { employees?: unknown[] };
     const base = seedState();
-    // v4：強制使用新人員名單（Scott + Agents），避免舊假資料殘留
-    const employees = structuredClone(SEED_EMPLOYEES);
+
+    // 正式版：沿用使用者已建立的人員；測試版可回落示範名單
+    const employees: Employee[] =
+      Array.isArray(parsed.employees) && parsed.employees.length
+        ? (parsed.employees as Employee[])
+        : structuredClone(SEED_EMPLOYEES);
+
     const projects = Array.isArray(parsed.projects)
-      ? parsed.projects.map((p) => migrateProject(p as unknown as Record<string, unknown>, employees))
+      ? parsed.projects.map((p) =>
+          migrateProject(p as unknown as Record<string, unknown>, employees),
+        )
       : base.projects;
 
     let session: Session | null = parsed.session ?? null;
@@ -170,34 +241,63 @@ function load(): AppState {
       /* ignore */
     }
 
-    // session 若指到已移除的舊帳號，回退 Scott
-    const sessionUser = session ? employees.find((e) => e.id === session!.userId) : null;
-    const currentUser = sessionUser ?? employees.find((e) => e.id === "scott") ?? employees[0]!;
-    if (!sessionUser) {
-      session = null;
-    }
+    const sessionUser = session
+      ? employees.find((e) => e.id === session!.userId && e.active !== false)
+      : null;
+    const currentUser =
+      sessionUser ??
+      employees.find((e) => e.isCurrent) ??
+      employees[0] ??
+      structuredClone(GHOST_USER);
+    if (!sessionUser) session = null;
 
     const workflowStages =
       Array.isArray(parsed.workflowStages) && parsed.workflowStages.length
         ? (parsed.workflowStages as WorkflowStageDef[])
         : base.workflowStages;
     const cases: Record<string, CaseRecord> = {
-      ...base.cases,
       ...(parsed.cases ?? {}),
     };
-    if (!cases.p1) cases.p1 = buildSeedCase("p1", employees);
-    const activeProjectId = parsed.activeProjectId ?? "p1";
-    const activeCase = cases[activeProjectId] ?? cases.p1;
+    const activeProjectId =
+      parsed.activeProjectId && projects.some((p) => p.id === parsed.activeProjectId)
+        ? parsed.activeProjectId
+        : (projects[0]?.id ?? "");
+    const activeCase = activeProjectId ? cases[activeProjectId] : undefined;
+
+    const onboardingComplete =
+      typeof parsed.onboardingComplete === "boolean"
+        ? parsed.onboardingComplete
+        : APP_VARIANT === "test"
+          ? true
+          : employees.some((e) => e.kind === "human" && e.accessRole === "admin" && e.active !== false);
+
+    const sectionValues = parsed.sectionValues ?? base.sectionValues;
+    let projectSectionValues =
+      (parsed.projectSectionValues as AppState["projectSectionValues"] | undefined) ?? {};
+    // 遷移：舊狀態無 bag → 把目前正文掛到 active
+    if (!Object.keys(projectSectionValues).length && activeProjectId) {
+      projectSectionValues = { [activeProjectId]: structuredClone(sectionValues) };
+    }
+    // 確保 active 與 bag 同步（優先用 bag 內已存正文）
+    const activeDocs =
+      projectSectionValues[activeProjectId] ?? structuredClone(sectionValues);
+    projectSectionValues = {
+      ...projectSectionValues,
+      [activeProjectId]: activeDocs,
+    };
 
     return {
       ...base,
       ...parsed,
-      projects,
+      projects: APP_VARIANT === "prod" ? projects.filter((p) => !p.isSample) : projects,
       sections: parsed.sections ?? base.sections,
-      sectionValues: parsed.sectionValues ?? base.sectionValues,
+      sectionValues: activeDocs,
+      projectSectionValues,
       sampleSectionValues: parsed.sampleSectionValues ?? null,
       comments: parsed.comments ?? base.comments,
-      approvals: approvalsFromCase(activeCase) ?? parsed.approvals ?? base.approvals,
+      approvals: activeCase
+        ? approvalsFromCase(activeCase)
+        : (parsed.approvals ?? base.approvals),
       workflowStages,
       cases,
       activeProjectId,
@@ -206,9 +306,21 @@ function load(): AppState {
       currentUser,
       session,
       locked: activeCase?.locked ?? parsed.locked ?? false,
-      settings: { ...base.settings, ...(parsed.settings ?? {}) },
-      showSamples: parsed.showSamples !== false,
+      settings: {
+        ...base.settings,
+        ...(parsed.settings ?? {}),
+        enableLinters: {
+          ...base.settings.enableLinters,
+          ...((parsed.settings as AISettings | undefined)?.enableLinters ?? {}),
+        },
+        editor: {
+          ...base.settings.editor,
+          ...((parsed.settings as AISettings | undefined)?.editor ?? {}),
+        },
+      },
+      showSamples: APP_VARIANT === "prod" ? false : parsed.showSamples !== false,
       agentJobs: Array.isArray(parsed.agentJobs) ? (parsed.agentJobs as AgentJob[]) : [],
+      onboardingComplete,
     };
   } catch {
     return seedState();
@@ -292,47 +404,370 @@ export const store = {
     emit();
   },
 
+  needsOnboarding(): boolean {
+    if (APP_VARIANT === "test") return false;
+    if (state.onboardingComplete) return false;
+    const hasAdmin = state.employees.some(
+      (e) => e.kind === "human" && e.accessRole === "admin" && e.active !== false && e.id !== "__setup__",
+    );
+    return !hasAdmin;
+  },
+
+  /**
+   * 首次引導：建立工作區管理員並登入。
+   */
+  bootstrapAdmin(input: {
+    name: string;
+    email: string;
+    password: string;
+    title?: string;
+  }): { ok: boolean; reason?: string; userId?: string } {
+    const name = input.name.trim();
+    const email = input.email.trim();
+    const password = input.password;
+    if (!name) return { ok: false, reason: "請填寫姓名" };
+    if (!email || !email.includes("@")) return { ok: false, reason: "請填寫有效 Email" };
+    if (!password || password.length < 4) return { ok: false, reason: "密碼至少 4 字元" };
+
+    const id = `admin-${Date.now().toString(36)}`;
+    const avatar = name.slice(0, 1).toUpperCase() || "A";
+    const admin: Employee = {
+      id,
+      name,
+      title: (input.title ?? "工作區管理員").trim() || "工作區管理員",
+      avatar,
+      email,
+      accessRole: "admin",
+      kind: "human",
+      agentFamily: null,
+      password,
+      isCurrent: true,
+      active: true,
+    };
+
+    // 清掉幽靈帳與示範殘留
+    const rest = state.employees.filter((e) => e.id !== "__setup__" && e.id !== "scott");
+    state = {
+      ...state,
+      employees: [admin, ...rest.filter((e) => e.kind === "agent")],
+      currentUser: admin,
+      session: { userId: admin.id, loggedInAt: new Date().toISOString() },
+      showSamples: false,
+      projects: state.projects.filter((p) => !p.isSample),
+      comments: state.comments.filter((c) => !c.authorId?.startsWith("claude") && !c.authorId?.startsWith("codex")),
+    };
+    emit();
+    return { ok: true, userId: id };
+  },
+
+  /** 引導步驟：安裝入門 Agent 包（可略過） */
+  installStarterAgents(passwordForAgents?: string): { ok: boolean; count: number } {
+    const pwd =
+      passwordForAgents ||
+      state.employees.find((e) => e.accessRole === "admin" && e.kind === "human")?.password ||
+      "demo";
+    const starters = buildStarterAgents(pwd);
+    const existingIds = new Set(state.employees.map((e) => e.id));
+    const toAdd = starters.filter((a) => !existingIds.has(a.id));
+    if (!toAdd.length) return { ok: true, count: 0 };
+    state = { ...state, employees: [...state.employees, ...toAdd] };
+    emit();
+    return { ok: true, count: toAdd.length };
+  },
+
+  completeOnboarding(opts?: { next?: "blank" | "beginner" | "import" }) {
+    state = {
+      ...state,
+      onboardingComplete: true,
+      showSamples: false,
+    };
+    emit();
+    return opts?.next ?? "blank";
+  },
+
+  /** 從 Markdown 粗略匯入為新專案草稿 */
+  importMarkdownProject(filename: string, markdown: string): { ok: boolean; projectId?: string; reason?: string } {
+    const user = state.currentUser;
+    if (!user || user.id === "__setup__" || user.active === false) {
+      return { ok: false, reason: "請先完成管理員建立並登入" };
+    }
+    const titleMatch = markdown.match(/^#\s+(.+)$/m);
+    const title =
+      (titleMatch?.[1] ?? "").trim() ||
+      filename.replace(/\.md$/i, "").trim() ||
+      "匯入的 PRD";
+    const id = `p${Date.now()}`;
+    const p: Project = {
+      id,
+      title,
+      customName: undefined,
+      status: "draft",
+      pct: 8,
+      owner: user.name,
+      ownerId: user.id,
+      authorId: user.id,
+      authorAgentFamily: user.kind === "agent" ? user.agentFamily : null,
+      mine: true,
+      updated: "剛剛",
+      lastFileAt: nowIso(),
+      tag: "import",
+      isSample: false,
+      isImported: true,
+      sourceFolder: filename,
+    };
+    this.addProject(p);
+    this.setActiveProject(id);
+    // 盡量塞進摘要 what
+    const body = markdown.replace(/^#\s+.+$/m, "").trim().slice(0, 4000);
+    if (body) {
+      this.setSectionField("summary", "what", body.slice(0, 500));
+      this.setSectionField("problem", "problem", body.slice(0, 1500));
+      this.updateSection("summary", { status: "warn" });
+      this.updateSection("problem", { status: "warn" });
+    }
+    return { ok: true, projectId: id };
+  },
+
   setProjects(projects: Project[]) {
     state = { ...state, projects };
     emit();
   },
 
   addProject(p: Project) {
-    state = { ...state, projects: [p, ...state.projects] };
+    const bag = snapshotActiveDocs(state);
+    if (!bag[p.id]) bag[p.id] = blankDocsForSections(state.sections);
+    state = {
+      ...state,
+      projects: [p, ...state.projects],
+      projectSectionValues: bag,
+    };
     emit();
   },
 
-  deleteProject(id: string): { ok: boolean; reason?: string } {
+  /**
+   * 確認匯入：將掃描候選轉成獨立專案 + 正文袋。
+   * 回傳建立的專案 id 列表（第一個會設為 active）。
+   */
+  importProjectCandidates(
+    candidates: ProjectCandidate[],
+    folderName: string,
+  ): { ok: boolean; projectIds: string[]; reason?: string } {
+    const user = state.currentUser;
+    if (!user || user.id === "__setup__" || user.active === false) {
+      return { ok: false, projectIds: [], reason: "請先登入" };
+    }
+    if (user.accessRole === "approver") {
+      return { ok: false, projectIds: [], reason: "核准人員無法匯入專案" };
+    }
+    const selected = candidates.filter((c) => c.selected && c.files.length >= 0);
+    if (!selected.length) {
+      return { ok: false, projectIds: [], reason: "請至少勾選一個專案" };
+    }
+
+    const bag = snapshotActiveDocs(state);
+    const newProjects: Project[] = [];
+    const ids: string[] = [];
+
+    for (const c of selected) {
+      const id = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      const docs = mapCandidateToSectionValues(c);
+      // 合併完整 section keys
+      const full = blankDocsForSections(state.sections);
+      for (const [sid, fields] of Object.entries(docs)) {
+        full[sid] = { ...(full[sid] ?? {}), ...fields };
+      }
+      bag[id] = full;
+
+      const missingRequired = c.slots
+        .filter((s) => s.required && s.status === "missing")
+        .map((s) => s.label);
+
+      const summary: ProjectImportSummary = {
+        folderName,
+        rootPath: c.rootPath,
+        scannedAt: new Date().toISOString(),
+        overallScore: c.overallScore,
+        coveragePct: c.coveragePct,
+        progressPct: c.progressPct,
+        matchedFiles: c.matches.map((m) => ({
+          slot: m.slot,
+          path: m.file.path,
+          contentScore: m.contentScore,
+        })),
+        missingRequired,
+      };
+
+      const folder = folderName || c.name || "匯入專案";
+      const p: Project = {
+        id,
+        title: folder,
+        // 未自訂名稱時顯示資料夾名
+        customName: undefined,
+        status: "draft",
+        pct: Math.max(5, Math.min(95, c.progressPct)),
+        owner: user.name,
+        ownerId: user.id,
+        authorId: user.id,
+        authorAgentFamily: user.kind === "agent" ? user.agentFamily : null,
+        mine: true,
+        updated: "剛剛",
+        lastFileAt: summary.scannedAt || nowIso(),
+        tag: "import",
+        isSample: false,
+        isImported: true,
+        sourceFolder: folder,
+        importSummary: summary,
+      };
+      newProjects.push(p);
+      ids.push(id);
+
+      if (!state.cases[id]) {
+        state = {
+          ...state,
+          cases: {
+            ...state.cases,
+            [id]: caseFromWorkflow(id, state.workflowStages, state.employees),
+          },
+        };
+      }
+    }
+
+    const firstId = ids[0];
+    const firstDocs = bag[firstId] ?? blankDocsForSections(state.sections);
+
+    state = {
+      ...state,
+      projects: [...newProjects, ...state.projects],
+      projectSectionValues: bag,
+      activeProjectId: firstId,
+      sectionValues: structuredClone(firstDocs),
+    };
+    syncApprovalsFromActiveCase();
+    emit();
+    return { ok: true, projectIds: ids };
+  },
+
+  /**
+   * 退出追蹤：僅從工作區拿掉專案與正文袋，不刪磁碟檔案。
+   */
+  untrackProject(id: string): { ok: boolean; reason?: string } {
     const user = state.currentUser;
     if (user.accessRole !== "admin" && user.accessRole !== "editor") {
-      return { ok: false, reason: "僅編輯人員或管理員可移除專案" };
+      return { ok: false, reason: "僅編輯人員或管理員可退出追蹤" };
     }
-    state = { ...state, projects: state.projects.filter((p) => p.id !== id) };
+    if (!state.projects.some((p) => p.id === id)) {
+      return { ok: false, reason: "找不到該專案" };
+    }
+    const bag = { ...state.projectSectionValues };
+    delete bag[id];
+    const cases = { ...state.cases };
+    delete cases[id];
+    const projects = state.projects.filter((p) => p.id !== id);
+    let activeProjectId = state.activeProjectId;
+    let sectionValues = state.sectionValues;
+    if (activeProjectId === id) {
+      activeProjectId = projects[0]?.id ?? "";
+      sectionValues = activeProjectId
+        ? structuredClone(bag[activeProjectId] ?? blankDocsForSections(state.sections))
+        : blankDocsForSections(state.sections);
+      if (activeProjectId) bag[activeProjectId] = sectionValues;
+    }
+    state = {
+      ...state,
+      projects,
+      projectSectionValues: bag,
+      cases,
+      activeProjectId,
+      sectionValues,
+      locked: false,
+    };
+    syncApprovalsFromActiveCase();
     emit();
     return { ok: true };
   },
 
-  setSectionValues(sectionId: string, values: Record<string, string>) {
+  /** @deprecated 請用 untrackProject（語意：退出追蹤，非刪檔） */
+  deleteProject(id: string): { ok: boolean; reason?: string } {
+    return this.untrackProject(id);
+  },
+
+  /** 清空工作區內所有追蹤專案（不碰磁碟） */
+  untrackAllProjects(): { ok: boolean; count: number; reason?: string } {
+    const user = state.currentUser;
+    if (user.accessRole !== "admin" && user.accessRole !== "editor") {
+      return { ok: false, count: 0, reason: "僅編輯人員或管理員可清空追蹤" };
+    }
+    const count = state.projects.length;
     state = {
       ...state,
-      sectionValues: {
-        ...state.sectionValues,
-        [sectionId]: { ...state.sectionValues[sectionId], ...values },
-      },
+      projects: [],
+      projectSectionValues: {},
+      cases: {},
+      activeProjectId: "",
+      sectionValues: blankDocsForSections(state.sections),
+      comments: [],
+      locked: false,
+      approvals: structuredClone(SEED_APPROVALS).map((a) => ({
+        ...a,
+        name: "待指派",
+        state: "empty" as const,
+        assigneeId: undefined,
+      })),
     };
+    emit();
+    return { ok: true, count };
+  },
+
+  setSectionValues(sectionId: string, values: Record<string, string>) {
+    const sectionValues = {
+      ...state.sectionValues,
+      [sectionId]: { ...state.sectionValues[sectionId], ...values },
+    };
+    const bag = { ...state.projectSectionValues };
+    if (state.activeProjectId) bag[state.activeProjectId] = sectionValues;
+    state = { ...state, sectionValues, projectSectionValues: bag };
+    touchProjectMeta(state.activeProjectId);
     emit();
   },
 
   setSectionField(sectionId: string, key: string, value: string) {
     const cur = state.sectionValues[sectionId] ?? {};
+    const sectionValues = {
+      ...state.sectionValues,
+      [sectionId]: { ...cur, [key]: value },
+    };
+    const bag = { ...state.projectSectionValues };
+    if (state.activeProjectId) bag[state.activeProjectId] = sectionValues;
+    state = { ...state, sectionValues, projectSectionValues: bag };
+    touchProjectMeta(state.activeProjectId);
+    emit();
+  },
+
+  /** 自訂側欄顯示名稱（空字串＝清除自訂，改回資料夾／標題） */
+  renameProject(id: string, customName: string): { ok: boolean; reason?: string } {
+    const user = state.currentUser;
+    if (user.accessRole !== "admin" && user.accessRole !== "editor") {
+      return { ok: false, reason: "無權限重新命名" };
+    }
+    if (!state.projects.some((p) => p.id === id)) {
+      return { ok: false, reason: "找不到專案" };
+    }
+    const name = customName.trim();
     state = {
       ...state,
-      sectionValues: {
-        ...state.sectionValues,
-        [sectionId]: { ...cur, [key]: value },
-      },
+      projects: state.projects.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              customName: name || undefined,
+              updated: "剛剛",
+              lastFileAt: nowIso(),
+            }
+          : p,
+      ),
     };
     emit();
+    return { ok: true };
   },
 
   updateSection(sectionId: string, patch: Partial<Section>) {
@@ -417,7 +852,35 @@ export const store = {
 
   setActiveProject(id: string) {
     if (!state.projects.some((p) => p.id === id)) return;
-    state = { ...state, activeProjectId: id };
+    if (id === state.activeProjectId) {
+      // 仍確保 case 存在
+      if (!state.cases[id]) {
+        state = {
+          ...state,
+          cases: {
+            ...state.cases,
+            [id]: caseFromWorkflow(id, state.workflowStages, state.employees),
+          },
+        };
+        syncApprovalsFromActiveCase();
+        emit();
+      }
+      return;
+    }
+
+    // 1) 快照目前專案正文
+    const bag = snapshotActiveDocs(state);
+    // 2) 載入目標專案正文（無則空白）
+    const nextDocs =
+      bag[id] ?? blankDocsForSections(state.sections);
+    bag[id] = nextDocs;
+
+    state = {
+      ...state,
+      activeProjectId: id,
+      sectionValues: structuredClone(nextDocs),
+      projectSectionValues: bag,
+    };
     if (!state.cases[id]) {
       state = {
         ...state,

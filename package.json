@@ -16,8 +16,14 @@
     "app:all": "bash mac-app-build/build-dmg.sh --all"
   },
   "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^26.1.2",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
+  },
+  "dependencies": {
+    "markdown-it": "^15.0.0",
+    "markdown-it-mark": "^4.0.0",
+    "markdown-it-task-lists": "^2.1.1"
   }
 }

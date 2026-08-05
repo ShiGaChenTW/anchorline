@@ -1,9 +1,15 @@
+import { APP_VARIANT } from "../data/seed";
 import { store } from "../data/store";
 import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL } from "../data/types";
 import { initTheme } from "../lib/theme";
 import { escapeHtml } from "../lib/ui";
 
 initTheme();
+
+// 正式版首次使用 → 引導建立管理員
+if (store.needsOnboarding()) {
+  location.href = "onboarding.html";
+}
 
 // Already logged in → workspace
 if (store.get().session?.userId) {
@@ -19,7 +25,14 @@ const errEl = document.getElementById("login-error")!;
 const pwd = document.getElementById("password") as HTMLInputElement;
 
 function renderOptions() {
-  const employees = store.get().employees.filter((e) => e.active !== false);
+  const employees = store
+    .get()
+    .employees.filter((e) => e.active !== false && e.id !== "__setup__");
+  if (!employees.length) {
+    select.innerHTML = `<option value="">（尚無帳號 — 請完成首次引導）</option>`;
+    preview.textContent = "—";
+    return;
+  }
   select.innerHTML = employees
     .map((e) => {
       const kind = e.kind === "agent" ? "Agent" : "人員";
@@ -70,10 +83,27 @@ document.getElementById("login-form")?.addEventListener("submit", (e) => {
 });
 
 renderOptions();
-// Prefer admin as default for first-time? Keep first seed current (editor)
-const preferred = store.get().employees.find((e) => e.id === "scott") ?? store.get().employees[0];
+const preferred =
+  store.get().employees.find((e) => e.kind === "human" && e.accessRole === "admin" && e.active !== false) ??
+  store.get().employees.find((e) => e.active !== false && e.id !== "__setup__");
 if (preferred) {
   select.value = preferred.id;
   updatePreview();
 }
-pwd.value = "demo";
+// 測試版預填 demo；正式版不預填密碼
+if (APP_VARIANT === "test") {
+  pwd.value = "demo";
+} else {
+  pwd.value = "";
+  pwd.placeholder = "請輸入密碼";
+}
+
+// 正式版隱藏示範快速身分
+if (APP_VARIANT !== "test") {
+  document.querySelector(".quick-roles")?.remove();
+  const hint = document.querySelector(".login-hint");
+  if (hint) {
+    hint.innerHTML =
+      "正式版：請使用首次引導建立的管理員帳號登入。<br />可在「管理中心」新增人員與 Agent，在「Agent 管理」調整 prompt 與進場作業。";
+  }
+}

@@ -1,0 +1,37 @@
+/* transparency: clear all chrome so NSVisualEffect shows through uniformly
+   (layered rgba would only translucent-ify 2 panes). popovers keep --surface intentionally. */
+
+:root[data-transparency="on"] .mdv-titlebar,
+:root[data-transparency="on"] .mdv-breadcrumb,
+:root[data-transparency="on"] .mdv-statusbar,
+:root[data-transparency="on"] .mdv-sidebar,
+:root[data-transparency="on"] .mdv-sidebar__inner,
+:root[data-transparency="on"] .mdv-sidebar__header,
+:root[data-transparency="on"] .mdv-sidebar__body,
+:root[data-transparency="on"] .mdv-sidebar__search-row,
+:root[data-transparency="on"] .mdv-context-tray,
+:root[data-transparency="on"] .mdv-rootfolder,
+:root[data-transparency="on"] .mdv-rootfolder__header,
+:root[data-transparency="on"] .mdv-tabs,
+:root[data-transparency="on"] .mdv-tab.is-active,
+:root[data-transparency="on"] .mdv-editor,
+:root[data-transparency="on"] .mdv-editor .cm-editor,
+:root[data-transparency="on"] .mdv-editor .cm-gutters,
+:root[data-transparency="on"] .mdv-editor .cm-scroller,
+:root[data-transparency="on"] .mdv-preview,
+:root[data-transparency="on"] .mdv-prose {
+  background: transparent !important;
+}
+
+/* preserve hover feedback on translucent surfaces — rgba lets the blur show through */
+:root[data-transparency="on"] .mdv-tree__row:hover,
+:root[data-transparency="on"] .mdv-rootfolder__header:hover,
+:root[data-transparency="on"] .mdv-tab:hover {
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+
+:root[data-transparency="on"] .mdv-tree__edit-input,
+:root[data-transparency="on"] .mdv-editor .cm-textfield,
+:root[data-transparency="on"] .mdv-editor .cm-button {
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+}

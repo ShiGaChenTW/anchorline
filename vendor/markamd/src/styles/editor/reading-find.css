@@ -1,0 +1,90 @@
+/* ─── reading-mode find bar (⌘F / Ctrl+F when ⌘. active) ─────────── */
+.mdv-find {
+  position: fixed;
+  top: calc(var(--titlebar-h, 44px) + 16px);
+  right: 24px;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 12px 32px -12px rgba(0, 0, 0, 0.22);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  animation: mdv-find-in 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes mdv-find-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.mdv-find input {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  outline: none;
+  color: var(--fg);
+  font: inherit;
+  padding: 6px 8px;
+  width: 200px;
+}
+.mdv-find input::placeholder { color: var(--muted); }
+.mdv-find__count {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 52px;
+  text-align: right;
+  padding-right: 4px;
+}
+.mdv-find__btn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  transition: background 160ms ease, color 160ms ease;
+}
+.mdv-find__btn:hover:not([disabled]) {
+  background: var(--bg-soft);
+  color: var(--fg);
+}
+.mdv-find__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.mdv-find__btn[disabled] { opacity: 0.4; cursor: default; }
+.mdv-find__btn--close { font-size: 16px; padding: 2px 8px; }
+
+/* highlighted matches in the rendered prose */
+.mdv-find-hit {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 1px 2px;
+  margin: 0 -2px;
+  scroll-margin-block: 30vh;
+}
+.mdv-find-hit--active {
+  background: color-mix(in srgb, var(--accent) 65%, transparent);
+  color: #fff;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (max-width: 640px) {
+  .mdv-find { right: 12px; left: 12px; }
+  .mdv-find input { width: auto; flex: 1; }
+  .mdv-find__count { min-width: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mdv-find { animation: none; }
+}

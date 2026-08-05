@@ -1,0 +1,29 @@
+name: 💬 feedback
+description: share thoughts, ideas, or a feature request
+title: "[feedback] "
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        thanks for taking the time 🐙 — keep it short, no pressure.
+        for a bug report, use the bug template instead.
+  - type: textarea
+    id: thoughts
+    attributes:
+      label: what's on your mind?
+      description: ideas, missing features, what surprised you, what you wish worked differently — anything.
+      placeholder: e.g. "would love an export-to-pdf option that includes mermaid diagrams"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: platform (optional)
+      placeholder: macOS / Windows / Linux + version
+  - type: textarea
+    id: context
+    attributes:
+      label: how do you use marka.md? (optional)
+      description: helps me prioritize. one sentence is enough.
+      placeholder: "i use it to prep claude project context daily"

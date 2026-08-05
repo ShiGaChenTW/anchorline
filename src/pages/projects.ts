@@ -1,6 +1,6 @@
 import { store } from "../data/store";
 import { APP_VARIANT } from "../data/seed";
-import type { Project, ProjectStatus } from "../data/types";
+import { projectDisplayName, type Project, type ProjectStatus } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import {
   BEGINNER_EXAMPLES,
@@ -9,9 +9,19 @@ import {
 } from "../lib/beginner-flow";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile, exportOpenspecBundle } from "../lib/export";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
+import {
+  scanFolderFromFileList,
+  scanFromNativeFolder,
+  scoreTone,
+  SLOT_META,
+  type FolderScanResult,
+  type NativeFolderFile,
+  type ProjectCandidate,
+} from "../lib/folder-import";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
 import { canDelete, canEditContent, canExport } from "../lib/permissions";
+import { bindRailProjects, renderRailProjects } from "../lib/rail-projects";
 import { initTheme } from "../lib/theme";
 import {
   bindModalDismiss,
@@ -29,8 +39,10 @@ if (!requireAuth()) {
   initTheme();
   initMobileNav("projects");
   bindModalDismiss("modal");
+  bindModalDismiss("modal-import");
   bindLogout();
   initHelpOverlay();
+  bindRailProjects();
 
   // L1–L6 strip under toolbar
   {
@@ -124,42 +136,11 @@ if (!requireAuth()) {
     });
   }
 
-  /** 依標題／tag／檔名模糊對應 plan（簽核狀態仍以 case 為準，不覆寫） */
-  function matchPlan(project: Project, plans: PlanHit[]): PlanHit | null {
-    if (!plans.length) return null;
-    let best: PlanHit | null = null;
-    let bestScore = 0;
-    const title = project.title.toLowerCase();
-    const tag = project.tag.toLowerCase();
-    const id = project.id.toLowerCase();
-    for (const pl of plans) {
-      let score = 0;
-      const pt = pl.meta.title.toLowerCase();
-      const pn = pl.name.toLowerCase();
-      if (pt && (pt.includes(title.slice(0, 6)) || title.includes(pt.slice(0, 6)))) score += 4;
-      if (pn.includes(tag) || pn.includes(id)) score += 3;
-      if (project.isSample && pn.includes("prod-app")) score += 1;
-      if (project.status === "review" && pl.meta.status.includes("進行")) score += 1;
-      if (score > bestScore) {
-        bestScore = score;
-        best = pl;
-      }
-    }
-    // 無明確對應時：焦點專案掛「最新一筆有 steps 的 plan」作工作區提示
-    if (bestScore < 2) {
-      if (project.id === store.get().activeProjectId || project.id === "p1") {
-        return plans.find((p) => p.meta.total_steps > 0) ?? plans[0] ?? null;
-      }
-      return null;
-    }
-    return best;
-  }
-
   function renderPlanBar(plans: PlanHit[]) {
     const bar = document.getElementById("plan-workspace-bar");
     if (!bar) return;
     if (!plans.length) {
-      bar.innerHTML = `工作區計劃：0 檔 · <a href="tracking.html" style="color:var(--accent)">開啟追蹤</a> · <span class="muted">bun run track</span>`;
+      bar.innerHTML = `尚無計劃檔 · <a href="tracking.html" class="plan-bar-link">打開計劃追蹤</a>`;
       return;
     }
     const withSteps = plans.filter((p) => p.meta.total_steps > 0);
@@ -168,7 +149,10 @@ if (!requireAuth()) {
         ? 0
         : Math.round(withSteps.reduce((a, p) => a + p.pct, 0) / withSteps.length);
     const pending = withSteps.reduce((a, p) => a + p.meta.pending_steps, 0);
-    bar.innerHTML = `工作區計劃：<strong>${plans.length}</strong> 檔 · 平均完成 <strong>${avg}%</strong> · 待辦步驟 <strong>${pending}</strong> · <a href="tracking.html" style="color:var(--accent)">計劃追蹤</a> · <span style="color:var(--muted)">終端 bun run track</span>`;
+    bar.innerHTML = `<span class="plan-bar-stat"><em>${plans.length}</em> 份計劃</span>
+      <span class="plan-bar-stat">完成 <em>${avg}%</em></span>
+      <span class="plan-bar-stat">待辦 <em>${pending}</em></span>
+      <a href="tracking.html" class="plan-bar-link">打開追蹤</a>`;
   }
 
   function renderFlow() {
@@ -203,12 +187,10 @@ if (!requireAuth()) {
     });
 
     const count = document.getElementById("result-count");
-    if (count) count.textContent = `${rows.length} 筆`;
+    if (count) count.textContent = rows.length === 0 ? "沒有項目" : `${rows.length} 個專案`;
 
     if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--muted)">沒有符合的專案${
-        !store.get().showSamples ? "（範例文件已隱藏）" : ""
-      }</td></tr>`;
+      tbody.innerHTML = `<div class="project-board-empty">沒有符合的專案</div>`;
       renderStats(projects);
       syncChrome();
       return;
@@ -229,52 +211,42 @@ if (!requireAuth()) {
               ? "審閱"
               : p.status === "withdrawn"
                 ? "抽單"
-                : "繼續";
-        const sampleTag = p.isSample
-          ? `<span class="pill" style="margin-left:6px;font-size:10px">範例</span>`
-          : "";
-        const agentTag = p.authorAgentFamily
-          ? `<span class="mono" style="color:var(--muted);font-size:11px"> · agent:${escapeHtml(p.authorAgentFamily)}</span>`
-          : "";
-        const plan = matchPlan(p, planHits);
-        const planCell = plan
-          ? `<a href="tracking.html" class="plan-link" title="${escapeHtml(plan.meta.title)} (${escapeHtml(plan.name)})">
-              <span class="plan-pct">${plan.meta.done_steps}/${plan.meta.total_steps || "—"}</span>
-              <span class="mono" style="color:var(--muted)">${plan.pct}%</span>
-            </a>`
-          : `<span class="mono" style="color:var(--meta)">—</span>`;
-        const del =
+                : "繼續寫";
+        const tags: string[] = [];
+        if (p.isImported) tags.push(`<span class="p-tag p-tag--import">匯入</span>`);
+        if (p.isSample) tags.push(`<span class="p-tag">範例</span>`);
+        if (p.id === store.get().activeProjectId) tags.push(`<span class="p-tag p-tag--now">目前</span>`);
+        const untrack =
           canDelete(user)
-            ? `<button type="button" class="btn btn-sm btn-ghost btn-del" data-id="${p.id}" title="移除專案" aria-label="移除 ${escapeHtml(p.title)}">移除</button>`
+            ? `<button type="button" class="btn btn-sm btn-ghost btn-untrack" data-untrack-id="${escapeHtml(p.id)}" title="僅從工作區退出追蹤，不刪除磁碟檔案">退出追蹤</button>`
             : "";
-        return `<tr data-id="${p.id}" data-od-id="row-${p.id}">
-      <td><a href="editor.html">${escapeHtml(p.title)}</a>${sampleTag}<div class="mono">#${escapeHtml(p.tag)}${agentTag}</div></td>
-      <td><span class="pill ${s.cls}">${s.label}</span></td>
-      <td><div class="progress"><div class="progress-bar ${barCls}"><i style="width:${p.pct}%"></i></div><span>${p.pct}%</span></div></td>
-      <td>${planCell}</td>
-      <td>${escapeHtml(p.owner)}</td>
-      <td class="mono">${escapeHtml(p.updated)}</td>
-      <td class="col-actions">
-        <div class="row-actions" role="group" aria-label="專案操作">
-          <a class="btn btn-sm btn-primary row-action-main" href="${actionHref}">${actionLabel}</a>
-          ${del}
-        </div>
-      </td>
-    </tr>`;
+        const display = projectDisplayName(p);
+        const metaBits = [
+          p.owner ? escapeHtml(p.owner) : "",
+          p.updated ? escapeHtml(p.updated) : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        return `<article class="project-card${p.id === store.get().activeProjectId ? " is-active" : ""}" data-id="${p.id}" role="listitem">
+  <div class="project-card-main">
+    <div class="project-card-title-row">
+      <a class="project-card-title" href="${actionHref}" data-open-project="${p.id}">${escapeHtml(display)}</a>
+      <span class="pill ${s.cls}">${s.label}</span>
+      ${tags.join("")}
+    </div>
+    <div class="project-card-meta">${metaBits || "—"}</div>
+    <div class="project-card-progress">
+      <div class="progress"><div class="progress-bar ${barCls}"><i style="width:${p.pct}%"></i></div></div>
+      <span class="project-card-pct">${p.pct}%</span>
+    </div>
+  </div>
+  <div class="project-card-actions">
+    <a class="btn btn-primary row-action-main" href="${actionHref}" data-open-project="${p.id}">${actionLabel}</a>
+    ${untrack}
+  </div>
+</article>`;
       })
       .join("");
-
-    tbody.querySelectorAll(".btn-del").forEach((btn) => {
-      (btn as HTMLButtonElement).onclick = () => {
-        const id = (btn as HTMLElement).dataset.id!;
-        const p = projects.find((x) => x.id === id);
-        if (!p || !confirm(`確定移除「${p.title}」？`)) return;
-        const r = store.deleteProject(id);
-        if (!r.ok) toast(r.reason ?? "無法移除");
-        else toast("已移除專案");
-        render();
-      };
-    });
 
     renderStats(projects);
     renderFlow();
@@ -282,6 +254,52 @@ if (!requireAuth()) {
     syncBeginnerCta();
     const navCount = document.querySelector('[data-od-id="nav-projects"] .count');
     if (navCount) navCount.textContent = String(projects.length);
+  }
+
+  // 表格操作：委派綁定（避免 WKWebView 下 re-render 後 handler 失效；confirm 不可靠時仍可操作）
+  const tbodyEl = document.getElementById("tbody");
+  if (tbodyEl && !tbodyEl.dataset.actionsBound) {
+    tbodyEl.dataset.actionsBound = "1";
+    tbodyEl.addEventListener("click", (e) => {
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+
+      const untrackBtn = t.closest<HTMLElement>("[data-untrack-id]");
+      if (untrackBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = untrackBtn.dataset.untrackId;
+        if (!id) return;
+        const p = store.get().projects.find((x) => x.id === id);
+        const title = p?.title ?? id;
+        // WKWebView 的 confirm 偶發無效；改用兩段式 data-confirm
+        if (untrackBtn.dataset.confirming !== "1") {
+          untrackBtn.dataset.confirming = "1";
+          untrackBtn.textContent = "再點確認";
+          untrackBtn.classList.add("btn-warn-confirm");
+          toast(`再點一次以退出追蹤「${title}」（不刪檔）`);
+          window.setTimeout(() => {
+            if (untrackBtn.dataset.confirming === "1") {
+              untrackBtn.dataset.confirming = "";
+              untrackBtn.textContent = "退出追蹤";
+              untrackBtn.classList.remove("btn-warn-confirm");
+            }
+          }, 4000);
+          return;
+        }
+        const r = store.untrackProject(id);
+        if (!r.ok) toast(r.reason ?? "無法退出追蹤");
+        else toast(`已退出追蹤「${title}」· 磁碟檔案未動`);
+        return;
+      }
+
+      const openEl = t.closest<HTMLElement>("[data-open-project]");
+      if (openEl && openEl.tagName === "A") {
+        const id = openEl.dataset.openProject;
+        if (id) store.setActiveProject(id);
+        // 讓 <a href> 正常導向
+      }
+    });
   }
 
   document.querySelectorAll("[data-filter]").forEach((btn) => {
@@ -297,6 +315,65 @@ if (!requireAuth()) {
     query = (e.target as HTMLInputElement).value.trim();
     render();
   });
+
+  // 工具列：全部退出追蹤
+  const toolbar = document.querySelector(".toolbar");
+  if (toolbar && !document.getElementById("btn-untrack-all")) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "btn-untrack-all";
+    btn.className = "btn";
+    btn.title = "清空工作區追蹤列表，不刪除磁碟檔案";
+    btn.textContent = "全部退出追蹤";
+    const importBtn = document.getElementById("btn-import");
+    if (importBtn?.parentElement) {
+      importBtn.parentElement.insertBefore(btn, importBtn);
+    } else {
+      toolbar.appendChild(btn);
+    }
+    btn.addEventListener("click", () => {
+      const n = store.get().projects.length;
+      if (!n) {
+        toast("目前沒有追蹤中的專案");
+        return;
+      }
+      if (btn.dataset.confirming !== "1") {
+        btn.dataset.confirming = "1";
+        btn.textContent = `再點確認清空 ${n} 筆`;
+        toast("再點一次將清空工作區追蹤（不刪磁碟檔）");
+        window.setTimeout(() => {
+          if (btn.dataset.confirming === "1") {
+            btn.dataset.confirming = "";
+            btn.textContent = "全部退出追蹤";
+          }
+        }, 4000);
+        return;
+      }
+      const r = store.untrackAllProjects();
+      btn.dataset.confirming = "";
+      btn.textContent = "全部退出追蹤";
+      if (!r.ok) toast(r.reason ?? "清空失敗");
+      else toast(`已退出追蹤 ${r.count} 個專案 · 可重新匯入`);
+    });
+  }
+
+  // 一次性清空：先前錯誤拆分子目錄匯入的追蹤資料，方便重新匯入
+  {
+    const MIGRATE_KEY = "specforge:clear-split-import-v1";
+    try {
+      if (!localStorage.getItem(MIGRATE_KEY) && store.get().projects.length > 0) {
+        const r = store.untrackAllProjects();
+        localStorage.setItem(MIGRATE_KEY, "1");
+        if (r.ok && r.count > 0) {
+          toast(`已清空 ${r.count} 筆舊追蹤，請重新「專案匯入」`);
+        }
+      } else if (!localStorage.getItem(MIGRATE_KEY)) {
+        localStorage.setItem(MIGRATE_KEY, "1");
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 
   /* ─── PRD 新手撰寫流程（7 步） ─── */
   let wizStep = 0;
@@ -522,6 +599,7 @@ if (!requireAuth()) {
     const p: Project = {
       id: `p${Date.now()}`,
       title,
+      customName: undefined,
       status: "draft",
       pct: 18,
       owner: user.name,
@@ -530,6 +608,7 @@ if (!requireAuth()) {
       authorAgentFamily: user.kind === "agent" ? user.agentFamily : null,
       mine: true,
       updated: "剛剛",
+      lastFileAt: new Date().toISOString(),
       tag: tpl.includes("資安") ? "security" : tpl.includes("成長") ? "growth" : "product",
       isSample: false,
     };
@@ -568,7 +647,20 @@ if (!requireAuth()) {
   // 初始化步驟列（關閉時也有正確 DOM）
   renderWizardChrome();
 
-  // 正式版隱藏「隱藏範例」意義較弱時仍保留；標題列可顯示變體提示
+  // 正式版首次引導選「新手流程」→ 自動開啟精靈
+  if (new URLSearchParams(location.search).get("beginner") === "1") {
+    setBeginnerMode(true);
+    window.setTimeout(() => {
+      if (canEditContent(store.get().currentUser)) openWizard(true);
+    }, 200);
+  }
+
+  // 正式版：隱藏「範例文件」切換（無示範內容）
+  if (APP_VARIANT === "prod") {
+    document.getElementById("btn-toggle-samples")?.remove();
+  }
+
+  // 測試版標題列可顯示變體提示
   if (APP_VARIANT === "test") {
     const meta = document.querySelector(".titlebar-meta");
     if (meta && !document.getElementById("variant-badge")) {
@@ -625,16 +717,325 @@ if (!requireAuth()) {
     toast("已匯出 OpenSpec：PRD.md · tasks.md · proposal.md");
   });
 
+  /* ─── 專案資料夾匯入 ─── */
+  let scanResult: FolderScanResult | null = null;
+  let candidates: ProjectCandidate[] = [];
+
+  function importErr(msg: string) {
+    const el = document.getElementById("import-err");
+    if (el) el.textContent = msg;
+  }
+
+  function renderImportModal() {
+    const empty = document.getElementById("import-empty");
+    const result = document.getElementById("import-result");
+    const bar = document.getElementById("import-summary-bar");
+    const list = document.getElementById("import-candidates");
+    const confirmBtn = document.getElementById("import-confirm") as HTMLButtonElement | null;
+    const sub = document.getElementById("import-subtitle");
+
+    if (!scanResult || !candidates.length) {
+      if (empty) empty.hidden = false;
+      if (result) result.hidden = true;
+      if (confirmBtn) confirmBtn.disabled = true;
+      if (sub) sub.textContent = "選擇資料夾後自動偵測 PRD 相關文件";
+      return;
+    }
+
+    if (empty) empty.hidden = true;
+    if (result) result.hidden = false;
+    if (sub) {
+      sub.textContent = `資料夾「${scanResult.folderName}」· 掃描 ${scanResult.fileCount} 個文字檔 · ${candidates.length} 個候選專案`;
+    }
+
+    const selected = candidates.filter((c) => c.selected);
+    const avg =
+      selected.length === 0
+        ? 0
+        : Math.round(selected.reduce((a, c) => a + c.overallScore, 0) / selected.length);
+    if (bar) {
+      bar.innerHTML = `
+        <div class="import-bar-stats">
+          <span>已勾選 <strong>${selected.length}</strong> / ${candidates.length}</span>
+          <span>平均評分 <strong class="score-tone-${scoreTone(avg)}">${avg}</strong></span>
+          <span class="hint">必要欄位：PRD · 問題 · 目標 · 指標</span>
+        </div>`;
+    }
+
+    if (list) {
+      const shortName = (name: string, max = 36) => {
+        if (name.length <= max) return name;
+        const ext = name.includes(".") ? name.slice(name.lastIndexOf(".")) : "";
+        const base = ext ? name.slice(0, -ext.length) : name;
+        const keep = Math.max(8, max - ext.length - 1);
+        return `${base.slice(0, keep)}…${ext}`;
+      };
+      const slotRow = (row: (typeof candidates)[0]["slots"][0]) => {
+        const st = row.status === "ok" ? "ok" : row.status === "warn" ? "warn" : "miss";
+        const full = row.match?.file.name ?? "";
+        const file = row.match
+          ? escapeHtml(shortName(full))
+          : row.required
+            ? "未找到"
+            : "—";
+        const sc = row.match ? `${row.match.contentScore}` : "";
+        const title = row.match
+          ? `${SLOT_META[row.slot].label} · ${full} · ${row.match.contentScore}分`
+          : SLOT_META[row.slot].sectionHint;
+        const mark =
+          row.status === "ok" ? "✓" : row.status === "warn" ? "!" : row.required ? "×" : "·";
+        return `<div class="import-slot import-slot-${st}" title="${escapeHtml(title)}">
+          <span class="import-slot-mark" aria-hidden="true">${mark}</span>
+          <span class="import-slot-body">
+            <span class="import-slot-label">${escapeHtml(row.label)}${row.required ? "" : " <em>選用</em>"}</span>
+            <span class="import-slot-file">${file}${sc ? ` · ${sc}分` : ""}</span>
+          </span>
+        </div>`;
+      };
+
+      list.innerHTML = candidates
+        .map((c) => {
+          const tone = scoreTone(c.overallScore);
+          const required = c.slots.filter((s) => s.required);
+          const optional = c.slots.filter((s) => !s.required && s.status !== "missing");
+          const missingOpt = c.slots.filter((s) => !s.required && s.status === "missing").length;
+          const reqHtml = required.map(slotRow).join("");
+          const optHtml = optional.map(slotRow).join("");
+          const unmapped =
+            c.unmapped.length > 0
+              ? `<details class="import-unmapped"><summary>其他檔案 ${c.unmapped.length}</summary>
+                  <ul>${c.unmapped
+                    .slice(0, 40)
+                    .map((f) => `<li title="${escapeHtml(f.path)}">${escapeHtml(shortName(f.name, 42))}</li>`)
+                    .join("")}${
+                      c.unmapped.length > 40
+                        ? `<li class="muted">…另有 ${c.unmapped.length - 40} 個</li>`
+                        : ""
+                    }</ul>
+                </details>`
+              : "";
+          return `
+            <article class="import-card${c.selected ? " selected" : ""}" data-temp="${escapeHtml(c.tempId)}" role="listitem">
+              <header class="import-card-head">
+                <label class="import-check">
+                  <input type="checkbox" data-sel="${escapeHtml(c.tempId)}" ${c.selected ? "checked" : ""} />
+                  <strong title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</strong>
+                </label>
+                <div class="import-scores">
+                  <span class="score-pill score-tone-${tone}" title="綜合評分">${c.overallScore}</span>
+                  <span class="import-cov">覆蓋 ${c.coveragePct}%</span>
+                </div>
+              </header>
+              <div class="import-progress" aria-label="進度 ${c.progressPct}%">
+                <div class="import-progress-bar"><i style="width:${c.progressPct}%"></i></div>
+                <span class="import-pct">${c.progressPct}%</span>
+              </div>
+              <div class="import-section-label">必要欄位</div>
+              <div class="import-slots import-slots--required">${reqHtml}</div>
+              ${
+                optHtml || missingOpt
+                  ? `<details class="import-optional">
+                      <summary>選用欄位（已對應 ${optional.length}${missingOpt ? ` · 缺 ${missingOpt}` : ""}）</summary>
+                      <div class="import-slots import-slots--optional">${optHtml || `<p class="hint">尚無對應檔</p>`}</div>
+                    </details>`
+                  : ""
+              }
+              ${unmapped}
+            </article>`;
+        })
+        .join("");
+
+      list.querySelectorAll<HTMLInputElement>("input[data-sel]").forEach((inp) => {
+        inp.addEventListener("change", () => {
+          const id = inp.dataset.sel!;
+          const c = candidates.find((x) => x.tempId === id);
+          if (c) c.selected = inp.checked;
+          renderImportModal();
+        });
+      });
+    }
+
+    if (confirmBtn) confirmBtn.disabled = selected.length === 0;
+  }
+
+  type NativePayload = {
+    type: string;
+    folderName?: string;
+    folderPath?: string;
+    files?: NativeFolderFile[];
+    message?: string;
+  };
+
+  function applyScanResult(result: FolderScanResult) {
+    scanResult = result;
+    candidates = result.candidates.map((c) => ({ ...c, selected: true }));
+    if (!candidates.length || result.fileCount === 0) {
+      importErr("此資料夾沒有可讀的 Markdown／文字檔（.md / .txt）");
+      candidates = [];
+    } else {
+      importErr("");
+    }
+    renderImportModal();
+    openModal("modal-import");
+    if (result.fileCount > 0) {
+      toast(`掃描完成：${result.fileCount} 檔 · ${candidates.length} 候選專案`);
+    }
+  }
+
+  async function handleFolderPicked(fileList: FileList | null) {
+    importErr("");
+    if (!fileList?.length) {
+      importErr("未選擇任何檔案（若在 App 內請改用原生選夾）");
+      return;
+    }
+    toast("掃描資料夾中…");
+    try {
+      const first = fileList[0] as File & { webkitRelativePath?: string };
+      const folderHint = first.webkitRelativePath?.split("/")[0];
+      const result = await scanFolderFromFileList(fileList, folderHint);
+      applyScanResult(result);
+    } catch (e) {
+      importErr(e instanceof Error ? e.message : "掃描失敗");
+      toast("掃描失敗");
+    }
+  }
+
+  function handleNativeFolderPayload(payload: NativePayload) {
+    if (!payload || typeof payload !== "object") return;
+    if (payload.type === "folderPickCancelled") {
+      toast("已取消選擇資料夾");
+      return;
+    }
+    if (payload.type === "folderPickError") {
+      importErr(payload.message ?? "原生選夾失敗");
+      toast(payload.message ?? "選夾失敗");
+      return;
+    }
+    if (payload.type === "folderPickResult") {
+      toast("掃描資料夾中…");
+      try {
+        const files = Array.isArray(payload.files) ? payload.files : [];
+        const result = scanFromNativeFolder(payload.folderName || "匯入資料夾", files);
+        applyScanResult(result);
+      } catch (e) {
+        importErr(e instanceof Error ? e.message : "掃描失敗");
+        toast("掃描失敗");
+      }
+    }
+  }
+
+  /** SpecForge.app 注入 window.__SPECFORGE_NATIVE__ + webkit.messageHandlers.specforge */
+  function hasNativeFolderPicker(): boolean {
+    const w = window as Window & {
+      __SPECFORGE_NATIVE__?: boolean;
+      __specforgeHasNativeFolder?: boolean;
+      webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
+    };
+    return Boolean(
+      w.__SPECFORGE_NATIVE__ ||
+        w.__specforgeHasNativeFolder ||
+        w.webkit?.messageHandlers?.specforge,
+    );
+  }
+
+  function openFolderPicker() {
+    if (!canEditContent(store.get().currentUser)) {
+      toast("無編輯權限，無法匯入");
+      return;
+    }
+    importErr("");
+
+    const w = window as Window & {
+      __specforgeNativeFolderResult?: (p: NativePayload) => void;
+      webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
+    };
+
+    // 優先原生 NSOpenPanel（macOS App）
+    if (hasNativeFolderPicker() && w.webkit?.messageHandlers?.specforge) {
+      w.__specforgeNativeFolderResult = handleNativeFolderPayload;
+      try {
+        w.webkit.messageHandlers.specforge.postMessage({ action: "pickFolder" });
+        toast("請在系統對話框選擇資料夾…");
+        return;
+      } catch (e) {
+        console.warn("native pickFolder failed, fallback to input", e);
+      }
+    }
+
+    // 瀏覽器 fallback：不可使用 [hidden]（會擋 dialog），改用 visually-hidden
+    const input = document.getElementById("folder-import-input") as HTMLInputElement | null;
+    if (!input) {
+      importErr("找不到檔案選擇器。若在 App 內，請重啟 SpecForge 以載入原生橋。");
+      toast("無法開啟選夾");
+      return;
+    }
+    input.value = "";
+    // 某些 WebKit 需要在同一使用者手勢內同步 click
+    input.click();
+    // 若 800ms 內沒有 change，提示可能被擋
+    window.setTimeout(() => {
+      if (!input.files?.length && !scanResult) {
+        importErr(
+          "瀏覽器未開啟資料夾選擇器。請在 SpecForge App 使用（原生選夾），或改用 Chrome 開 dev server。",
+        );
+      }
+    }, 1200);
+  }
+
+  // 原生也可能從選單 ⌘⇧O 觸發，需監聽全域 callback / event
+  (window as Window & { __specforgeNativeFolderResult?: (p: NativePayload) => void }).__specforgeNativeFolderResult =
+    handleNativeFolderPayload;
+  window.addEventListener("specforge-native", ((e: CustomEvent<NativePayload>) => {
+    handleNativeFolderPayload(e.detail);
+  }) as EventListener);
+
   document.getElementById("btn-import")?.addEventListener("click", () => {
-    toast("已選擇匯入流程（原型）");
+    scanResult = null;
+    candidates = [];
+    importErr("");
+    renderImportModal();
+    openModal("modal-import");
+    // 同一 click 手勢內立刻開選夾（原生 / input 皆需）
+    openFolderPicker();
   });
 
-  document.getElementById("btn-tui-hint")?.addEventListener("click", () => {
-    toast("終端 TUI：在專案目錄執行 bun run track · Web：側欄「計劃追蹤」");
-    window.setTimeout(() => {
-      location.href = "tracking.html";
-    }, 600);
+  document.getElementById("import-pick")?.addEventListener("click", () => openFolderPicker());
+  document.getElementById("import-rescan")?.addEventListener("click", () => openFolderPicker());
+  document.getElementById("import-close")?.addEventListener("click", () => closeModal("modal-import"));
+  document.getElementById("import-cancel")?.addEventListener("click", () => closeModal("modal-import"));
+
+  document.getElementById("folder-import-input")?.addEventListener("change", (e) => {
+    const input = e.target as HTMLInputElement;
+    void handleFolderPicked(input.files);
   });
+
+  document.getElementById("import-confirm")?.addEventListener("click", () => {
+    importErr("");
+    if (!scanResult) {
+      importErr("請先選擇資料夾");
+      return;
+    }
+    const r = store.importProjectCandidates(candidates, scanResult.folderName);
+    if (!r.ok) {
+      importErr(r.reason ?? "匯入失敗");
+      toast(r.reason ?? "匯入失敗");
+      return;
+    }
+    closeModal("modal-import");
+    setBeginnerMode(false);
+    toast(`已匯入 ${r.projectIds.length} 個專案 · 內容各自獨立`);
+    renderRailProjects();
+    render();
+    // 進入第一個專案的編輯畫面（獨立內容）
+    location.href = "editor.html";
+  });
+
+  document.addEventListener("specforge:project-changed", () => {
+    render();
+    toast("已切換目前專案（內容獨立）");
+  });
+
+  // TUI 快捷由 initRailNav 統一綁定
 
   render();
   store.subscribe(render);

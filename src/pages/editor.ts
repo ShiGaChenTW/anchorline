@@ -1,19 +1,25 @@
 import { critiqueSectionWithAI, generateAIDraft, polishTextWithAI } from "../lib/ai-coach";
 import { evaluateChecks, liveScore, store } from "../data/store";
-import type { Section } from "../data/types";
+import type { Project, Section } from "../data/types";
+import { projectDisplayName } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
+import { syncRailContext } from "../lib/rail-projects";
 import {
   EDITOR_BEGINNER_TRACK,
   isBeginnerMode,
   setBeginnerMode,
 } from "../lib/beginner-flow";
 import { exportMarkdownFile } from "../lib/export";
+import { bindMdField, mdFieldHtml } from "../lib/markamd";
 import { canEditContent } from "../lib/permissions";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+
+/** MarkaMD 雙欄欄位清理 */
+let unbindMd: (() => void) | null = null;
 
 const planModules = import.meta.glob("../../plans/*.md", {
   query: "?raw",
@@ -40,6 +46,59 @@ let idx = 0;
 
 function editable(): boolean {
   return canEditContent(store.get().currentUser) && !store.get().locked;
+}
+
+function activeProject(): Project | null {
+  const st = store.get();
+  const visible = st.projects.filter((p) => (st.showSamples ? true : !p.isSample));
+  return (
+    visible.find((p) => p.id === st.activeProjectId) ??
+    visible[0] ??
+    st.projects.find((p) => p.id === st.activeProjectId) ??
+    st.projects[0] ??
+    null
+  );
+}
+
+/** 工具列綁定目前專案；專案名改放側欄（不再塞 titlebar） */
+function syncProjectChrome() {
+  const p = activeProject();
+  const name = p ? projectDisplayName(p) : "未選擇專案";
+  const meta =
+    (p?.sourceFolder && p.sourceFolder.trim()) ||
+    (p?.tag && p.tag.trim()) ||
+    (p?.id ?? "—");
+
+  const statusMap: Record<string, { label: string; tone: "draft" | "review" | "ok" | "warn"; cls: string }> = {
+    draft: { label: "草稿", tone: "draft", cls: "pill pill-draft" },
+    review: { label: "審閱中", tone: "review", cls: "pill pill-review" },
+    approved: { label: "已核准", tone: "ok", cls: "pill pill-approved" },
+    withdrawn: { label: "已抽單", tone: "warn", cls: "pill pill-draft" },
+  };
+  const stInfo = (p && statusMap[p.status]) || { label: "—", tone: "draft" as const, cls: "pill pill-draft" };
+
+  syncRailContext({
+    mode: "編輯工作台",
+    projectName: name,
+    statusLabel: stInfo.label,
+    statusTone: stInfo.tone,
+    meta: p ? meta : undefined,
+  });
+
+  const h1 = document.querySelector<HTMLElement>('[data-od-id="page-title"], .toolbar h1');
+  if (h1) h1.textContent = name;
+
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  const sub = document.querySelector<HTMLElement>('[data-od-id="page-sub"], .toolbar .sub');
+  if (sub) {
+    sub.textContent = p
+      ? `${meta} · 自動儲存 ${hh}:${mm}`
+      : "回到專案列表選擇一個專案";
+  }
+
+  document.title = `${name} · 編輯 · PRD開發監控台`;
 }
 
 function syncUser() {
@@ -71,13 +130,17 @@ function renderOutline() {
   const el = document.getElementById("outline");
   if (!el) return;
   const list = sections();
+  // ADHD：大綱只顯示編號＋標題＋狀態；說明改 title tooltip，減少並列文字
   el.innerHTML = list
     .map((s, i) => {
       const st = s.status === "done" ? "done" : s.status === "warn" ? "warn" : "empty";
       const label = s.status === "done" ? "完成" : s.status === "warn" ? "待補" : "空白";
-      return `<button type="button" class="sec ${i === idx ? "active" : ""}" data-i="${i}" role="option" aria-selected="${i === idx}" data-od-id="sec-${s.id}">
+      const active = i === idx;
+      return `<button type="button" class="sec adhd-sec ${active ? "active" : ""}" data-i="${i}" role="option" aria-selected="${active}" data-od-id="sec-${s.id}" title="${escapeHtml(s.desc)}">
       <span class="n">${s.n}</span>
-      <span><div class="t">${escapeHtml(s.title)}</div><div class="d">${escapeHtml(s.desc)}</div></span>
+      <span class="adhd-sec-body"><div class="t">${escapeHtml(s.title)}</div>${
+        active ? `<div class="d adhd-sec-hint">${escapeHtml(s.desc)}</div>` : ""
+      }</span>
       <span class="st ${st}">${label}</span>
     </button>`;
     })
@@ -116,29 +179,48 @@ function renderEditor() {
         <input type="text" data-key="${f.key}" value="${escapeHtml(val)}" />
       </div>`;
       }
-      const rows = f.rows || 4;
-      return `<div class="field" data-od-id="field-${f.key}">
-      <label>${escapeHtml(f.label)}<span>${escapeHtml(f.hint || "")}</span></label>
-      <textarea data-key="${f.key}" rows="${rows}">${escapeHtml(val)}</textarea>
-    </div>`;
+      // 長文欄位：MarkaMD 風格雙欄 Markdown 寫作 + 即時預覽
+      const rows = Math.max(f.rows || 6, 8);
+      return mdFieldHtml({
+        key: f.key,
+        label: f.label,
+        hint: f.hint || "Markdown",
+        value: val,
+        rows,
+        readOnly: !editable(),
+      });
     })
     .join("");
 
   const body = document.getElementById("editor-body");
   if (!body) return;
+
+  unbindMd?.();
+  unbindMd = null;
+
+  // 章節導引可摺：空白章節預設展開，已有內容則收合（文件編輯器本體不動）
+  const filledLen = Object.values(values).join("").trim().length;
+  const guideOpen = filledLen < 40 || s.status === "empty";
+
   body.innerHTML = `
-    <h3 data-od-id="section-title">${escapeHtml(s.title)}</h3>
-    <p class="lead">${escapeHtml(s.desc)}</p>
-    <div class="guide" data-od-id="guide">
-      <strong>本章怎麼寫</strong>
-      ${escapeHtml(s.guide)}
-      <ul>${s.tips.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>
-    </div>
+    <header class="adhd-sec-header">
+      <p class="adhd-sec-kicker">本章</p>
+      <h3 data-od-id="section-title">${escapeHtml(s.title)}</h3>
+      <p class="lead adhd-sec-lead">${escapeHtml(s.desc)}</p>
+    </header>
+    <details class="adhd-guide" data-od-id="guide" ${guideOpen ? "open" : ""}>
+      <summary>本章怎麼寫 <span class="adhd-guide-meta">${s.tips.length} 提示</span></summary>
+      <div class="guide">
+        ${escapeHtml(s.guide)}
+        <ul>${s.tips.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>
+      </div>
+    </details>
     ${fields}
-    <div class="hint">變更會即時反映右側品質檢查 · <span class="mono">⌘↵</span> 下一節</div>
+    <div class="hint adhd-editor-hint">變更即時存檔 · <span class="mono">⌘↵</span> 下一節 · <span class="mono">⌘S</span> 確認</div>
   `;
 
-  body.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("[data-key]").forEach((input) => {
+  // 一般 input
+  body.querySelectorAll<HTMLInputElement>("input[data-key]").forEach((input) => {
     if (!editable()) {
       input.readOnly = true;
       input.disabled = true;
@@ -154,6 +236,18 @@ function renderEditor() {
       renderCoach();
       renderOutline();
     });
+  });
+
+  // MarkaMD 雙欄 textarea
+  unbindMd = bindMdField(body, (key, value) => {
+    if (!editable()) return;
+    store.setSectionField(s.id, key, value);
+    const len = Object.values(store.get().sectionValues[s.id] ?? {}).join("").length;
+    if (len > 80 && s.status === "empty") {
+      store.updateSection(s.id, { status: "warn" });
+    }
+    renderCoach();
+    renderOutline();
   });
 
   const prev = document.getElementById("btn-prev") as HTMLButtonElement | null;
@@ -175,65 +269,46 @@ function renderCoach() {
   const gate = evaluatePrdGates(store.get());
   const coach = document.getElementById("coach-body");
   if (!coach) return;
+
+  // ADHD：一次只強調「現在補什麼」；其餘收進 details
+  const failing = checks.filter((c) => !c.pass);
+  const nextCheck = failing[0];
+  const scoreLabel = score >= 85 ? "可送審" : score >= 70 ? "接近完成" : "需補強";
+  const gateBlocks = gate.findings.filter((f) => f.level === "block");
+  const gateOpen = !gate.canSubmit;
+
   coach.innerHTML = `
-    <div class="card" data-od-id="score-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <h4 style="margin:0">本章品質</h4>
-        <span class="pill pill-review" style="font-size:10px">${escapeHtml(settings.model)}</span>
-      </div>
-      <div class="score-ring">
-        <div class="ring" style="--p:${score}"><b>${score}</b></div>
-        <div>
-          <div style="font-weight:600;font-size:14px">${score >= 85 ? "可送審" : score >= 70 ? "接近完成" : "需補強"}</div>
-          <div class="mono" style="margin-top:4px">${passN}/${checks.length} 檢查通過</div>
+    <div class="card adhd-coach-now" data-od-id="next-card">
+      <p class="adhd-coach-kicker">現在做這一件</p>
+      ${
+        nextCheck
+          ? `<h4 class="adhd-coach-now-title">補齊：${escapeHtml(nextCheck.label)}</h4>
+             <p class="adhd-coach-now-detail">完成後分數與檢查會即時更新。一次只盯這一項。</p>`
+          : `<h4 class="adhd-coach-now-title">本章檢查已過</h4>
+             <p class="adhd-coach-now-detail">可按「下一節」，或結構 gate 全過後送出審閱。</p>`
+      }
+      ${
+        failing.length > 1
+          ? `<p class="adhd-coach-more-count">另外還有 ${failing.length - 1} 項稍後再補</p>`
+          : ""
+      }
+    </div>
+
+    <div class="card adhd-score-card" data-od-id="score-card">
+      <div class="adhd-score-row">
+        <div class="score-ring adhd-score-ring">
+          <div class="ring" style="--p:${score}"><b>${score}</b></div>
+        </div>
+        <div class="adhd-score-meta">
+          <div class="adhd-score-label">${scoreLabel}</div>
+          <div class="mono adhd-score-pass">${passN}/${checks.length} 通過</div>
+          <span class="pill pill-review adhd-model-pill">${escapeHtml(settings.model)}</span>
         </div>
       </div>
     </div>
 
-    <div class="card" data-od-id="prd-gate-card">
-      <h4>結構 gate（SCVB）</h4>
-      <div class="mono" style="font-size:11px;color:var(--muted);margin-bottom:8px">${escapeHtml(gateSummaryLine(gate))} · score ${gate.score}</div>
-      <div class="check-list">
-        ${gate.findings
-          .map((f) => {
-            const icon = f.level === "pass" ? "✔" : f.level === "warn" ? "!" : "✗";
-            const color =
-              f.level === "pass" ? "var(--success)" : f.level === "warn" ? "var(--warn)" : "var(--danger)";
-            return `<div style="display:flex;gap:8px;margin-bottom:6px;font-size:12px">
-              <span style="color:${color};width:14px">${icon}</span>
-              <span><strong style="color:var(--fg)">${escapeHtml(f.label)}</strong>
-              <span style="color:var(--muted)"> — ${escapeHtml(f.detail)}</span></span>
-            </div>`;
-          })
-          .join("")}
-      </div>
-      ${
-        !gate.canSubmit
-          ? `<div style="margin-top:8px;font-size:12px;color:var(--danger)">有 BLOCK 項時無法送審</div>`
-          : `<div style="margin-top:8px;font-size:12px;color:var(--success)">可送審</div>`
-      }
-      <div style="margin-top:8px"><a href="tracking.html" style="color:var(--accent);font-size:12px">開啟計劃追蹤 →</a></div>
-    </div>
-
-    <!-- AI Coach Tools -->
-    <div class="card" data-od-id="ai-tools-card" style="border:1px solid color-mix(in oklab, var(--accent) 40%, var(--border))">
-      <h4 style="display:flex;align-items:center;gap:6px">🤖 AI 寫作教練助教</h4>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-        <button type="button" class="btn btn-sm btn-accent" id="btn-ai-draft">✨ 一鍵 AI 生稿</button>
-        <button type="button" class="btn btn-sm" id="btn-ai-polish">🪄 AI 語調潤色</button>
-        <button type="button" class="btn btn-sm" id="btn-ai-audit">🔍 深度評估</button>
-      </div>
-
-      <!-- Prompt Input -->
-      <div style="display:flex;gap:6px">
-        <input type="text" id="ai-prompt-input" placeholder="對 AI 提問，如：補充資安評估" style="flex:1;font-size:12px;padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg);color:var(--fg)" />
-        <button type="button" class="btn btn-sm btn-primary" id="btn-ai-send">送出</button>
-      </div>
-      <div id="ai-feedback" style="margin-top:8px;font-size:12px;color:var(--muted);line-height:1.4"></div>
-    </div>
-
-    <div class="card" data-od-id="checklist-card">
-      <h4>檢查清單</h4>
+    <details class="adhd-coach-details card" data-od-id="checklist-card" ${failing.length && failing.length <= 3 ? "open" : ""}>
+      <summary>檢查清單 <span class="adhd-details-meta">${passN}/${checks.length}</span></summary>
       <div class="check-list">
         ${checks
           .map(
@@ -245,24 +320,51 @@ function renderCoach() {
           )
           .join("")}
       </div>
-    </div>
-    <div class="card" data-od-id="example-card">
-      <h4>好例子</h4>
+    </details>
+
+    <details class="adhd-coach-details card" data-od-id="prd-gate-card" ${gateOpen ? "open" : ""}>
+      <summary>結構 gate <span class="adhd-details-meta">${escapeHtml(gateSummaryLine(gate))}</span></summary>
+      <div class="mono adhd-gate-score">score ${gate.score}</div>
+      <div class="check-list">
+        ${gate.findings
+          .map((f) => {
+            const icon = f.level === "pass" ? "✔" : f.level === "warn" ? "!" : "✗";
+            const color =
+              f.level === "pass" ? "var(--success)" : f.level === "warn" ? "var(--warn)" : "var(--danger)";
+            return `<div class="adhd-gate-row">
+              <span style="color:${color}">${icon}</span>
+              <span><strong>${escapeHtml(f.label)}</strong>
+              <span class="adhd-gate-detail"> — ${escapeHtml(f.detail)}</span></span>
+            </div>`;
+          })
+          .join("")}
+      </div>
+      ${
+        !gate.canSubmit
+          ? `<p class="adhd-gate-block">有 BLOCK 項時無法送審${gateBlocks.length ? `（${gateBlocks.length}）` : ""}</p>`
+          : `<p class="adhd-gate-ok">可送審</p>`
+      }
+      <p class="adhd-coach-link"><a href="tracking.html">開啟計劃追蹤 →</a></p>
+    </details>
+
+    <details class="adhd-coach-details card adhd-ai-card" data-od-id="ai-tools-card">
+      <summary>AI 助教</summary>
+      <div class="adhd-ai-actions">
+        <button type="button" class="btn btn-sm btn-accent" id="btn-ai-draft">一鍵生稿</button>
+        <button type="button" class="btn btn-sm" id="btn-ai-polish">語調潤色</button>
+        <button type="button" class="btn btn-sm" id="btn-ai-audit">深度評估</button>
+      </div>
+      <div class="adhd-ai-prompt-row">
+        <input type="text" id="ai-prompt-input" placeholder="提問，如：補充資安評估" />
+        <button type="button" class="btn btn-sm btn-primary" id="btn-ai-send">送出</button>
+      </div>
+      <div id="ai-feedback" class="adhd-ai-feedback"></div>
+    </details>
+
+    <details class="adhd-coach-details card" data-od-id="example-card">
+      <summary>好例子</summary>
       <div class="example">${escapeHtml(s.example)}</div>
-    </div>
-    <div class="card" data-od-id="next-card">
-      <h4>建議下一步</h4>
-      <ol>
-        ${
-          checks
-            .filter((c) => !c.pass)
-            .slice(0, 2)
-            .map((c) => `<li>補齊：${escapeHtml(c.label)}</li>`)
-            .join("") || "<li>本章已達標，可進下一節或送出審閱。</li>"
-        }
-        <li><a href="templates.html" style="color:var(--accent)">從範本庫插入段落</a></li>
-      </ol>
-    </div>
+    </details>
   `;
 
   coach.querySelectorAll<HTMLInputElement>(".check-list input").forEach((cb) => {
@@ -444,6 +546,7 @@ function render() {
   const activeId = store.get().activeSectionId;
   const found = sections().findIndex((s) => s.id === activeId);
   if (found >= 0) idx = found;
+  syncProjectChrome();
   renderOutline();
   renderEditor();
   renderCoach();
@@ -534,15 +637,6 @@ document.addEventListener("keydown", (e) => {
     toast("已儲存");
   }
 });
-
-// stamp autosave time
-const sub = document.querySelector(".toolbar .sub");
-if (sub) {
-  const now = new Date();
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mm = String(now.getMinutes()).padStart(2, "0");
-  sub.textContent = `identity / prd-2fa · 自動儲存 ${hh}:${mm}`;
-}
 
 render();
 } // end __authed

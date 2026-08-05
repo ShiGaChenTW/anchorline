@@ -5,35 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>專案列表 · PRD 引導工作台</title>
 <link rel="stylesheet" href="shared.css" />
-<script>(function(){try{var t=localStorage.getItem("specforge:theme");var m={warp:["dark","#161412"],kami:["light","#f5f4ed"],github:["dark","#0d1117"],claude:["light","#f5f4ed"]};if(!m[t])t="warp";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","warp");}})();</script>
+<script>(function(){try{var t=localStorage.getItem("specforge:theme");if(t==="warp")t="github";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
 </head>
 <body>
 <div class="app" data-od-id="app-projects">
-  <div class="titlebar" data-od-id="titlebar">
-    <div class="traffic" aria-hidden="true"><i class="r"></i><i class="y"></i><i class="g"></i></div>
-    <div class="titlebar-title">PRD 引導工作台</div>
-    <div class="titlebar-meta">
-      <div class="theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
-        <button type="button" data-theme-value="warp" aria-pressed="true">Warp</button>
-        <button type="button" data-theme-value="kami" aria-pressed="false">kami</button>
-        <button type="button" data-theme-value="github" aria-pressed="false">GitHub</button>
-        <button type="button" data-theme-value="claude" aria-pressed="false">Claude</button>
-      </div>
-
-      <span>PM-SPEC+SCVB</span>
-      <span class="kbd">?</span>
-    </div>
-  </div>
-
   <div class="shell">
     <aside class="rail" data-od-id="rail">
-      <div class="rail-brand">
+            <div class="rail-brand">
         <div class="rail-logo">PR</div>
-        <div>
-          <strong>SpecForge</strong>
+        <div class="rail-brand-text">
+          <strong>PRD開發監控台</strong>
           <span>prd.local</span>
         </div>
       </div>
+      <div class="rail-theme-row">
+        <div class="theme-switch rail-theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
+          <button type="button" data-theme-value="kami" aria-pressed="false">kami</button>
+          <button type="button" data-theme-value="github" aria-pressed="true">GitHub</button>
+        </div>
+      </div>
+
       <nav class="rail-nav" data-od-id="rail-nav">
         <div class="nav-label">工作區</div>
         <a class="nav-item active" href="projects.html" data-od-id="nav-projects">
@@ -103,8 +94,8 @@
     <main class="main" data-od-id="main-projects">
       <div class="toolbar" data-od-id="toolbar">
         <div>
-          <h1 data-od-id="page-title">規格專案</h1>
-          <div class="sub">workspace / product-specs</div>
+          <h1 data-od-id="page-title">我的專案</h1>
+          <div class="sub">選擇要繼續的規格</div>
         </div>
         <div class="spacer"></div>
         <div class="search" data-od-id="search">
@@ -118,7 +109,9 @@
           <button type="button" class="btn" id="btn-export-html">匯出 HTML</button>
           <button type="button" class="btn" id="btn-export-openspec" title="PRD.md + tasks.md + proposal.md">匯出 OpenSpec</button>
         </div>
-        <button type="button" class="btn" id="btn-import" data-od-id="btn-import">匯入 Markdown</button>
+        <button type="button" class="btn" id="btn-import" data-od-id="btn-import" title="選擇資料夾，自動偵測 PRD 相關檔並評分">專案匯入</button>
+        <!-- 不可用 hidden：WebKit 會擋 file dialog；App 走原生 NSOpenPanel，此為瀏覽器 fallback -->
+        <input type="file" id="folder-import-input" class="visually-hidden-file" webkitdirectory directory multiple tabindex="-1" aria-hidden="true" />
         <button type="button" class="btn" id="btn-beginner" data-od-id="btn-beginner" title="一步步帶你寫出第一份 PRD">🌱 新手引導</button>
         <button type="button" class="btn btn-primary" id="btn-new" data-od-id="btn-new">＋ 新建 PRD</button>
         <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
@@ -145,31 +138,18 @@
 
         <div id="plan-workspace-bar" class="plan-workspace-bar mono" aria-live="polite"></div>
 
-        <div class="filters" data-od-id="filters">
+        <div class="filters adhd-filters" data-od-id="filters">
           <button type="button" class="chip on" data-filter="all">全部</button>
           <button type="button" class="chip" data-filter="draft">草稿</button>
           <button type="button" class="chip" data-filter="review">審閱中</button>
           <button type="button" class="chip" data-filter="approved">已核准</button>
-          <button type="button" class="chip" data-filter="mine">我擁有的</button>
+          <button type="button" class="chip" data-filter="mine">我的</button>
           <span class="spacer"></span>
-          <span class="mono" id="result-count">— 筆</span>
+          <span class="result-count" id="result-count">—</span>
         </div>
 
-        <div class="table-wrap" data-od-id="project-table">
-          <table class="data">
-            <thead>
-              <tr>
-                <th>標題</th>
-                <th>狀態</th>
-                <th>完成度</th>
-                <th>計劃</th>
-                <th>擁有者</th>
-                <th>更新</th>
-                <th class="col-actions">操作</th>
-              </tr>
-            </thead>
-            <tbody id="tbody"></tbody>
-          </table>
+        <div class="project-board" data-od-id="project-table" id="project-board">
+          <div id="tbody" class="project-board-list" role="list"></div>
         </div>
       </div>
     </main>
@@ -297,6 +277,36 @@
     </footer>
   </div>
 </div>
+<!-- 專案資料夾匯入：掃描 → 對應 → 評分 → 確認 -->
+<div class="modal-back" id="modal-import" data-od-id="modal-import">
+  <div class="modal modal-import" role="dialog" aria-labelledby="import-title" aria-modal="true">
+    <header>
+      <div>
+        <h3 id="import-title">專案匯入</h3>
+        <p class="sub" id="import-subtitle" style="margin:2px 0 0;font-size:12px">選擇資料夾後自動偵測 PRD 相關文件</p>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="import-close">關閉</button>
+    </header>
+    <div class="body import-body">
+      <div id="import-empty" class="import-empty">
+        <p>點下方按鈕開啟<strong>系統資料夾選擇器</strong>。</p>
+        <p class="hint">App 使用原生選夾（NSOpenPanel）；會掃描 .md / .txt，對應 PRD、問題、目標、指標、Tasks、計劃等並評分。<br />快捷鍵：⌘⇧O</p>
+        <button type="button" class="btn btn-primary" id="import-pick">選擇資料夾…</button>
+      </div>
+      <div id="import-result" hidden>
+        <div class="import-summary-bar" id="import-summary-bar"></div>
+        <div class="import-candidates" id="import-candidates" role="list"></div>
+      </div>
+      <p class="login-error" id="import-err" role="alert"></p>
+    </div>
+    <footer>
+      <button type="button" class="btn" id="import-cancel">取消</button>
+      <button type="button" class="btn" id="import-rescan">重新選擇</button>
+      <button type="button" class="btn btn-primary" id="import-confirm" disabled>確認匯入並進入工作區</button>
+    </footer>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status"></div>
 
 <script type="module" src="/src/pages/projects.ts"></script>

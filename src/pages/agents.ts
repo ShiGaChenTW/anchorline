@@ -10,7 +10,7 @@ import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/u
 const __authed = requireAuth();
 if (__authed) {
   initTheme();
-  initMobileNav("admin");
+  initMobileNav("agents");
   bindLogout();
   initHelpOverlay();
 

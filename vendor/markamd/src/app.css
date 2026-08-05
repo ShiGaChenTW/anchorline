@@ -1,0 +1,170 @@
+@import "./styles/shared/menu.css";
+@import "./styles/shared/kbd.css";
+@import "./styles/shared/toast.css";
+@import "./styles/shared/transparency.css";
+@import "./styles/chrome/titlebar.css";
+@import "./styles/chrome/breadcrumb.css";
+@import "./styles/chrome/statusbar.css";
+@import "./styles/editor/panes.css";
+@import "./styles/editor/prose.css";
+@import "./styles/editor/reading-find.css";
+@import "./styles/editor/toc.css";
+@import "./styles/files/sidebar.css";
+@import "./styles/overlays/overlay.css";
+@import "./styles/overlays/palette.css";
+@import "./styles/overlays/help.css";
+@import "./styles/overlays/welcome.css";
+@import "./styles/overlays/drop.css";
+@import "./styles/overlays/about.css";
+@import "./styles/overlays/file-preview.css";
+
+/* shell layout */
+.mdv-app {
+  --mdv-writing-font-size: 14px;
+  --mdv-writing-line-height: 1.55;
+  --mdv-prose-font-family: var(--font-ui);
+  --mdv-prose-font-size: 15px;
+  --mdv-prose-line-height: 1.65;
+  --mdv-reading-font-size: 16px;
+  --mdv-reading-content-width: 880px;
+  --mdv-reading-prose-width: 720px;
+  display: grid;
+  grid-template-rows: var(--titlebar-h) var(--breadcrumb-h) 1fr var(--statusbar-h);
+  height: 100vh;
+  width: 100vw;
+  background: var(--bg);
+  color: var(--fg);
+  transition:
+    background-color var(--dur-base) var(--easing),
+    color var(--dur-base) var(--easing);
+}
+
+/* pin chrome rows explicitly so display:none on any sibling
+   (e.g. in reading mode) doesn't shift later children up via auto-flow */
+.mdv-app > .mdv-titlebar { grid-row: 1; }
+.mdv-app > .mdv-breadcrumb { grid-row: 2; }
+.mdv-app > .mdv-shell { grid-row: 3; }
+.mdv-app > .mdv-statusbar { grid-row: 4; }
+
+.mdv-preview-window {
+  --mdv-prose-font-family: var(--font-ui);
+  --mdv-prose-font-size: 15px;
+  --mdv-prose-line-height: 1.65;
+  --mdv-reading-content-width: 880px;
+  --mdv-reading-prose-width: 720px;
+  height: 100vh;
+  width: 100vw;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.mdv-preview-window > .mdv-preview {
+  height: 100%;
+  padding: 42px max(36px, calc((100% - var(--mdv-reading-content-width, 880px)) / 2)) 72px;
+}
+
+/* titlebar hidden mode */
+.mdv-app.has-hidden-titlebar {
+  grid-template-rows: 0 var(--breadcrumb-h) 1fr var(--statusbar-h);
+}
+.mdv-app.has-hidden-titlebar .mdv-titlebar {
+  display: none;
+}
+
+/* reading mode — Preview is rendered directly as flex-1 child of .mdv-shell */
+.mdv-app.is-reading {
+  grid-template-rows: var(--titlebar-h) 0 1fr 0;
+}
+
+.mdv-app.is-reading .mdv-breadcrumb,
+.mdv-app.is-reading .mdv-statusbar {
+  display: none;
+}
+
+.mdv-app.is-reading.has-hidden-titlebar .mdv-titlebar {
+  display: flex;
+}
+
+html.is-mac .mdv-app.has-hidden-titlebar:not(.is-reading) .mdv-breadcrumb {
+  padding-left: 132px;
+  height: 42px;
+}
+
+html.is-mac .mdv-app.has-hidden-titlebar:not(.is-reading) {
+  grid-template-rows: 0 42px 1fr var(--statusbar-h);
+}
+
+/* iA Writer-style reading mode: wide max-width, generous breathing room,
+   subtle warmer tint, and slow calm fade-in */
+.mdv-app.is-reading .mdv-shell > .mdv-preview {
+  flex: 1;
+  min-width: 0;
+  padding-left: max(56px, calc((100% - var(--mdv-reading-content-width)) / 2));
+  padding-right: max(56px, calc((100% - var(--mdv-reading-content-width)) / 2));
+  padding-top: 80px;
+  padding-bottom: 96px;
+  background: color-mix(in srgb, var(--bg) 96%, var(--fg) 4%);
+  animation: mdv-reading-in 360ms var(--easing) both;
+}
+
+.mdv-app.is-reading .mdv-shell > .mdv-preview .mdv-prose {
+  max-width: var(--mdv-reading-prose-width);
+  font-size: var(--mdv-reading-font-size);
+  line-height: 1.75;
+}
+
+/* slightly looser leading on inline elements, calmer headings */
+.mdv-app.is-reading .mdv-shell > .mdv-preview .mdv-prose > * + * {
+  margin-top: 1.15em;
+}
+
+.mdv-app.is-reading .mdv-shell > .mdv-preview .mdv-prose h1 {
+  margin-top: 0;
+  margin-bottom: 0.4em;
+}
+
+@keyframes mdv-reading-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* reading width = "full": content fills the pane and multi-column tables
+   span full width (no horizontal scrollbar). Applies in both the split
+   preview pane and reading mode. */
+.mdv-app.is-reading-width-full .mdv-preview {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.mdv-app.is-reading-width-full .mdv-prose {
+  max-width: none;
+}
+.mdv-app.is-reading-width-full .mdv-prose table {
+  width: 100%;
+}
+/* reading mode's own width/padding rules are more specific, so match them */
+.mdv-app.is-reading-width-full.is-reading .mdv-shell > .mdv-preview {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.mdv-app.is-reading-width-full.is-reading .mdv-shell > .mdv-preview .mdv-prose {
+  max-width: none;
+}
+
+/* theme transition smoothing — common surfaces fade between palettes */
+.mdv-titlebar,
+.mdv-statusbar,
+.mdv-popover,
+.mdv-menu__item,
+.mdv-btn,
+.mdv-prose,
+.mdv-prose pre,
+.mdv-prose code,
+.mdv-prose blockquote,
+.mdv-splitter__handle,
+.cm-editor,
+.cm-gutters {
+  transition:
+    background-color var(--dur-base) var(--easing),
+    color var(--dur-base) var(--easing),
+    border-color var(--dur-base) var(--easing);
+}

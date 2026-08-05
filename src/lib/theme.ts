@@ -3,14 +3,21 @@ import type { ThemeId } from "../data/types";
 const KEY = "specforge:theme";
 
 const THEMES: Record<ThemeId, { label: string; scheme: "dark" | "light"; bg: string }> = {
-  warp: { label: "Warp · 終端", scheme: "dark", bg: "#0c0b0a" },
   kami: { label: "kami · 紙", scheme: "light", bg: "#f5f4ed" },
   github: { label: "GitHub · Dark", scheme: "dark", bg: "#0d1117" },
-  claude: { label: "Claude · 陶土", scheme: "light", bg: "#f5f4ed" },
 };
 
+/** 舊主題遷移：warp→github、claude→kami */
+function migrateLegacy(theme: string | null | undefined): ThemeId | null {
+  if (!theme) return null;
+  if (theme === "kami" || theme === "github") return theme;
+  if (theme === "warp") return "github";
+  if (theme === "claude") return "kami";
+  return null;
+}
+
 function normalize(theme: string | null | undefined): ThemeId {
-  return theme && theme in THEMES ? (theme as ThemeId) : "warp";
+  return migrateLegacy(theme) ?? "github";
 }
 
 export function applyTheme(theme: string | null | undefined) {
@@ -44,7 +51,8 @@ export function applyTheme(theme: string | null | undefined) {
 export function currentTheme(): ThemeId {
   try {
     const s = localStorage.getItem(KEY);
-    if (s && s in THEMES) return s as ThemeId;
+    const m = migrateLegacy(s);
+    if (m) return m;
   } catch {
     /* ignore */
   }

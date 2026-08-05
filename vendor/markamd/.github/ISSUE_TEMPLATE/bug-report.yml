@@ -1,0 +1,51 @@
+name: 🐛 bug report
+description: something's not working as expected
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        thanks for reporting 🐙 — please include the basics so i can reproduce.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: what happened?
+      description: what did you do, what did you expect, what actually happened?
+      placeholder: |
+        steps:
+        1. open a folder with .md files
+        2. press ⌘F in reading mode
+        3. ...
+
+        expected: search bar opens
+        actual: nothing happens, console shows X
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: marka.md version
+      placeholder: "1.3.1 (see About → version)"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: platform
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows
+        - Linux (AppImage)
+        - Linux (.deb)
+        - Linux (.rpm)
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: console output / screenshots (optional)
+      description: open devtools (View → Toggle Developer Tools) and paste any red errors. screenshots help too.
+      render: shell

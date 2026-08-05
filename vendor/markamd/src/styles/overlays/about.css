@@ -1,0 +1,240 @@
+.mdv-about__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mdv-about__eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.mdv-about__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 28px 28px 24px;
+  gap: 8px;
+}
+
+.mdv-about__art {
+  margin-bottom: 6px;
+  filter: drop-shadow(0 4px 14px color-mix(in srgb, var(--accent) 22%, transparent));
+  animation: mdv-about-float 4.2s ease-in-out infinite;
+}
+
+@keyframes mdv-about-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mdv-about__art {
+    animation: none;
+  }
+}
+
+.mdv-about__brand {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+}
+
+.mdv-about__version {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.mdv-about__version-num {
+  min-width: 44px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.mdv-about__dot {
+  opacity: 0.6;
+}
+
+.mdv-about__tagline {
+  margin: 6px 0 14px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  max-width: 340px;
+}
+
+.mdv-about__features {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: min(100%, 390px);
+  margin-bottom: 10px;
+}
+
+.mdv-about__feature {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "icon label"
+    "icon detail";
+  align-items: center;
+  column-gap: 8px;
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  text-align: left;
+}
+
+.mdv-about__feature svg {
+  grid-area: icon;
+  color: var(--accent);
+}
+
+.mdv-about__feature-label {
+  grid-area: label;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg);
+}
+
+.mdv-about__feature-detail {
+  grid-area: detail;
+  margin-top: 1px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.mdv-about__links {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.mdv-about__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--easing),
+    color var(--dur-fast) var(--easing),
+    background var(--dur-fast) var(--easing);
+}
+
+.mdv-about__link:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.mdv-about__footer {
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.mdv-about__footer-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 1px dotted color-mix(in srgb, var(--muted) 60%, transparent);
+  transition: color var(--dur-fast) var(--easing),
+    border-color var(--dur-fast) var(--easing);
+}
+
+.mdv-about__footer-link:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.mdv-about__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--easing),
+    color var(--dur-fast) var(--easing),
+    background var(--dur-fast) var(--easing);
+}
+
+.mdv-about__check:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.mdv-about__check:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* the star CTA — subtle accent treatment so it reads as the primary ask
+   without screaming. site link stays in its neutral default. */
+.mdv-about__link--star {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  color: color-mix(in srgb, var(--accent) 80%, var(--fg));
+}
+
+.mdv-about__link--star svg {
+  color: var(--accent);
+}
+
+.mdv-about__link--star:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+@media (max-width: 520px) {
+  .mdv-about__features {
+    grid-template-columns: 1fr;
+  }
+
+  .mdv-about__links {
+    flex-direction: column;
+  }
+}

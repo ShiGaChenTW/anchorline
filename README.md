@@ -21,7 +21,7 @@
 | 畫面 | 角色 |
 |------|------|
 | `login.html` | 登入（Scott + Agents，密碼 `demo`） |
-| `projects.html` | 專案列表 |
+| `projects.html` | 專案列表 · **專案匯入**（資料夾掃描／評分） |
 | `editor.html` | 引導編輯 + **結構 gate 面板** |
 | `templates.html` | 範本庫 |
 | `review.html` | 審閱簽核（gate 擋核准） |
@@ -72,12 +72,20 @@ bun run app:test
 bun run app:all
 ```
 
-| 變體 | App 名稱 | Bundle ID | 範例專案 | DMG |
-|------|----------|-----------|----------|-----|
-| **正式** | `SpecForge.app` | `com.specforge.prd.workbench` | **僅 1 份**（SaaS 2FA） | `SpecForge-{ver}-macOS.dmg` |
-| **測試** | `SpecForge Test.app` | `com.specforge.prd.workbench.test` | 8 份示範列表 | `SpecForge-Test-{ver}-macOS.dmg` |
+| 變體 | App 名稱 | Bundle ID | 內容 | DMG |
+|------|----------|-----------|------|-----|
+| **正式** | `SpecForge.app` | `com.specforge.prd.workbench` | **無示範** + 首次引導 | `SpecForge-{ver}-macOS.dmg` |
+| **測試** | `SpecForge Test.app` | `com.specforge.prd.workbench.test` | 8 份示範 + demo 帳號 | `SpecForge-Test-{ver}-macOS.dmg` |
 
 測試版在 Dock／選單列／Finder 顯示名稱含 **Test**，可與正式版並存。
+
+### 正式版首次使用引導（`onboarding.html`）
+
+1. **建立管理員** — 姓名／Email／密碼  
+2. **專案導入** — 新手流程 / 匯入 Markdown / 空白工作區  
+3. **Agent 互動** — 說明人員 vs Agent、進場作業、簽核鏈；可選安裝入門 Agent 包  
+
+完成後進入工作區。狀態 key：`specforge:state:v6:prod`。
 
 ### PRD 新手撰寫流程
 
@@ -92,6 +100,27 @@ bun run app:all
 7. 確認建立 → 編輯台 **新手教練列**
 
 快速路徑：**＋ 新建 PRD**（略過說明，同一套骨架）。
+
+### 編輯台 · marka.md 引擎
+
+文件編輯台（`editor.html`）長文欄位使用 **[marka.md](https://github.com/mattenarle10/markamd)** 風格：
+
+- 雙欄 **寫作 | 即時 Markdown 預覽**
+- 模式切換：雙欄 / 只寫作 / 只預覽
+- 完整源碼副本：`vendor/markamd/`（MIT）
+- 適配層：`src/lib/markamd/`（無 Tauri，嵌入現有 SpecForge 流程）
+
+詳見 `THIRD_PARTY.md`。
+
+### 專案資料夾匯入
+
+專案列表 → **專案匯入**：
+
+1. 系統資料夾選擇器（`webkitdirectory`）
+2. 自動掃描 `.md` / `.txt`，對應軟體所需欄位（PRD、問題、目標／Non-Goals、指標、故事、Tasks、Proposal、計劃、README）
+3. 每個候選專案顯示**覆蓋率、內容評分、進度條**與檔案對應狀態
+4. 確認後寫入**獨立正文袋**（切換專案不互相覆蓋）
+5. 側邊欄「專案」清單可點選匯入／新建專案
 
 `vite.config.ts` 使用 `base: "./"`（file:// 相容）。
 

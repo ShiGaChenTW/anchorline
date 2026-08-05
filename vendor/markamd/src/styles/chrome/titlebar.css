@@ -1,0 +1,140 @@
+.mdv-titlebar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  height: var(--titlebar-h);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+html.is-mac .mdv-titlebar {
+  /* clears the native traffic-light buttons, which sit at fixed PHYSICAL
+     size — counter-scale by the app zoom level (set by use-app-zoom) so the
+     inset stays aligned with them at any zoom */
+  padding: 0 12px 0 calc(84px / var(--mdv-zoom, 1));
+}
+
+.mdv-titlebar__sep-v {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.mdv-titlebar__lead {
+  flex: 1;
+  min-width: 0;
+}
+
+.mdv-titlebar__actions {
+  flex-shrink: 0;
+}
+
+.mdv-titlebar__center {
+  /* absolute-center against the whole window so traffic-light reserved space
+     on the left doesn't visually shift the filename right of true center.
+     keep pointer-events ON so Tauri's data-tauri-drag-region can capture
+     drags from the centered filename — max-width: 60% already prevents
+     overlap with the right-side action buttons. */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 60%;
+}
+
+.mdv-titlebar__name {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  color: var(--fg);
+  line-height: 1;
+}
+
+.mdv-titlebar__doc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 0;
+}
+
+.mdv-titlebar__sep {
+  color: var(--border);
+}
+
+.mdv-titlebar__filename {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mdv-titlebar__dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  /* nudge down by half a pixel for optical centering against the mono
+     x-height — the geometric middle of a 14px line still reads a hair high */
+  transform: translateY(0.5px);
+}
+
+.mdv-titlebar__spacer {
+  flex: 1;
+}
+
+.mdv-titlebar__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.mdv-titlebar__zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  height: 22px;
+  margin-right: 4px;
+  padding-right: 6px;
+  border-right: 1px solid var(--border);
+}
+
+.mdv-titlebar__zoom .mdv-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+}
+
+.mdv-titlebar__zoom .mdv-btn:disabled {
+  color: color-mix(in srgb, var(--muted) 42%, transparent);
+  cursor: default;
+  transform: none;
+}
+
+.mdv-titlebar__zoom .mdv-btn:disabled:hover {
+  background: transparent;
+  color: color-mix(in srgb, var(--muted) 42%, transparent);
+}
+
+.mdv-titlebar__theme {
+  position: relative;
+}

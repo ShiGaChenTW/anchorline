@@ -5,6 +5,10 @@ dist/
 .vite/
 SpecForge.app
 SpecForge Test.app
+PRD開發監控台.app
+PRD開發監控台 Test.app
 *.dmg
 mac-app-build/SpecForge
 mac-app-build/SpecForgeTest
+vendor/markamd/node_modules/
+vendor/markamd/src-tauri/target/

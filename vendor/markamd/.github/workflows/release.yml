@@ -1,0 +1,371 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag to publish, e.g. v1.5.5"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      # don't kill the macOS build if Windows fails (or vice versa) — release
+      # still ships partial artifacts for users on the platform that built ok.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: ""
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: ""
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      # flag at job level for the cert-import step's `if:` condition.
+      # we DON'T put the actual cert material at job level — if we did,
+      # an empty APPLE_CERTIFICATE env var would leak into tauri-action,
+      # which sees the var as "set" and tries to `security import` empty
+      # data, hard-failing the bundle step.
+      HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
+      # Tauri updater artifacts require a private signing key. Keep signed
+      # auto-update releases when configured, but let unsigned/manual builds
+      # complete without injecting empty signing env vars.
+      HAS_TAURI_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          # Manual dispatch should build the requested tag, not the branch the
+          # workflow UI was opened from.
+          ref: ${{ env.RELEASE_TAG }}
+          # need full history + tags so we can derive a per-release commit list
+          # via `git log <prev_tag>..<this_tag>` for the changelog.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: compute changelog since previous tag
+        id: changelog
+        shell: bash
+        run: |
+          set -e
+          # find the most recent tag BEFORE the one we're building. `git tag --sort`
+          # gives semver-ordered tags; we filter out the current ref and pick the next.
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${{ env.RELEASE_TAG }}$" | head -1 || true)
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS="- first public release 🐙"
+            DIFF_URL=""
+          else
+            COMMITS=$(git log "$PREV_TAG..${{ env.RELEASE_TAG }}" --pretty=format:'- %s' --no-merges --reverse)
+            if [ -z "$COMMITS" ]; then
+              COMMITS="- (no commit changes since $PREV_TAG — version bump only)"
+            fi
+            DIFF_URL="full diff: https://github.com/${{ github.repository }}/compare/$PREV_TAG...${{ env.RELEASE_TAG }}"
+          fi
+          echo "PREV_TAG=$PREV_TAG" >> "$GITHUB_OUTPUT"
+          {
+            echo "COMMITS<<COMMITS_EOF"
+            echo "$COMMITS"
+            echo "COMMITS_EOF"
+            echo "DIFF_URL=$DIFF_URL"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: resolve release body
+        id: release_body
+        shell: bash
+        env:
+          COMMITS: ${{ steps.changelog.outputs.COMMITS }}
+          DIFF_URL: ${{ steps.changelog.outputs.DIFF_URL }}
+          TAG_NAME: ${{ env.RELEASE_TAG }}
+        run: |
+          set -e
+          NOTES_FILE="docs/release-notes/${TAG_NAME}.md"
+          {
+            echo "BODY<<BODY_EOF"
+            if [ -f "$NOTES_FILE" ]; then
+              cat "$NOTES_FILE"
+            else
+              printf '# %s\n\n' "$TAG_NAME"
+              printf '## What changed\n\n%s\n\n%s\n\n' "$COMMITS" "$DIFF_URL"
+              printf '## Install\n\n'
+              printf '**macOS Apple Silicon**: `marka.md.dmg`\n'
+              printf '**macOS Intel**: `marka.md_intel.dmg`\n'
+              printf '**Windows**: `marka.md_*-setup.exe`\n'
+              printf '**Linux**: pick `.AppImage`, `.deb`, or `.rpm`\n\n'
+              printf 'Existing users on auto-update get this on next launch.\n'
+            fi
+            echo "BODY_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: setup rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: cache cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ matrix.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ matrix.os }}-cargo-
+
+      - name: install linux build deps
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev
+
+      - name: install dependencies
+        run: bun install
+
+      - name: disable updater artifacts for unsigned build
+        if: env.HAS_TAURI_SIGNING_KEY != 'true'
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const path = 'src-tauri/tauri.conf.json';
+            const cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
+            cfg.bundle.createUpdaterArtifacts = false;
+            fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
+          "
+
+      - name: import apple cert + propagate signing env (macOS only)
+        if: matrix.os == 'macos-latest' && env.HAS_APPLE_CERT == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          echo "$APPLE_CERTIFICATE" | base64 --decode > /tmp/cert.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security import /tmp/cert.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm /tmp/cert.p12
+          # propagate the signing env to later steps so tauri-action can read it.
+          # this step is skipped when HAS_APPLE_CERT=false or non-macOS → these
+          # vars are never written → tauri-action's env contains no APPLE_* →
+          # Tauri auto-skips signing instead of running `codesign --sign ""`.
+          {
+            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
+            echo "APPLE_ID=$APPLE_ID"
+            echo "APPLE_PASSWORD=$APPLE_PASSWORD"
+            echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+          } >> "$GITHUB_ENV"
+
+      - name: build + release (signed updater)
+        if: env.HAS_TAURI_SIGNING_KEY == 'true'
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Apple signing env injected by the cert-import step via $GITHUB_ENV
+          # (macOS only — Windows runner never sees these).
+          # Tauri updater signing — signs the bundle + emits latest.json. Set on
+          # both runners so macOS .app.tar.gz.sig and Windows .nsis.zip.sig are
+          # produced and the updater can verify upgrades cross-platform.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: "marka.md ${{ env.RELEASE_TAG }}"
+          releaseBody: ${{ steps.release_body.outputs.BODY }}
+          # publish as a DRAFT so the matrix runners can both upload artifacts
+          # (including their per-platform latest.json entries) without racing
+          # to overwrite each other on the same live release. the publish-release
+          # job below flips the draft to public AFTER both legs complete + a
+          # consolidated latest.json with both `darwin-aarch64` and
+          # `windows-x86_64` platforms is in place.
+          # ref: https://v2.tauri.app/distribute/pipelines/github/
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: build + release (unsigned, no updater artifacts)
+        if: env.HAS_TAURI_SIGNING_KEY != 'true'
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: "marka.md ${{ env.RELEASE_TAG }}"
+          releaseBody: ${{ steps.release_body.outputs.BODY }}
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      # tauri-action emits `marka.md_<version>_<arch>.dmg` by default. Rename
+      # per arch so users get clean filenames + the landing dropdown can keep
+      # linking to `marka.md.dmg` (apple-silicon default). Intel gets a clear
+      # `_intel` suffix. Both rename steps are guarded by their matrix target
+      # so the two macOS legs don't race.
+      - name: rename dmg → marka.md.dmg (apple silicon)
+        if: matrix.target == 'aarch64-apple-darwin' && success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -e
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases --jq '.[] | select(.tag_name == "${{ env.RELEASE_TAG }}") | .id' | head -1)
+          if [ -z "$RELEASE_ID" ]; then
+            echo "no release found for tag ${{ env.RELEASE_TAG }} — skipping rename"
+            exit 0
+          fi
+          ASSET_ID=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID/assets" --jq '.[] | select(.name | test("aarch64.*\\.dmg$")) | .id' | head -1)
+          if [ -n "$ASSET_ID" ]; then
+            EXISTING_ID=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID/assets" --jq '.[] | select(.name == "marka.md.dmg") | .id' | head -1)
+            if [ -n "$EXISTING_ID" ]; then
+              echo "deleting existing marka.md.dmg asset $EXISTING_ID"
+              gh api "repos/${{ github.repository }}/releases/assets/$EXISTING_ID" -X DELETE
+            fi
+            echo "renaming aarch64 dmg asset $ASSET_ID → marka.md.dmg"
+            gh api "repos/${{ github.repository }}/releases/assets/$ASSET_ID" -X PATCH -f name='marka.md.dmg'
+          else
+            echo "no aarch64 dmg asset found — skipping rename"
+          fi
+
+      - name: rename dmg → marka.md_intel.dmg (intel)
+        if: matrix.target == 'x86_64-apple-darwin' && success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -e
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases --jq '.[] | select(.tag_name == "${{ env.RELEASE_TAG }}") | .id' | head -1)
+          if [ -z "$RELEASE_ID" ]; then
+            echo "no release found for tag ${{ env.RELEASE_TAG }} — skipping rename"
+            exit 0
+          fi
+          ASSET_ID=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID/assets" --jq '.[] | select(.name | test("x64.*\\.dmg$")) | .id' | head -1)
+          if [ -n "$ASSET_ID" ]; then
+            EXISTING_ID=$(gh api "repos/${{ github.repository }}/releases/$RELEASE_ID/assets" --jq '.[] | select(.name == "marka.md_intel.dmg") | .id' | head -1)
+            if [ -n "$EXISTING_ID" ]; then
+              echo "deleting existing marka.md_intel.dmg asset $EXISTING_ID"
+              gh api "repos/${{ github.repository }}/releases/assets/$EXISTING_ID" -X DELETE
+            fi
+            echo "renaming intel dmg asset $ASSET_ID → marka.md_intel.dmg"
+            gh api "repos/${{ github.repository }}/releases/assets/$ASSET_ID" -X PATCH -f name='marka.md_intel.dmg'
+          else
+            echo "no dmg asset found — skipping rename"
+          fi
+
+  # flip the draft release to public AFTER both matrix runners have finished
+  # uploading their artifacts + latest.json entries. this prevents the
+  # cross-platform race where each runner could overwrite the other's
+  # latest.json on a live release.
+  publish-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+    steps:
+      - name: checkout release tooling
+        uses: actions/checkout@v7
+
+      - name: normalize updater manifest URLs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          WORK_DIR="$RUNNER_TEMP/latest-json"
+          mkdir -p "$WORK_DIR"
+
+          LATEST_ASSET_NAME=$(gh api "repos/${{ github.repository }}/releases/tags/${{ env.RELEASE_TAG }}" \
+            --jq '[.assets[] | select(.name == "latest.json") | .name][0] // ""')
+
+          if [ "$LATEST_ASSET_NAME" != "latest.json" ]; then
+            echo "no latest.json asset found for ${{ env.RELEASE_TAG }} — skipping updater manifest normalization"
+            exit 0
+          fi
+
+          gh release download "${{ env.RELEASE_TAG }}" \
+            --repo "${{ github.repository }}" \
+            --pattern latest.json \
+            --dir "$WORK_DIR"
+
+          gh api "repos/${{ github.repository }}/releases/tags/${{ env.RELEASE_TAG }}" \
+            --jq '.assets | map({ name, url, browser_download_url })' \
+            > "$WORK_DIR/release-assets.json"
+
+          node scripts/normalize-latest-json.mjs \
+            "$WORK_DIR/latest.json" \
+            "$WORK_DIR/release-assets.json" \
+            "$WORK_DIR/latest.normalized.json"
+
+          gh release upload "${{ env.RELEASE_TAG }}" \
+            "$WORK_DIR/latest.normalized.json#latest.json" \
+            --repo "${{ github.repository }}" \
+            --clobber
+
+      - name: publish draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "publishing draft release for ${{ env.RELEASE_TAG }}"
+          gh release edit "${{ env.RELEASE_TAG }}" \
+            --repo "${{ github.repository }}" \
+            --draft=false \
+            --latest
+
+  # fires a Vercel deploy hook after a release publishes so markamd.vercel.app
+  # rebuilds and picks up the new version automatically (no manual empty
+  # commit needed). gracefully no-ops if the secret isn't set yet.
+  # NOTE: GitHub Actions does not allow `secrets.*` in `if:` expressions —
+  # they must be evaluated through env first (same pattern as HAS_APPLE_CERT).
+  notify-site:
+    needs: publish-release
+    runs-on: ubuntu-latest
+    env:
+      HAS_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK != '' }}
+    steps:
+      - name: ping vercel deploy hook
+        if: env.HAS_HOOK == 'true'
+        env:
+          DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          echo "triggering markamd-site rebuild for ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}"
+          curl -fsS -X POST "$DEPLOY_HOOK"
+      - name: no hook configured
+        if: env.HAS_HOOK != 'true'
+        run: echo "VERCEL_DEPLOY_HOOK secret not set — skipping site rebuild"

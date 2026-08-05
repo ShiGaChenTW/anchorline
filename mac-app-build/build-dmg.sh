@@ -25,20 +25,22 @@ fi
 
 if [[ "$VARIANT" == "test" ]]; then
   # 測試版：App 顯示名稱含 Test（Dock / 選單列 / Finder）
-  APP_DISPLAY_NAME="SpecForge Test"
+  APP_DISPLAY_NAME="PRD開發監控台 Test"
+  APP_BUNDLE_DIR_NAME="PRD開發監控台 Test"
   APP_EXEC="SpecForgeTest"
   BUNDLE_ID="com.specforge.prd.workbench.test"
-  DMG_FILE="$PROJECT_DIR/SpecForge-Test-${VERSION}-macOS.dmg"
+  DMG_FILE="$PROJECT_DIR/PRD開發監控台-Test-${VERSION}-macOS.dmg"
 else
   # 正式版
-  APP_DISPLAY_NAME="SpecForge"
+  APP_DISPLAY_NAME="PRD開發監控台"
+  APP_BUNDLE_DIR_NAME="PRD開發監控台"
   APP_EXEC="SpecForge"
   BUNDLE_ID="com.specforge.prd.workbench"
-  DMG_FILE="$PROJECT_DIR/SpecForge-${VERSION}-macOS.dmg"
+  DMG_FILE="$PROJECT_DIR/PRD開發監控台-${VERSION}-macOS.dmg"
 fi
 
-APP_BUNDLE="$PROJECT_DIR/${APP_DISPLAY_NAME}.app"
-STAGING_NAME="$APP_DISPLAY_NAME"
+APP_BUNDLE="$PROJECT_DIR/${APP_BUNDLE_DIR_NAME}.app"
+STAGING_NAME="$APP_BUNDLE_DIR_NAME"
 
 echo "════════════════════════════════════════"
 echo "  SpecForge macOS · ${VARIANT} · v${VERSION}"
