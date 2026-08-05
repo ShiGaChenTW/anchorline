@@ -1,6 +1,5 @@
 import { store } from "../data/store";
 import type { Project, ProjectStatus } from "../data/types";
-import { ACCESS_ROLE_LABEL } from "../data/types";
 import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
@@ -71,17 +70,54 @@ if (!requireAuth()) {
     const open = projects.filter((p) => p.status === "draft" || p.status === "review").length;
     const pending = projects.filter((p) => p.status === "review").length;
     const approved = projects.filter((p) => p.status === "approved").length;
+    // 粗估「完成天數」：僅示意 — 用 (100-pct)/15 的平均，避免寫死 6.4
+    const drafts = projects.filter((p) => p.status !== "approved");
+    const avgDays =
+      drafts.length === 0
+        ? 0
+        : Math.round(
+            (drafts.reduce((a, p) => a + Math.max(1, (100 - p.pct) / 12), 0) / drafts.length) * 10,
+          ) / 10;
+
     const nodes = document.querySelectorAll(".stat .v");
-    if (nodes[0]) nodes[0].textContent = String(open);
+    if (nodes[0]) {
+      // 可能含 <small>，只更新數字文字節點
+      const el = nodes[0] as HTMLElement;
+      if (el.querySelector("small")) {
+        el.childNodes[0] && (el.childNodes[0].textContent = String(open));
+      } else el.textContent = String(open);
+    }
     if (nodes[1]) nodes[1].textContent = String(pending);
     if (nodes[2]) nodes[2].textContent = String(approved);
+    if (nodes[3]) {
+      const el = nodes[3] as HTMLElement;
+      const small = el.querySelector("small");
+      if (small) {
+        el.childNodes[0] && (el.childNodes[0].textContent = String(avgDays) + " ");
+      } else el.textContent = String(avgDays);
+    }
+
+    const navProjects = document.querySelector('[data-od-id="nav-projects"] .count');
+    if (navProjects) navProjects.textContent = String(projects.length);
+    const navReview = document.querySelector('[data-od-id="nav-review"] .count');
+    if (navReview) navReview.textContent = String(pending);
+    const navTpl = document.querySelector('[data-od-id="nav-templates"] .count');
+    if (navTpl) navTpl.textContent = String(store.get().templates.length);
   }
+
+  const planModules = import.meta.glob("../../plans/*.md", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>;
 
   function renderFlow() {
     const host = document.getElementById("flow-strip-host");
     if (!host) return;
-    // plan steps presence unknown without fetch; mark true if any plan file name in plans list later
-    host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps: true }));
+    const hasPlanSteps = Object.values(planModules).some((raw) =>
+      /^- \[[ xXvV]\]/m.test(raw),
+    );
+    host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps }));
   }
 
   function render() {
@@ -363,7 +399,10 @@ if (!requireAuth()) {
   });
 
   document.getElementById("btn-tui-hint")?.addEventListener("click", () => {
-    toast(`目前身分：${store.get().currentUser.name}（${ACCESS_ROLE_LABEL[store.get().currentUser.accessRole]}）`);
+    toast("終端 TUI：在專案目錄執行 bun run track · Web：側欄「計劃追蹤」");
+    window.setTimeout(() => {
+      location.href = "tracking.html";
+    }, 600);
   });
 
   render();

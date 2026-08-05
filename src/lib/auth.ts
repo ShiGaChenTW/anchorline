@@ -58,8 +58,12 @@ export function roleBadge(role: string): string {
 }
 
 export function bindLogout(btnId = "btn-logout") {
-  document.getElementById(btnId)?.addEventListener("click", () => {
+  const handler = () => {
     store.logout();
     location.href = "login.html";
+  };
+  // 支援多顆登出鈕；避免重複 id 時只綁到第一顆
+  document.querySelectorAll(`#${btnId}, [data-logout], .btn-logout`).forEach((el) => {
+    el.addEventListener("click", handler);
   });
 }

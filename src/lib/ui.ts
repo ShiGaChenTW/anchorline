@@ -67,10 +67,16 @@ export function initMobileNav(
 }
 
 export function updateUserRailFooter(user: { name: string; role: string; avatar: string }) {
-  const avatarEl = document.querySelector(".rail-foot .avatar");
-  const textContainer = document.querySelector(".rail-foot > div:last-child");
+  const foot = document.querySelector(".rail-foot");
+  if (!foot) return;
+  const avatarEl = foot.querySelector(".avatar");
+  // 不可用 div:last-child：登出 button 常是最後一個子節點，導致選不到名字區、畫面卡在 HTML 預設「林可晴」
+  const textContainer =
+    foot.querySelector(".rail-foot-meta") ||
+    foot.querySelector("[data-user-meta]") ||
+    Array.from(foot.querySelectorAll(":scope > div")).find((d) => !d.classList.contains("avatar"));
   if (avatarEl) avatarEl.textContent = user.avatar || user.name.slice(0, 1);
   if (textContainer) {
-    textContainer.innerHTML = `<div style="font-weight:600;color:var(--fg);font-size:12.5px">${escapeHtml(user.name)}</div><div>${escapeHtml(user.role)}</div>`;
+    textContainer.innerHTML = `<div class="rail-foot-name" style="font-weight:600;color:var(--fg);font-size:12.5px">${escapeHtml(user.name)}</div><div class="rail-foot-role">${escapeHtml(user.role)}</div>`;
   }
 }
