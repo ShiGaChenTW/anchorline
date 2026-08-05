@@ -1,7 +1,7 @@
 import { store } from "../data/store";
 import type { AgentTaskType, Employee } from "../data/types";
 import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL, AGENT_TASK_LABEL } from "../data/types";
-import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
+import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { canManageUsers } from "../lib/permissions";
 import { initTheme } from "../lib/theme";
@@ -22,11 +22,7 @@ if (__authed) {
 
   function syncUser() {
     const u = store.get().currentUser;
-    updateUserRailFooter({
-      name: u.name,
-      role: `${roleBadge(u.accessRole)} · ${u.title}`,
-      avatar: u.avatar,
-    });
+    updateUserRailFooter(toRailUser(u));
   }
 
   function renderList() {

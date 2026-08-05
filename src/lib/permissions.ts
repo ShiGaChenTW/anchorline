@@ -42,6 +42,28 @@ export function hasPermission(user: Employee | null | undefined, perm: Permissio
   return ROLE_PERMS[user.accessRole].includes(perm);
 }
 
+/** 側欄／個人資訊用：精簡能力標籤（中文 chips） */
+export function summarizePermissions(user: Employee | null | undefined): string[] {
+  if (!user || user.active === false) return ["未啟用"];
+  if (user.accessRole === "admin") return ["全部權限"];
+  const chips: string[] = [];
+  if (hasPermission(user, "edit") || hasPermission(user, "write")) chips.push("編輯");
+  if (hasPermission(user, "delete")) chips.push("刪除");
+  if (hasPermission(user, "approve")) chips.push("簽核");
+  if (hasPermission(user, "peer_review")) chips.push("覆核");
+  if (hasPermission(user, "export")) chips.push("匯出");
+  if (hasPermission(user, "manage_users")) chips.push("帳號");
+  if (chips.length === 0) chips.push("唯讀");
+  return chips;
+}
+
+/** 角色 badge 視覺調性 class */
+export function accessRoleTone(role: AccessRole): string {
+  if (role === "admin") return "role-tone-admin";
+  if (role === "approver") return "role-tone-approver";
+  return "role-tone-editor";
+}
+
 export function canEditContent(user: Employee | null | undefined): boolean {
   return hasPermission(user, "edit") || hasPermission(user, "write");
 }

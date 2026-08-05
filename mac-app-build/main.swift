@@ -26,7 +26,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             defer: false
         )
 
-        window.title = "SpecForge — PRD 引導工作台"
+        let displayName =
+            (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? "SpecForge"
+        window.title = "\(displayName) — PRD 引導工作台"
         window.titlebarAppearsTransparent = false
         window.titleVisibility = .visible
         window.isMovableByWindowBackground = true

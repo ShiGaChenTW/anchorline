@@ -39,7 +39,7 @@
         <a class="nav-item active" href="projects.html" data-od-id="nav-projects">
           <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 2.5a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75z"/><path d="M7.25 8a.75.75 0 0 1 .75-.75h5.5a.75.75 0 0 1 0 1.5h-5.5A.75.75 0 0 1 7.25 8zm0 3a.75.75 0 0 1 .75-.75h5.5a.75.75 0 0 1 0 1.5h-5.5a.75.75 0 0 1-.75-.75zM4 7.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm0 3a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0z"/></svg>
           專案列表
-          <span class="count">8</span>
+          <span class="count">1</span>
         </a>
         <a class="nav-item" href="editor.html" data-od-id="nav-editor">
           <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086zM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064l6.286-6.286z"/></svg>
@@ -77,13 +77,26 @@
           開啟 TUI 追蹤
         </button>
       </nav>
-      <div class="rail-foot">
-        <div class="avatar">S</div>
-        <div class="rail-foot-meta" data-user-meta>
-          <div class="rail-foot-name" style="font-weight:600;color:var(--fg);font-size:12.5px">—</div>
-          <div class="rail-foot-role">—</div>
+      <div class="rail-foot rail-foot--user" aria-label="目前使用者">
+        <div class="rail-user">
+          <div class="avatar" data-user-avatar aria-hidden="true">S</div>
+          <div class="rail-user-body">
+            <div class="rail-user-top">
+              <div class="rail-foot-meta" data-user-meta>
+                <div class="rail-foot-name">—</div>
+                <div class="rail-foot-title">—</div>
+              </div>
+              <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout title="登出">登出</button>
+            </div>
+            <div class="rail-user-role-row">
+              <span class="role-badge role-tone-editor" data-user-role-badge>—</span>
+              <span class="rail-user-kind" data-user-kind>人員</span>
+            </div>
+            <div class="rail-user-perms" data-user-perms role="list" aria-label="權限摘要">
+              <span class="perm-chip" role="listitem">—</span>
+            </div>
+          </div>
         </div>
-        <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout style="margin-left:auto">登出</button>
       </div>
     </aside>
 
@@ -106,6 +119,7 @@
           <button type="button" class="btn" id="btn-export-openspec" title="PRD.md + tasks.md + proposal.md">匯出 OpenSpec</button>
         </div>
         <button type="button" class="btn" id="btn-import" data-od-id="btn-import">匯入 Markdown</button>
+        <button type="button" class="btn" id="btn-beginner" data-od-id="btn-beginner" title="一步步帶你寫出第一份 PRD">🌱 新手引導</button>
         <button type="button" class="btn btn-primary" id="btn-new" data-od-id="btn-new">＋ 新建 PRD</button>
         <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
       </div>
@@ -118,6 +132,17 @@
           <div class="stat"><div class="k">預估剩餘</div><div class="v">0 <small>天</small></div></div>
         </div>
 
+        <div id="beginner-cta" class="beginner-cta" hidden>
+          <div class="beginner-cta-body">
+            <strong>第一次寫 PRD？</strong>
+            <p>用新手撰寫流程，7 步完成摘要、問題、邊界與成功指標，再進入編輯台補細節。</p>
+          </div>
+          <div class="beginner-cta-actions">
+            <button type="button" class="btn btn-primary" id="btn-beginner-cta">開始新手引導</button>
+            <a class="btn" href="editor.html" id="btn-open-sample">先看範例 2FA</a>
+          </div>
+        </div>
+
         <div id="plan-workspace-bar" class="plan-workspace-bar mono" aria-live="polite"></div>
 
         <div class="filters" data-od-id="filters">
@@ -127,7 +152,7 @@
           <button type="button" class="chip" data-filter="approved">已核准</button>
           <button type="button" class="chip" data-filter="mine">我擁有的</button>
           <span class="spacer"></span>
-          <span class="mono" id="result-count">8 筆</span>
+          <span class="mono" id="result-count">— 筆</span>
         </div>
 
         <div class="table-wrap" data-od-id="project-table">
@@ -140,7 +165,7 @@
                 <th>計劃</th>
                 <th>擁有者</th>
                 <th>更新</th>
-                <th></th>
+                <th class="col-actions">操作</th>
               </tr>
             </thead>
             <tbody id="tbody"></tbody>
@@ -152,59 +177,84 @@
 </div>
 
 <div class="modal-back" id="modal" data-od-id="modal-new">
-  <div class="modal modal-wizard" role="dialog" aria-labelledby="modal-title">
+  <div class="modal modal-wizard modal-wizard-beginner" role="dialog" aria-labelledby="modal-title" aria-describedby="wiz-coach">
     <header>
-      <h3 id="modal-title">新建 PRD 精靈</h3>
+      <div>
+        <h3 id="modal-title">PRD 新手撰寫流程</h3>
+        <p class="sub" id="wiz-mode-label" style="margin:2px 0 0;font-size:12px">7 步完成第一份可送審骨架</p>
+      </div>
       <button type="button" class="btn btn-ghost btn-sm" id="modal-close">關閉</button>
     </header>
-    <div class="wizard-steps" id="wizard-steps" aria-label="精靈步驟">
-      <span data-ws="0" class="on">1 基本</span>
-      <span data-ws="1">2 問題</span>
-      <span data-ws="2">3 非目標</span>
-      <span data-ws="3">4 成果</span>
+    <div class="wizard-steps" id="wizard-steps" aria-label="撰寫步驟"></div>
+    <div class="wiz-coach" id="wiz-coach" aria-live="polite">
+      <div class="wiz-coach-title" id="wiz-coach-title">—</div>
+      <p class="wiz-coach-body" id="wiz-coach-body">—</p>
+      <ul class="wiz-coach-tips" id="wiz-coach-tips"></ul>
     </div>
     <div class="body">
+      <!-- 0 認識 -->
       <div class="wizard-pane" data-pane="0">
+        <div class="beginner-intro">
+          <p>這份流程會帶你寫出 PRD 的<strong>最小可審閱骨架</strong>：</p>
+          <ol class="beginner-checklist">
+            <li>一句話交付物與受益角色</li>
+            <li>問題陳述（先不寫解法）</li>
+            <li>目標與至少 3 條 Non-Goals</li>
+            <li>可量測的成功指標</li>
+          </ol>
+          <p class="hint">正式版內建 1 份完整範例「SaaS 雙重驗證（2FA）」，卡住時可對照。</p>
+          <div class="field-row" style="margin-top:12px">
+            <div class="field">
+              <label>範本類型</label>
+              <select id="new-tpl">
+                <option>標準功能 PRD</option>
+                <option>平台／基礎設施</option>
+                <option>資安與合規</option>
+                <option>成長實驗</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>目標發布</label>
+              <input type="text" id="new-target" placeholder="Q3 · 2026-09" value="Q3 · 2026-09" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- 1 一句話 -->
+      <div class="wizard-pane" data-pane="1" hidden>
         <div class="field">
           <label>標題</label>
           <input type="text" id="new-title" placeholder="例如：企業版 SSO 強制政策" value="" />
         </div>
-        <div class="field-row">
-          <div class="field">
-            <label>範本</label>
-            <select id="new-tpl">
-              <option>標準功能 PRD</option>
-              <option>平台／基礎設施</option>
-              <option>資安與合規</option>
-              <option>成長實驗</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>目標發布</label>
-            <input type="text" id="new-target" placeholder="Q3 · 2026-09" value="Q3 · 2026-09" />
-          </div>
-        </div>
         <div class="field">
-          <label>做什麼（一句話）</label>
-          <input type="text" id="wiz-what" placeholder="交付物一句話" />
+          <label>做什麼（一句話交付物）</label>
+          <input type="text" id="wiz-what" placeholder="交付物一句話，避免口號" />
         </div>
-        <div class="field">
-          <label>給誰</label>
-          <input type="text" id="wiz-who" placeholder="主要受益角色" />
-        </div>
+        <button type="button" class="btn btn-sm btn-ghost" id="wiz-fill-oneliner" data-fill="oneliner">填入範例句（可再改）</button>
       </div>
-      <div class="wizard-pane" data-pane="1" hidden>
+      <!-- 2 對象與時機 -->
+      <div class="wizard-pane" data-pane="2" hidden>
+        <div class="field">
+          <label>給誰（角色，可多個）</label>
+          <input type="text" id="wiz-who" placeholder="例如：租戶管理員、資安團隊" />
+        </div>
         <div class="field">
           <label>為何現在</label>
-          <textarea id="wiz-why" rows="3" placeholder="外部壓力／內部期限"></textarea>
+          <textarea id="wiz-why" rows="3" placeholder="外部壓力／合約／法規／內部期限（最好有數字）"></textarea>
         </div>
+        <button type="button" class="btn btn-sm btn-ghost" id="wiz-fill-who" data-fill="who">填入範例句</button>
+      </div>
+      <!-- 3 問題 -->
+      <div class="wizard-pane" data-pane="3" hidden>
         <div class="field">
           <label>問題陳述</label>
-          <textarea id="wiz-problem" rows="5" placeholder="痛點、對象、佐證（勿先寫解法）"></textarea>
+          <textarea id="wiz-problem" rows="6" placeholder="痛點、對象、佐證。先不要寫解法。"></textarea>
         </div>
+        <button type="button" class="btn btn-sm btn-ghost" id="wiz-fill-problem" data-fill="problem">填入範例句</button>
       </div>
-      <div class="wizard-pane" data-pane="2" hidden>
-        <p class="hint" style="margin-top:0">至少 <strong>3 條</strong> Non-Goals（SCVB 結構契約，否則無法送審）</p>
+      <!-- 4 邊界 -->
+      <div class="wizard-pane" data-pane="4" hidden>
+        <p class="hint" style="margin-top:0">至少 <strong>3 條</strong> Non-Goals（結構契約，否則無法送審）</p>
         <div class="field">
           <label>非目標 1</label>
           <input type="text" id="wiz-ng1" placeholder="這次刻意不做…" />
@@ -221,20 +271,29 @@
           <label>目標（可列點）</label>
           <textarea id="wiz-goals" rows="3" placeholder="• 可驗收目標…"></textarea>
         </div>
+        <button type="button" class="btn btn-sm btn-ghost" id="wiz-fill-goals" data-fill="goals">填入範例句</button>
       </div>
-      <div class="wizard-pane" data-pane="3" hidden>
+      <!-- 5 指標 -->
+      <div class="wizard-pane" data-pane="5" hidden>
         <div class="field">
-          <label>成功指標（建議含數字）</label>
-          <textarea id="wiz-metrics" rows="4" placeholder="指標 | 目標 | 量測&#10;覆蓋率 | ≥ 80% | …"></textarea>
+          <label>成功指標（建議：指標 | 目標 | 量測）</label>
+          <textarea id="wiz-metrics" rows="4" placeholder="覆蓋率 | ≥ 80% | 90 天內統計"></textarea>
         </div>
-        <p class="hint">建立後會寫入摘要／問題／目標／指標章節，並開啟編輯工作台。可按 ? 查看快捷鍵。</p>
+        <button type="button" class="btn btn-sm btn-ghost" id="wiz-fill-metrics" data-fill="metrics">填入範例句</button>
+      </div>
+      <!-- 6 確認 -->
+      <div class="wizard-pane" data-pane="6" hidden>
+        <div class="beginner-confirm" id="wiz-confirm-summary">
+          <p class="hint">請確認下列摘要，建立後會寫入章節並開啟<strong>新手教練</strong>編輯台。</p>
+          <dl class="wiz-confirm-dl" id="wiz-confirm-dl"></dl>
+        </div>
       </div>
     </div>
     <footer>
       <button type="button" class="btn" id="modal-cancel">取消</button>
       <button type="button" class="btn" id="wizard-prev" hidden>上一步</button>
       <button type="button" class="btn btn-primary" id="wizard-next">下一步</button>
-      <button type="button" class="btn btn-primary" id="modal-create" hidden>建立並開啟</button>
+      <button type="button" class="btn btn-primary" id="modal-create" hidden>建立並進入編輯</button>
     </footer>
   </div>
 </div>

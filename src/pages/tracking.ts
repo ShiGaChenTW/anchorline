@@ -1,5 +1,5 @@
 import { store } from "../data/store";
-import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
+import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { deriveFlowLayers } from "../lib/flow-layers";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
@@ -39,11 +39,7 @@ if (__authed) {
 
   function syncUser() {
     const u = store.get().currentUser;
-    updateUserRailFooter({
-      name: u.name,
-      role: `${roleBadge(u.accessRole)} · ${u.title}`,
-      avatar: u.avatar,
-    });
+    updateUserRailFooter(toRailUser(u));
   }
 
   function renderList() {
