@@ -37,6 +37,26 @@ bun run dev
 # 開啟 login.html 或 tracking.html
 ```
 
+## 終端 TUI（真·Terminal）
+
+讀取 `plans/*.md` 的計劃進度（SCVB tracking 概念，零 blessed 依賴）：
+
+```bash
+bun run track          # 全螢幕互動 TUI
+bun run track:once     # 單次輸出（可 pipe）
+bun run track -- --dir ./plans
+```
+
+| 鍵 | 功能 |
+|----|------|
+| `j` / `k` | 下／上一個 plan |
+| `J` / `K` | 步驟清單捲動 |
+| `r` | 重新載入 |
+| `?` | 說明 |
+| `q` / `Esc` | 離開 |
+
+Web 版追蹤頁：`tracking.html`（App 內）。終端版：`bun run track`。
+
 ## 建置 / macOS App
 
 ```bash
