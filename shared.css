@@ -51,7 +51,10 @@
   --focus-ring: 0 0 0 2px rgba(250, 249, 246, 0.5);
   --motion-fast: 150ms;
   --motion-base: 200ms;
+  --motion-enter: 220ms;
+  --motion-flash: 420ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --container-max: 1500px;
   --container-gutter-desktop: 32px;
   --container-gutter-tablet: 24px;
@@ -2016,7 +2019,103 @@ html, body {
   *, *::before, *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
+}
+
+/* 設定「減少動態」或系統偏好 */
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+}
+html.reduce-motion .attn-focus-flash,
+html.reduce-motion .attn-pulse-once,
+html.reduce-motion .attn-enter,
+html.reduce-motion .attn-hl-enter,
+html.reduce-motion .attn-expand-enter {
+  animation: none !important;
+}
+
+/* ═══════════════════════════════════════════
+   注意力導引動畫 Phase A+B
+   ═══════════════════════════════════════════ */
+@keyframes attn-focus-flash-kf {
+  0% {
+    box-shadow: inset 0 0 0 0 transparent;
+    background-color: transparent;
+  }
+  35% {
+    box-shadow: inset 3px 0 0 var(--accent);
+    background-color: color-mix(in oklab, var(--accent) 14%, transparent);
+  }
+  100% {
+    box-shadow: inset 3px 0 0 color-mix(in oklab, var(--accent) 40%, transparent);
+    background-color: color-mix(in oklab, var(--accent) 6%, transparent);
+  }
+}
+@keyframes attn-pulse-once-kf {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 0%, transparent); transform: scale(1); }
+  40% { box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 35%, transparent); transform: scale(1.02); }
+  100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 0%, transparent); transform: scale(1); }
+}
+@keyframes attn-enter-kf {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes attn-hl-enter-kf {
+  from { filter: brightness(1.35); }
+  to { filter: brightness(1); }
+}
+@keyframes attn-expand-enter-kf {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.attn-focus-flash {
+  animation: attn-focus-flash-kf var(--motion-flash) var(--ease-out) both;
+  border-radius: 6px;
+}
+.attn-pulse-once {
+  animation: attn-pulse-once-kf 480ms var(--ease-out) both;
+}
+.attn-enter {
+  animation: attn-enter-kf var(--motion-enter) var(--ease-out) both;
+}
+.attn-hl-enter {
+  animation: attn-hl-enter-kf 280ms var(--ease-out) both;
+}
+.attn-expand-enter {
+  animation: attn-expand-enter-kf 200ms var(--ease-out) both;
+}
+
+/* focus strip / 側欄 context 平穩過渡 */
+.adhd-focus-strip {
+  transition: background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+.rail-context-project {
+  transition: opacity var(--motion-fast) var(--ease-standard);
+}
+.review-sec-pill {
+  transition: background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+.review-comments-body,
+.adhd-guide .guide,
+.adhd-coach-details[open] > :not(summary),
+.review-approvals-wrap[open] .approval-strip {
+  transition: opacity var(--motion-fast) var(--ease-standard);
 }
 
 /* ─── Theme switcher (kami / GitHub) ─────── */

@@ -56,6 +56,8 @@ function populateSettings() {
   if (modeEl) modeEl.value = s.editor?.defaultMode ?? "split";
   if (hlEl) hlEl.checked = s.editor?.semanticHighlight !== false;
   if (hiEl) hiEl.value = s.editor?.highlightIntensity === "medium" ? "medium" : "soft";
+  const rmEl = document.getElementById("editor-reduce-motion") as HTMLInputElement | null;
+  if (rmEl) rmEl.checked = s.editor?.reduceMotion === true;
 
   renderEmployees();
   syncUser();
@@ -268,6 +270,8 @@ document.getElementById("btn-save-settings")?.addEventListener("click", () => {
       ? "medium"
       : "soft"
   ) as AISettings["editor"]["highlightIntensity"];
+  const reduceMotion =
+    (document.getElementById("editor-reduce-motion") as HTMLInputElement | null)?.checked === true;
 
   store.updateSettings({
     model,
@@ -288,8 +292,13 @@ document.getElementById("btn-save-settings")?.addEventListener("click", () => {
       defaultMode,
       semanticHighlight,
       highlightIntensity,
+      reduceMotion,
     },
   });
+
+  import("../lib/attention-motion")
+    .then((m) => m.syncMotionPreferenceClass())
+    .catch(() => {});
 
   toast("已成功儲存偏好與 AI 教練設定");
 });

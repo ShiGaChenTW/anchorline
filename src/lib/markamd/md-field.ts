@@ -13,6 +13,7 @@ import {
   lineHighlightKind,
   type HighlightOpts,
 } from "./semantic-highlight";
+import { markHighlightEnter } from "../attention-motion";
 
 export type MdFieldOptions = {
   key: string;
@@ -278,11 +279,36 @@ export function bindMdField(
 
     const showLn = field.dataset.showLn === "1" && ed?.showLineNumbers !== false;
 
+    let lastHlSig = "";
+    let hlEnterTimer: ReturnType<typeof setTimeout> | null = null;
+    const hlSignature = () => {
+      const counts: Record<string, number> = {};
+      preview.querySelectorAll("[data-hl]").forEach((node) => {
+        const k = node.getAttribute("data-hl") || "";
+        counts[k] = (counts[k] || 0) + 1;
+      });
+      return Object.keys(counts)
+        .sort()
+        .map((k) => `${k}:${counts[k]}`)
+        .join("|");
+    };
+
     const refreshPreview = () => {
       preview.innerHTML = renderMarkdown(ta.value);
       const opts = readHighlightOpts(field);
       applySemanticHighlight(preview, opts);
-      if (opts.enabled) applyFocusHighlight(preview, caretLineText(ta));
+      if (opts.enabled) {
+        applyFocusHighlight(preview, caretLineText(ta));
+        // 僅在語意標記集合變化時入場（避免每鍵重播）
+        const sig = hlSignature();
+        if (sig !== lastHlSig) {
+          lastHlSig = sig;
+          if (hlEnterTimer) clearTimeout(hlEnterTimer);
+          hlEnterTimer = setTimeout(() => markHighlightEnter(preview), 260);
+        }
+      } else {
+        lastHlSig = "";
+      }
     };
     const refreshGutter = () => {
       if (gutter && showLn) {

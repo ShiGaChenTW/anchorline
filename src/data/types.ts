@@ -201,6 +201,8 @@ export type AISettings = {
     semanticHighlight: boolean;
     /** 高亮強度：soft 僅待決+風險；medium 含指標／完成／引用 */
     highlightIntensity: "soft" | "medium";
+    /** 減少注意力導引動畫（亦尊重系統 prefers-reduced-motion） */
+    reduceMotion: boolean;
   };
 };
 
