@@ -3,6 +3,7 @@ import type { Comment } from "../data/types";
 import { bindLogout, requireAuth, roleBadge } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
 import { canApproveProject, canEditContent, canPeerReview } from "../lib/permissions";
+import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
@@ -82,12 +83,17 @@ function renderApprovals() {
     }
   }
 
+  const prdGate = evaluatePrdGates(store.get());
   const approveBtn = document.getElementById("btn-approve") as HTMLButtonElement | null;
   if (approveBtn) {
-    approveBtn.disabled = locked || withdrawn || !gate.ok;
+    const blocked = locked || withdrawn || !gate.ok || !prdGate.canApprove;
+    approveBtn.disabled = blocked;
     if (withdrawn) approveBtn.textContent = "已抽單";
     else if (locked) approveBtn.textContent = "已鎖定";
-    else if (!gate.ok) {
+    else if (!prdGate.canApprove) {
+      approveBtn.textContent = "結構未達標";
+      approveBtn.title = gateSummaryLine(prdGate);
+    } else if (!gate.ok) {
       approveBtn.textContent = "無法簽核";
       approveBtn.title = gate.reason ?? "";
     } else {
@@ -102,6 +108,8 @@ function renderApprovals() {
       hint.textContent = `已抽單${caseRec?.withdrawReason ? `：${caseRec.withdrawReason}` : ""}。管理員可至「管理中心 → 個案調整」重開。`;
     } else if (locked) {
       hint.textContent = "此規格已核准鎖定。";
+    } else if (!prdGate.canApprove) {
+      hint.textContent = gateSummaryLine(prdGate) + "（SCVB 結構 gate 阻擋核准）";
     } else if (!gate.ok) {
       hint.textContent = gate.reason ?? "";
     } else {
@@ -299,6 +307,11 @@ document.getElementById("btn-post")?.addEventListener("click", () => {
 
 document.getElementById("btn-approve")?.addEventListener("click", () => {
   if (store.get().locked) return;
+  const prdGate = evaluatePrdGates(store.get());
+  if (!prdGate.canApprove) {
+    toast(gateSummaryLine(prdGate) + " — 無法核准");
+    return;
+  }
   const r = store.approveAndLock();
   if (!r.ok) {
     toast(r.reason ?? "無法簽核");
