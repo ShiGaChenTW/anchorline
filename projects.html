@@ -20,8 +20,8 @@
         <button type="button" data-theme-value="claude" aria-pressed="false">Claude</button>
       </div>
 
-      <span>v0.9 · 桌面</span>
-      <span class="kbd">⌘K</span>
+      <span>PM-SPEC+SCVB</span>
+      <span class="kbd">?</span>
     </div>
   </div>
 
@@ -56,33 +56,34 @@
           <span class="count">3</span>
         </a>
         <a class="nav-item" href="tracking.html" data-od-id="nav-tracking">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1.75a.75.75 0 0 0 0 1.5h13a.75.75 0 0 0 0-1.5h-13zM1.5 5.75a.75.75 0 0 0 0 1.5h8a.75.75 0 0 0 0-1.5h-8zM1.5 9.75a.75.75 0 0 0 0 1.5h13a.75.75 0 0 0 0-1.5h-13zM1.5 13.75a.75.75 0 0 0 0 1.5h8a.75.75 0 0 0 0-1.5h-8z"/></svg>
           計劃追蹤
         </a>
-
-                <a class="nav-item" href="admin.html" data-od-id="nav-admin">
+        <a class="nav-item" href="admin.html" data-od-id="nav-admin">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.75A.75.75 0 0 1 2.75 2h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 2.75zm0 5A.75.75 0 0 1 2.75 7h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.75zm0 5a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75z"/></svg>
           管理中心
         </a>
         <a class="nav-item" href="agents.html" data-od-id="nav-agents">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a5 5 0 0 0-3.5 8.57V14a.75.75 0 0 0 1.2.6L8 12.5l2.3 2.1A.75.75 0 0 0 11.5 14V8.57A5 5 0 0 0 8 0zm0 1.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z"/></svg>
           Agent 管理
         </a>
-
-<a class="nav-item" href="settings.html" data-od-id="nav-settings">
+        <a class="nav-item" href="settings.html" data-od-id="nav-settings">
           <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm0 14.5a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13zM6.5 8a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z"/></svg>
           偏好設定
         </a>
         <div class="nav-label">快捷</div>
         <button type="button" class="nav-item" id="btn-tui-hint" data-od-id="nav-tui">
           <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25Zm1.75-.25a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25ZM7.25 8a.75.75 0 0 1-.22-.53V4.28a.75.75 0 0 1 1.5 0v3.19c0 .199-.079.39-.22.53l-1.75 1.75a.75.75 0 0 1-1.06-1.06L7.25 8z"/></svg>
-          TUI 模式提示
+          開啟 TUI 追蹤
         </button>
       </nav>
       <div class="rail-foot">
-        <div class="avatar">林</div>
-        <div>
-          <div style="font-weight:600;color:var(--fg);font-size:12.5px">林可晴</div>
-          <div>產品 · Identity</div>
+        <div class="avatar">S</div>
+        <div class="rail-foot-meta" data-user-meta>
+          <div class="rail-foot-name" style="font-weight:600;color:var(--fg);font-size:12.5px">—</div>
+          <div class="rail-foot-role">—</div>
         </div>
-        <button type="button" class="btn btn-sm btn-ghost" id="btn-logout" style="margin-left:auto">登出</button>
+        <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout style="margin-left:auto">登出</button>
       </div>
     </aside>
 
@@ -105,15 +106,15 @@
         </div>
         <button type="button" class="btn" id="btn-import" data-od-id="btn-import">匯入 Markdown</button>
         <button type="button" class="btn btn-primary" id="btn-new" data-od-id="btn-new">＋ 新建 PRD</button>
-        <button type="button" class="btn btn-ghost" id="btn-logout">登出</button>
+        <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
       </div>
 
       <div class="content">
         <div class="stats" data-od-id="stats">
-          <div class="stat"><div class="k">進行中</div><div class="v">5</div></div>
-          <div class="stat"><div class="k">待審閱</div><div class="v">3</div></div>
-          <div class="stat"><div class="k">本季已核准</div><div class="v">11</div></div>
-          <div class="stat"><div class="k">平均完成天數</div><div class="v">6.4 <small>天</small></div></div>
+          <div class="stat"><div class="k">進行中</div><div class="v">0</div></div>
+          <div class="stat"><div class="k">待審閱</div><div class="v">0</div></div>
+          <div class="stat"><div class="k">已核准</div><div class="v">0</div></div>
+          <div class="stat"><div class="k">預估剩餘</div><div class="v">0 <small>天</small></div></div>
         </div>
 
         <div class="filters" data-od-id="filters">

@@ -10,6 +10,12 @@ import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
+const planModules = import.meta.glob("../../plans/*.md", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
 const __authed = requireAuth();
 if (__authed) {
 initTheme();
@@ -366,7 +372,10 @@ function render() {
   renderCoach();
   syncUser();
   const host = document.getElementById("flow-strip-host");
-  if (host) host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps: true }));
+  if (host) {
+    const hasPlanSteps = Object.values(planModules).some((raw) => /^- \[[ xXvV]\]/m.test(raw));
+    host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps }));
+  }
 }
 
 // Apply pending template insert into current section first field
