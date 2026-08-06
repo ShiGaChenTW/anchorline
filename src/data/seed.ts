@@ -188,20 +188,36 @@ export const SEED_SECTIONS: Section[] = [
     id: "summary",
     n: "01",
     title: "三行摘要",
-    desc: "做什麼 · 給誰 · 為何現在",
+    desc: "做什麼 · 給誰 · 為何現在 · 技術線選型",
     status: "done",
-    guide: "用三句話讓忙碌的審閱者 10 秒內抓住全貌。避免行話堆疊。",
-    tips: ["寫具體對象，不要寫「所有使用者」", "「為何現在」要有外部壓力或內部期限", "不要在摘要塞成功指標細節"],
-    example: "為 Northwind 登入流程加入 TOTP 與安全金鑰，讓企業客戶通過資安審核，並解鎖三筆待簽合約。",
+    guide: "先用三句話讓忙碌的審閱者 10 秒內抓住全貌；再補技術線選型，讓工程／架構一眼知道「用什麼做、刻意不選什麼」。避免行話堆疊與無邊界的技術清單。",
+    tips: [
+      "寫具體對象，不要寫「所有使用者」",
+      "「為何現在」要有外部壓力或內部期限",
+      "不要在摘要塞成功指標細節",
+      "技術線選型：主路徑 2–5 條即可；至少寫一項「刻意不選」與原因",
+    ],
+    example:
+      "為 Northwind 登入流程加入 TOTP 與安全金鑰，讓企業客戶通過資安審核。技術線：TOTP + WebAuthn；不選簡訊 OTP（SIM 交換與成本）。",
     fields: [
       { key: "what", label: "做什麼", hint: "一句話描述交付物", type: "textarea", rows: 2, value: "在 Northwind SaaS 登入流程加入 TOTP 與 WebAuthn 第二因素，並支援工作區強制政策與復原碼。" },
       { key: "who", label: "給誰", hint: "主要受益者", type: "text", value: "企業租戶管理員、一般成員、需通過 SOC 2 審核的資安團隊" },
       { key: "why", label: "為何現在", hint: "時機與壓力", type: "textarea", rows: 3, value: "近六次企業資安審查中有三次將缺少第二因素列為阻擋項；三筆待簽合約將 2FA 列為簽約前提，目標在 Q4 前關閉缺口。" },
+      {
+        key: "tech",
+        label: "技術線選型",
+        hint: "主技術路徑 · 關鍵元件 · 刻意不選（每行一條，可用 •）",
+        type: "textarea",
+        rows: 5,
+        value:
+          "• 認證擴充：在既有登入／SSO 流上掛第二因素（相容 OIDC／SAML 既有路徑）\n• 第二因素：TOTP（RFC 6238，Authenticator App）+ WebAuthn／FIDO2 安全金鑰（Enterprise）\n• 復原：可列印／下載／輪替的一次性復原碼\n• 稽核：設定、變更、移除寫入稽核日誌\n• 刻意不選：簡訊／語音 OTP（SIM 交換風險與通道成本）",
+      },
     ],
     checks: [
       { id: "c1", label: "有明確交付物（非願景口號）", pass: true },
       { id: "c2", label: "受益者可指認到角色", pass: true },
       { id: "c3", label: "時機與外部壓力可驗證", pass: true },
+      { id: "c4", label: "技術線選型含主路徑與至少一項不選", pass: true },
     ],
     score: 92,
   },
@@ -592,9 +608,10 @@ export function buildStarterAgents(adminPassword: string): Employee[] {
 }
 
 export const DEFAULT_SETTINGS: AISettings = {
-  model: "gemini-1.5-pro",
+  model: "gemini-1.5-flash",
   apiKey: "",
   endpoint: "https://generativelanguage.googleapis.com/v1beta",
+  localModelName: "llama3.2",
   temperature: 0.7,
   persona: "executive",
   language: "zh-TW",

@@ -445,7 +445,7 @@ export function mapCandidateToSectionValues(
   candidate: ProjectCandidate,
 ): Record<string, Record<string, string>> {
   const values: Record<string, Record<string, string>> = {
-    summary: { what: "", who: "", why: "" },
+    summary: { what: "", who: "", why: "", tech: "" },
     problem: { problem: "", quote: "" },
     goals: { goals: "", nongoals: "" },
     metrics: { m1: "" },
@@ -463,6 +463,15 @@ export function mapCandidateToSectionValues(
   // summary.what
   if (titleFromH1) values.summary.what = titleFromH1;
   else if (candidate.name) values.summary.what = candidate.name;
+
+  // summary.tech — 從 PRD／README 擷取技術／stack 段落
+  if (prdText) {
+    const tech = extractSection(
+      prdText,
+      /技術線|技術選型|技術棧|tech(?:nology)?\s*stack|architecture|架構選型|stack/i,
+    );
+    if (tech) values.summary.tech = tech.slice(0, 3000);
+  }
 
   if (bySlot.problem) {
     values.problem.problem = bySlot.problem.file.text.trim().slice(0, 4000);

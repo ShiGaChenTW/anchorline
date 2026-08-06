@@ -38,8 +38,11 @@ function populateSettings() {
   if (tempValEl) tempValEl.textContent = String(s.temperature);
   if (keyEl) keyEl.value = s.apiKey || "";
   if (endpointEl) endpointEl.value = s.endpoint || "";
+  const localModelEl = document.getElementById("ai-local-model") as HTMLInputElement | null;
+  if (localModelEl) localModelEl.value = s.localModelName || "llama3.2";
   if (personaEl) personaEl.value = s.persona;
   if (langEl) langEl.value = s.language;
+  syncLocalModelUi();
 
   if (ngEl) ngEl.checked = s.enableLinters.requireNonGoals;
   if (metEl) metEl.checked = s.enableLinters.requireMetrics;
@@ -246,11 +249,52 @@ document.getElementById("ai-temp")?.addEventListener("input", (e) => {
   if (tempValEl) tempValEl.textContent = v;
 });
 
+function syncLocalModelUi() {
+  const model = (document.getElementById("ai-model") as HTMLSelectElement | null)?.value;
+  const group = document.getElementById("local-model-group");
+  if (group) group.style.display = model === "local-smart" ? "" : "none";
+}
+
+document.getElementById("ai-model")?.addEventListener("change", () => {
+  const model = (document.getElementById("ai-model") as HTMLSelectElement).value;
+  const endpointEl = document.getElementById("ai-endpoint") as HTMLInputElement | null;
+  const keyEl = document.getElementById("ai-key") as HTMLInputElement | null;
+  if (model === "local-smart" && endpointEl) {
+    if (
+      !endpointEl.value ||
+      endpointEl.value.includes("generativelanguage") ||
+      endpointEl.value.includes("openai.com") ||
+      endpointEl.value.includes("anthropic.com")
+    ) {
+      endpointEl.value = "http://localhost:11434/v1";
+    }
+    if (keyEl && !keyEl.value.trim()) keyEl.placeholder = "可填 ollama 或任意字";
+  }
+  if (model.startsWith("gemini") && endpointEl) {
+    if (!endpointEl.value || endpointEl.value.includes("11434") || endpointEl.value.includes("openai.com")) {
+      endpointEl.value = "https://generativelanguage.googleapis.com/v1beta";
+    }
+  }
+  if (model.startsWith("gpt") && endpointEl) {
+    if (!endpointEl.value || endpointEl.value.includes("11434") || endpointEl.value.includes("generativelanguage")) {
+      endpointEl.value = "https://api.openai.com/v1";
+    }
+  }
+  if (model.startsWith("claude") && endpointEl) {
+    if (!endpointEl.value || endpointEl.value.includes("11434") || endpointEl.value.includes("generativelanguage")) {
+      endpointEl.value = "https://api.anthropic.com";
+    }
+  }
+  syncLocalModelUi();
+});
+
 document.getElementById("btn-save-settings")?.addEventListener("click", () => {
   const model = (document.getElementById("ai-model") as HTMLSelectElement).value as AISettings["model"];
   const temperature = Number((document.getElementById("ai-temp") as HTMLInputElement).value);
   const apiKey = (document.getElementById("ai-key") as HTMLInputElement).value.trim();
   const endpoint = (document.getElementById("ai-endpoint") as HTMLInputElement).value.trim();
+  const localModelName =
+    (document.getElementById("ai-local-model") as HTMLInputElement | null)?.value.trim() || "llama3.2";
   const persona = (document.getElementById("ai-persona") as HTMLSelectElement).value as AISettings["persona"];
   const language = (document.getElementById("ai-lang") as HTMLSelectElement).value as AISettings["language"];
 
@@ -276,8 +320,11 @@ document.getElementById("btn-save-settings")?.addEventListener("click", () => {
   store.updateSettings({
     model,
     temperature,
-    apiKey,
-    endpoint,
+    apiKey: apiKey || (model === "local-smart" ? "ollama" : ""),
+    endpoint:
+      endpoint ||
+      (model === "local-smart" ? "http://localhost:11434/v1" : store.get().settings.endpoint),
+    localModelName,
     persona,
     language,
     enableLinters: {
@@ -301,6 +348,36 @@ document.getElementById("btn-save-settings")?.addEventListener("click", () => {
     .catch(() => {});
 
   toast("已成功儲存偏好與 AI 教練設定");
+});
+
+document.getElementById("btn-ai-test")?.addEventListener("click", async () => {
+  const out = document.getElementById("ai-test-result");
+  // 先把畫面上的 key 暫存進 store（避免未按儲存就測連線）
+  const apiKey = (document.getElementById("ai-key") as HTMLInputElement | null)?.value.trim() ?? "";
+  const endpoint = (document.getElementById("ai-endpoint") as HTMLInputElement | null)?.value.trim() ?? "";
+  const model = (document.getElementById("ai-model") as HTMLSelectElement | null)?.value as AISettings["model"];
+  const temperature = Number((document.getElementById("ai-temp") as HTMLInputElement | null)?.value ?? 0.7);
+  const localModelName =
+    (document.getElementById("ai-local-model") as HTMLInputElement | null)?.value.trim() || "llama3.2";
+  store.updateSettings({
+    apiKey: apiKey || (model === "local-smart" ? "ollama" : apiKey),
+    endpoint:
+      endpoint ||
+      (model === "local-smart" ? "http://localhost:11434/v1" : endpoint),
+    model: model || store.get().settings.model,
+    localModelName,
+    temperature,
+  });
+  if (out) out.textContent = "測試中…";
+  const { testAiConnection } = await import("../lib/ai-client");
+  const r = await testAiConnection();
+  if (r.ok) {
+    if (out) out.textContent = `成功：${r.sample}`;
+    toast("AI 連線測試成功");
+  } else {
+    if (out) out.textContent = `失敗：${r.reason}`;
+    toast(`AI 連線失敗：${r.reason}`);
+  }
 });
 
 document.getElementById("btn-export-json")?.addEventListener("click", () => {

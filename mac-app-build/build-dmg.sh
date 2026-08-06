@@ -89,6 +89,8 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
 	<string>${APP_DISPLAY_NAME}</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleShortVersionString</key>
 	<string>${VERSION}</string>
 	<key>CFBundleVersion</key>
@@ -102,6 +104,15 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
+
+# App icon (Dock / Finder)
+if [[ -f "$BUILD_DIR/resources/AppIcon.icns" ]]; then
+  cp "$BUILD_DIR/resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+elif [[ -f "$PROJECT_DIR/logos/export/AppIcon.icns" ]]; then
+  cp "$PROJECT_DIR/logos/export/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
+else
+  echo "⚠️  未找到 AppIcon.icns（mac-app-build/resources 或 logos/export），App 將使用預設圖示"
+fi
 
 cp -R "$PROJECT_DIR/dist" "$APP_BUNDLE/Contents/Resources/dist"
 

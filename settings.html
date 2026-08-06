@@ -115,8 +115,8 @@
       </div>
       <div class="rail-theme-row">
         <div class="theme-switch rail-theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
-          <button type="button" data-theme-value="kami" aria-pressed="false">kami</button>
-          <button type="button" data-theme-value="github" aria-pressed="true">GitHub</button>
+          <button type="button" data-theme-value="kami" aria-pressed="false">LIGHT</button>
+          <button type="button" data-theme-value="github" aria-pressed="true">DARK</button>
         </div>
       </div>
 
@@ -193,31 +193,41 @@
           <!-- Section 1: AI Model & Key -->
           <div class="settings-section">
             <h2>🤖 AI 寫作教練模型與金鑰設定</h2>
-            <p class="sub">選擇 AI 引擎並設定 API Key，可解鎖一鍵生稿、語調潤色與智慧教練重構功能。</p>
+            <p class="sub">必須填入 API Key 後，編輯台「一鍵生稿／語調潤色／指令」才會呼叫真實模型。未設定時按鈕會停用，不會再產生假 demo 文案。</p>
             <div class="form-grid">
               <div class="form-group">
                 <label for="ai-model">首選 AI 模型</label>
                 <select id="ai-model">
-                  <option value="gemini-1.5-pro">Google Gemini 1.5 Pro (推薦)</option>
-                  <option value="gemini-1.5-flash">Google Gemini 1.5 Flash (極速)</option>
+                  <option value="gemini-1.5-flash">Google Gemini 1.5 Flash（推薦／快速）</option>
+                  <option value="gemini-1.5-pro">Google Gemini 1.5 Pro</option>
                   <option value="claude-3-5-sonnet">Anthropic Claude 3.5 Sonnet</option>
                   <option value="gpt-4o">OpenAI GPT-4o</option>
-                  <option value="local-smart">Local Smart Engine (零延遲本機引擎)</option>
+                  <option value="local-smart">Ollama／本機 OpenAI 相容（推薦本機）</option>
                 </select>
+              </div>
+              <div class="form-group" id="local-model-group">
+                <label for="ai-local-model">Ollama 模型名稱</label>
+                <input type="text" id="ai-local-model" placeholder="llama3.2" value="llama3.2" />
+                <span class="hint">需先 <code>ollama pull 模型名</code>。例：llama3.2、qwen2.5、mistral、gemma2</span>
               </div>
               <div class="form-group">
                 <label for="ai-temp">發想創意度 (Temperature)<span class="range-val" id="temp-val">0.7</span></label>
                 <input type="range" id="ai-temp" min="0" max="1" step="0.1" value="0.7" style="margin-top:8px" />
               </div>
               <div class="form-group">
-                <label for="ai-key">API Key (選擇性填寫)</label>
-                <input type="password" id="ai-key" placeholder="AI-xxxxxxxxxxxx" />
-                <span class="hint">僅安全儲存於您的本機瀏覽器 localStorage，不會傳送至中間伺服器。</span>
+                <label for="ai-key">API Key</label>
+                <input type="password" id="ai-key" placeholder="雲端必填；Ollama 可填 ollama 或留空" autocomplete="off" />
+                <span class="hint">僅存本機。Gemini／Claude／GPT 需真 Key；Ollama 可任意字或 ollama。</span>
               </div>
               <div class="form-group">
-                <label for="ai-endpoint">API Proxy 端點</label>
+                <label for="ai-endpoint">API 端點</label>
                 <input type="text" id="ai-endpoint" value="https://generativelanguage.googleapis.com/v1beta" />
+                <span class="hint">Ollama：http://localhost:11434/v1 · Gemini：…/v1beta · OpenAI：https://api.openai.com/v1</span>
               </div>
+            </div>
+            <div class="actions-row" style="margin-top:12px">
+              <button type="button" class="btn btn-primary" id="btn-ai-test">測試連線</button>
+              <span class="hint" id="ai-test-result" style="align-self:center"></span>
             </div>
           </div>
 

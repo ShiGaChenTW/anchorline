@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRD開發監控台 — App Icon Final (Layers · Kami)</title>
+<style>
+  :root {
+    --bg: #f3f2ec; --fg: #141413; --muted: #5c5a54; --card: #faf9f5;
+    --border: #e0ddd2; --accent: #1b365d;
+    --desk: linear-gradient(160deg, #e8e6dc, #d4d0c4);
+  }
+  body.dark {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #8b949e; --card: #161b22;
+    --border: #30363d; --accent: #58a6ff;
+    --desk: linear-gradient(160deg, #161b22, #0d1117);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", sans-serif;
+    background: var(--bg); color: var(--fg); line-height: 1.5; min-height: 100vh;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 36px 20px 72px; }
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: #fff; background: #1b365d;
+    padding: 4px 10px; border-radius: 999px; margin-bottom: 12px;
+  }
+  h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
+  .sub { margin-top: 8px; color: var(--muted); font-size: 14px; max-width: 54ch; }
+  header { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
+  button {
+    appearance: none; border: 1px solid var(--border); background: var(--card);
+    color: var(--fg); border-radius: 999px; padding: 8px 14px; font: inherit;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .hero {
+    background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+    padding: 32px; display: grid; gap: 28px;
+  }
+  @media (min-width: 700px) {
+    .hero { grid-template-columns: 220px 1fr; align-items: center; }
+  }
+  .stage {
+    aspect-ratio: 1; border-radius: 28px; display: flex; align-items: center; justify-content: center;
+    background: var(--desk);
+  }
+  .stage img {
+    width: 168px; height: 168px; border-radius: 38px;
+    box-shadow: 0 18px 40px rgba(0,0,0,.18);
+  }
+  .meta h2 { font-size: 1.2rem; margin-bottom: 8px; }
+  .meta p { color: var(--muted); font-size: 14px; }
+  .meta dl {
+    margin-top: 16px; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px;
+    font-size: 13px;
+  }
+  .meta dt { color: var(--muted); }
+  .meta dd { font-weight: 600; }
+  .swatches { display: flex; gap: 6px; margin-top: 14px; }
+  .swatch { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border); }
+  h3 {
+    margin: 28px 0 12px; font-size: 12px; font-weight: 700;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--muted);
+  }
+  .sizes {
+    display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-end;
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 18px;
+  }
+  .size-item { text-align: center; }
+  .size-item img {
+    display: block; border-radius: 22%;
+    box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  }
+  .size-item span { display: block; margin-top: 6px; font-size: 11px; color: var(--muted); }
+  .files {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px;
+    font-size: 13px;
+  }
+  .files code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+    background: color-mix(in oklab, var(--fg) 6%, transparent); padding: 1px 6px; border-radius: 4px;
+  }
+  .files li { margin: 6px 0; color: var(--muted); }
+  .files strong { color: var(--fg); }
+  footer { margin-top: 28px; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body class="light">
+  <div class="wrap">
+    <header>
+      <div>
+        <div class="badge">Final · Selected</div>
+        <h1>Layers · Kami Navy</h1>
+        <p class="sub">Concept 2 + Palette A 已定稿。已匯出 PNG 多尺寸與 macOS <code>AppIcon.icns</code>，並寫入打包腳本。</p>
+      </div>
+      <button type="button" id="theme-toggle">🌙 Dark</button>
+    </header>
+
+    <section class="hero">
+      <div class="stage">
+        <img src="export/logo-512.png" alt="PRD開發監控台 app icon">
+      </div>
+      <div class="meta">
+        <h2>章節分層 · 紙面深藍</h2>
+        <p>堆疊卡片代表 PRD 章節結構；海軍藍底 + 象牙白前卡，對齊 kami 主題與閱讀工作台氣質。</p>
+        <dl>
+          <dt>概念</dt><dd>2 · Layers</dd>
+          <dt>色彩</dt><dd>A · Kami Navy</dd>
+          <dt>主色</dt><dd>#1b365d / #2d5a8a / #faf9f5</dd>
+          <dt>格式</dt><dd>SVG + PNG + ICNS</dd>
+        </dl>
+        <div class="swatches">
+          <div class="swatch" style="background:#142a48"></div>
+          <div class="swatch" style="background:#1b365d"></div>
+          <div class="swatch" style="background:#2d5a8a"></div>
+          <div class="swatch" style="background:#3d6f9e"></div>
+          <div class="swatch" style="background:#faf9f5"></div>
+        </div>
+      </div>
+    </section>
+
+    <h3>尺寸預覽</h3>
+    <div class="sizes">
+      <div class="size-item"><img src="export/logo-192.png" width="128" height="128" alt=""><span>128</span></div>
+      <div class="size-item"><img src="export/logo-192.png" width="64" height="64" alt=""><span>64</span></div>
+      <div class="size-item"><img src="export/logo-48.png" width="48" height="48" alt=""><span>48</span></div>
+      <div class="size-item"><img src="export/logo-32.png" width="32" height="32" alt=""><span>32</span></div>
+      <div class="size-item"><img src="export/logo-16.png" width="16" height="16" alt=""><span>16</span></div>
+    </div>
+
+    <h3>產出檔案</h3>
+    <ul class="files">
+      <li><strong>主 SVG</strong> — <code>logos/export/logo.svg</code></li>
+      <li><strong>PNG</strong> — <code>logo-16</code> … <code>logo-2048.png</code></li>
+      <li><strong>macOS</strong> — <code>logos/export/AppIcon.icns</code> → <code>mac-app-build/resources/AppIcon.icns</code></li>
+      <li><strong>打包</strong> — <code>build-dmg.sh</code> 已設 <code>CFBundleIconFile = AppIcon</code></li>
+    </ul>
+
+    <footer>若 Dock 仍顯示舊圖示：重開 App，或 <code>killall Dock</code> / 重新登入以清 icon cache。</footer>
+  </div>
+<script>
+document.getElementById("theme-toggle").onclick = () => {
+  const d = document.body.classList.toggle("dark");
+  document.body.classList.toggle("light", !d);
+  document.getElementById("theme-toggle").textContent = d ? "☀️ Light" : "🌙 Dark";
+};
+</script>
+</body>
+</html>

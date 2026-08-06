@@ -180,6 +180,11 @@ export type AISettings = {
   model: "gemini-1.5-pro" | "gemini-1.5-flash" | "claude-3-5-sonnet" | "gpt-4o" | "local-smart";
   apiKey: string;
   endpoint: string;
+  /**
+   * OpenAI 相容／Ollama 實際模型名（如 llama3.2、qwen2.5、mistral）。
+   * 僅在 model === local-smart 或自訂端點時使用。
+   */
+  localModelName: string;
   temperature: number;
   persona: "concise" | "detailed" | "technical" | "executive";
   language: "zh-TW" | "en-US";

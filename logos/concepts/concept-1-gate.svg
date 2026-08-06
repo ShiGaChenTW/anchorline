@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="PRD Gate icon">
+  <!-- Concept 1: Document + review gate — PRD 審閱閘門 -->
+  <defs>
+    <linearGradient id="c1-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1b365d"/>
+      <stop offset="100%" stop-color="#142a48"/>
+    </linearGradient>
+  </defs>
+  <g id="icon">
+    <rect width="512" height="512" rx="96" fill="url(#c1-bg)"/>
+    <!-- paper -->
+    <rect x="128" y="96" width="256" height="320" rx="28" fill="#faf9f5"/>
+    <!-- fold -->
+    <path d="M288 96v64a16 16 0 0 0 16 16h64" fill="none" stroke="#d4d0c4" stroke-width="14" stroke-linejoin="round"/>
+    <path d="M304 96l64 64H304V96z" fill="#e8e6dc"/>
+    <!-- lines -->
+    <rect x="168" y="200" width="140" height="18" rx="9" fill="#c5c2b6"/>
+    <rect x="168" y="240" width="176" height="18" rx="9" fill="#d8d5c8"/>
+    <rect x="168" y="280" width="120" height="18" rx="9" fill="#d8d5c8"/>
+    <!-- gate badge -->
+    <circle cx="320" cy="340" r="52" fill="#2d5a8a"/>
+    <path d="M296 340l16 16 32-36" fill="none" stroke="#faf9f5" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

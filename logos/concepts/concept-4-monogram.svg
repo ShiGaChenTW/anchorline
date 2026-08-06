@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="PR monogram icon">
+  <!-- Concept 4: Geometric PR monogram — PRD 字標 -->
+  <defs>
+    <linearGradient id="c4-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2f81f7"/>
+      <stop offset="100%" stop-color="#1f6feb"/>
+    </linearGradient>
+  </defs>
+  <g id="icon">
+    <rect width="512" height="512" rx="96" fill="url(#c4-bg)"/>
+    <!-- abstract P as shield/path, no external fonts -->
+    <path
+      d="M152 112h128c70 0 120 42 120 108s-50 108-120 108H216v92c0 14-12 26-26 26h-12c-14 0-26-12-26-26V138c0-14 12-26 26-26z
+         M216 168v104h64c36 0 60-20 60-52s-24-52-60-52H216z"
+      fill="#ffffff"/>
+    <!-- bottom bar = progress / gate -->
+    <rect x="152" y="404" width="208" height="28" rx="14" fill="#ffffff" opacity="0.35"/>
+    <rect x="152" y="404" width="132" height="28" rx="14" fill="#ffffff"/>
+  </g>
+</svg>

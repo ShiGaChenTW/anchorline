@@ -27,14 +27,14 @@ function nextStepForPage(page: RailPage | null): NextStep {
     case "projects":
       if (!projects.length) {
         return {
-          label: "先建立第一份規格",
-          detail: "匯入既有資料夾，或新建空白 PRD。一次只選一個即可。",
+          label: "下一步",
+          detail: "先建立第一份規格：匯入資料夾或新建空白 PRD，一次只選一個。",
           cta: "匯入專案",
           action: () => document.getElementById("btn-import")?.click(),
         };
       }
       return {
-        label: "接著寫規格",
+        label: "下一步",
         detail: name
           ? `目前：${name}。打開編輯台繼續填寫章節。`
           : `你有 ${projects.length} 個專案，選一個開始寫。`,
@@ -42,53 +42,53 @@ function nextStepForPage(page: RailPage | null): NextStep {
         href: "editor.html",
       };
     case "editor":
+      // 標題已在 toolbar h1；此處只補「下一步」文案，CTA 用工具列「送出審閱／預覽審閱」
       return {
-        label: active ? `正在寫：${name}` : "先選一個專案",
+        label: active ? "下一步" : "先選一個專案",
         detail: active
-          ? "左側章節由上往下填。空的先補齊，再送審。"
+          ? "左側章節由上往下填。空的先補齊，再送出審閱。"
           : "回到專案列表，點一個專案卡片。",
-        cta: active ? "去審閱" : "專案列表",
-        href: active ? "review.html" : "projects.html",
+        cta: active ? undefined : "專案列表",
+        href: active ? undefined : "projects.html",
       };
     case "review":
       return {
-        label: "檢查後再決定",
-        detail: "沒問題就核准；要改字就回編輯。",
-        cta: "回編輯",
-        href: "editor.html",
+        label: "下一步",
+        detail: "檢查後再決定：沒問題就核准；要改字就返回編輯。",
+        // 工具列已有「返回編輯」— 不重複 CTA
       };
     case "templates":
       return {
-        label: "挑選範本",
-        detail: "插入後回編輯台修改即可。",
+        label: "下一步",
+        detail: "挑選段落骨架插入後，回編輯台改成你的內容。",
         cta: "回編輯",
         href: "editor.html",
       };
     case "tracking":
       return {
-        label: "這裡只看進度",
-        detail: "要改規格內容，請回編輯台。",
+        label: "下一步",
+        detail: "這裡只看計劃進度；要改規格請回編輯台。",
         cta: "回編輯",
         href: "editor.html",
       };
     case "admin":
       return {
-        label: "人員與流程設定",
-        detail: "日常寫作不用常待在這裡。",
+        label: "下一步",
+        detail: "人員與流程在此調整；日常寫作請回專案列表。",
         cta: "回專案",
         href: "projects.html",
       };
     case "agents":
       return {
-        label: "Agent 設定",
-        detail: "調完就回編輯台寫內容。",
+        label: "下一步",
+        detail: "調完 prompt／進場後，回編輯台繼續寫內容。",
         cta: "回編輯",
         href: "editor.html",
       };
     case "settings":
       return {
-        label: "個人偏好",
-        detail: "行號、主題、備份都在這裡。",
+        label: "下一步",
+        detail: "行號、主題、AI 金鑰與備份都在這裡；改完回專案。",
         cta: "回專案",
         href: "projects.html",
       };
@@ -102,7 +102,129 @@ function nextStepForPage(page: RailPage | null): NextStep {
   }
 }
 
-function ensureFocusStrip(step: NextStep) {
+/**
+ * 全站：工具列 + 焦點條合併為單一 chrome（對齊編輯工作台）
+ * 避免標題列與「下一步」雙層重複、雙 CTA。
+ */
+function integratePageChrome(step: NextStep) {
+  const main = document.querySelector(".main");
+  const toolbar = main?.querySelector(".toolbar") as HTMLElement | null;
+  if (!toolbar) {
+    // 無 toolbar 的頁面才退回獨立焦點條
+    ensureStandaloneFocusStrip(step);
+    return;
+  }
+
+  document.getElementById("adhd-focus-strip")?.remove();
+
+  toolbar.classList.add("adhd-page-chrome", "adhd-editor-chrome", "adhd-toolbar");
+
+  let chromeMain = toolbar.querySelector(".adhd-page-chrome-main, .adhd-editor-chrome-main") as HTMLElement | null;
+  if (!chromeMain) {
+    const titleBlock = toolbar.querySelector("h1")?.parentElement as HTMLElement | null;
+    if (!titleBlock || titleBlock === toolbar) {
+      ensureStandaloneFocusStrip(step);
+      return;
+    }
+
+    chromeMain = document.createElement("div");
+    chromeMain.className = "adhd-page-chrome-main adhd-editor-chrome-main";
+    titleBlock.replaceWith(chromeMain);
+    titleBlock.classList.add("adhd-page-chrome-title", "adhd-editor-chrome-title");
+    chromeMain.appendChild(titleBlock);
+  }
+
+  let focusLine = document.getElementById("adhd-toolbar-focus");
+  const isNew = !focusLine;
+  if (!focusLine) {
+    focusLine = document.createElement("div");
+    focusLine.id = "adhd-toolbar-focus";
+    focusLine.className = "adhd-toolbar-focus";
+    focusLine.setAttribute("role", "status");
+    focusLine.setAttribute("aria-label", "目前建議的下一步");
+    chromeMain.appendChild(focusLine);
+  }
+
+  const prev = focusLine.dataset.detail ?? "";
+  focusLine.dataset.detail = step.detail;
+  focusLine.innerHTML = `
+    <span class="adhd-toolbar-focus-kicker">${escape(step.label)}</span>
+    <span class="adhd-toolbar-focus-detail">${escape(step.detail)}</span>
+  `;
+
+  let actions = toolbar.querySelector(
+    ".adhd-page-chrome-actions, .adhd-editor-chrome-actions",
+  ) as HTMLElement | null;
+  if (!actions) {
+    actions = document.createElement("div");
+    actions.className = "adhd-page-chrome-actions adhd-editor-chrome-actions";
+    Array.from(toolbar.children).forEach((child) => {
+      const el = child as HTMLElement;
+      if (el === chromeMain) return;
+      if (el.classList.contains("spacer")) {
+        el.remove();
+        return;
+      }
+      actions!.appendChild(el);
+    });
+    toolbar.appendChild(actions);
+  }
+
+  // CTA：若工具列已有相同 href 的連結，不重複放「回編輯／進入編輯」
+  let cta = document.getElementById("adhd-toolbar-cta") as HTMLAnchorElement | null;
+  const href = step.href || "";
+  const hasSameLink =
+    !!href &&
+    !!actions.querySelector(
+      `a[href="${href}"], a[href$="${href.split("/").pop() || href}"]`,
+    );
+
+  if (step.cta && step.href && !hasSameLink) {
+    if (!cta) {
+      cta = document.createElement("a");
+      cta.id = "adhd-toolbar-cta";
+      cta.className = "btn btn-primary adhd-toolbar-cta";
+      actions.appendChild(cta);
+    }
+    cta.href = step.href;
+    cta.textContent = step.cta;
+    cta.hidden = false;
+    // 主路徑 CTA 置前（在更多之前）
+    const more = actions.querySelector(".adhd-more");
+    if (more && cta.nextElementSibling !== more) {
+      actions.insertBefore(cta, more);
+    }
+  } else if (cta) {
+    cta.hidden = true;
+  } else if (step.cta && step.action && !step.href) {
+    // 僅 action（如匯入）
+    let btn = document.getElementById("adhd-toolbar-cta-action") as HTMLButtonElement | null;
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.id = "adhd-toolbar-cta-action";
+      btn.className = "btn btn-primary adhd-toolbar-cta";
+      actions.appendChild(btn);
+    }
+    btn.textContent = step.cta;
+    btn.hidden = false;
+    btn.onclick = () => step.action?.();
+  } else {
+    const btn = document.getElementById("adhd-toolbar-cta-action");
+    if (btn) (btn as HTMLButtonElement).hidden = true;
+  }
+
+  import("./attention-motion")
+    .then((m) => {
+      m.syncMotionPreferenceClass();
+      if (isNew) m.enter(focusLine);
+      else if (prev && prev !== step.detail) m.flashFocus(focusLine);
+    })
+    .catch(() => {});
+}
+
+/** 無標準 toolbar 時的後備焦點條 */
+function ensureStandaloneFocusStrip(step: NextStep) {
   const main = document.querySelector(".main");
   if (!main) return;
 
@@ -140,7 +262,6 @@ function ensureFocusStrip(step: NextStep) {
     document.getElementById("adhd-focus-action")?.addEventListener("click", () => step.action?.());
   }
 
-  // 注意力：首次入場，或下一步標籤變更時 flash
   import("./attention-motion")
     .then((m) => {
       m.syncMotionPreferenceClass();
@@ -148,6 +269,10 @@ function ensureFocusStrip(step: NextStep) {
       else if (labelChanged) m.flashFocus(strip);
     })
     .catch(() => {});
+}
+
+function ensureFocusStrip(step: NextStep) {
+  integratePageChrome(step);
 }
 
 function escape(s: string): string {
@@ -187,34 +312,44 @@ function collapseToolbar() {
   const panel = moreHost.querySelector(".adhd-more-panel") as HTMLElement;
   const toggle = moreHost.querySelector(".adhd-more-toggle") as HTMLButtonElement;
 
+  // 頁面 chrome 整合後按鈕在 actions 內
+  const host =
+    (toolbar.querySelector(
+      ".adhd-page-chrome-actions, .adhd-editor-chrome-actions",
+    ) as HTMLElement | null) ?? toolbar;
+
   const moveables: HTMLElement[] = [];
-  Array.from(toolbar.children).forEach((child) => {
+  Array.from(host.children).forEach((child) => {
     const el = child as HTMLElement;
     if (el.classList.contains("spacer")) return;
+    if (el.classList.contains("adhd-editor-chrome-main")) return;
+    if (el.classList.contains("adhd-page-chrome-main")) return;
     if (el.tagName === "DIV" && el.querySelector("h1")) return; // title block
     if (el.classList.contains("search")) return; // keep search visible but compact
     if (el.id === "folder-import-input") return;
     if (el.classList.contains("adhd-more")) return;
+    if (el.id === "adhd-toolbar-cta") return;
 
     const id = el.id;
-    if (id && keepIds.has(id)) return;
+    if (id && keepIds.has(id) && id !== "btn-outline") return;
     if (el.classList.contains("btn-primary") || el.classList.contains("btn-accent")) return;
     if (el.matches("a.btn-primary, a.btn-accent")) return;
     // 預覽審閱保留在主列（主路徑）
     if (el.matches('a[href="review.html"], a[data-od-id="btn-preview"]')) return;
     if (el.matches('a[href="editor.html"]#btn-edit, a[data-od-id="btn-edit"]')) return;
 
-    // export-menu、次要 btn、登出 → more
+    // export-menu、次要 btn、登出、大綱 → more
     const isExport = el.classList.contains("export-menu");
     const isLogout = el.matches("[data-logout], .btn-logout");
     const isSecondaryBtn =
       el.matches("button.btn, a.btn") &&
       !keepClasses.some((c) => el.classList.contains(c)) &&
-      !(el.id && keepIds.has(el.id));
+      !(el.id && keepIds.has(el.id) && el.id !== "btn-outline");
     const isToggleSamples = el.id === "btn-toggle-samples";
     const isUntrackAll = el.id === "btn-untrack-all";
+    const isOutline = el.id === "btn-outline";
 
-    if (isExport || isLogout || isSecondaryBtn || isToggleSamples || isUntrackAll) {
+    if (isExport || isLogout || isSecondaryBtn || isToggleSamples || isUntrackAll || isOutline) {
       moveables.push(el);
     }
   });
@@ -225,7 +360,7 @@ function collapseToolbar() {
     el.classList.add("adhd-more-item");
     panel.appendChild(el);
   });
-  toolbar.appendChild(moreHost);
+  host.appendChild(moreHost);
 
   toggle.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -271,9 +406,13 @@ function collapseNoiseBlocks() {
   document.querySelector("#flow-strip-host")?.classList.add("adhd-flow-quiet");
 }
 
-/** 側欄：主流程 3 項 + 其餘收合 */
+/** 側欄：主流程 3 項 + 其餘收合；目前頁在「其他」內則展開並標示 */
 export function applyAdhdRail(nav: Element) {
-  if (nav.getAttribute("data-adhd-rail") === "1") return;
+  if (nav.getAttribute("data-adhd-rail") === "1") {
+    // 已套過：仍同步展開／摘要（換頁或 re-sync active 時）
+    expandOtherNavIfNeeded(nav);
+    return;
+  }
   nav.setAttribute("data-adhd-rail", "1");
 
   const primary = new Set(["nav-projects", "nav-editor", "nav-review"]);
@@ -299,7 +438,7 @@ export function applyAdhdRail(nav: Element) {
 
   const details = document.createElement("details");
   details.className = "adhd-nav-more";
-  details.innerHTML = `<summary>其他功能</summary><div class="adhd-nav-more-body"></div>`;
+  details.innerHTML = `<summary class="adhd-nav-more-summary"><span class="adhd-nav-more-summary-label">其他功能</span></summary><div class="adhd-nav-more-body"></div>`;
   const body = details.querySelector(".adhd-nav-more-body")!;
 
   // 插在最後一個 primary 後面
@@ -317,6 +456,48 @@ export function applyAdhdRail(nav: Element) {
     lastPrimary.parentElement?.insertBefore(details, lastPrimary.nextSibling);
   } else {
     nav.appendChild(details);
+  }
+
+  expandOtherNavIfNeeded(nav);
+}
+
+/**
+ * 目前頁若在「其他功能」內：展開 details、標 active、summary 顯示當前項
+ */
+export function expandOtherNavIfNeeded(nav: Element = document.querySelector(".rail-nav")!) {
+  if (!nav) return;
+  const details = nav.querySelector<HTMLDetailsElement>("details.adhd-nav-more");
+  if (!details) return;
+
+  const activeItem = details.querySelector<HTMLElement>(
+    "a.nav-item.active, a.nav-item[aria-current='page'], button.nav-item.active",
+  );
+  const summary = details.querySelector(".adhd-nav-more-summary");
+  const labelEl =
+    summary?.querySelector(".adhd-nav-more-summary-label") ||
+    summary;
+
+  if (activeItem) {
+    details.open = true;
+    details.classList.add("has-active");
+    activeItem.classList.add("active");
+    activeItem.setAttribute("aria-current", "page");
+    // 取出可見名稱（去掉 count）
+    const name = (activeItem.textContent || "")
+      .replace(/\s+/g, " ")
+      .replace(/\d+\s*$/, "")
+      .trim();
+    if (labelEl) {
+      labelEl.textContent = name ? `其他功能 · ${name}` : "其他功能";
+    }
+    // 捲到可見
+    requestAnimationFrame(() => {
+      activeItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+  } else {
+    details.classList.remove("has-active");
+    if (labelEl) labelEl.textContent = "其他功能";
+    // 沒有 active 子項時保持使用者手動開合狀態，不強制關閉
   }
 }
 
@@ -367,8 +548,9 @@ export function initAdhdUi() {
     .catch(() => {});
 
   const page = detectRailPage();
-  ensureFocusStrip(nextStepForPage(page));
+  // 先收斂工具列，再合併焦點（編輯台 chrome 依賴 actions 容器）
   collapseToolbar();
+  ensureFocusStrip(nextStepForPage(page));
   collapseNoiseBlocks();
   enhanceEmptyState();
 
@@ -388,5 +570,13 @@ export function reapplyAdhdRail() {
   const nav = document.querySelector(".rail-nav");
   if (!nav) return;
   nav.removeAttribute("data-adhd-rail");
+  // 清掉舊的「其他功能」再重建（避免重複巢狀）
+  nav.querySelectorAll("details.adhd-nav-more").forEach((d) => {
+    const body = d.querySelector(".adhd-nav-more-body");
+    if (body) {
+      Array.from(body.childNodes).forEach((n) => d.parentElement?.insertBefore(n, d));
+    }
+    d.remove();
+  });
   applyAdhdRail(nav);
 }

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Spec layers icon">
+  <!-- Concept 2: Stacked PRD sections — 章節分層規格 -->
+  <defs>
+    <linearGradient id="c2-bg" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1b365d"/>
+    </linearGradient>
+  </defs>
+  <g id="icon">
+    <rect width="512" height="512" rx="96" fill="url(#c2-bg)"/>
+    <!-- back card -->
+    <rect x="118" y="128" width="276" height="72" rx="20" fill="#2d5a8a" opacity="0.55"/>
+    <!-- mid card -->
+    <rect x="118" y="196" width="276" height="72" rx="20" fill="#3d6f9e"/>
+    <!-- front card -->
+    <rect x="118" y="264" width="276" height="120" rx="24" fill="#faf9f5"/>
+    <!-- section markers -->
+    <rect x="148" y="148" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.85"/>
+    <rect x="148" y="216" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.9"/>
+    <rect x="148" y="292" width="48" height="32" rx="10" fill="#1b365d"/>
+    <!-- content bars on front -->
+    <rect x="216" y="300" width="140" height="16" rx="8" fill="#1b365d" opacity="0.85"/>
+    <rect x="216" y="332" width="108" height="16" rx="8" fill="#1b365d" opacity="0.4"/>
+  </g>
+</svg>

@@ -1,4 +1,11 @@
-import { critiqueSectionWithAI, generateAIDraft, polishTextWithAI } from "../lib/ai-coach";
+import {
+  AiError,
+  critiqueSectionWithAI,
+  generateAIDraft,
+  getAiReadiness,
+  isAiConfigured,
+  polishTextWithAI,
+} from "../lib/ai-coach";
 import { evaluateChecks, liveScore, store } from "../data/store";
 import type { Project, Section } from "../data/types";
 import { projectDisplayName } from "../data/types";
@@ -355,18 +362,20 @@ function renderCoach() {
       <p class="adhd-coach-link"><a href="tracking.html">開啟計劃追蹤 →</a></p>
     </details>
 
-    <details class="adhd-coach-details card adhd-ai-card" data-od-id="ai-tools-card">
+    <details class="adhd-coach-details card adhd-ai-card" data-od-id="ai-tools-card" open>
       <summary>AI 助教</summary>
+      <p class="adhd-ai-status" id="ai-config-status"></p>
       <div class="adhd-ai-actions">
         <button type="button" class="btn btn-sm btn-accent" id="btn-ai-draft">一鍵生稿</button>
         <button type="button" class="btn btn-sm" id="btn-ai-polish">語調潤色</button>
-        <button type="button" class="btn btn-sm" id="btn-ai-audit">深度評估</button>
+        <button type="button" class="btn btn-sm" id="btn-ai-audit">本機＋AI 評估</button>
       </div>
       <div class="adhd-ai-prompt-row">
-        <input type="text" id="ai-prompt-input" placeholder="提問，如：補充資安評估" />
+        <input type="text" id="ai-prompt-input" placeholder="指令，如：依本專案補技術線選型" />
         <button type="button" class="btn btn-sm btn-primary" id="btn-ai-send">送出</button>
       </div>
       <div id="ai-feedback" class="adhd-ai-feedback"></div>
+      <p class="adhd-ai-hint"><a href="settings.html">偏好設定 → API Key</a></p>
     </details>
 
     <details class="adhd-coach-details card" data-od-id="example-card">
@@ -383,67 +392,145 @@ function renderCoach() {
     });
   });
 
-  // AI Draft Button
+  const aiReady = getAiReadiness();
+  const statusEl = document.getElementById("ai-config-status");
+  if (statusEl) {
+    if (aiReady.ok) {
+      statusEl.innerHTML = `<span class="adhd-ai-ok">已設定 · ${escapeHtml(settings.model)}</span> 生稿／潤色／指令將呼叫真實 API。`;
+      statusEl.className = "adhd-ai-status is-ready";
+    } else {
+      statusEl.innerHTML = `<span class="adhd-ai-bad">未就緒</span> ${escapeHtml(aiReady.reason)}`;
+      statusEl.className = "adhd-ai-status is-blocked";
+    }
+  }
+
+  const setAiBusy = (busy: boolean) => {
+    ["btn-ai-draft", "btn-ai-polish", "btn-ai-audit", "btn-ai-send"].forEach((id) => {
+      const b = document.getElementById(id) as HTMLButtonElement | null;
+      if (b) b.disabled = busy || (!editable() && id !== "btn-ai-audit");
+    });
+  };
+
+  const showAiError = (feedbackEl: HTMLElement | null, err: unknown) => {
+    const msg = err instanceof AiError || err instanceof Error ? err.message : String(err);
+    if (feedbackEl) {
+      feedbackEl.innerHTML = `<div class="adhd-ai-err">${escapeHtml(msg)}</div>`;
+    }
+    toast(msg);
+  };
+
+  // 一鍵生稿 — 真實 API only
   document.getElementById("btn-ai-draft")?.addEventListener("click", async () => {
     if (!editable()) {
       toast("目前身分無法編輯內文");
       return;
     }
-    const feedbackEl = document.getElementById("ai-feedback");
-    if (feedbackEl) feedbackEl.innerHTML = `<span style="color:var(--accent)">✨ AI 正在依據《${escapeHtml(s.title)}》生成最佳實踐段落...</span>`;
-    const draft = await generateAIDraft(s, valuesFor(s));
-    for (const key in draft) {
-      store.setSectionField(s.id, key, draft[key]);
+    if (!isAiConfigured()) {
+      toast(getAiReadiness().ok ? "AI 未就緒" : (getAiReadiness() as { reason: string }).reason);
+      return;
     }
-    toast("✨ AI 生稿已套用至編輯畫布");
-    renderEditor();
-    renderOutline();
-    renderCoach();
+    const feedbackEl = document.getElementById("ai-feedback");
+    if (feedbackEl)
+      feedbackEl.innerHTML = `<span class="adhd-ai-busy">正在呼叫 ${escapeHtml(settings.model)} 生稿《${escapeHtml(s.title)}》…</span>`;
+    setAiBusy(true);
+    try {
+      const draft = await generateAIDraft(s, valuesFor(s));
+      for (const key in draft) {
+        store.setSectionField(s.id, key, draft[key]!);
+      }
+      toast("AI 生稿已套用");
+      if (feedbackEl)
+        feedbackEl.innerHTML = `<div class="adhd-ai-ok-msg">已更新欄位：${escapeHtml(Object.keys(draft).join("、"))}</div>`;
+      renderEditor();
+      renderOutline();
+      renderCoach();
+    } catch (e) {
+      showAiError(feedbackEl, e);
+    } finally {
+      setAiBusy(false);
+    }
   });
 
-  // AI Polish Button
+  // 語調潤色 — 真實 API only
   document.getElementById("btn-ai-polish")?.addEventListener("click", async () => {
     if (!editable()) {
       toast("目前身分無法編輯內文");
       return;
     }
-    const feedbackEl = document.getElementById("ai-feedback");
-    if (feedbackEl) feedbackEl.innerHTML = `<span style="color:var(--accent)">🪄 AI 正在進行語調潤色與結構修整...</span>`;
-    const current = valuesFor(s);
-    for (const key in current) {
-      if (current[key]) {
-        const polished = await polishTextWithAI(current[key], settings.persona === "concise" ? "concise" : "executive");
-        store.setSectionField(s.id, key, polished);
-      }
+    if (!isAiConfigured()) {
+      const r = getAiReadiness();
+      toast(r.ok ? "AI 未就緒" : r.reason);
+      return;
     }
-    toast("🪄 已完成 AI 潤色");
-    renderEditor();
-    renderOutline();
-    renderCoach();
+    const feedbackEl = document.getElementById("ai-feedback");
+    if (feedbackEl)
+      feedbackEl.innerHTML = `<span class="adhd-ai-busy">正在呼叫 ${escapeHtml(settings.model)} 潤色…</span>`;
+    setAiBusy(true);
+    try {
+      const current = valuesFor(s);
+      const mode = settings.persona === "concise" ? "concise" : settings.persona === "technical" ? "technical" : "executive";
+      let n = 0;
+      for (const key of Object.keys(current)) {
+        const v = current[key];
+        if (!v?.trim()) continue;
+        const polished = await polishTextWithAI(v, mode);
+        store.setSectionField(s.id, key, polished);
+        n++;
+      }
+      if (!n) {
+        toast("本章沒有可潤色的內容");
+        if (feedbackEl) feedbackEl.innerHTML = `<div class="adhd-ai-err">請先撰寫內容再潤色</div>`;
+      } else {
+        toast(`已潤色 ${n} 個欄位`);
+        if (feedbackEl)
+          feedbackEl.innerHTML = `<div class="adhd-ai-ok-msg">已用 ${escapeHtml(settings.model)} 潤色 ${n} 欄</div>`;
+        renderEditor();
+        renderOutline();
+        renderCoach();
+      }
+    } catch (e) {
+      showAiError(feedbackEl, e);
+    } finally {
+      setAiBusy(false);
+    }
   });
 
-  // AI Audit Button
+  // 評估：本機規則一定跑；有 Key 再加深 AI
   document.getElementById("btn-ai-audit")?.addEventListener("click", async () => {
     const feedbackEl = document.getElementById("ai-feedback");
-    if (feedbackEl) feedbackEl.innerHTML = `<span style="color:var(--accent)">🔍 AI 深度審查中...</span>`;
-    const critique = await critiqueSectionWithAI(s, valuesFor(s), settings);
-    if (feedbackEl) {
-      feedbackEl.innerHTML = `
-        <div style="padding:6px;background:var(--inset);border-radius:var(--radius-sm);margin-top:4px">
-          <strong>${critique.summary}</strong>
-          <ul style="margin:4px 0 0;padding-left:16px">
-            ${critique.warnings.map((w) => `<li style="color:var(--warn,#d9534f)">${escapeHtml(w)}</li>`).join("")}
-            ${critique.suggestions.map((sg) => `<li style="color:var(--accent)">${escapeHtml(sg)}</li>`).join("")}
-          </ul>
-        </div>
-      `;
+    if (feedbackEl)
+      feedbackEl.innerHTML = `<span class="adhd-ai-busy">${isAiConfigured() ? "本機規則 + AI 評估中…" : "本機規則檢查中…"}</span>`;
+    setAiBusy(true);
+    try {
+      const critique = await critiqueSectionWithAI(s, valuesFor(s), settings);
+      if (feedbackEl) {
+        feedbackEl.innerHTML = `
+          <div class="adhd-ai-critique">
+            <strong>${escapeHtml(critique.summary)}</strong>
+            <div class="adhd-ai-score">分數 ${critique.score} · ${critique.grade}${critique.localOnly ? " · 僅本機" : ""}</div>
+            <ul>
+              ${critique.warnings.map((w) => `<li class="w">${escapeHtml(w)}</li>`).join("")}
+              ${critique.suggestions.map((sg) => `<li class="s">${escapeHtml(sg)}</li>`).join("")}
+            </ul>
+          </div>
+        `;
+      }
+    } catch (e) {
+      showAiError(feedbackEl, e);
+    } finally {
+      setAiBusy(false);
     }
   });
 
-  // AI Custom Prompt Send
+  // 自訂指令 — 真實 API only
   document.getElementById("btn-ai-send")?.addEventListener("click", async () => {
     if (!editable()) {
       toast("目前身分無法編輯內文");
+      return;
+    }
+    if (!isAiConfigured()) {
+      const r = getAiReadiness();
+      toast(r.ok ? "AI 未就緒" : r.reason);
       return;
     }
     const input = document.getElementById("ai-prompt-input") as HTMLInputElement | null;
@@ -453,17 +540,43 @@ function renderCoach() {
       return;
     }
     const feedbackEl = document.getElementById("ai-feedback");
-    if (feedbackEl) feedbackEl.innerHTML = `<span style="color:var(--accent)">🤖 處理指令中：「${escapeHtml(promptText)}」...</span>`;
-    const patch = await generateAIDraft(s, valuesFor(s), promptText);
-    for (const key in patch) {
-      store.setSectionField(s.id, key, patch[key]);
+    if (feedbackEl)
+      feedbackEl.innerHTML = `<span class="adhd-ai-busy">處理指令：「${escapeHtml(promptText)}」…</span>`;
+    setAiBusy(true);
+    try {
+      const patch = await generateAIDraft(s, valuesFor(s), promptText);
+      for (const key in patch) {
+        store.setSectionField(s.id, key, patch[key]!);
+      }
+      toast("AI 已依指令更新內容");
+      if (input) input.value = "";
+      if (feedbackEl)
+        feedbackEl.innerHTML = `<div class="adhd-ai-ok-msg">已更新：${escapeHtml(Object.keys(patch).join("、"))}</div>`;
+      renderEditor();
+      renderOutline();
+      renderCoach();
+    } catch (e) {
+      showAiError(feedbackEl, e);
+    } finally {
+      setAiBusy(false);
     }
-    toast("AI 已根據您的指令更新內容");
-    if (input) input.value = "";
-    renderEditor();
-    renderOutline();
-    renderCoach();
   });
+
+  // 未設定 Key：生稿／潤色／指令禁用；評估仍可用（本機）
+  if (!isAiConfigured()) {
+    ["btn-ai-draft", "btn-ai-polish", "btn-ai-send"].forEach((id) => {
+      const b = document.getElementById(id) as HTMLButtonElement | null;
+      if (b) {
+        b.disabled = true;
+        b.title = "請先在偏好設定填入 API Key";
+      }
+    });
+    const inp = document.getElementById("ai-prompt-input") as HTMLInputElement | null;
+    if (inp) {
+      inp.disabled = true;
+      inp.placeholder = "需先設定 API Key";
+    }
+  }
 
   if (!editable()) {
     coach.querySelectorAll("button, input").forEach((el) => {

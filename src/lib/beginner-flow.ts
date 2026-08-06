@@ -98,7 +98,7 @@ export const EDITOR_BEGINNER_TRACK: {
   label: string;
   hint: string;
 }[] = [
-  { sectionId: "summary", label: "三行摘要", hint: "做什麼 · 給誰 · 為何現在" },
+  { sectionId: "summary", label: "三行摘要", hint: "做什麼 · 給誰 · 為何現在 · 技術線選型" },
   { sectionId: "problem", label: "問題陳述", hint: "痛點與佐證，勿先寫解法" },
   { sectionId: "goals", label: "目標／非目標", hint: "Non-Goals ≥ 3" },
   { sectionId: "metrics", label: "成功指標", hint: "至少一個可量測數字" },
@@ -111,6 +111,7 @@ export const BEGINNER_EXAMPLES = {
   what: "在登入流程加入 TOTP 與 WebAuthn 第二因素，並支援工作區強制政策與復原碼。",
   who: "企業租戶管理員、一般成員、需通過 SOC 2 審核的資安團隊",
   why: "近六次企業資安審查中有三次將缺少第二因素列為阻擋項；三筆待簽合約將 2FA 列為簽約前提。",
+  tech: "• TOTP + WebAuthn\n• 工作區強制政策與復原碼\n• 刻意不選：簡訊 OTP",
   problem:
     "目前僅密碼守護工作區。對需符合 SOC 2 Type II 的企業租戶，這是控制面缺口。近六次企業資安審查有三次將缺少第二因素列為阻擋。",
   ng1: "不重做整個帳號系統或改密碼規則",

@@ -242,6 +242,7 @@ if (!requireAuth()) {
   </div>
   <div class="project-card-actions">
     <a class="btn btn-primary row-action-main" href="${actionHref}" data-open-project="${p.id}">${actionLabel}</a>
+    <button type="button" class="btn btn-sm btn-ghost" data-rename-project="${escapeHtml(p.id)}" title="自訂顯示名稱">重新命名</button>
     ${untrack}
   </div>
 </article>`;
@@ -263,6 +264,18 @@ if (!requireAuth()) {
     tbodyEl.addEventListener("click", (e) => {
       const t = e.target as HTMLElement | null;
       if (!t) return;
+
+      const renameBtn = t.closest<HTMLElement>("[data-rename-project]");
+      if (renameBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = renameBtn.dataset.renameProject;
+        if (!id) return;
+        import("../lib/rail-projects")
+          .then((m) => m.startProjectRename(id))
+          .catch(() => toast("無法開啟重新命名"));
+        return;
+      }
 
       const untrackBtn = t.closest<HTMLElement>("[data-untrack-id]");
       if (untrackBtn) {

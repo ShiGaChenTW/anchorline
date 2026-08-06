@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Spec seal stamp icon">
+  <!-- Concept 5: Spec seal / forge stamp — 規格蓋章通過 -->
+  <defs>
+    <linearGradient id="c5-bg" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0%" stop-color="#f5f4ed"/>
+      <stop offset="100%" stop-color="#e8e6dc"/>
+    </linearGradient>
+  </defs>
+  <g id="icon">
+    <rect width="512" height="512" rx="96" fill="url(#c5-bg)"/>
+    <!-- outer seal ring -->
+    <circle cx="256" cy="256" r="168" fill="none" stroke="#1b365d" stroke-width="28"/>
+    <circle cx="256" cy="256" r="132" fill="none" stroke="#1b365d" stroke-width="12" opacity="0.35"/>
+    <!-- diamond / diamond gate -->
+    <path d="M256 140 L360 256 L256 372 L152 256 Z" fill="#1b365d"/>
+    <!-- check cutout via overlay (light diamond minus) -->
+    <path d="M216 258 l22 22 48-54" fill="none" stroke="#f5f4ed" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- tick marks around seal -->
+    <g fill="#1b365d">
+      <rect x="248" y="78" width="16" height="28" rx="4"/>
+      <rect x="248" y="406" width="16" height="28" rx="4"/>
+      <rect x="78" y="248" width="28" height="16" rx="4"/>
+      <rect x="406" y="248" width="28" height="16" rx="4"/>
+    </g>
+  </g>
+</svg>
