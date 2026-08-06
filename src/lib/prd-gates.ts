@@ -46,7 +46,7 @@ export function evaluatePrdGates(state: AppState): GateReport {
   const findings: GateFinding[] = [];
   const { sections, sectionValues } = state;
 
-  // Summary three fields
+  // Summary core fields（做什麼／給誰／為何現在 = block；技術線選型 = warn）
   const summary = sectionValues["summary"] ?? {};
   const missingSummary = ["what", "who", "why"].filter((k) => !(summary[k] ?? "").trim());
   if (missingSummary.length) {
@@ -62,6 +62,29 @@ export function evaluatePrdGates(state: AppState): GateReport {
       level: "pass",
       label: "三行摘要完整",
       detail: "做什麼／給誰／為何現在皆有內容",
+    });
+  }
+  const tech = (summary.tech ?? "").trim();
+  if (!tech || tech.length < 12) {
+    findings.push({
+      id: "summary-tech-missing",
+      level: "warn",
+      label: "技術線選型未填",
+      detail: "建議在「01 三行摘要」補主技術路徑與至少一項刻意不選（不擋送審，但影響工程對齊）。",
+    });
+  } else if (!/不選|不做|暫不|排除|不採用|out of scope|non-?goal/i.test(tech)) {
+    findings.push({
+      id: "summary-tech-boundary",
+      level: "warn",
+      label: "技術線選型缺邊界",
+      detail: "已有技術描述，但未見「刻意不選」— 建議加一行避免 scope 膨脹。",
+    });
+  } else {
+    findings.push({
+      id: "summary-tech-ok",
+      level: "pass",
+      label: "技術線選型已寫",
+      detail: "含主路徑與不選邊界",
     });
   }
 

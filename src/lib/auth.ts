@@ -5,11 +5,13 @@ import { initAdhdUi } from "./adhd-ui";
 import { detectRailPage, initRailNav, refreshNavCounts } from "./rail-nav";
 import { bindRailProjects, renderRailProjects } from "./rail-projects";
 import { initResizablePanels } from "./resize-panels";
+import { initStatusBar } from "./status-bar";
 import { updateUserRailFooter, type RailUserInfo } from "./ui";
 
 let railProjectsBound = false;
 let resizeBound = false;
 let adhdBound = false;
+let statusBarBound = false;
 
 const SESSION_KEY = "specforge:session:v1";
 
@@ -74,6 +76,12 @@ export function requireAuth(): boolean {
             adhdBound = true;
             // rail 已建完再套 ADHD 層
             requestAnimationFrame(() => initAdhdUi());
+          }
+          if (!statusBarBound) {
+            statusBarBound = true;
+            requestAnimationFrame(() => initStatusBar());
+          } else {
+            requestAnimationFrame(() => initStatusBar());
           }
         });
       }

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Layers C — Amber dark">
+  <!-- Layers · Palette C: 預設 dark + amber 警示色（監控熱感） -->
+  <defs>
+    <linearGradient id="lc-bg" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#161412"/>
+      <stop offset="100%" stop-color="#201e1b"/>
+    </linearGradient>
+  </defs>
+  <g id="icon">
+    <rect width="512" height="512" rx="96" fill="url(#lc-bg)"/>
+    <!-- back -->
+    <rect x="118" y="128" width="276" height="72" rx="20" fill="#b45309" opacity="0.45"/>
+    <!-- mid -->
+    <rect x="118" y="196" width="276" height="72" rx="20" fill="#d97706"/>
+    <!-- front -->
+    <rect x="118" y="264" width="276" height="120" rx="24" fill="#faf9f6"/>
+    <!-- markers -->
+    <rect x="148" y="148" width="48" height="32" rx="10" fill="#f59e0b" opacity="0.85"/>
+    <rect x="148" y="216" width="48" height="32" rx="10" fill="#f59e0b"/>
+    <rect x="148" y="292" width="48" height="32" rx="10" fill="#b45309"/>
+    <!-- content bars -->
+    <rect x="216" y="300" width="140" height="16" rx="8" fill="#161412" opacity="0.88"/>
+    <rect x="216" y="332" width="108" height="16" rx="8" fill="#161412" opacity="0.35"/>
+  </g>
+</svg>

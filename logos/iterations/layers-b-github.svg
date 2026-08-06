@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Layers B — GitHub blue">
+  <!-- Layers · Palette B: GitHub 深藍 + 亮藍 accent（工程感） -->
+  <defs>
+    <linearGradient id="lb-bg" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+  </defs>
+  <g id="icon">
+    <rect width="512" height="512" rx="96" fill="url(#lb-bg)"/>
+    <!-- back -->
+    <rect x="118" y="128" width="276" height="72" rx="20" fill="#1f6feb" opacity="0.35"/>
+    <!-- mid -->
+    <rect x="118" y="196" width="276" height="72" rx="20" fill="#2f81f7" opacity="0.75"/>
+    <!-- front -->
+    <rect x="118" y="264" width="276" height="120" rx="24" fill="#e6edf3"/>
+    <!-- markers -->
+    <rect x="148" y="148" width="48" height="32" rx="10" fill="#58a6ff" opacity="0.9"/>
+    <rect x="148" y="216" width="48" height="32" rx="10" fill="#58a6ff"/>
+    <rect x="148" y="292" width="48" height="32" rx="10" fill="#1f6feb"/>
+    <!-- content bars -->
+    <rect x="216" y="300" width="140" height="16" rx="8" fill="#0d1117" opacity="0.85"/>
+    <rect x="216" y="332" width="108" height="16" rx="8" fill="#0d1117" opacity="0.35"/>
+  </g>
+</svg>

@@ -48,6 +48,67 @@ const KEY = `specforge:state:v6:${APP_VARIANT}`;
 const LEGACY_KEY = `specforge:state:v5:${APP_VARIANT}`;
 const SESSION_KEY = "specforge:session:v1";
 
+/**
+ * 將 SEED 章節結構合併進已存 sections（補新欄位／檢查項，不覆蓋使用者 status/score）
+ * 例如「三行摘要」新增「技術線選型」後，舊 localStorage 也能看到該欄。
+ */
+function mergeSectionsWithSeed(existing: Section[]): Section[] {
+  const seedById = new Map(SEED_SECTIONS.map((s) => [s.id, s]));
+  const seen = new Set<string>();
+  const merged = existing.map((sec) => {
+    seen.add(sec.id);
+    const seed = seedById.get(sec.id);
+    if (!seed) return sec;
+    const fieldKeys = new Set(sec.fields.map((f) => f.key));
+    const fields = [...sec.fields];
+    for (const f of seed.fields) {
+      if (!fieldKeys.has(f.key)) {
+        fields.push({ ...f, value: "" });
+      } else {
+        // 同步 label/hint/rows（不改 value 定義在 section 的預設）
+        const i = fields.findIndex((x) => x.key === f.key);
+        if (i >= 0) {
+          fields[i] = {
+            ...fields[i]!,
+            label: f.label,
+            hint: f.hint,
+            type: f.type,
+            rows: f.rows,
+          };
+        }
+      }
+    }
+    const checkIds = new Set(sec.checks.map((c) => c.id));
+    const checks = [...sec.checks];
+    for (const c of seed.checks) {
+      if (!checkIds.has(c.id)) checks.push({ ...c, pass: false });
+    }
+    return {
+      ...sec,
+      title: seed.title || sec.title,
+      desc: seed.desc || sec.desc,
+      guide: seed.guide || sec.guide,
+      tips: seed.tips?.length ? seed.tips : sec.tips,
+      example: seed.example || sec.example,
+      fields,
+      checks,
+    };
+  });
+  // 種子有、舊狀態沒有的章節（極少見）— 附加空白
+  for (const seed of SEED_SECTIONS) {
+    if (!seen.has(seed.id)) {
+      merged.push({
+        ...structuredClone(seed),
+        fields: seed.fields.map((f) => ({ ...f, value: "" })),
+        checks: seed.checks.map((c) => ({ ...c, pass: false })),
+        status: "empty",
+        score: 0,
+      });
+    }
+  }
+  return merged;
+}
+
 /** 從 section.fields.value 帶入種子正文 */
 function valuesFromSections(sections: Section[]): Record<string, Record<string, string>> {
   const out: Record<string, Record<string, string>> = {};
@@ -286,11 +347,15 @@ function load(): AppState {
       [activeProjectId]: activeDocs,
     };
 
+    const sections = mergeSectionsWithSeed(
+      (parsed.sections as Section[] | undefined) ?? base.sections,
+    );
+
     return {
       ...base,
       ...parsed,
       projects: APP_VARIANT === "prod" ? projects.filter((p) => !p.isSample) : projects,
-      sections: parsed.sections ?? base.sections,
+      sections,
       sectionValues: activeDocs,
       projectSectionValues,
       sampleSectionValues: parsed.sampleSectionValues ?? null,
@@ -1338,7 +1403,7 @@ export const store = {
   },
 
   /**
-   * 呼叫 Agent 進場作業（原型：佇列 → 執行 → 完成，並寫入留言／草稿痕跡）
+   * 呼叫 Agent 進場：佇列 → 真實 LLM 執行 → 完成／失敗（無 API Key 則 failed，不產生假結果）
    */
   invokeAgent(opts: {
     agentId: string;
@@ -1399,93 +1464,95 @@ export const store = {
     state = { ...state, agentJobs: [job, ...state.agentJobs].slice(0, 80) };
     emit();
 
-    // 非同步模擬進場
-    window.setTimeout(() => {
-      const cur = state.agentJobs.find((j) => j.id === jobId);
-      if (!cur || cur.status === "cancelled") return;
-      state = {
-        ...state,
-        agentJobs: state.agentJobs.map((j) =>
-          j.id === jobId ? { ...j, status: "running" as const } : j,
-        ),
-      };
-      emit();
-    }, 400);
-
-    window.setTimeout(() => {
-      const cur = state.agentJobs.find((j) => j.id === jobId);
-      if (!cur || cur.status === "cancelled") return;
-      const promptHint = (agent.agentPrompt || "").slice(0, 120);
-      const roleHint = (agent.agentRoleBrief || agent.title).slice(0, 80);
-      let result = "";
-      if (opts.task === "edit" || opts.task === "coach") {
-        result = `【${agent.name}】已依 role／prompt 完成「${opts.task}」進場。\nRole: ${roleHint}\nPrompt 摘要: ${promptHint || "（未設定）"}\n建議：請至編輯工作台檢視章節補強。`;
-        // 在開放問題章節留下痕跡
-        const open = state.sectionValues["open"] ?? {};
-        const prev = open.oq ?? "";
-        const line = `\n• [Agent ${agent.name} · ${opts.task}] ${opts.note || "自動補強建議"} — 剛剛`;
+    // 真實模型進場（非假 2FA 模擬）
+    void (async () => {
+      const mark = (status: AgentJob["status"], result?: string) => {
         state = {
           ...state,
-          sectionValues: {
-            ...state.sectionValues,
-            open: { ...open, oq: (prev + line).trim() },
-          },
-        };
-      } else if (opts.task === "approve") {
-        result = `【${agent.name}】簽核進場完成。已依核准 prompt 檢視「${project.title}」。`;
-        // 標記自己的關卡
-        const c = state.cases[project.id];
-        if (c) {
-          const stages = c.stages.map((s) =>
-            s.assigneeId === agent.id && s.state !== "approved"
+          agentJobs: state.agentJobs.map((j) =>
+            j.id === jobId
               ? {
-                  ...s,
-                  state: "approved" as const,
-                  assigneeName: `${agent.name} · 已簽`,
+                  ...j,
+                  status,
+                  ...(result != null ? { result } : {}),
+                  ...(status === "done" || status === "failed"
+                    ? { finishedAt: new Date().toISOString() }
+                    : {}),
                 }
-              : s,
+              : j,
+          ),
+        };
+        emit();
+      };
+
+      mark("running");
+      try {
+        const { runAgentTask, isAiConfigured } = await import("../lib/ai-coach");
+        if (!isAiConfigured()) {
+          mark(
+            "failed",
+            "無法進場：尚未設定 API Key。請至偏好設定填入模型與金鑰後重試。",
           );
+          return;
+        }
+        const bag = state.sectionValues;
+        const contextSnippet = Object.entries(bag)
+          .map(([sid, fields]) => {
+            const title = state.sections.find((s) => s.id === sid)?.title ?? sid;
+            const body = Object.entries(fields)
+              .map(([k, v]) => `${k}: ${String(v).slice(0, 400)}`)
+              .join("\n");
+            return `## ${title}\n${body}`;
+          })
+          .join("\n\n");
+
+        const result = await runAgentTask({
+          agentName: agent.name,
+          agentRole: agent.agentRoleBrief || agent.title,
+          agentPrompt: agent.agentPrompt || "",
+          task: opts.task,
+          projectTitle: project.title,
+          note: opts.note || "",
+          contextSnippet,
+        });
+
+        // 僅留下意見／開放問題線索，不自動「假核准」
+        if (opts.task === "edit" || opts.task === "coach") {
+          const open = state.sectionValues["open"] ?? {};
+          const prev = open.oq ?? "";
+          const line = `\n• [Agent ${agent.name} · ${opts.task}] ${opts.note || "進場建議"} — 剛剛（見進場紀錄全文）`;
           state = {
             ...state,
-            cases: { ...state.cases, [project.id]: { ...c, stages } },
-          };
-          if (project.id === state.activeProjectId) syncApprovalsFromActiveCase();
-        }
-      } else {
-        result = `【${agent.name}】覆核進場完成，已留下審閱意見。`;
-        state = {
-          ...state,
-          comments: [
-            {
-              id: `c${Date.now()}`,
-              author: agent.name,
-              authorId: agent.id,
-              avatar: agent.avatar,
-              time: "剛剛",
-              anchor: "§ Agent 進場",
-              body: opts.note || `依 role 完成覆核：${roleHint}`,
-              resolved: false,
+            sectionValues: {
+              ...state.sectionValues,
+              open: { ...open, oq: (prev + line).trim() },
             },
-            ...state.comments,
-          ],
-        };
-      }
+          };
+        } else if (opts.task === "review" || opts.task === "approve") {
+          state = {
+            ...state,
+            comments: [
+              {
+                id: `c${Date.now()}`,
+                author: agent.name,
+                authorId: agent.id,
+                avatar: agent.avatar,
+                time: "剛剛",
+                anchor: "§ Agent 進場",
+                body: result.slice(0, 1200),
+                resolved: false,
+              },
+              ...state.comments,
+            ],
+          };
+        }
 
-      state = {
-        ...state,
-        agentJobs: state.agentJobs.map((j) =>
-          j.id === jobId
-            ? {
-                ...j,
-                status: "done" as const,
-                result,
-                finishedAt: new Date().toISOString(),
-              }
-            : j,
-        ),
-      };
-      emit();
-    }, 1600);
+        mark("done", result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        mark("failed", `進場失敗：${msg}`);
+      }
+    })();
 
     return { ok: true, jobId };
   },

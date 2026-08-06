@@ -147,6 +147,7 @@ profile: A
 - **Problem Statement：** ${(problem.problem || summary.why || "（待補）").replace(/\n/g, " ").slice(0, 400)}
 - **Proposed Solution：** ${(summary.what || "（待補）").replace(/\n/g, " ")}
 - **Audience：** ${(summary.who || "（待補）").replace(/\n/g, " ")}
+- **Tech Direction：** ${(summary.tech || "（待補技術線選型）").replace(/\n/g, " ").slice(0, 500)}
 
 ## Non-Goals
 `;

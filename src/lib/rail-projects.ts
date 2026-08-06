@@ -150,6 +150,8 @@ export function renderRailProjects(host?: HTMLElement | null) {
 
   block.querySelectorAll<HTMLButtonElement>("[data-open-id]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      // 編輯名稱中不要切專案
+      if (btn.closest(".rail-proj-card")?.classList.contains("is-renaming")) return;
       const id = btn.dataset.openId;
       if (!id) return;
       store.setActiveProject(id);
@@ -173,21 +175,124 @@ export function renderRailProjects(host?: HTMLElement | null) {
       e.stopPropagation();
       const id = btn.dataset.renameId;
       if (!id) return;
-      const p = store.get().projects.find((x) => x.id === id);
-      if (!p) return;
-      const current = projectDisplayName(p);
-      const next = window.prompt(
-        `自訂專案名稱（留空則顯示${p.sourceFolder ? "資料夾名" : "標題"}：${p.sourceFolder || p.title}）`,
-        p.customName || current,
-      );
-      if (next === null) return;
-      const r = store.renameProject(id, next);
-      if (!r.ok) toast(r.reason ?? "重新命名失敗");
-      else toast(next.trim() ? `已命名為「${next.trim()}」` : "已清除自訂名稱");
+      beginInlineRename(block, id);
     });
   });
 
   bumpCounts();
+}
+
+/**
+ * 頁內重新命名（WKWebView 不支援 window.prompt）
+ */
+function beginInlineRename(block: HTMLElement, id: string) {
+  const p = store.get().projects.find((x) => x.id === id);
+  if (!p) return;
+
+  const card = Array.from(block.querySelectorAll<HTMLElement>(".rail-proj-card")).find(
+    (el) => el.dataset.projectId === id,
+  );
+  if (!card) return;
+
+  // 已在編輯：聚焦
+  const existing = card.querySelector<HTMLInputElement>(".rail-proj-rename-input");
+  if (existing) {
+    existing.focus();
+    existing.select();
+    return;
+  }
+
+  const fallback = (p.sourceFolder || p.title || "").trim() || "專案";
+  const current = (p.customName || projectDisplayName(p)).trim();
+  card.classList.add("is-renaming");
+
+  const main = card.querySelector(".rail-proj-card-main");
+  const renameBtn = card.querySelector(".rail-proj-card-rename");
+  if (main) (main as HTMLElement).style.display = "none";
+  if (renameBtn) (renameBtn as HTMLElement).style.display = "none";
+
+  const form = document.createElement("div");
+  form.className = "rail-proj-rename-form";
+  form.innerHTML = `
+    <label class="rail-proj-rename-label">自訂名稱
+      <span class="rail-proj-rename-hint">留空＝${escapeHtml(fallback)}</span>
+    </label>
+    <input type="text" class="rail-proj-rename-input" maxlength="80" value="${escapeHtml(current)}" />
+    <div class="rail-proj-rename-actions">
+      <button type="button" class="btn btn-sm btn-primary rail-proj-rename-save">儲存</button>
+      <button type="button" class="btn btn-sm btn-ghost rail-proj-rename-cancel">取消</button>
+    </div>
+  `;
+  card.appendChild(form);
+
+  const input = form.querySelector<HTMLInputElement>(".rail-proj-rename-input")!;
+  const save = () => {
+    const next = input.value;
+    const r = store.renameProject(id, next);
+    if (!r.ok) {
+      toast(r.reason ?? "重新命名失敗");
+      return;
+    }
+    // 必須先解除 is-renaming 再重繪：subscribe 會跳過「編輯中」卡片
+    card.classList.remove("is-renaming");
+    form.remove();
+    renderRailProjects();
+    // 側欄「目前」區塊也同步新名稱
+    const active = store.get().activeProjectId === id;
+    if (active) {
+      const p2 = store.get().projects.find((x) => x.id === id);
+      if (p2) {
+        const name = projectDisplayName(p2);
+        const ctx = document.querySelector(".rail-context-project");
+        if (ctx) ctx.textContent = name;
+      }
+    }
+    toast(next.trim() ? `已命名為「${next.trim()}」` : "已清除自訂名稱");
+  };
+  const cancel = () => {
+    card.classList.remove("is-renaming");
+    renderRailProjects();
+  };
+
+  form.querySelector(".rail-proj-rename-save")?.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    save();
+  });
+  form.querySelector(".rail-proj-rename-cancel")?.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    cancel();
+  });
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      save();
+    } else if (ev.key === "Escape") {
+      ev.preventDefault();
+      cancel();
+    }
+  });
+  input.addEventListener("click", (ev) => ev.stopPropagation());
+
+  // 下一個 frame 聚焦（WKWebView 較穩）
+  requestAnimationFrame(() => {
+    input.focus();
+    input.select();
+  });
+}
+
+/** 供專案列表等外部觸發側欄頁內重新命名 */
+export function startProjectRename(id: string) {
+  renderRailProjects();
+  requestAnimationFrame(() => {
+    const block = document.getElementById("rail-projects-block");
+    if (!block) {
+      toast("側欄專案清單尚未就緒");
+      return;
+    }
+    beginInlineRename(block, id);
+  });
 }
 
 let bound = false;
@@ -196,5 +301,9 @@ export function bindRailProjects() {
   renderRailProjects();
   if (bound) return;
   bound = true;
-  store.subscribe(() => renderRailProjects());
+  store.subscribe(() => {
+    // 重新命名編輯中不要洗掉表單
+    if (document.querySelector(".rail-proj-card.is-renaming")) return;
+    renderRailProjects();
+  });
 }

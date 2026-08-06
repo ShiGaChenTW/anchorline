@@ -3,8 +3,8 @@ import type { ThemeId } from "../data/types";
 const KEY = "specforge:theme";
 
 const THEMES: Record<ThemeId, { label: string; scheme: "dark" | "light"; bg: string }> = {
-  kami: { label: "kami · 紙", scheme: "light", bg: "#f5f4ed" },
-  github: { label: "GitHub · Dark", scheme: "dark", bg: "#0d1117" },
+  kami: { label: "LIGHT", scheme: "light", bg: "#f5f4ed" },
+  github: { label: "DARK", scheme: "dark", bg: "#0d1117" },
 };
 
 /** 舊主題遷移：warp→github、claude→kami */

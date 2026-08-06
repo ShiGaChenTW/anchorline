@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Monitor dashboard icon">
+  <!-- Concept 3: Radar monitor — 開發監控台 -->
+  <defs>
+    <linearGradient id="c3-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#161412"/>
+      <stop offset="100%" stop-color="#201e1b"/>
+    </linearGradient>
+  </defs>
+  <g id="icon">
+    <rect width="512" height="512" rx="96" fill="url(#c3-bg)"/>
+    <!-- outer ring -->
+    <circle cx="256" cy="248" r="132" fill="none" stroke="#3a3630" stroke-width="18"/>
+    <circle cx="256" cy="248" r="88" fill="none" stroke="#3a3630" stroke-width="12"/>
+    <circle cx="256" cy="248" r="44" fill="none" stroke="#3a3630" stroke-width="10"/>
+    <!-- sweep wedge -->
+    <path d="M256 248 L256 116 A132 132 0 0 1 372 300 Z" fill="#f59e0b" opacity="0.28"/>
+    <!-- needle -->
+    <line x1="256" y1="248" x2="340" y2="180" stroke="#f59e0b" stroke-width="18" stroke-linecap="round"/>
+    <circle cx="256" cy="248" r="22" fill="#f59e0b"/>
+    <circle cx="256" cy="248" r="10" fill="#0f0e0c"/>
+    <!-- status dots -->
+    <circle cx="168" cy="400" r="16" fill="#16a34a"/>
+    <circle cx="224" cy="400" r="16" fill="#f59e0b"/>
+    <circle cx="280" cy="400" r="16" fill="#2f81f7"/>
+    <rect x="320" y="388" width="72" height="24" rx="12" fill="#3a3630"/>
+  </g>
+</svg>

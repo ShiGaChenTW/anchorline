@@ -14,6 +14,10 @@ export function toast(msg: string, ms = 2200) {
   (el as HTMLElement & { _t?: number })._t = window.setTimeout(() => {
     el?.classList.remove("show");
   }, ms);
+  // 底部狀態列同步短暫訊息（與 toast 並行）
+  import("./status-bar")
+    .then((m) => m.setStatusMessage(msg, Math.max(ms, 2800)))
+    .catch(() => {});
 }
 
 export function escapeHtml(s: string): string {

@@ -255,7 +255,7 @@ html[data-theme="github"] body {
 
 .app {
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   height: 100vh;
   height: 100dvh;
   width: 100%;
@@ -265,6 +265,134 @@ html[data-theme="github"] body {
   border: 0;
   box-shadow: none;
   overflow: hidden;
+}
+.app:has(.mobile-bar) {
+  grid-template-rows: minmax(0, 1fr) auto auto;
+}
+
+/* 底部狀態列 */
+.app-status-bar {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 12px;
+  min-height: 28px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in oklab, var(--surface) 92%, var(--bg));
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--fg-2);
+  z-index: 25;
+  user-select: none;
+}
+.app-status-left,
+.app-status-center,
+.app-status-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.app-status-center {
+  justify-content: center;
+}
+.app-status-right {
+  justify-content: flex-end;
+}
+.app-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--meta);
+}
+.app-status-dot--ok { background: var(--success); }
+.app-status-dot--review { background: var(--warn); }
+.app-status-dot--warn { background: var(--danger); }
+.app-status-dot--draft { background: var(--meta); }
+.app-status-project {
+  font-weight: 650;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 28ch;
+}
+.app-status-sep {
+  color: var(--meta);
+  opacity: 0.7;
+}
+.app-status-page {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.app-status-pill {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 650;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.app-status-pill--review {
+  color: color-mix(in oklab, var(--warn) 55%, var(--fg));
+  border-color: color-mix(in oklab, var(--warn) 35%, var(--border));
+  background: color-mix(in oklab, var(--warn) 10%, transparent);
+}
+.app-status-pill--ok {
+  color: var(--success);
+  border-color: color-mix(in oklab, var(--success) 35%, var(--border));
+  background: color-mix(in oklab, var(--success) 10%, transparent);
+}
+.app-status-pill--warn {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 35%, var(--border));
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
+}
+.app-status-gate,
+.app-status-ephemeral {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.app-status-gate--ok { color: var(--success); font-weight: 600; }
+.app-status-gate--warn { color: color-mix(in oklab, var(--warn) 70%, var(--fg)); font-weight: 600; }
+.app-status-ephemeral {
+  color: var(--accent);
+  font-weight: 650;
+}
+.app-status-user {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  max-width: 22ch;
+}
+.app-status-clock {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--meta);
+  font-variant-numeric: tabular-nums;
+}
+html.adhd-calm .app-status-bar {
+  min-height: 30px;
+  padding: 5px 14px;
+  font-size: 12px;
+}
+@media (max-width: 900px) {
+  .app-status-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 5px 10px;
+  }
+  .app-status-center {
+    display: none;
+  }
+  .app-status-page { display: none; }
+  .app-status-user { max-width: 14ch; }
 }
 
 /* 頁內 titlebar 已移除；系統視窗標題由原生 app 負責 */
@@ -1953,7 +2081,7 @@ html, body {
     display: none;
   }
   .app {
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto auto;
   }
   .mobile-bar { display: grid; }
   .toolbar { padding: 10px 12px; }
@@ -2101,6 +2229,161 @@ html.reduce-motion .attn-expand-enter {
 .adhd-focus-strip {
   transition: background var(--motion-fast) var(--ease-standard),
     border-color var(--motion-fast) var(--ease-standard);
+}
+
+/* 全站頁面 chrome：標題 + 下一步 + 動作（對齊編輯工作台） */
+.toolbar.adhd-page-chrome,
+.toolbar.adhd-editor-chrome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 16px 12px;
+  border-bottom: 1px solid color-mix(in oklab, var(--accent) 16%, var(--border));
+  background:
+    linear-gradient(
+      105deg,
+      color-mix(in oklab, var(--accent) 9%, var(--surface)) 0%,
+      color-mix(in oklab, var(--accent) 3%, var(--surface)) 48%,
+      var(--surface) 100%
+    );
+}
+.adhd-page-chrome-main,
+.adhd-editor-chrome-main {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.adhd-page-chrome-title h1,
+.adhd-editor-chrome-title h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+.adhd-page-chrome-title .sub,
+.adhd-editor-chrome-title .sub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--meta);
+  font-family: var(--font-body) !important;
+}
+.adhd-toolbar-focus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in oklab, var(--accent) 22%, var(--border));
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg));
+  max-width: 56ch;
+}
+.adhd-toolbar-focus-kicker {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.adhd-toolbar-focus-detail {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--fg-2);
+  line-height: 1.4;
+}
+.adhd-page-chrome-actions,
+.adhd-editor-chrome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 1 auto;
+}
+/* 標題列按鈕統一尺寸（預覽審閱 / 送出審閱 / 更多 等） */
+.adhd-page-chrome-actions > .btn,
+.adhd-page-chrome-actions > a.btn,
+.adhd-page-chrome-actions .adhd-more-toggle,
+.adhd-editor-chrome-actions > .btn,
+.adhd-editor-chrome-actions > a.btn,
+.adhd-editor-chrome-actions .adhd-more-toggle {
+  box-sizing: border-box;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: var(--btn-radius, 8px);
+}
+.adhd-page-chrome-actions > .btn.btn-sm,
+.adhd-page-chrome-actions > a.btn.btn-sm,
+.adhd-editor-chrome-actions > .btn.btn-sm,
+.adhd-editor-chrome-actions > a.btn.btn-sm {
+  min-height: 36px;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  border-radius: var(--btn-radius, 8px);
+}
+html.adhd-calm .adhd-page-chrome-actions .btn-primary,
+html.adhd-calm .adhd-page-chrome-actions .btn-accent,
+html.adhd-calm .adhd-editor-chrome-actions .btn-primary,
+html.adhd-calm .adhd-editor-chrome-actions .btn-accent,
+html.adhd-calm .adhd-toolbar .adhd-page-chrome-actions .btn-primary,
+html.adhd-calm .adhd-toolbar .adhd-page-chrome-actions .btn-accent,
+html.adhd-calm .adhd-toolbar .adhd-editor-chrome-actions .btn-primary,
+html.adhd-calm .adhd-toolbar .adhd-editor-chrome-actions .btn-accent {
+  min-height: 36px;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+.adhd-page-chrome-actions .adhd-more,
+.adhd-editor-chrome-actions .adhd-more {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+}
+.adhd-page-chrome-actions .adhd-toolbar-cta,
+.adhd-editor-chrome-actions .adhd-toolbar-cta {
+  order: -1;
+}
+html.adhd-calm .toolbar.adhd-page-chrome,
+html.adhd-calm .toolbar.adhd-editor-chrome {
+  padding: 14px var(--adhd-space, 16px);
+}
+html.adhd-calm .adhd-page-chrome-title h1,
+html.adhd-calm .adhd-editor-chrome-title h1 {
+  font-size: 1.2rem;
+}
+html.adhd-calm .adhd-toolbar-focus-detail {
+  font-size: 13px;
+}
+/* 已整合 chrome 的頁面：隱藏舊的獨立焦點條（若殘留） */
+.main:has(.toolbar.adhd-page-chrome) > #adhd-focus-strip,
+.main:has(.toolbar.adhd-editor-chrome) > #adhd-focus-strip {
+  display: none !important;
+}
+@media (max-width: 720px) {
+  .toolbar.adhd-page-chrome,
+  .toolbar.adhd-editor-chrome {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .adhd-page-chrome-actions,
+  .adhd-editor-chrome-actions {
+    justify-content: flex-start;
+  }
+  .adhd-toolbar-focus {
+    max-width: none;
+  }
 }
 .rail-context-project {
   transition: opacity var(--motion-fast) var(--ease-standard);
@@ -2855,6 +3138,62 @@ a.is-disabled {
   background: var(--inset);
   color: var(--accent);
 }
+/* 頁內重新命名（不依賴 window.prompt） */
+.rail-proj-card.is-renaming {
+  grid-template-columns: 1fr;
+  padding: 8px;
+  gap: 0;
+}
+.rail-proj-rename-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 2px 4px;
+}
+.rail-proj-rename-label {
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+}
+.rail-proj-rename-hint {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--meta);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.rail-proj-rename-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--border));
+  background: var(--bg);
+  color: var(--fg);
+  outline: none;
+}
+.rail-proj-rename-input:focus {
+  box-shadow: var(--focus-ring);
+}
+.rail-proj-rename-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
 .rail-proj-tag {
   flex-shrink: 0;
   padding: 0 5px;
@@ -3398,11 +3737,19 @@ html.adhd-calm .adhd-toolbar {
   gap: 10px;
   padding: 12px 18px;
 }
+/* 主路徑按鈕加權重；尺寸由 chrome-actions 統一，避免比「更多」高大一截 */
 html.adhd-calm .adhd-toolbar .btn-primary,
 html.adhd-calm .adhd-toolbar .btn-accent {
   font-weight: 600;
-  padding: 8px 16px;
-  min-height: 40px;
+}
+html.adhd-calm .adhd-toolbar > .btn-primary,
+html.adhd-calm .adhd-toolbar > .btn-accent,
+html.adhd-calm .adhd-toolbar > a.btn-primary,
+html.adhd-calm .adhd-toolbar > a.btn-accent {
+  padding: 0 14px;
+  min-height: 36px;
+  height: 36px;
+  font-size: 13px;
 }
 html.adhd-calm .search {
   min-width: 140px;
@@ -3415,6 +3762,7 @@ html.adhd-calm .search {
 }
 .adhd-more-toggle {
   color: var(--muted) !important;
+  /* 尺寸跟 chrome-actions 其他按鈕一致；此處只管色彩 */
 }
 .adhd-more-panel {
   position: absolute;
@@ -3576,8 +3924,16 @@ html.adhd-calm .adhd-nav-primary.active {
   margin: 8px 6px 4px;
   border-top: 1px solid var(--border-muted);
   padding-top: 6px;
+  border-radius: 8px;
 }
-.adhd-nav-more > summary {
+.adhd-nav-more.has-active {
+  border: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border));
+  border-top: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border));
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
+  padding: 4px;
+}
+.adhd-nav-more > summary,
+.adhd-nav-more-summary {
   list-style: none;
   cursor: pointer;
   padding: 8px 10px;
@@ -3586,17 +3942,37 @@ html.adhd-calm .adhd-nav-primary.active {
   color: var(--meta);
   border-radius: var(--radius-sm);
   user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .adhd-nav-more > summary::-webkit-details-marker { display: none; }
-.adhd-nav-more > summary:hover {
+.adhd-nav-more > summary:hover,
+.adhd-nav-more-summary:hover {
   background: var(--inset);
   color: var(--fg-2);
 }
-.adhd-nav-more > summary::before {
-  content: "▸ ";
+.adhd-nav-more > summary::before,
+.adhd-nav-more-summary::before {
+  content: "▸";
+  font-size: 10px;
+  flex-shrink: 0;
+  color: var(--meta);
 }
-.adhd-nav-more[open] > summary::before {
-  content: "▾ ";
+.adhd-nav-more[open] > summary::before,
+.adhd-nav-more[open] > .adhd-nav-more-summary::before {
+  content: "▾";
+}
+.adhd-nav-more.has-active > summary,
+.adhd-nav-more.has-active > .adhd-nav-more-summary {
+  color: var(--fg);
+  font-weight: 700;
+}
+.adhd-nav-more-summary-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .adhd-nav-more-body {
   display: flex;
@@ -3608,6 +3984,14 @@ html.adhd-calm .adhd-nav-primary.active {
   font-size: 12.5px;
   padding: 7px 10px;
   color: var(--muted);
+  border-radius: 8px;
+}
+.adhd-nav-more-body .nav-item.active,
+.adhd-nav-more-body .nav-item[aria-current="page"] {
+  background: color-mix(in oklab, var(--accent) 14%, var(--bg));
+  color: var(--fg);
+  font-weight: 650;
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 .adhd-nav-more-body .nav-label {
   margin-top: 6px;
@@ -4811,6 +5195,64 @@ html.adhd-calm .adhd-editor-hint {
   color: var(--muted);
   line-height: 1.4;
 }
+.adhd-ai-status {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--fg-2);
+  background: var(--inset);
+  border: 1px solid var(--border-muted, var(--border));
+}
+.adhd-ai-status.is-ready {
+  border-color: color-mix(in oklab, var(--success) 30%, var(--border));
+  background: color-mix(in oklab, var(--success) 8%, transparent);
+}
+.adhd-ai-status.is-blocked {
+  border-color: color-mix(in oklab, var(--warn) 35%, var(--border));
+  background: color-mix(in oklab, var(--warn) 10%, transparent);
+}
+.adhd-ai-ok { color: var(--success); font-weight: 700; }
+.adhd-ai-bad { color: var(--danger); font-weight: 700; }
+.adhd-ai-busy { color: var(--accent); }
+.adhd-ai-err {
+  padding: 8px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--danger) 30%, var(--border));
+  color: var(--fg);
+  font-size: 12px;
+}
+.adhd-ai-ok-msg {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--success) 10%, transparent);
+  color: var(--fg-2);
+}
+.adhd-ai-critique {
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--inset);
+  border: 1px solid var(--border-muted, var(--border));
+}
+.adhd-ai-critique .adhd-ai-score {
+  margin: 4px 0 6px;
+  font-size: 11px;
+  color: var(--meta);
+}
+.adhd-ai-critique ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.adhd-ai-critique li.w { color: color-mix(in oklab, var(--warn) 70%, var(--fg)); }
+.adhd-ai-critique li.s { color: var(--accent); }
+.adhd-ai-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.adhd-ai-hint a { color: var(--accent); }
 
 /* 編輯欄本體（MarkaMD）維持，只略降周圍噪音 */
 html.adhd-calm .editor-body > .mdv-banner { display: none; }

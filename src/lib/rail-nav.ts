@@ -127,6 +127,12 @@ function syncActive(nav: Element, active: RailPage) {
     if (on) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   }
+  // 目前頁在「其他功能」內時展開並標示
+  import("./adhd-ui")
+    .then((m) => m.expandOtherNavIfNeeded(nav))
+    .catch(() => {
+      /* ignore */
+    });
 }
 
 /** 更新側欄 count（專案數／範本數／待審） */
