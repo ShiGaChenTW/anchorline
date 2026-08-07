@@ -125,16 +125,39 @@
   }
   .hint.ok { color: var(--success); }
   .hint.bad { color: var(--danger, #f85149); }
-  /* 在彈窗 iframe 裡：只留設定內容，側欄與標題列都是外層已經有的東西 */
+  /* 在彈窗 iframe 裡：只留「左分類 + 右分組卡」。
+     標題列、側欄、狀態列、底部條都由外層彈窗提供，留著就是重複一次。 */
   html.in-modal .rail,
   html.in-modal .titlebar,
   html.in-modal .toolbar,
   html.in-modal .statusbar,
-  html.in-modal .app-status-bar { display: none !important; }
-  html.in-modal .shell { grid-template-columns: 1fr !important; }
-  html.in-modal #set-pane { padding: 16px 18px 24px; }
-  html.in-modal #set-pane .settings-section { padding: 16px 18px; margin-bottom: 14px; }
-  html.in-modal .set-rail { padding: 8px; }
+  html.in-modal .app-status-bar,
+  html.in-modal .resize-handle,
+  html.in-modal .panel-expand-strip,
+  html.in-modal .set-foot { display: none !important; }
+  /* 側欄與它的拖曳把手都收掉了，grid 也要跟著收成單欄單列，
+     否則把手留下的那一列會在標題下方留一塊 85px 的空白。 */
+  html.in-modal .shell {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr !important;
+  }
+  html.in-modal .set-shell { grid-template-columns: 236px minmax(0, 1fr) !important; }
+  html.in-modal .set-rail { padding: 20px 16px; gap: 4px; }
+  /* 分類是這個視窗的主導覽，字級要撐得住 */
+  html.in-modal .set-cat { padding: 12px 16px; font-size: 15px; border-radius: 9px; }
+  html.in-modal .set-cat.on {
+    background: color-mix(in oklab, var(--accent) 26%, transparent);
+    font-weight: 600;
+  }
+  html.in-modal #set-pane { padding: 26px 30px 34px; }
+  html.in-modal #set-pane .settings-section {
+    max-width: none;
+    padding: 22px 24px;
+    margin-bottom: 18px;
+    border-radius: 12px;
+  }
+  html.in-modal #set-pane .settings-section h2 { font-size: 16px; margin-bottom: 8px; }
+  html.in-modal #set-pane .settings-section > .sub { font-size: 13.5px; margin-bottom: 20px; }
   .actions-row {
     display: flex;
     gap: 12px;
