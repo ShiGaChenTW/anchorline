@@ -101,20 +101,21 @@ if (!requireAuth()) {
 
     return `<section class="d-hero tone-${head.tone}">
       <div class="d-ident">
+        <p class="d-eyebrow">專案</p>
         <input
           type="text"
           id="d-name"
           class="d-ident-name"
           value="${escapeHtml(name)}"
           aria-label="專案名稱"
-          placeholder="專案名稱"
+          placeholder="未命名專案"
         />
         <textarea
           id="d-desc"
           class="d-ident-desc"
-          rows="2"
+          rows="1"
           aria-label="專案介紹"
-          placeholder="一句話說明這個專案在做什麼（點這裡就能寫）"
+          placeholder="一句話說明這個專案在做什麼"
         >${escapeHtml(desc)}</textarea>
       </div>
 
@@ -437,6 +438,13 @@ if (!requireAuth()) {
     const descEl = document.getElementById("d-desc") as HTMLTextAreaElement | null;
     if (descEl && descEl.dataset.bound !== "1") {
       descEl.dataset.bound = "1";
+      // 依內容長高，才不會在沒寫東西時留一塊固定兩行的空白
+      const autosize = () => {
+        descEl.style.height = "auto";
+        descEl.style.height = `${descEl.scrollHeight}px`;
+      };
+      autosize();
+      descEl.addEventListener("input", autosize);
       descEl.addEventListener("blur", () => {
         if (descEl.value.trim() === (p.description ?? "")) return;
         store.setProjectDescription(p.id, descEl.value);
