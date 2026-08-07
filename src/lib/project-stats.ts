@@ -18,6 +18,14 @@ export type GitStats = {
   behind: number;
   tag: string;
   commitCount: number;
+  /** 最近 40 筆；refs 來自 %D，含 "HEAD -> main" 與 "tag: v1.2.0" */
+  commits?: { hash: string; subject: string; at: string; author: string; refs: string }[];
+  /** 依建立時間新到舊 */
+  tags?: { name: string; hash: string; at: string }[];
+  /** git worktree list --porcelain；第一筆是主工作區 */
+  worktrees?: { path: string; head?: string; branch?: string }[];
+  /** 本地分支，依最後提交時間新到舊；current="1" 是目前所在 */
+  branches?: { name: string; at: string; current: string }[];
 };
 
 export type ProjectStats = {

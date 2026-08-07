@@ -6502,3 +6502,100 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .d-reserved-row .ask-input { flex: 1; }
 
 .d-measured { margin: 20px 0 0; font-size: 11.5px; color: var(--muted); }
+
+/* ── 頂列：版本控制 + 版號/commit，兩張等高 ── */
+.d-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+.d-top .d-hero { margin-bottom: 0; }
+/* d-tall 與 hero 同高：兩者都被 grid 拉滿，內容超出就在卡片內捲 */
+.d-card.d-tall { display: flex; flex-direction: column; min-height: 0; }
+@media (max-width: 1100px) { .d-top { grid-template-columns: 1fr; } }
+
+/* ── 版號列表：目前版本要一眼認出來 ── */
+.d-tags { list-style: none; margin: 0 0 4px; padding: 0; display: grid; gap: 4px; }
+.d-tags li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--fg-2);
+}
+/* 目前版本：底色 + 左緣 2px + 粗體。三個訊號疊起來才不用比對雜湊 */
+.d-tags li.is-current {
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+  color: var(--fg);
+}
+.d-tag-name { font-weight: 600; }
+.d-tags li.is-current .d-tag-name { font-size: 14px; }
+.d-tag-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 20%, transparent);
+}
+.d-tag-hash { font-size: 11.5px; color: var(--muted); }
+.d-tag-at { margin-left: auto; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ── 提交紀錄：卡片內捲，不讓卡片自己長高 ── */
+.d-commits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.d-commits li {
+  display: grid;
+  grid-template-columns: 10px auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12.5px;
+  color: var(--fg-2);
+}
+.d-commit-rail {
+  width: 5px; height: 5px; border-radius: 50%;
+  align-self: center;
+  background: var(--border);
+}
+.d-commits li.is-head .d-commit-rail { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent); }
+.d-commits li.is-head { color: var(--fg); }
+.d-commit-hash { font-size: 11.5px; color: var(--muted); }
+.d-commit-subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-commit-flag,
+.d-commit-tag {
+  padding: 0 5px; border-radius: 4px; font-size: 10px; font-weight: 600;
+  color: var(--accent); background: color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.d-commit-tag { color: var(--success); background: color-mix(in oklab, var(--success) 18%, transparent); }
+.d-commit-at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+/* ── 工作區狀態 ── */
+.d-facts--stack { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding-top: 0; border-top: 0; margin-bottom: 4px; }
+.d-kind { margin-left: 6px; font-size: 11px; color: var(--muted); }
+.d-rows--plain li { grid-template-columns: minmax(0, 1fr) auto auto; }
+.d-rows--plain li.is-primary { color: var(--fg); }
+.d-rows--plain li.is-primary .d-rows-label { font-weight: 600; }
+
+/* ── 檔案樹卡片：沿用編輯台那份樹，在卡片內捲 ── */
+.d-tree { overflow: auto; flex: 1; min-height: 0; margin: -4px -8px 0; }
+.d-tree .ft-row { font-size: 12px; }
+.d-card { display: flex; flex-direction: column; min-height: 0; }
+/* HEAD 那列多了徽章，日期欄被擠到換行成三段。日期永不折行。 */
+.d-commit-at { white-space: nowrap; }
+.d-commits li { grid-template-columns: 10px auto minmax(0, 1fr) auto auto; }
+.d-commit-flag, .d-commit-tag { white-space: nowrap; }
+/* hero 被拉高時內容靠上，不要垂直置中留一大片空 */
+.d-hero { display: flex; flex-direction: column; }
+.d-hero .d-facts { margin-top: auto; }

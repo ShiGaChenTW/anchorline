@@ -12,6 +12,7 @@
 import { store } from "../data/store";
 import { projectDisplayName, type Project } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
+import { buildFileTree, renderFileTreeHtml } from "../lib/file-tree";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { askForProjectFolder } from "../lib/project-folder";
 import { syncRailContext } from "../lib/rail-projects";
@@ -166,23 +167,153 @@ if (!requireAuth()) {
     </section>`;
   }
 
-  function cardRelease(s: ProjectStats): string {
+  /**
+   * 版號與 commit —— 目前版本要一眼認出來。
+   * ADHD：清單裡「我在哪」如果要靠比對雜湊字串才找得到，等於沒標。
+   */
+  function cardHistory(s: ProjectStats): string {
     const g = s.git;
-    const tag = g?.tag || "";
-    return `<section class="d-card">
-      <p class="d-eyebrow">版號與 Release</p>
-      <p class="d-figure">${tag ? escapeHtml(tag) : "無 tag"}</p>
+    if (!g) {
+      return `<section class="d-card d-tall">
+        <p class="d-eyebrow">版號與 commit</p>
+        <p class="d-figure">不是 git 專案</p>
+        <p class="d-figure-sub">起了版控之後這裡會列出版號與提交紀錄。</p>
+      </section>`;
+    }
+
+    const tags = g.tags ?? [];
+    const commits = g.commits ?? [];
+    const current = tags[0]?.name || "";
+    /** tag 掛在哪個 commit 上，畫列表時要標出來 */
+    const tagByHash = new Map(tags.map((t) => [t.hash, t.name]));
+
+    return `<section class="d-card d-tall">
+      <p class="d-eyebrow">版號與 commit</p>
+      <p class="d-figure">${escapeHtml(current || "尚無版號")}</p>
       <p class="d-figure-sub">${
-        tag ? `HEAD ${escapeHtml(g?.head || "—")}` : "還沒發過版"
-      }　累計 ${g?.commitCount ?? "—"} 個 commit</p>
-      <div class="d-reserved">
-        <span class="d-reserved-tag">尚未實作</span>
-        <p>取號：先佔下一個版號，避免兩邊同時發版撞號。目前只有介面骨架。</p>
-        <div class="d-reserved-row">
-          <input type="text" class="ask-input" id="dash-next-ver" placeholder="v1.2.0" disabled />
-          <button type="button" class="btn btn-sm" id="dash-take-number" disabled>取號</button>
-        </div>
-      </div>
+        current
+          ? `目前版本　共 ${tags.length} 個 tag　${g.commitCount} 個 commit`
+          : `還沒發過版　${g.commitCount} 個 commit`
+      }</p>
+
+      ${
+        tags.length
+          ? `<ul class="d-tags">${tags
+              .slice(0, 6)
+              .map(
+                (t, i) =>
+                  `<li class="${i === 0 ? "is-current" : ""}">
+                     <span class="d-tag-name">${escapeHtml(t.name)}</span>
+                     ${i === 0 ? `<span class="d-tag-badge">目前版本</span>` : ""}
+                     <span class="d-tag-hash mono">${escapeHtml(t.hash)}</span>
+                     <span class="d-tag-at">${escapeHtml(t.at.slice(0, 10))}</span>
+                   </li>`,
+              )
+              .join("")}</ul>`
+          : ""
+      }
+
+      <p class="d-sub-h">提交紀錄</p>
+      <ol class="d-commits">${commits
+        .map((c) => {
+          const isHead = /\bHEAD\b/.test(c.refs);
+          const tagOnIt = tagByHash.get(c.hash);
+          return `<li class="${isHead ? "is-head" : ""}">
+            <span class="d-commit-rail" aria-hidden="true"></span>
+            <span class="d-commit-hash mono">${escapeHtml(c.hash)}</span>
+            <span class="d-commit-subject">${escapeHtml(c.subject || "（無訊息）")}</span>
+            ${isHead ? `<span class="d-commit-flag">HEAD</span>` : ""}
+            ${tagOnIt ? `<span class="d-commit-tag">${escapeHtml(tagOnIt)}</span>` : ""}
+            <span class="d-commit-at">${escapeHtml((c.at || "").slice(0, 10))}</span>
+          </li>`;
+        })
+        .join("")}</ol>
+      ${commits.length ? "" : `<p class="d-figure-sub">讀不到提交紀錄。</p>`}
+    </section>`;
+  }
+
+  /** agent 家族 → 顯示名。authorAgentFamily 是既有欄位。 */
+  const AGENT_LABEL: Record<string, string> = {
+    claude: "Claude",
+    codex: "Codex",
+    grok: "Grok",
+    agy: "Antigravity",
+    gemini: "Gemini",
+  };
+
+  /**
+   * 工作區狀態：worktree、branch、專案階段、由誰起的。
+   * 這四件事的共同問題是「散在四個地方，沒人一起看」。
+   */
+  function cardWorkspace(s: ProjectStats): string {
+    const g = s.git;
+    const p = activeProject();
+    const wts = g?.worktrees ?? [];
+    const brs = g?.branches ?? [];
+    const extra = Math.max(0, wts.length - 1); // 第一筆是主工作區
+
+    const statusLabel =
+      p?.status === "approved"
+        ? "已核准"
+        : p?.status === "review"
+          ? "審閱中"
+          : p?.status === "withdrawn"
+            ? "已抽單"
+            : "草稿";
+    const fam = p?.authorAgentFamily ?? null;
+    const starter = fam ? (AGENT_LABEL[fam] ?? fam) : p?.owner || "—";
+    const starterKind = fam ? "agent" : "人員";
+
+    return `<section class="d-card">
+      <p class="d-eyebrow">工作區狀態</p>
+      <p class="d-figure">${extra ? `${extra} 個平行 worktree` : "只有主工作區"}</p>
+      <p class="d-figure-sub">${brs.length || "—"} 條本地分支　規格狀態：${escapeHtml(statusLabel)}</p>
+
+      <dl class="d-facts d-facts--stack">
+        <div><dt>建立者</dt><dd>${escapeHtml(starter)}<span class="d-kind">${starterKind}</span></dd></div>
+        <div><dt>目前分支</dt><dd class="mono">${escapeHtml(g?.branch || "—")}</dd></div>
+      </dl>
+
+      ${
+        wts.length
+          ? `<p class="d-sub-h">Worktree</p>
+             <ul class="d-rows d-rows--plain">${wts
+               .map((w, i) => {
+                 const name = w.path.split("/").filter(Boolean).pop() || w.path;
+                 return `<li class="${i === 0 ? "is-primary" : ""}">
+                   <span class="d-rows-label">${escapeHtml(name)}${i === 0 ? "<span class='d-tag-badge'>主</span>" : ""}</span>
+                   <span class="d-rows-value mono">${escapeHtml(w.branch || "—")}</span>
+                   <span class="d-rows-sub mono">${escapeHtml(w.head || "")}</span>
+                 </li>`;
+               })
+               .join("")}</ul>`
+          : ""
+      }
+
+      ${
+        brs.length
+          ? `<p class="d-sub-h">分支</p>
+             <ul class="d-rows d-rows--plain">${brs
+               .slice(0, 6)
+               .map(
+                 (b) => `<li class="${b.current ? "is-primary" : ""}">
+                   <span class="d-rows-label">${escapeHtml(b.name)}${b.current ? "<span class='d-tag-badge'>目前</span>" : ""}</span>
+                   <span class="d-rows-sub">${escapeHtml((b.at || "").slice(0, 10))}</span>
+                 </li>`,
+               )
+               .join("")}</ul>`
+          : ""
+      }
+    </section>`;
+  }
+
+  /** 綠框：專案檔案樹。沿用編輯台那份 buildFileTree，不另外做一套。 */
+  function cardTree(): string {
+    const p = activeProject();
+    const tree = p ? buildFileTree(p, store.get().sections) : null;
+    return `<section class="d-card">
+      <p class="d-eyebrow">專案檔案</p>
+      <div class="d-tree">${renderFileTreeHtml(tree, store.get().activeSectionId ?? "")}</div>
     </section>`;
   }
 
@@ -195,10 +326,54 @@ if (!requireAuth()) {
 
   function renderStats(s: ProjectStats) {
     renderState(
-      `${heroGit(s)}
-       <div class="d-grid">${cardStack(s)}${cardSize(s)}${cardRelease(s)}</div>
-       <p class="d-measured">量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")}　<span class="mono">${escapeHtml(s.folderPath)}</span></p>`,
+      `<div class="d-top">${heroGit(s)}${cardHistory(s)}</div>
+       <div class="d-grid">${cardStack(s)}${cardSize(s)}${cardTree()}${cardWorkspace(s)}</div>
+       <p class="d-measured" data-equalize>量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")}　<span class="mono">${escapeHtml(s.folderPath)}</span></p>`,
     );
+  }
+
+  /**
+   * 黃框那排等高：以「技術線」的自然高度 ×1.05 為準，其餘卡片對齊它。
+   * 用量測而非寫死數字 —— 語言類別數、框架數會變，寫死一定會爆或留白。
+   * 內容超出就在卡片內捲，不讓卡片自己長高破壞對齊。
+   */
+  /**
+   * 黃框那排等高：以「技術線」的自然高度 ×1.05 為準。
+   *
+   * 不賭時序 —— 用 ResizeObserver 盯住第一張卡，字體載入、內容變動、
+   * 換欄都會重算。`applying` 旗標擋掉自己改高度造成的回呼迴圈。
+   */
+  let ro: ResizeObserver | null = null;
+  let applying = false;
+
+  function equalizeGrid() {
+    const grid = document.querySelector<HTMLElement>(".d-grid");
+    if (!grid) return;
+    const cards = [...grid.children] as HTMLElement[];
+    if (!cards.length) return;
+
+    applying = true;
+    cards.forEach((c) => (c.style.height = ""));
+    const base = cards[0]!.getBoundingClientRect().height;
+    if (base) {
+      const h = `${Math.round(base * 1.05)}px`;
+      cards.forEach((c) => (c.style.height = h));
+    }
+    // 讓這一輪的 resize 回呼跑完再解鎖
+    requestAnimationFrame(() => (applying = false));
+  }
+
+  /** 每次重繪後重新掛 observer：renderState 會把整個 .d-grid 換掉 */
+  function watchGrid() {
+    ro?.disconnect();
+    const first = document.querySelector<HTMLElement>(".d-grid > *");
+    if (!first) return;
+    ro = new ResizeObserver(() => {
+      if (applying) return;
+      equalizeGrid();
+    });
+    ro.observe(first);
+    equalizeGrid();
   }
 
   async function load(force = false) {
@@ -240,6 +415,7 @@ if (!requireAuth()) {
     const cached = !force && cache.get(path);
     if (cached) {
       renderStats(cached);
+      watchGrid();
       return;
     }
 
@@ -250,6 +426,7 @@ if (!requireAuth()) {
       const s = await requestProjectStats(path);
       cache.set(path, s);
       renderStats(s);
+      watchGrid();
     } catch (e) {
       renderState(
         `<div class="dash-empty"><p>${escapeHtml(e instanceof Error ? e.message : "量測失敗")}</p></div>`,
@@ -259,6 +436,11 @@ if (!requireAuth()) {
       busy = false;
     }
   }
+
+  // 視窗變寬變窄會換欄，等高要重算
+  window.addEventListener("resize", () => {
+    if (!applying) equalizeGrid();
+  });
 
   document.getElementById("btn-refresh-stats")?.addEventListener("click", () => {
     toast("重新量測中…");
