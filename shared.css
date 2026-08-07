@@ -6225,3 +6225,82 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .welcome-dl { border-top: 1px solid var(--border); padding-top: 14px; }
 .welcome-dl dt { flex: 0 0 6.5em; }
 .welcome-modal footer { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   專案顯示方式：列表 / 卡片 / 資料夾
+   原本一列一張寬卡，寬螢幕右半邊整片浪費，4 個專案就要捲。
+   ═══════════════════════════════════════════════════════════════ */
+.view-switch { display: flex; gap: 4px; margin-right: 10px; }
+
+/* ── 列表：一行一個，密度最高 ── */
+.project-board-list.view-list { display: flex; flex-direction: column; gap: 1px; }
+.view-list .project-card {
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  padding: 8px 12px;
+  align-items: center;
+}
+.view-list .project-card-main { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 14px; align-items: center; }
+.view-list .project-card-meta { display: none; }
+.view-list .project-card-progress { margin: 0; }
+.view-list .project-card-title { font-size: 14px; }
+
+/* ── 卡片：網格。寬螢幕一次看到 3–4 個，不用捲 ── */
+.project-board-list.view-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+.view-card .project-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  height: 100%;
+}
+.view-card .project-card-actions { justify-content: flex-start; flex-wrap: wrap; }
+.view-card .project-card-main { flex: 1; }
+
+/* ── 資料夾：依磁碟位置分群 ── */
+.project-board-list.view-folder { display: flex; flex-direction: column; gap: 18px; }
+.folder-group { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.folder-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: var(--inset);
+  border-bottom: 1px solid var(--border);
+}
+/* .ic 本身沒帶尺寸（側欄另外給），這裡不寫死就會撐成 894×894 */
+.folder-group-head .ic { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted); }
+.folder-group-name { font-size: 13.5px; font-weight: 600; color: var(--fg); }
+.folder-group-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.folder-group-path {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55%;
+}
+.folder-group-body { display: flex; flex-direction: column; gap: 1px; }
+.folder-group-body .project-card { border-radius: 0; border: 0; border-top: 1px solid var(--border); padding: 8px 12px; align-items: center; }
+.folder-group-body .project-card:first-child { border-top: 0; }
+.folder-group-body .project-card-meta { display: none; }
+.folder-group-body .project-card-main { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 14px; align-items: center; }
+
+@media (max-width: 900px) {
+  .project-board-list.view-card { grid-template-columns: 1fr; }
+  .view-list .project-card-main,
+  .folder-group-body .project-card-main { grid-template-columns: minmax(0, 1fr); }
+}
