@@ -164,7 +164,43 @@ function valuesFor(s: Section): Record<string, string> {
  */
 let lastTreeSig = "__init__";
 
+/**
+ * 大綱欄的可收合區塊。三塊共用一支：OpenSpec 章節、Task List、專案檔案。
+ * 收合狀態各自記在 localStorage —— 每次開編輯台都要重收一次是懲罰。
+ */
+function initCollapsible(btnId: string, bodyId: string, storageKey: string, label: string) {
+  const btn = document.getElementById(btnId) as HTMLButtonElement | null;
+  const body = document.getElementById(bodyId) as HTMLElement | null;
+  if (!btn || !body) return;
+
+  const apply = (collapsed: boolean) => {
+    body.hidden = collapsed;
+    btn.classList.toggle("is-collapsed", collapsed);
+    btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    btn.title = `${collapsed ? "展開" : "收合"} ${label}`;
+  };
+
+  let collapsed = false;
+  try {
+    collapsed = localStorage.getItem(storageKey) === "1";
+  } catch {
+    /* private mode */
+  }
+  apply(collapsed);
+
+  btn.addEventListener("click", () => {
+    collapsed = !collapsed;
+    apply(collapsed);
+    try {
+      localStorage.setItem(storageKey, collapsed ? "1" : "0");
+    } catch {
+      /* private mode */
+    }
+  });
+}
+
 const FT_COLLAPSE_KEY = "specforge:file-tree-collapsed";
+
 const FT_HEIGHT_KEY = "specforge:file-tree-height";
 
 /**
@@ -1091,6 +1127,8 @@ document.getElementById("editor-body")?.addEventListener(
 // ⌥F 快捷鍵與狀態還原；同步執行，不能靠 rAF（分頁在背景時 rAF 不觸發）
 initFileTreeCollapse();
 initFileTreeResize();
+initCollapsible("btn-openspec-toggle", "openspec-list", "specforge:openspec-collapsed", "OpenSpec 章節");
+initCollapsible("btn-tasklist-toggle", "task-list", "specforge:tasklist-collapsed", "Task List");
 initFocusMode();
 initHyperfocusGuard();
 render();

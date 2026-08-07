@@ -7526,3 +7526,10 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   color: var(--muted);
 }
 .task-empty { margin: 0; padding: 8px 10px; font-size: 12px; color: var(--success); }
+
+/* OpenSpec / Task List 的收合鍵：跟專案檔案同一顆按鈕樣式，
+   差別是狀態掛在按鈕自己身上（專案檔案掛在整個 outline-col）。 */
+.ft-collapse.is-collapsed span { transform: rotate(90deg); }
+/* 計數靠右、收合鍵在最右 */
+.os-bar { justify-content: flex-start; }
+.os-bar .mono { margin-left: auto; }
