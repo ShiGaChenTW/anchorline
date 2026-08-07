@@ -3055,8 +3055,11 @@ a.is-disabled {
 }
 /* 專案卡片：兩行（名稱 + 最後更新） */
 .rail-proj-card {
+  /* 單欄。改名鍵改成絕對定位疊在右下角 —— 它以前是 grid 的第二欄，
+     每張卡永遠被吃掉 38px，專案名剩不到 100px 一定卡字。 */
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px 4px;
   align-items: stretch;
   border: 1px solid var(--border);
@@ -3118,8 +3121,11 @@ a.is-disabled {
   line-height: 1.25;
 }
 .rail-proj-card-sub {
-  display: block;
-  padding-left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* 右邊留給改名鍵，避免 hover 時蓋到時間字 */
+  padding: 0 28px 0 14px;
   font-size: 11px;
   line-height: 1.3;
   color: var(--meta);
@@ -3129,17 +3135,18 @@ a.is-disabled {
   white-space: nowrap;
 }
 .rail-proj-card-rename {
-  align-self: start;
-  margin: 6px 6px 0 0;
-  width: 26px;
-  height: 26px;
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--meta);
   font-size: 12px;
   cursor: pointer;
-  opacity: 0.55;
   transition: opacity var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
 .rail-proj-card:hover .rail-proj-card-rename,
@@ -5848,12 +5855,40 @@ html.adhd-calm .review-focus-bar {
 [data-od-id="outline-col"] { display: flex; flex-direction: column; min-height: 0; }
 #outline { flex: 1 1 auto; min-height: 0; overflow: auto; }
 .file-tree-host {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
-  max-height: 38vh;
+  /* 高度可拖曳；--ft-h 由拖曳把手寫進 outline-col 的 inline style */
+  height: var(--ft-h, 240px);
+  max-height: 60vh;
   overflow: auto;
   padding: 4px 0 8px;
 }
+
+/* 上下拖曳把手：分隔「章節」與「專案檔案」兩層。
+   兩層都會長，誰該多分一點只有當下的你知道 —— 給把手比猜一個比例好。 */
+.ft-resize {
+  flex: 0 0 auto;
+  height: 7px;
+  margin-top: 2px;
+  cursor: row-resize;
+  touch-action: none;
+  position: relative;
+}
+.ft-resize::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  width: 28px;
+  height: 2px;
+  border-radius: 2px;
+  transform: translateX(-50%);
+  background: var(--border);
+  transition: background 140ms ease;
+}
+.ft-resize:hover::after, .ft-resize.is-dragging::after { background: var(--accent); }
+[data-od-id="outline-col"].ft-collapsed .ft-resize { display: none; }
+@media (prefers-reduced-motion: reduce) { .ft-resize::after { transition: none; } }
 .wb-head--sub {
   border-top: 1px solid var(--border);
   flex-shrink: 0;
@@ -5879,9 +5914,10 @@ html.adhd-calm .review-focus-bar {
 }
 .ft-collapse:hover { color: var(--fg); border-color: var(--accent); }
 .ft-collapse:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.ft-collapse span { transform: rotate(90deg); display: block; }
+/* 展開時箭頭朝下、收合時朝上 —— 箭頭指的是「按下去之後內容會往哪走」 */
+.ft-collapse span { transform: rotate(-90deg); display: block; }
 [data-od-id="outline-col"].ft-collapsed .file-tree-host { display: none; }
-[data-od-id="outline-col"].ft-collapsed .ft-collapse span { transform: rotate(-90deg); }
+[data-od-id="outline-col"].ft-collapsed .ft-collapse span { transform: rotate(90deg); }
 @media (prefers-reduced-motion: reduce) { .ft-collapse { transition: none; } }
 
 .ft-empty {
