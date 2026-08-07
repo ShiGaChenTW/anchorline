@@ -38,13 +38,20 @@ export function openSettingsModal() {
   back.id = "settings-modal-back";
   back.className = "set-modal-back";
   back.innerHTML = `
-    <div class="set-modal" role="dialog" aria-modal="true" aria-label="偏好設定">
+    <div class="set-modal" role="dialog" aria-modal="true" aria-labelledby="set-modal-title">
       <header class="set-modal-head">
-        <strong>偏好設定</strong>
-        <span class="set-modal-hint">變更會自動儲存 · 拖右下角可調整大小 · Esc 關閉</span>
-        <button type="button" class="btn btn-sm btn-ghost" data-set-modal="close">關閉</button>
+        <div class="set-modal-titles">
+          <p class="set-modal-eyebrow">PRD 開發監控台</p>
+          <h2 id="set-modal-title">設定</h2>
+          <p class="set-modal-sub">自訂你的工作區。快捷鍵：<kbd>Cmd+,</kbd></p>
+        </div>
+        <button type="button" class="set-modal-x" data-set-modal="close" aria-label="關閉設定">✕</button>
       </header>
       <iframe class="set-modal-frame" src="settings.html" title="偏好設定"></iframe>
+      <footer class="set-modal-foot">
+        <span class="set-modal-note">變更立即生效，並會自動儲存。</span>
+        <button type="button" class="btn btn-primary" data-set-modal="close">關閉</button>
+      </footer>
     </div>
   `;
   document.body.appendChild(back);
@@ -82,7 +89,9 @@ export function openSettingsModal() {
     if (e.key === "Escape") close();
   };
   document.addEventListener("keydown", onKey);
-  back.querySelector('[data-set-modal="close"]')?.addEventListener("click", close);
+  back.querySelectorAll('[data-set-modal="close"]').forEach((b) =>
+    b.addEventListener("click", close),
+  );
   back.addEventListener("click", (e) => {
     if (e.target === back) close();
   });
@@ -95,6 +104,13 @@ export function initSettingsModal() {
   if (location.pathname.endsWith("settings.html")) return;
   if (document.documentElement.dataset.setModalBound === "1") return;
   document.documentElement.dataset.setModalBound = "1";
+
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+      e.preventDefault();
+      openSettingsModal();
+    }
+  });
 
   document.addEventListener("click", (e) => {
     const a = (e.target as HTMLElement | null)?.closest?.(

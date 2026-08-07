@@ -6998,7 +6998,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
 
 /* ═══════════════════════════════════════════════════════════════
    偏好設定彈出視窗
-   預設 40% 視窗、置中、可拖右下角調整大小。
+   大標題區 + 左分類 + 右分組卡 + 底部固定條。
    iframe 載入 settings.html —— 不複製一份設定畫面出來各自腐爛。
    ═══════════════════════════════════════════════════════════════ */
 .set-modal-back {
@@ -7007,44 +7007,88 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   z-index: 400;
   display: grid;
   place-items: center;
-  background: color-mix(in oklab, #000 55%, transparent);
-  backdrop-filter: blur(2px);
+  background: color-mix(in oklab, #000 58%, transparent);
+  backdrop-filter: blur(3px);
 }
 .set-modal {
-  /* 使用者要的 40%；拉過之後由 inline style 記住 */
-  width: 40vw;
-  height: 40vh;
-  min-width: 420px;
-  min-height: 320px;
-  max-width: calc(100vw - 24px);
-  max-height: calc(100vh - 24px);
+  /* 這個版面（左直排分類 + 右卡片）在 900px 以下會塌掉，所以下限寫死。
+     使用者拉過的尺寸記在 localStorage，之後開就是他要的大小。 */
+  width: 72vw;
+  height: 80vh;
+  min-width: 900px;
+  min-height: 600px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   resize: both;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--panel, var(--bg));
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.5);
 }
+
+/* 標題區：眉標 → 大標 → 一句說明。
+   一眼就知道「這是哪個 app 的設定」，不必從內容反推。 */
 .set-modal-head {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 16px;
   flex: 0 0 auto;
-  padding: 11px 14px;
+  padding: 26px 30px 22px;
   border-bottom: 1px solid var(--border);
 }
-.set-modal-head strong { font-size: 13.5px; color: var(--fg); }
-.set-modal-hint {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 11.5px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.set-modal-titles { flex: 1 1 auto; min-width: 0; }
+.set-modal-eyebrow {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
+.set-modal-head h2 {
+  margin: 0 0 6px;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+.set-modal-sub {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.set-modal-sub kbd {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--inset, var(--bg));
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--fg-2);
+}
+.set-modal-x {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.set-modal-x:hover { background: var(--inset); color: var(--fg); }
+.set-modal-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 .set-modal-frame {
   flex: 1 1 auto;
   min-height: 0;
@@ -7052,3 +7096,15 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   border: 0;
   background: var(--bg);
 }
+
+.set-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: 0 0 auto;
+  padding: 16px 30px;
+  border-top: 1px solid var(--border);
+}
+.set-modal-note { font-size: 13px; color: var(--muted); }
+.set-modal-foot .btn-primary { padding: 9px 26px; font-size: 13.5px; }
