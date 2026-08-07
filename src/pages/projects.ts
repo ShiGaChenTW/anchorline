@@ -50,6 +50,7 @@ if (!requireAuth()) {
   bindRailProjects();
   initFirstRunTour();
 
+
   // L1–L6 strip under toolbar
   {
     const main = document.querySelector(".main");
@@ -1058,7 +1059,7 @@ if (!requireAuth()) {
       toast("agent 交接進來了，正在匯入…");
       try {
         const files = Array.isArray(payload.files) ? payload.files : [];
-        const result = scanFromNativeFolder(payload.folderName || "agent 專案", files);
+        const result = scanFromNativeFolder(payload.folderName || "agent 專案", files, payload.folderPath ?? "");
         const res = store.importProjectCandidates(
           result.candidates.map((c) => ({ ...c, selected: true })),
           payload.folderName || "agent 專案",
@@ -1097,7 +1098,7 @@ if (!requireAuth()) {
       toast("掃描資料夾中…");
       try {
         const files = Array.isArray(payload.files) ? payload.files : [];
-        const result = scanFromNativeFolder(payload.folderName || "匯入資料夾", files);
+        const result = scanFromNativeFolder(payload.folderName || "匯入資料夾", files, payload.folderPath ?? "");
         applyScanResult(result);
       } catch (e) {
         importErr(e instanceof Error ? e.message : "掃描失敗");
