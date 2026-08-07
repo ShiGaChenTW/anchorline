@@ -288,7 +288,7 @@ document.getElementById("ai-model")?.addEventListener("change", () => {
   syncLocalModelUi();
 });
 
-document.getElementById("btn-save-settings")?.addEventListener("click", () => {
+function saveSettings() {
   const model = (document.getElementById("ai-model") as HTMLSelectElement).value as AISettings["model"];
   const temperature = Number((document.getElementById("ai-temp") as HTMLInputElement).value);
   const apiKey = (document.getElementById("ai-key") as HTMLInputElement).value.trim();
@@ -346,9 +346,65 @@ document.getElementById("btn-save-settings")?.addEventListener("click", () => {
   import("../lib/attention-motion")
     .then((m) => m.syncMotionPreferenceClass())
     .catch(() => {});
+}
 
-  toast("已成功儲存偏好與 AI 教練設定");
+/**
+ * 自動儲存：任何控制項變動就寫入，不需要按儲存。
+ * ADHD：「我剛剛存了嗎」是一個不必要的開放迴圈。
+ * 300ms debounce —— 拖 range 時不要每一格都寫一次。
+ */
+let saveTimer = 0;
+function autoSave() {
+  window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => {
+    saveSettings();
+    const note = document.querySelector<HTMLElement>(".set-foot-note");
+    if (!note) return;
+    note.textContent = "已儲存";
+    note.classList.add("is-saved");
+    window.setTimeout(() => {
+      note.textContent = "變更立即生效，並會自動儲存。";
+      note.classList.remove("is-saved");
+    }, 1400);
+  }, 300);
+}
+
+document.getElementById("set-pane")?.addEventListener("change", autoSave);
+document.getElementById("set-pane")?.addEventListener("input", (e) => {
+  // 文字欄位用 input 太吵，只讓 range 走即時
+  if ((e.target as HTMLElement).matches('input[type="range"]')) autoSave();
 });
+
+/** 分類切換：一次只顯示一組，不做整頁捲動 */
+{
+  const pane = document.getElementById("set-pane");
+  const showCat = (key: string) => {
+    pane?.querySelectorAll<HTMLElement>("[data-cat]").forEach((el) => {
+      el.hidden = el.dataset.cat !== key;
+    });
+    document.querySelectorAll<HTMLButtonElement>("[data-set-cat]").forEach((b) => {
+      const on = b.dataset.setCat === key;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-current", on ? "true" : "false");
+    });
+    try {
+      localStorage.setItem("specforge:settings-cat", key);
+    } catch {
+      /* private mode */
+    }
+    pane?.scrollTo({ top: 0 });
+  };
+  document.querySelectorAll<HTMLButtonElement>("[data-set-cat]").forEach((b) => {
+    b.addEventListener("click", () => showCat(b.dataset.setCat ?? "general"));
+  });
+  let initial = "general";
+  try {
+    initial = localStorage.getItem("specforge:settings-cat") || "general";
+  } catch {
+    /* ignore */
+  }
+  showCat(initial);
+}
 
 document.getElementById("btn-ai-test")?.addEventListener("click", async () => {
   const out = document.getElementById("ai-test-result");
