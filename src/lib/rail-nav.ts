@@ -56,7 +56,8 @@ const IC = {
 
 /** 工作區側欄固定項目 */
 export const RAIL_ITEMS: RailItem[] = [
-  { page: "projects", href: "projects.html", label: "專案列表", odId: "nav-projects", icon: IC.projects, count: true },
+  // 專案列表不進側欄 —— 側欄上方已經是專案清單本身，再放一個入口是重複
+  { page: "projects", href: "projects.html", label: "專案列表", odId: "nav-projects", icon: IC.projects, count: true, hidden: true },
   { page: "editor", href: "editor.html", label: "編輯工作台", odId: "nav-editor", icon: IC.editor },
   { page: "dashboard", href: "dashboard.html", label: "專案儀表板", odId: "nav-dashboard", icon: IC.dashboard, hidden: true },
   { page: "overview", href: "overview.html", label: "總覽", odId: "nav-overview", icon: IC.dashboard, hidden: true },

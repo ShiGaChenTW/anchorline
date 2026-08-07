@@ -6934,3 +6934,27 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 /* .d-rows 是 grid，又是固定高度卡片裡 flex:1 的子元素 —— 沒有 align-content
    的話，多出來的高度會被平均分給每一列，四列就撐成 74px 一列 */
 .d-rows { align-content: start; }
+
+/* 專案標題列：「專案 N」＋總覽＋新建，三者同一行 */
+.rail-proj-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rail-proj-head .rail-overview { float: none; margin-left: 0; }
+.rail-proj-add {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.rail-proj-add:hover { background: color-mix(in oklab, var(--accent) 20%, transparent); color: var(--accent); }
+.rail-proj-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
