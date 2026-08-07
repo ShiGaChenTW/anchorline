@@ -24,6 +24,11 @@ type RailItem = {
   /** 內嵌 SVG path（16×16） */
   icon: string;
   count?: boolean;
+  /**
+   * 不出現在側欄，但仍是已知頁面 —— detectRailPage / 狀態列要認得它。
+   * 儀表板的入口是「點專案卡片」，不是側欄多一顆按鈕。
+   */
+  hidden?: boolean;
 };
 
 const IC = {
@@ -52,7 +57,7 @@ const IC = {
 export const RAIL_ITEMS: RailItem[] = [
   { page: "projects", href: "projects.html", label: "專案列表", odId: "nav-projects", icon: IC.projects, count: true },
   { page: "editor", href: "editor.html", label: "編輯工作台", odId: "nav-editor", icon: IC.editor },
-  { page: "dashboard", href: "dashboard.html", label: "專案儀表板", odId: "nav-dashboard", icon: IC.dashboard },
+  { page: "dashboard", href: "dashboard.html", label: "專案儀表板", odId: "nav-dashboard", icon: IC.dashboard, hidden: true },
   { page: "templates", href: "templates.html", label: "章節範本", odId: "nav-templates", icon: IC.templates, count: true },
   { page: "review", href: "review.html", label: "審閱佇列", odId: "nav-review", icon: IC.review, count: true },
   { page: "tracking", href: "tracking.html", label: "計劃追蹤", odId: "nav-tracking", icon: IC.tracking },
@@ -92,7 +97,7 @@ export function initRailNav(active: RailPage) {
   nav.innerHTML = `
     <div class="nav-label">工作區</div>
     <div id="rail-projects-block" class="rail-projects-block"></div>
-    ${RAIL_ITEMS.map((it) => itemHtml(it, active)).join("\n")}
+    ${RAIL_ITEMS.filter((it) => !it.hidden).map((it) => itemHtml(it, active)).join("\n")}
     <div class="nav-label">快捷</div>
     <button type="button" class="nav-item" id="btn-tui-hint" data-od-id="nav-tui">
       ${svg(IC.tui)}開啟 TUI 追蹤

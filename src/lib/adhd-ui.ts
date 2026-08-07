@@ -415,9 +415,7 @@ export function applyAdhdRail(nav: Element) {
   }
   nav.setAttribute("data-adhd-rail", "1");
 
-  // 儀表板是「這個專案的現況」，和編輯台同屬專案層級的主路徑。
-  // 收進「其他功能」等於藏起來 —— 使用者找不到就是沒做。
-  const primary = new Set(["nav-projects", "nav-editor", "nav-dashboard", "nav-review"]);
+  const primary = new Set(["nav-projects", "nav-editor", "nav-review"]);
   const secondary: HTMLElement[] = [];
 
   nav.querySelectorAll<HTMLElement>("a.nav-item, button.nav-item").forEach((el) => {
