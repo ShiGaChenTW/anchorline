@@ -266,6 +266,80 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
                 g["ahead"] = -1
             }
             g["tag"] = git(["describe", "--tags", "--abbrev=0"], in: root) ?? ""
+
+            // commit 列表：欄位用 \u{1F} 分隔，避免 commit 訊息裡的 | 把欄位切爛
+            if let log = git(
+                ["log", "-n", "40", "--pretty=%h\u{1F}%s\u{1F}%cI\u{1F}%an\u{1F}%D"],
+                in: root
+            ) {
+                g["commits"] = log.split(separator: "\n").map { line -> [String: String] in
+                    let f = line.components(separatedBy: "\u{1F}")
+                    return [
+                        "hash": f.count > 0 ? f[0] : "",
+                        "subject": f.count > 1 ? f[1] : "",
+                        "at": f.count > 2 ? f[2] : "",
+                        "author": f.count > 3 ? f[3] : "",
+                        // %D 給 refs：HEAD -> main, tag: v1.2.0
+                        "refs": f.count > 4 ? f[4] : "",
+                    ]
+                }
+            }
+
+            // worktree：porcelain 以空行分段，每段 worktree/HEAD/branch 三行
+            if let wt = git(["worktree", "list", "--porcelain"], in: root) {
+                var list: [[String: String]] = []
+                var cur: [String: String] = [:]
+                for line in wt.split(separator: "\n", omittingEmptySubsequences: false) {
+                    let l = String(line)
+                    if l.isEmpty {
+                        if !cur.isEmpty { list.append(cur); cur = [:] }
+                        continue
+                    }
+                    if l.hasPrefix("worktree ") { cur["path"] = String(l.dropFirst(9)) }
+                    else if l.hasPrefix("HEAD ") { cur["head"] = String(String(l.dropFirst(5)).prefix(7)) }
+                    else if l.hasPrefix("branch ") {
+                        cur["branch"] = String(l.dropFirst(7)).replacingOccurrences(of: "refs/heads/", with: "")
+                    } else if l == "detached" { cur["branch"] = "(detached)" }
+                    else if l == "bare" { cur["branch"] = "(bare)" }
+                }
+                if !cur.isEmpty { list.append(cur) }
+                g["worktrees"] = list
+            }
+
+            // 本地 branch：附最後提交時間，讓「哪條還活著」看得出來
+            if let br = git(
+                ["for-each-ref", "--sort=-committerdate", "--count=30",
+                 "--format=%(refname:short)\u{1F}%(committerdate:iso8601)\u{1F}%(HEAD)",
+                 "refs/heads"],
+                in: root
+            ), !br.isEmpty {
+                g["branches"] = br.split(separator: "\n").map { line -> [String: String] in
+                    let f = line.components(separatedBy: "\u{1F}")
+                    return [
+                        "name": f.count > 0 ? f[0] : "",
+                        "at": f.count > 1 ? f[1] : "",
+                        // %(HEAD) 在目前分支是 "*"
+                        "current": (f.count > 2 && f[2] == "*") ? "1" : "",
+                    ]
+                }
+            }
+
+            // tag 依建立時間新到舊，附上指向的 commit
+            if let tags = git(
+                ["for-each-ref", "--sort=-creatordate", "--count=20",
+                 "--format=%(refname:short)\u{1F}%(objectname:short)\u{1F}%(creatordate:iso8601)",
+                 "refs/tags"],
+                in: root
+            ), !tags.isEmpty {
+                g["tags"] = tags.split(separator: "\n").map { line -> [String: String] in
+                    let f = line.components(separatedBy: "\u{1F}")
+                    return [
+                        "name": f.count > 0 ? f[0] : "",
+                        "hash": f.count > 1 ? f[1] : "",
+                        "at": f.count > 2 ? f[2] : "",
+                    ]
+                }
+            }
             g["commitCount"] = Int(git(["rev-list", "--count", "HEAD"], in: root) ?? "0") ?? 0
             payload["git"] = g
         }
