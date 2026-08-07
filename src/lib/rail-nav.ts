@@ -8,6 +8,7 @@ import { toast } from "./ui";
 export type RailPage =
   | "projects"
   | "editor"
+  | "dashboard"
   | "templates"
   | "review"
   | "tracking"
@@ -42,6 +43,8 @@ const IC = {
     '<path d="M8 0a5 5 0 0 0-3.5 8.57V14a.75.75 0 0 0 1.2.6L8 12.5l2.3 2.1A.75.75 0 0 0 11.5 14V8.57A5 5 0 0 0 8 0zm0 1.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z"/>',
   settings:
     '<path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm0 14.5a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13zM6.5 8a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z"/>',
+  dashboard:
+    '<path d="M1.75 1h5A.75.75 0 0 1 7.5 1.75v4.5A.75.75 0 0 1 6.75 7h-5A.75.75 0 0 1 1 6.25v-4.5A.75.75 0 0 1 1.75 1zm7.5 0h5a.75.75 0 0 1 .75.75v2.5a.75.75 0 0 1-.75.75h-5a.75.75 0 0 1-.75-.75v-2.5A.75.75 0 0 1 9.25 1zM1.75 9h5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-.75.75h-5A.75.75 0 0 1 1 14.25v-4.5A.75.75 0 0 1 1.75 9zm7.5-2.5h5a.75.75 0 0 1 .75.75v7a.75.75 0 0 1-.75.75h-5a.75.75 0 0 1-.75-.75v-7a.75.75 0 0 1 .75-.75z"/>',
   tui: '<path d="M0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25Zm1.75-.25a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25ZM7.25 8a.75.75 0 0 1-.22-.53V4.28a.75.75 0 0 1 1.5 0v3.19c0 .199-.079.39-.22.53l-1.75 1.75a.75.75 0 0 1-1.06-1.06L7.25 8z"/>',
 };
 
@@ -49,6 +52,7 @@ const IC = {
 export const RAIL_ITEMS: RailItem[] = [
   { page: "projects", href: "projects.html", label: "專案列表", odId: "nav-projects", icon: IC.projects, count: true },
   { page: "editor", href: "editor.html", label: "編輯工作台", odId: "nav-editor", icon: IC.editor },
+  { page: "dashboard", href: "dashboard.html", label: "專案儀表板", odId: "nav-dashboard", icon: IC.dashboard },
   { page: "templates", href: "templates.html", label: "章節範本", odId: "nav-templates", icon: IC.templates, count: true },
   { page: "review", href: "review.html", label: "審閱佇列", odId: "nav-review", icon: IC.review, count: true },
   { page: "tracking", href: "tracking.html", label: "計劃追蹤", odId: "nav-tracking", icon: IC.tracking },
