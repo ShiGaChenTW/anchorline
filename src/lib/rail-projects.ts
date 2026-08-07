@@ -187,7 +187,7 @@ function bindAddMenu(block: HTMLElement) {
       <a class="rail-list" href="projects.html" title="專案清單：篩選、搜尋、切換檢視">清單</a>
       <button type="button" class="rail-proj-add" id="rail-proj-add" title="新增" aria-label="新增" aria-haspopup="true" aria-expanded="false">+</button>
     </div>
-    <div class="rail-projects" role="list" aria-label="專案清單">
+    <div class="rail-projects" role="list" aria-label="專案清單" id="rail-projects-list">
       ${projects
         .map((p) => {
           const name = projectDisplayName(p);
@@ -217,6 +217,8 @@ function bindAddMenu(block: HTMLElement) {
         })
         .join("")}
     </div>
+    <div class="rail-proj-resize" id="rail-proj-resize" role="separator" aria-orientation="horizontal"
+         aria-label="調整專案清單高度" title="上下拖曳調整高度"></div>
   `;
 
   block.querySelectorAll<HTMLButtonElement>("[data-open-id]").forEach((btn) => {
@@ -248,7 +250,76 @@ function bindAddMenu(block: HTMLElement) {
   });
 
   bindAddMenu(block);
+  bindListResize(block);
   bumpCounts();
+}
+
+const RAIL_LIST_H_KEY = "specforge:rail-projects-height";
+
+/**
+ * 專案清單高度可拖曳。
+ * 清單預設上限 min(36vh, 280px)，專案一多就得一直捲；但把上限拉大又會把
+ * 下面的導覽推出畫面。誰該多分一點只有當下的你知道 —— 給把手比猜一個值好。
+ */
+function bindListResize(block: HTMLElement) {
+  const grip = block.querySelector("#rail-proj-resize") as HTMLElement | null;
+  const list = block.querySelector("#rail-projects-list") as HTMLElement | null;
+  if (!grip || !list || grip.dataset.bound === "1") {
+    if (grip && list) applySavedListHeight(list);
+    return;
+  }
+  grip.dataset.bound = "1";
+  applySavedListHeight(list);
+
+  const MIN = 80;
+  let startY = 0;
+  let startH = 0;
+
+  const onMove = (e: PointerEvent) => {
+    const max = Math.max(MIN, window.innerHeight - 260); // 下面的導覽至少留 260px
+    const h = Math.min(max, Math.max(MIN, startH + (e.clientY - startY)));
+    list.style.maxHeight = `${Math.round(h)}px`;
+    list.style.height = `${Math.round(h)}px`;
+  };
+  const onUp = () => {
+    // 掛在 window：滑鼠拖出把手範圍很常見，掛在把手上會中斷
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    grip.classList.remove("is-dragging");
+    document.body.style.userSelect = "";
+    try {
+      localStorage.setItem(RAIL_LIST_H_KEY, String(list.offsetHeight));
+    } catch {
+      /* private mode */
+    }
+  };
+
+  grip.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    startY = e.clientY;
+    startH = list.offsetHeight;
+    grip.classList.add("is-dragging");
+    document.body.style.userSelect = "none";
+    try {
+      grip.setPointerCapture(e.pointerId);
+    } catch {
+      /* 沒有 capture 也能拖 */
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+}
+
+function applySavedListHeight(list: HTMLElement) {
+  try {
+    const saved = Number(localStorage.getItem(RAIL_LIST_H_KEY));
+    if (saved >= 80) {
+      list.style.maxHeight = `${saved}px`;
+      list.style.height = `${saved}px`;
+    }
+  } catch {
+    /* private mode */
+  }
 }
 
 /**

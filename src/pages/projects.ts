@@ -71,6 +71,11 @@ if (!requireAuth()) {
 
   let filter = "all";
   let query = "";
+  /** 標籤篩選（可複選，全部命中才留下）。網址 ?tag=xxx 可直接帶入 */
+  let tagFilter: string[] = (() => {
+    const t = new URLSearchParams(location.search).get("tag");
+    return t ? [t] : [];
+  })();
 
   function syncChrome() {
     const u = store.get().currentUser;
@@ -289,6 +294,33 @@ if (!requireAuth()) {
       .join("");
   }
 
+  /**
+   * 標籤篩選列。只在真的有人打過標籤時才出現 ——
+   * 一條永遠空著的篩選列只是佔位噪音。
+   */
+  function renderTagBar() {
+    const host = document.getElementById("tag-bar");
+    if (!host) return;
+    const all = store.allTags();
+    if (!all.length) {
+      host.innerHTML = "";
+      host.hidden = true;
+      return;
+    }
+    host.hidden = false;
+    host.innerHTML = `
+      <span class="tag-bar-label">標籤</span>
+      ${all
+        .map((t) => {
+          const on = tagFilter.some((x) => x.toLowerCase() === t.tag.toLowerCase());
+          return `<button type="button" class="tag-chip${on ? " on" : ""}" data-tag="${escapeHtml(t.tag)}"
+                    aria-pressed="${on}">${escapeHtml(t.tag)}<span>${t.count}</span></button>`;
+        })
+        .join("")}
+      ${tagFilter.length ? `<button type="button" class="tag-clear" id="tag-clear">清除</button>` : ""}
+    `;
+  }
+
   function render() {
     const tbody = document.getElementById("tbody");
     if (!tbody) return;
@@ -299,16 +331,27 @@ if (!requireAuth()) {
     const rows = projects.filter((p) => {
       if (filter === "mine" && !p.mine) return false;
       if (filter !== "all" && filter !== "mine" && p.status !== filter) return false;
+      // 標籤篩選是 AND：選了兩個就是「同時有這兩個標籤」，
+      // 不然選越多結果越多，篩選就失去意義
+      if (tagFilter.length) {
+        const own = (p.tags ?? []).map((t) => t.toLowerCase());
+        if (!tagFilter.every((t) => own.includes(t.toLowerCase()))) return false;
+      }
       if (query) {
         const q = query.toLowerCase();
         return (
           p.title.toLowerCase().includes(q) ||
+          (p.customName ?? "").toLowerCase().includes(q) ||
+          (p.description ?? "").toLowerCase().includes(q) ||
           p.owner.includes(query) ||
-          p.tag.includes(q)
+          p.tag.includes(q) ||
+          (p.tags ?? []).some((t) => t.toLowerCase().includes(q))
         );
       }
       return true;
     });
+
+    renderTagBar();
 
     const count = document.getElementById("result-count");
     if (count) count.textContent = rows.length === 0 ? "沒有項目" : `${rows.length} 個專案`;
@@ -456,6 +499,23 @@ if (!requireAuth()) {
     });
   }
   syncViewSwitch();
+
+  // 標籤列用事件委派：內容每次 render 都會重建
+  document.getElementById("tag-bar")?.addEventListener("click", (e) => {
+    const t = e.target as HTMLElement;
+    if (t.closest("#tag-clear")) {
+      tagFilter = [];
+      render();
+      return;
+    }
+    const chip = t.closest("[data-tag]") as HTMLElement | null;
+    if (!chip) return;
+    const tag = chip.dataset.tag ?? "";
+    const i = tagFilter.findIndex((x) => x.toLowerCase() === tag.toLowerCase());
+    if (i >= 0) tagFilter.splice(i, 1);
+    else tagFilter.push(tag);
+    render();
+  });
 
   document.querySelectorAll("[data-filter]").forEach((btn) => {
     btn.addEventListener("click", () => {

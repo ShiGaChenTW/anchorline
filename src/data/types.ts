@@ -76,6 +76,11 @@ export type Project = {
   sourceFolder?: string;
   /** 專案介紹，使用者手寫。與 PRD 章節無關，是給人看的一句話。 */
   description?: string;
+  /**
+   * 使用者自訂標籤。用來搜尋與分群。
+   * 與上面的 `tag`（單一、系統給的分類）不同：這個是完全自由的多值欄位。
+   */
+  tags?: string[];
   /** 匯入評分與對應摘要 */
   importSummary?: ProjectImportSummary;
 };

@@ -86,6 +86,54 @@ if (!requireAuth()) {
   }
 
   /** 頭條：整頁唯一該先被讀到的東西，佔滿一行 */
+  /**
+   * 標籤列的內容。抽出來是因為新增／移除後只重畫這一塊 ——
+   * 整張卡重畫要有 ProjectStats，而打標籤跟磁碟量測無關。
+   */
+  /**
+   * 名稱／介紹／標籤。三個都是人寫的中繼資料，跟磁碟量測無關 ——
+   * 所以量不到 git 的時候（沒綁資料夾、瀏覽器版）也一樣要能編輯。
+   * 之前它埋在 heroGit() 裡，等於「沒有資料夾就不能打標籤」。
+   */
+  function identHtml(p: Project | null): string {
+    const name = p ? projectDisplayName(p) : "未選擇專案";
+    const desc = p?.description ?? "";
+    return `<div class="d-ident">
+        <p class="d-eyebrow">專案</p>
+        <input type="text" id="d-name" class="d-ident-name" value="${escapeHtml(name)}"
+               aria-label="專案名稱" placeholder="未命名專案" />
+        <textarea id="d-desc" class="d-ident-desc" rows="1" aria-label="專案介紹"
+                  placeholder="一句話說明這個專案在做什麼">${escapeHtml(desc)}</textarea>
+        <div class="d-tags" id="d-tags">${tagsInnerHtml(p)}</div>
+      </div>`;
+  }
+
+  function tagsInnerHtml(p: Project | null): string {
+    const tags = p?.tags ?? [];
+    return `${tags
+      .map(
+        (t) => `<span class="d-tag">
+          <a href="projects.html?tag=${encodeURIComponent(t)}" title="找出所有「${escapeHtml(t)}」的專案">${escapeHtml(t)}</a>
+          <button type="button" data-tag-remove="${escapeHtml(t)}" aria-label="移除標籤 ${escapeHtml(t)}">×</button>
+        </span>`,
+      )
+      .join("")}
+      <input type="text" id="d-tag-input" class="d-tag-input" list="d-tag-options"
+             placeholder="＋ 標籤" aria-label="新增標籤" autocomplete="off" />
+      <datalist id="d-tag-options">${store
+        .allTags()
+        .map((t) => `<option value="${escapeHtml(t.tag)}"></option>`)
+        .join("")}</datalist>`;
+  }
+
+  /** 只重畫標籤列並把游標放回輸入框 —— 連打好幾個標籤時不該每次都要重新點 */
+  function refreshTags(focus = true) {
+    const host = document.getElementById("d-tags");
+    if (!host) return;
+    host.innerHTML = tagsInnerHtml(activeProject());
+    if (focus) (document.getElementById("d-tag-input") as HTMLInputElement | null)?.focus();
+  }
+
   function heroGit(s: ProjectStats): string {
     const g = s.git;
     const head = gitHeadline(g);
@@ -101,28 +149,9 @@ if (!requireAuth()) {
         ]
       : [];
     const p = activeProject();
-    const name = p ? projectDisplayName(p) : "未選擇專案";
-    const desc = p?.description ?? "";
 
     return `<section class="d-hero tone-${head.tone}">
-      <div class="d-ident">
-        <p class="d-eyebrow">專案</p>
-        <input
-          type="text"
-          id="d-name"
-          class="d-ident-name"
-          value="${escapeHtml(name)}"
-          aria-label="專案名稱"
-          placeholder="未命名專案"
-        />
-        <textarea
-          id="d-desc"
-          class="d-ident-desc"
-          rows="1"
-          aria-label="專案介紹"
-          placeholder="一句話說明這個專案在做什麼"
-        >${escapeHtml(desc)}</textarea>
-      </div>
+      ${identHtml(p)}
 
       <p class="d-eyebrow">版本控制</p>
       <p class="d-hero-figure">${escapeHtml(head.text)}</p>
@@ -375,12 +404,14 @@ if (!requireAuth()) {
       // 當場就能解決，不要把人踢去別頁再自己找按鈕 ——
       // 「沒綁資料夾」是這一頁最常見的狀態（多數專案都沒綁）
       renderState(
-        `<div class="dash-empty">
+        `<section class="d-hero">${identHtml(p)}</section>
+         <div class="dash-empty">
           <p>「${escapeHtml(projectDisplayName(p))}」還沒有對應磁碟上的資料夾，所以量不到 git、技術線與容量。</p>
           <button type="button" class="btn btn-primary" id="dash-bind">指定專案資料夾</button>
           <p class="dash-note">綁定只記錄對應關係，不會動到你已經寫好的章節內容。</p>
         </div>`,
       );
+      bindIdentEditing();
       document.getElementById("dash-bind")?.addEventListener("click", () => {
         askForProjectFolder(p.id, projectDisplayName(p));
       });
@@ -388,11 +419,13 @@ if (!requireAuth()) {
     }
     if (!isDesktop()) {
       renderState(
-        `<div class="dash-empty">
+        `<section class="d-hero">${identHtml(p)}</section>
+         <div class="dash-empty">
           <p>這一頁需要桌面版 App。瀏覽器看不到磁碟，也跑不了 git。</p>
           <p class="dash-note mono">${escapeHtml(path)}</p>
         </div>`,
       );
+      bindIdentEditing();
       return;
     }
 
@@ -448,6 +481,55 @@ if (!requireAuth()) {
           nameEl.blur();
         }
       });
+    }
+
+    const tagWrap = document.getElementById("d-tags");
+    if (tagWrap && tagWrap.dataset.bound !== "1") {
+      tagWrap.dataset.bound = "1";
+      const current = () => activeProject()?.tags ?? [];
+
+      tagWrap.addEventListener("click", (e) => {
+        const btn = (e.target as HTMLElement).closest("[data-tag-remove]") as HTMLElement | null;
+        if (!btn) return;
+        const t = btn.dataset.tagRemove ?? "";
+        store.setProjectTags(p.id, current().filter((x) => x !== t));
+        refreshTags(false);
+        toast(`已移除標籤「${t}」`);
+      });
+
+      // 事件委派掛在容器上：新增／移除後整個 #d-tags 會重建，
+      // 監聽掛在 input 本身的話第一次之後就全失效（用 focusout，blur 不冒泡）。
+      const inputNow = () => document.getElementById("d-tag-input") as HTMLInputElement | null;
+      const commit = () => {
+        const input = inputNow();
+        if (!input) return;
+        // 逗號分隔一次貼多個 —— 從別處複製標籤時最省事
+        const parts = input.value.split(/[,、]/).map((x) => x.trim()).filter(Boolean);
+        if (!parts.length) return;
+        input.value = "";
+        store.setProjectTags(p.id, [...current(), ...parts]);
+        refreshTags();
+      };
+
+      tagWrap.addEventListener("keydown", (e) => {
+        const ke = e as KeyboardEvent;
+        const input = inputNow();
+        if (!input || ke.target !== input) return;
+        if (ke.key === "Enter" || ke.key === ",") {
+          e.preventDefault();
+          commit();
+          return;
+        }
+        // 空輸入按倒退鍵 = 刪掉最後一個，跟一般 tag 輸入框的手感一致
+        if (ke.key === "Backspace" && !input.value && current().length) {
+          e.preventDefault();
+          store.setProjectTags(p.id, current().slice(0, -1));
+          refreshTags();
+        }
+      });
+      tagWrap.addEventListener("focusout", commit);
+      // 從 datalist 選一個就直接成立，不必再按 Enter
+      tagWrap.addEventListener("change", commit);
     }
 
     const descEl = document.getElementById("d-desc") as HTMLTextAreaElement | null;
