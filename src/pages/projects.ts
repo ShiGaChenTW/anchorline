@@ -831,6 +831,13 @@ if (!requireAuth()) {
     }, 120);
   }
 
+  // 側欄「＋」選「專案匯入」
+  if (new URLSearchParams(location.search).get("import") === "1") {
+    window.setTimeout(() => {
+      (document.getElementById("btn-import") as HTMLButtonElement | null)?.click();
+    }, 150);
+  }
+
   // 正式版首次引導選「新手流程」→ 自動開啟精靈
   if (new URLSearchParams(location.search).get("beginner") === "1") {
     setBeginnerMode(true);

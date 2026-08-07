@@ -67,6 +67,33 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
                     self?.postToJS(["type": "onefetch", "folderPath": dir.path, "raw": raw])
                 }
             }
+        case "fastfetch":
+            // 歡迎畫面用。fastfetch --format json 前面會吐 ANSI 控制碼，
+            // 所以要從第一個 '[' 開始切 —— 直接 JSON.parse 會炸在第一個字元。
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let home = FileManager.default.homeDirectoryForCurrentUser
+                // fastfetch 前後會夾 ANSI 跳脫序列，而序列本身就含 '['
+                // （\u{1B}[m\u{1B}[?7l），所以要先整段剝掉再找 JSON 開頭。
+                let stripped = Self.runTool("fastfetch", ["--logo", "none", "--format", "json"], in: home)?
+                    .replacingOccurrences(
+                        of: "\u{1B}\\[[0-9;?]*[a-zA-Z]",
+                        with: "",
+                        options: .regularExpression
+                    )
+                guard let raw = stripped, let start = raw.firstIndex(of: "[") else {
+                    DispatchQueue.main.async {
+                        self?.postToJS([
+                            "type": "fastfetchError",
+                            "message": "找不到 fastfetch。可用 brew install fastfetch 安裝。",
+                        ])
+                    }
+                    return
+                }
+                let json = String(raw[start...])
+                DispatchQueue.main.async {
+                    self?.postToJS(["type": "fastfetch", "raw": json])
+                }
+            }
         case "ping":
             postToJS([
                 "type": "pong",
