@@ -1363,16 +1363,28 @@ table.data tbody tr.selected td.col-actions {
 .guide ul { margin: 6px 0 0; padding-left: 18px; color: var(--fg-2); }
 .guide li { margin: 3px 0; }
 .field { margin-bottom: 16px; }
+/* 欄位標題是這一刻的主標，不是註腳。原本 12.5px/11px 比內文還小，
+   造成「段落架構不明確」——讀者分不出標題與說明。拉出明確的級距與字重。
+   標題上方留白 > 下方留白（標題屬於它後面的內容）。 */
 .field label {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  font-size: 12.5px;
-  font-weight: 500;
-  margin-bottom: 6px;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 22px 0 8px;
   color: var(--fg);
 }
-.field label span { font-weight: 400; color: var(--muted); font-family: var(--mono); font-size: 11px; }
+.field label span {
+  font-weight: 400;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.field:first-of-type label { margin-top: 8px; }
 .field textarea,
 .field input[type="text"],
 .field select {
@@ -4966,14 +4978,6 @@ html.adhd-calm .sec.adhd-sec .st {
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border-muted, var(--border));
 }
-.adhd-sec-kicker {
-  margin: 0 0 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
 html.adhd-calm .adhd-sec-header h3 {
   margin: 0 0 6px;
   font-size: 1.35rem;
@@ -5214,7 +5218,9 @@ html.adhd-calm .adhd-editor-hint {
   background: color-mix(in oklab, var(--warn) 10%, transparent);
 }
 .adhd-ai-ok { color: var(--success); font-weight: 700; }
-.adhd-ai-bad { color: var(--danger); font-weight: 700; }
+/* 「沒設定 API Key」是設定狀態，不是你寫錯了 — 用 muted 不用 danger。
+   紅色留給真正失敗的呼叫（.adhd-ai-err）。 */
+.adhd-ai-bad { color: var(--muted); font-weight: 600; }
 .adhd-ai-busy { color: var(--accent); }
 .adhd-ai-err {
   padding: 8px;
@@ -5698,3 +5704,245 @@ html.adhd-calm .review-focus-bar {
     height: auto;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ADHD 專注模式 + 進度膠囊
+   設計依據：工作記憶約 4 個開放迴圈；時間盲；顯著性偏誤。
+   全部 additive — 移除 .focus-mode class 即完全復原。
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 進度膠囊：全畫面唯一的時間資訊 ── */
+.focus-progress {
+  padding: 6px 14px 9px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.focus-progress-text {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 5px;
+}
+.focus-progress-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.focus-progress-fill {
+  height: 100%;
+  width: 100%;
+  /* scaleX 而非 width：這條在每次按鍵都更新，動 width 會觸發 layout */
+  transform: scaleX(0);
+  transform-origin: left center;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: transform 240ms ease;
+}
+.focus-progress.is-done .focus-progress-fill { background: var(--success); }
+.focus-progress.is-done .focus-progress-text { color: var(--success); }
+.reduce-motion .focus-progress-fill { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .focus-progress-fill { transition: none; }
+}
+
+/* ── 「還沒開始」≠「做錯了」 ── */
+.adhd-gate-row.is-untouched { opacity: .62; }
+.adhd-gate-row.is-untouched strong { font-weight: 500; }
+
+/* ── 專注模式 ── */
+/* 1. 收掉大綱欄 —— 章節位置改由進度膠囊「第 X/Y 節」承擔。
+      不動 grid-template-columns：resize-panels.ts 用 inline style 設它，會蓋掉樣式表。
+      改成隱藏欄位＋讓編輯欄跨過空出來的 track，不必和 inline style 打架。 */
+.focus-mode [data-od-id="outline-col"],
+.focus-mode .resize-handle--outline { display: none; }
+.focus-mode .editor-pane { grid-column: 1 / 4; }
+
+/* 2. 教練欄只留第一張卡（現在做這一件）；其餘全收 */
+.focus-mode .coach .adhd-score-card,
+.focus-mode .coach .adhd-coach-details { display: none; }
+.focus-mode .coach .adhd-coach-now { border-color: var(--accent); }
+
+/* 3. 章節導引（本章怎麼寫）收起 —— 讀說明本身就是一個任務 */
+.focus-mode .adhd-guide { display: none; }
+
+/* 4. 格式工具列收到 6 顆常用的；其餘藏起來 */
+.focus-mode .mdv-tool:nth-child(n + 7) { display: none; }
+
+/* 5. 頁面 chrome 降噪：次要按鈕與流程條退場 */
+.focus-mode .flow-strip,
+.focus-mode #flow-strip-host,
+.focus-mode .adhd-more,
+.focus-mode #btn-export-md,
+.focus-mode #btn-toggle-samples { display: none; }
+
+/* 6. 唯一該亮的東西是打字的地方 */
+.focus-mode .mdv-input textarea:focus,
+.focus-mode textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+#btn-focus[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+@media (max-width: 980px) {
+  .focus-mode .wb { grid-template-columns: minmax(0, 1fr); }
+  .focus-mode .coach { display: none; }
+}
+
+/* ── 起手式：把空白頁變成填空題 ── */
+.wa-starter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.wa-starter-text { font-size: 13px; color: var(--muted); flex: 1 1 200px; }
+
+/* ── Hyperfocus 提醒 ── */
+.wa-nudge {
+  position: fixed;
+  right: 18px;
+  bottom: 54px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  max-width: 380px;
+  padding: 12px 14px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel, var(--bg));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .35);
+}
+/* 專注模式也要看得到休息提醒 — 這是唯一該打斷的東西 */
+.focus-mode .wa-nudge { display: flex; }
+
+/* ── tasks.md 回讀預覽 ── */
+.trb-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+.trb-table th,
+.trb-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.trb-table th { color: var(--muted); font-weight: 500; }
+.trb-notes { margin: 12px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
+.trb-notes li { margin-bottom: 4px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   專案檔案樹 + 章節定位
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 大綱欄改雙層：上檔案樹、下章節。兩層都要能各自捲動 */
+[data-od-id="outline-col"] { display: flex; flex-direction: column; min-height: 0; }
+.file-tree-host {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 38vh;
+  overflow: auto;
+  padding: 4px 0 8px;
+}
+.wb-head--sub {
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.ft-empty {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.ft-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 10px 4px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-2);
+  cursor: default;
+}
+button.ft-row { cursor: pointer; }
+button.ft-row:hover { background: var(--inset); color: var(--fg); }
+button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.ft-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-dir { color: var(--fg); font-weight: 600; }
+.ft-chevron { flex-shrink: 0; transform: rotate(90deg); transition: transform 120ms ease; }
+.ft-group.is-collapsed > .ft-dir .ft-chevron { transform: rotate(0deg); }
+.ft-group.is-collapsed > .ft-children { display: none; }
+@media (prefers-reduced-motion: reduce) { .ft-chevron { transition: none; } }
+
+/* 沒有角色的檔案退到背景，讓「來源／產出」跳出來 */
+.ft-role-plain { color: var(--muted); }
+
+.ft-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--sans, inherit);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.ft-badge-source {
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+.ft-badge-artifact {
+  color: var(--success);
+  background: color-mix(in oklab, var(--success) 14%, transparent);
+}
+.ft-file.is-active {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  color: var(--fg);
+}
+
+/* ── 章節定位列：這一節從哪來、匯出後去哪 ── */
+.sec-origin {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-muted, var(--border));
+  display: grid;
+  gap: 4px;
+}
+.sec-origin-row { display: flex; gap: 10px; align-items: baseline; }
+.sec-origin dt {
+  flex-shrink: 0;
+  width: 4.5em;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.sec-origin dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sec-origin-none { font-family: var(--sans, inherit); color: var(--muted); }
+
+/* 專注模式：定位列留著（它就是「我在哪」），檔案樹跟著大綱欄一起收 */
+.focus-mode .sec-origin { display: grid; }
+
+/* 檔案樹空狀態：手動新建 PRD 的補綁出口 */
+.ft-empty { padding: 12px; display: grid; gap: 10px; justify-items: start; }
+.ft-empty p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+.pf-note { opacity: .8; }

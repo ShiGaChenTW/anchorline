@@ -19,7 +19,13 @@ import {
   type ProjectCandidate,
 } from "../lib/folder-import";
 import { initHelpOverlay } from "../lib/help-overlay";
+import {
+  applyTasksReadback,
+  parseTasksReadback,
+  type TasksReadback,
+} from "../lib/openspec-import";
 import { parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
+import { askForProjectFolder } from "../lib/project-folder";
 import { canDelete, canEditContent, canExport } from "../lib/permissions";
 import { bindRailProjects, renderRailProjects } from "../lib/rail-projects";
 import { initTheme } from "../lib/theme";
@@ -646,7 +652,28 @@ if (!requireAuth()) {
 
     setBeginnerMode(true);
     toast(beginnerPath ? `已建立「${title}」· 進入新手教練編輯` : `已建立「${title}」`);
-    location.href = "editor.html?beginner=1";
+
+    // 手動新建沒有資料夾 → 主動問一次。使用者選「稍後再說」就直接進編輯台，
+    // 綁定成功則等 toast 看得到再跳頁。
+    closeModal("modal");
+    askForProjectFolder(p.id, title);
+
+    const goEditor = () => location.href = "editor.html?beginner=1";
+    let done = false;
+    const off = store.subscribe(() => {
+      if (done) return;
+      if (store.get().projects.find((x) => x.id === p.id)?.sourceFolder) {
+        done = true;
+        off();
+        window.setTimeout(goEditor, 900); // 讓「已綁定」的 toast 看得到
+      }
+    });
+    document.getElementById("pf-ask")?.addEventListener("click", (ev) => {
+      if ((ev.target as HTMLElement).dataset.pf !== "later" || done) return;
+      done = true;
+      off();
+      goEditor();
+    });
   });
 
   // 新手 CTA：尚無自建專案時顯示
@@ -729,6 +756,87 @@ if (!requireAuth()) {
     exportOpenspecBundle(st, active);
     toast("已匯出 OpenSpec：PRD.md · tasks.md · proposal.md");
   });
+
+  /* ─── tasks.md 回讀（OpenSpec 的另一半） ─── */
+  document.getElementById("btn-read-tasks")?.addEventListener("click", () => {
+    if (!canEditContent(store.get().currentUser)) {
+      toast("無權修改檢查項");
+      return;
+    }
+    (document.getElementById("tasks-readback-input") as HTMLInputElement | null)?.click();
+  });
+
+  document.getElementById("tasks-readback-input")?.addEventListener("change", async (e) => {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ""; // 讓同一個檔案可以再選一次
+    if (!file) return;
+
+    const md = await file.text();
+    const report = parseTasksReadback(md, store.get());
+    showTasksReadbackModal(file.name, report);
+  });
+
+  /**
+   * 先預覽再套用。回讀會覆寫使用者手動勾過的檢查項，靜默執行不可接受。
+   */
+  function showTasksReadbackModal(fileName: string, r: TasksReadback) {
+    document.getElementById("tasks-readback-modal")?.remove();
+
+    const rows = r.changes
+      .map(
+        (c) => `<tr>
+          <td>${escapeHtml(c.sectionLabel)}</td>
+          <td>${escapeHtml(c.checkLabel)}</td>
+          <td class="mono">${c.from ? "✔" : "○"} → <strong>${c.to ? "✔" : "○"}</strong></td>
+        </tr>`,
+      )
+      .join("");
+
+    const notes: string[] = [];
+    if (!r.usedAnchors && r.changes.length)
+      notes.push("這份檔案沒有回讀錨點（舊版匯出），改用文字比對——請對照上表確認。");
+    if (r.ignoredApprovals)
+      notes.push(`簽核段 ${r.ignoredApprovals} 行已忽略：簽核是人的決定，不從檔案回讀。`);
+    if (r.unmatched.length)
+      notes.push(`${r.unmatched.length} 行對不到檢查項，已跳過：${r.unmatched.slice(0, 3).map(escapeHtml).join("、")}${r.unmatched.length > 3 ? " …" : ""}`);
+
+    const back = document.createElement("div");
+    back.className = "modal-back open";
+    back.id = "tasks-readback-modal";
+    back.innerHTML = `
+      <div class="modal" role="dialog" aria-labelledby="trb-title" aria-modal="true">
+        <header>
+          <h3 id="trb-title">回讀 ${escapeHtml(fileName)}</h3>
+          <button type="button" class="btn btn-ghost btn-sm" data-trb="cancel">關閉</button>
+        </header>
+        <div class="body">
+          ${
+            r.changes.length
+              ? `<p class="sub">將變更 ${r.changes.length} 個檢查項（另有 ${r.unchanged} 項已一致）。</p>
+                 <table class="trb-table"><thead><tr><th>章節</th><th>檢查項</th><th>變更</th></tr></thead><tbody>${rows}</tbody></table>`
+              : `<p class="sub">沒有需要變更的檢查項（${r.unchanged} 項已一致）。</p>`
+          }
+          ${notes.length ? `<ul class="trb-notes">${notes.map((n) => `<li>${n}</li>`).join("")}</ul>` : ""}
+        </div>
+        <footer>
+          <button type="button" class="btn" data-trb="cancel">取消</button>
+          <button type="button" class="btn btn-primary" data-trb="apply" ${r.changes.length ? "" : "disabled"}>套用 ${r.changes.length} 項</button>
+        </footer>
+      </div>
+    `;
+    document.body.appendChild(back);
+
+    back.querySelectorAll('[data-trb="cancel"]').forEach((b) =>
+      b.addEventListener("click", () => back.remove()),
+    );
+    back.querySelector('[data-trb="apply"]')?.addEventListener("click", () => {
+      applyTasksReadback(r.changes);
+      back.remove();
+      toast(`已回讀 ${r.changes.length} 個檢查項`);
+      render();
+    });
+  }
 
   /* ─── 專案資料夾匯入 ─── */
   let scanResult: FolderScanResult | null = null;
@@ -915,6 +1023,13 @@ if (!requireAuth()) {
 
   function handleNativeFolderPayload(payload: NativePayload) {
     if (!payload || typeof payload !== "object") return;
+    // 綁定專案資料夾走另一條路（不掃描評分），交給 project-folder.ts 的 callback
+    if (payload.type === "projectFolderPickResult") {
+      (window as Window & {
+        __specforgeProjectFolderResult?: (p: NativePayload) => void;
+      }).__specforgeProjectFolderResult?.(payload);
+      return;
+    }
     if (payload.type === "folderPickCancelled") {
       toast("已取消選擇資料夾");
       return;

@@ -40,6 +40,11 @@ export type ProjectImportSummary = {
   progressPct: number;
   matchedFiles: { slot: string; path: string; contentScore: number }[];
   missingRequired: string[];
+  /**
+   * 掃到的所有相對路徑（不含內文）。用來畫檔案樹。
+   * 只存路徑不存內容：localStorage 有容量上限，內文是最大宗。
+   */
+  allPaths?: string[];
 };
 
 export type Project = {

@@ -11,6 +11,12 @@ export type GateFinding = {
   level: GateLevel;
   label: string;
   detail: string;
+  /**
+   * 來源欄位完全空白 = 「還沒開始」，不是「做錯了」。
+   * 判定等級不變（仍擋送審），只讓 UI 用中性符號呈現。
+   * ADHD／RSD：未嘗試就先看到紅叉會觸發迴避。
+   */
+  untouched?: boolean;
 };
 
 export type GateReport = {
@@ -55,6 +61,7 @@ export function evaluatePrdGates(state: AppState): GateReport {
       level: "block",
       label: "三行摘要不完整",
       detail: `缺少欄位：${missingSummary.join(", ")}（做什麼／給誰／為何現在）`,
+      untouched: missingSummary.length === 3,
     });
   } else {
     findings.push({
@@ -98,6 +105,7 @@ export function evaluatePrdGates(state: AppState): GateReport {
       level: "block",
       label: "Non-Goals 不足 3 條",
       detail: `目前約 ${ngCount} 條。至少 3 條「刻意不做」才能擋 scope 膨脹（S.CodingFlow 契約）。`,
+      untouched: !nongoalsText,
     });
   } else {
     findings.push({
@@ -116,6 +124,7 @@ export function evaluatePrdGates(state: AppState): GateReport {
       level: "block",
       label: "目標過薄",
       detail: "目標欄需可驗收描述（建議列點）",
+      untouched: !goalsText,
     });
   } else {
     findings.push({
@@ -134,6 +143,7 @@ export function evaluatePrdGates(state: AppState): GateReport {
       level: "block",
       label: "成功指標空白",
       detail: "需填寫指標／目標／量測（Desired Outcomes）",
+      untouched: !metrics.trim(),
     });
   } else if (!METRIC_RE.test(metrics)) {
     findings.push({

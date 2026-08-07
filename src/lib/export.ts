@@ -216,16 +216,18 @@ export function buildOpenspecTasks(state: AppState, project?: Project | null): s
     null;
   const title = p?.title ?? "PRD";
   let md = `# Tasks — ${title}\n\n`;
-  md += `> OpenSpec tasks skeleton（可由 Claude Code / Codex 勾選進度）\n\n`;
+  md += `> OpenSpec tasks skeleton（可由 Claude Code / Codex 勾選進度）\n`;
+  md += `> 勾完可用 SpecForge 專案頁「回讀 tasks.md」把檢查項狀態讀回來。\n`;
+  md += `> 行尾的 \`<!-- sf:… -->\` 是回讀錨點，請勿刪除（markdown 渲染時不顯示）。\n\n`;
   md += `## Plan Steps\n\n`;
 
   for (const s of state.sections) {
     const vals = state.sectionValues[s.id] || {};
     const filled = Object.values(vals).join("").trim().length > 20;
     const mark = filled || s.status === "done" ? "x" : " ";
-    md += `- [${mark}] ${s.n} ${s.title}\n`;
+    md += `- [${mark}] ${s.n} ${s.title} <!-- sf:s=${s.id} -->\n`;
     for (const c of s.checks) {
-      md += `  - [${c.pass ? "x" : " "}] ${c.label}\n`;
+      md += `  - [${c.pass ? "x" : " "}] ${c.label} <!-- sf:c=${s.id}/${c.id} -->\n`;
     }
   }
 

@@ -12,3 +12,6 @@ mac-app-build/SpecForge
 mac-app-build/SpecForgeTest
 vendor/markamd/node_modules/
 vendor/markamd/src-tauri/target/
+
+# git worktrees（Orca / 平行工作用，不進版控）
+.worktrees/
