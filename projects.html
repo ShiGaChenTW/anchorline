@@ -108,7 +108,10 @@
           <button type="button" class="btn" id="btn-export-json">匯出 JSON</button>
           <button type="button" class="btn" id="btn-export-html">匯出 HTML</button>
           <button type="button" class="btn" id="btn-export-openspec" title="PRD.md + tasks.md + proposal.md">匯出 OpenSpec</button>
+          <button type="button" class="btn" id="btn-read-tasks" title="讀回 agent 勾選過的 tasks.md（不含簽核）">回讀 tasks.md</button>
         </div>
+        <!-- 不可用 hidden：WebKit 會擋 file dialog -->
+        <input type="file" id="tasks-readback-input" class="visually-hidden-file" accept=".md,text/markdown" tabindex="-1" aria-hidden="true" />
         <button type="button" class="btn" id="btn-import" data-od-id="btn-import" title="選擇資料夾，自動偵測 PRD 相關檔並評分">專案匯入</button>
         <!-- 不可用 hidden：WebKit 會擋 file dialog；App 走原生 NSOpenPanel，此為瀏覽器 fallback -->
         <input type="file" id="folder-import-input" class="visually-hidden-file" webkitdirectory directory multiple tabindex="-1" aria-hidden="true" />

@@ -593,6 +593,50 @@ export const store = {
     return { ok: true, projectId: id };
   },
 
+  /**
+   * 把一個既有專案綁到磁碟上的資料夾。
+   *
+   * 與「專案匯入」不同：不做評分、不覆蓋任何章節內容。只是記下
+   * 「這份 PRD 對應到這個資料夾」，讓編輯台的檔案樹有東西可畫。
+   * 手動新建的 PRD 通常是先有內容才有資料夾，內容不能被掃描結果蓋掉。
+   */
+  bindProjectFolder(
+    projectId: string,
+    folderName: string,
+    folderPath: string,
+    paths: string[],
+    matchedFiles: { slot: string; path: string; contentScore: number }[] = [],
+  ) {
+    const existing = state.projects.find((p) => p.id === projectId);
+    if (!existing) return;
+
+    state = {
+      ...state,
+      projects: state.projects.map((p) =>
+        p.id !== projectId
+          ? p
+          : {
+              ...p,
+              sourceFolder: folderName,
+              lastFileAt: nowIso(),
+              importSummary: {
+                folderName,
+                rootPath: folderPath,
+                scannedAt: nowIso(),
+                // 綁定不評分：這些數字留給真正的匯入流程
+                overallScore: p.importSummary?.overallScore ?? 0,
+                coveragePct: p.importSummary?.coveragePct ?? 0,
+                progressPct: p.importSummary?.progressPct ?? 0,
+                matchedFiles: matchedFiles.length ? matchedFiles : (p.importSummary?.matchedFiles ?? []),
+                missingRequired: p.importSummary?.missingRequired ?? [],
+                allPaths: paths,
+              },
+            },
+      ),
+    };
+    emit();
+  },
+
   setProjects(projects: Project[]) {
     state = { ...state, projects };
     emit();
@@ -660,6 +704,8 @@ export const store = {
           contentScore: m.contentScore,
         })),
         missingRequired,
+        // 只留路徑不留內文，否則 localStorage 很快就爆
+        allPaths: c.files.map((f) => f.path),
       };
 
       const folder = folderName || c.name || "匯入專案";

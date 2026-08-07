@@ -26,11 +26,16 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
             DispatchQueue.main.async { [weak self] in
                 self?.pickFolder()
             }
+        case "pickProjectFolder":
+            // 綁定／新建專案資料夾：面板文案不同，且允許在面板裡直接建新資料夾
+            DispatchQueue.main.async { [weak self] in
+                self?.pickFolder(bindMode: true)
+            }
         case "ping":
             postToJS([
                 "type": "pong",
                 "native": true,
-                "capabilities": ["pickFolder"],
+                "capabilities": ["pickFolder", "pickProjectFolder", "createDirectories"],
             ])
         default:
             NSLog("SpecForge bridge unknown action: \(action)")
@@ -38,18 +43,26 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
     }
 
     /// 選單 / JS 共用
-    func pickFolder() {
+    func pickFolder(bindMode: Bool = false) {
         let hostWindow = webView?.window ?? NSApp.keyWindow ?? NSApp.mainWindow
 
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.canCreateDirectories = false
+        // App 本身不寫磁碟；「新增資料夾」由 NSOpenPanel 自己完成，
+        // 這是這個 app 能建資料夾的唯一途徑，兩種模式都開放。
+        panel.canCreateDirectories = true
         panel.treatsFilePackagesAsDirectories = true
-        panel.message = "選擇要匯入的專案資料夾（將掃描其中的 Markdown／文字檔）"
-        panel.prompt = "選擇此資料夾"
-        panel.title = "專案匯入"
+        if bindMode {
+            panel.message = "選擇這份 PRD 對應的專案資料夾。沒有的話，用左下角「新增資料夾」建一個。"
+            panel.prompt = "使用此資料夾"
+            panel.title = "指定專案資料夾"
+        } else {
+            panel.message = "選擇要匯入的專案資料夾（將掃描其中的 Markdown／文字檔）"
+            panel.prompt = "選擇此資料夾"
+            panel.title = "專案匯入"
+        }
         panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
 
         let handle: (NSApplication.ModalResponse) -> Void = { [weak self] response in
@@ -67,7 +80,7 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
 
                 let files = Self.scanDirectory(url)
                 let payload: [String: Any] = [
-                    "type": "folderPickResult",
+                    "type": bindMode ? "projectFolderPickResult" : "folderPickResult",
                     "folderName": url.lastPathComponent,
                     "folderPath": url.path,
                     "files": files,
