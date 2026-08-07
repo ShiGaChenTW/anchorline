@@ -12,6 +12,11 @@
 import { store } from "../data/store";
 import { projectDisplayName, type Project } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
+import {
+  aiSuggestions,
+  localSuggestions,
+  type Suggestion,
+} from "../lib/dashboard-optimize";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { askForProjectFolder } from "../lib/project-folder";
 import { syncRailContext } from "../lib/rail-projects";
@@ -470,6 +475,183 @@ if (!requireAuth()) {
       });
     }
   }
+
+  // ── 優化 Dashboard：找 agent 檢查欄位內容 ──────────────────
+
+  /** 目前可用的 agent（管理中心啟用中的） */
+  function availableAgents() {
+    return store
+      .get()
+      .employees.filter((e) => e.kind === "agent" && e.active !== false && e.agentEnabled !== false);
+  }
+
+  function optimizeModal(inner: string): HTMLElement {
+    document.getElementById("opt-modal")?.remove();
+    const back = document.createElement("div");
+    back.className = "modal-back open";
+    back.id = "opt-modal";
+    back.innerHTML = `<div class="modal opt-modal" role="dialog" aria-modal="true" aria-labelledby="opt-title">${inner}</div>`;
+    document.body.appendChild(back);
+    back.querySelectorAll("[data-opt-close]").forEach((b) =>
+      b.addEventListener("click", () => back.remove()),
+    );
+    back.addEventListener("click", (e) => {
+      if (e.target === back) back.remove();
+    });
+    return back;
+  }
+
+  /** 第一步：選 agent */
+  function openOptimize() {
+    const p = activeProject();
+    if (!p) {
+      toast("先選一個專案");
+      return;
+    }
+    const agents = availableAgents();
+
+    optimizeModal(`
+      <header>
+        <div>
+          <h3 id="opt-title">優化 Dashboard</h3>
+          <p class="sub">檢查專案名稱與介紹是否還說得通。其餘欄位是磁碟量測結果，不會被改動。</p>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" data-opt-close>關閉</button>
+      </header>
+      <div class="body">
+        <p class="d-eyebrow">選一個 agent</p>
+        <div class="opt-agents">
+          <button type="button" class="opt-agent is-local" data-agent="">
+            <span class="opt-agent-name">本機規則檢查</span>
+            <span class="opt-agent-brief">不呼叫 API，永遠可用。只挑「拿量測結果就能判斷」的問題。</span>
+          </button>
+          ${agents
+            .map(
+              (a) => `<button type="button" class="opt-agent" data-agent="${escapeHtml(a.id)}">
+                <span class="opt-agent-name">${escapeHtml(a.name)}</span>
+                <span class="opt-agent-brief">${escapeHtml(a.agentRoleBrief || a.title || "AI agent")}</span>
+              </button>`,
+            )
+            .join("")}
+        </div>
+        ${agents.length ? "" : `<p class="d-note-empty">管理中心還沒有啟用的 agent，可以先用本機規則檢查。</p>`}
+      </div>
+    `);
+
+    document.querySelectorAll<HTMLButtonElement>(".opt-agent").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.agent || "";
+        const agent = id ? availableAgents().find((a) => a.id === id) : null;
+        void runOptimize(agent?.name ?? "本機規則檢查", agent?.agentRoleBrief ?? "", !!agent);
+      });
+    });
+  }
+
+  /** 第二步：跑檢查，列出建議 */
+  async function runOptimize(agentName: string, brief: string, useAi: boolean) {
+    const p = activeProject();
+    if (!p) return;
+    const stats = p.importSummary?.rootPath ? (cache.get(p.importSummary.rootPath) ?? null) : null;
+
+    optimizeModal(`
+      <header><div><h3 id="opt-title">${escapeHtml(agentName)} 檢查中…</h3></div></header>
+      <div class="body"><p class="d-note-empty">正在比對欄位內容與量測結果。</p></div>
+    `);
+
+    // 本機規則永遠先跑：AI 失敗時仍有東西可看
+    let list: Suggestion[] = localSuggestions(p, stats);
+    let aiError = "";
+    if (useAi) {
+      try {
+        list = [...list, ...(await aiSuggestions(p, stats, brief))];
+      } catch (e) {
+        aiError = e instanceof Error ? e.message : "AI 呼叫失敗";
+      }
+    }
+
+    renderSuggestions(agentName, list, aiError, !stats);
+  }
+
+  /** 第三步：使用者逐項確認才寫入 */
+  function renderSuggestions(
+    agentName: string,
+    list: Suggestion[],
+    aiError: string,
+    noStats: boolean,
+  ) {
+    const notes = [
+      aiError ? `AI 部分失敗：${escapeHtml(aiError)}　以下只有本機規則的結果。` : "",
+      noStats ? "這個專案還沒量測過磁碟，判斷依據較少。可先按「重新量測」。" : "",
+    ].filter(Boolean);
+
+    const back = optimizeModal(`
+      <header>
+        <div>
+          <h3 id="opt-title">${escapeHtml(agentName)} 的建議</h3>
+          <p class="sub">${list.length ? `${list.length} 項　勾選要套用的，沒勾的不會動` : "沒有需要調整的欄位"}</p>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" data-opt-close>關閉</button>
+      </header>
+      <div class="body">
+        ${notes.length ? `<ul class="opt-notes">${notes.map((n) => `<li>${n}</li>`).join("")}</ul>` : ""}
+        ${
+          list.length
+            ? `<ul class="opt-list">${list
+                .map(
+                  (x, i) => `<li>
+                    <label class="opt-item">
+                      <input type="checkbox" data-opt-pick="${i}" ${x.current === x.proposed ? "" : "checked"} />
+                      <span class="opt-item-body">
+                        <span class="opt-item-head">
+                          <span class="opt-item-field">${escapeHtml(x.label)}</span>
+                          <span class="opt-item-src">${escapeHtml(x.source)}</span>
+                        </span>
+                        <span class="opt-why">${escapeHtml(x.why)}</span>
+                        ${
+                          x.current === x.proposed
+                            ? `<span class="opt-noop">這一項只是提醒，沒有可直接套用的新內容 —— 請自己改。</span>`
+                            : `<span class="opt-diff">
+                                 <span class="opt-before">${escapeHtml(x.current)}</span>
+                                 <span class="opt-after">${escapeHtml(x.proposed)}</span>
+                               </span>`
+                        }
+                      </span>
+                    </label>
+                  </li>`,
+                )
+                .join("")}</ul>`
+            : `<p class="d-note-empty">名稱與介紹目前和量測到的事實一致，沒有要改的。</p>`
+        }
+      </div>
+      <footer>
+        <button type="button" class="btn" data-opt-close>取消</button>
+        <button type="button" class="btn btn-primary" id="opt-apply" ${list.length ? "" : "disabled"}>套用勾選的</button>
+      </footer>
+    `);
+
+    back.querySelector("#opt-apply")?.addEventListener("click", () => {
+      const p = activeProject();
+      if (!p) return;
+      let n = 0;
+      back.querySelectorAll<HTMLInputElement>("[data-opt-pick]").forEach((cb) => {
+        if (!cb.checked) return;
+        const x = list[Number(cb.dataset.optPick)];
+        if (!x || x.current === x.proposed) return;
+        if (x.field === "name") store.renameProject(p.id, x.proposed);
+        else store.setProjectDescription(p.id, x.proposed);
+        n++;
+      });
+      back.remove();
+      if (n) {
+        toast(`已套用 ${n} 項`);
+        load(true);
+      } else {
+        toast("沒有勾選任何可套用的項目");
+      }
+    });
+  }
+
+  document.getElementById("btn-optimize")?.addEventListener("click", openOptimize);
 
   document.getElementById("btn-refresh-stats")?.addEventListener("click", () => {
     toast("重新量測中…");

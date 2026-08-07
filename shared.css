@@ -6702,3 +6702,58 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 @media (max-width: 1100px) { .d-grid > .d-tall { grid-column: span 1; } }
 /* HEAD 那列同時有 HEAD 與 tag 兩個徽章，5 欄不夠會擠出隱式第二列 */
 .d-commits li { grid-template-columns: 10px auto minmax(0, 1fr) auto auto auto; }
+
+/* ═══════════════════════════════════════════════════════════════
+   優化 Dashboard：選 agent → 看建議 → 逐項確認才寫入
+   ═══════════════════════════════════════════════════════════════ */
+.opt-modal { width: min(620px, 94vw); }
+.opt-modal header .sub { margin: 3px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.opt-modal .body { padding: 18px 16px 8px; max-height: 62vh; overflow: auto; }
+
+.opt-agents { display: grid; gap: 8px; }
+.opt-agent {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+}
+.opt-agent:hover { background: var(--inset); border-color: var(--accent); }
+.opt-agent:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.opt-agent-name { font-size: 14px; font-weight: 600; color: var(--fg); }
+.opt-agent-brief { font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.opt-agent.is-local { border-style: dashed; }
+
+.opt-notes { margin: 0 0 14px; padding-left: 18px; font-size: 12.5px; line-height: 1.6; color: var(--warn); }
+
+.opt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.opt-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.opt-item:hover { background: var(--inset); }
+.opt-item-body { display: grid; gap: 6px; min-width: 0; }
+.opt-item-head { display: flex; align-items: baseline; gap: 8px; }
+.opt-item-field { font-size: 13px; font-weight: 600; color: var(--fg); }
+.opt-item-src {
+  padding: 1px 6px; border-radius: 4px;
+  font-size: 10.5px; color: var(--muted); background: var(--inset);
+}
+.opt-why { font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+
+/* 改動前後：紅刪綠增太像 code diff，這裡用「舊的變淡＋刪除線 → 新的正常」 */
+.opt-diff { display: grid; gap: 4px; font-size: 13px; line-height: 1.5; }
+.opt-before { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+.opt-after { color: var(--fg); }
+.opt-after::before { content: "→ "; color: var(--accent); }
+.opt-noop { font-size: 12.5px; color: var(--warn); }
+
+.opt-modal footer { display: flex; justify-content: flex-end; gap: 8px; }
