@@ -13,6 +13,7 @@ import {
   SEED_TEMPLATES,
   SEED_WORKFLOW,
   SEED_WORKFLOW_PROD,
+  TEST_CASE_DOCS,
 } from "./seed";
 import type {
   AgentFamily,
@@ -186,6 +187,15 @@ function seedState(): AppState {
   const activeId = projects[0]?.id ?? "";
   const projectSectionValues: AppState["projectSectionValues"] = {};
   if (activeId) projectSectionValues[activeId] = structuredClone(sectionValues);
+
+  // 三個驗收測試案例各有自己的正文；沒有這步切過去會全部是空白，
+  // A/B/C 的差異就不見了
+  if (isTest) {
+    const blank = emptySectionValues(sections);
+    for (const [id, docs] of Object.entries(TEST_CASE_DOCS)) {
+      projectSectionValues[id] = { ...structuredClone(blank), ...structuredClone(docs) };
+    }
+  }
 
   return {
     projects,

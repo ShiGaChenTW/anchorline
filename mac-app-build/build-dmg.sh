@@ -24,12 +24,12 @@ else
 fi
 
 if [[ "$VARIANT" == "test" ]]; then
-  # 測試版：App 顯示名稱含 Test（Dock / 選單列 / Finder）
-  APP_DISPLAY_NAME="PRD開發監控台 Test"
-  APP_BUNDLE_DIR_NAME="PRD開發監控台 Test"
+  # 測試版：App 顯示名稱含「測試」（Dock / 選單列 / Finder 一眼分得出來）
+  APP_DISPLAY_NAME="PRD開發監控台 測試"
+  APP_BUNDLE_DIR_NAME="PRD開發監控台 測試"
   APP_EXEC="SpecForgeTest"
   BUNDLE_ID="com.specforge.prd.workbench.test"
-  DMG_FILE="$PROJECT_DIR/PRD開發監控台-Test-${VERSION}-macOS.dmg"
+  DMG_FILE="$PROJECT_DIR/PRD開發監控台-測試-${VERSION}-macOS.dmg"
 else
   # 正式版
   APP_DISPLAY_NAME="PRD開發監控台"

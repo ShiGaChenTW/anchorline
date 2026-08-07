@@ -31,6 +31,19 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
             DispatchQueue.main.async { [weak self] in
                 self?.pickFolder(bindMode: true)
             }
+        case "projectStats":
+            // 專案儀表板要的三件事：git 狀態、技術線、資料夾容量。
+            // 全部只能在原生端算 —— WebView 看不到磁碟，也跑不了 git。
+            guard let dict = message.body as? [String: Any],
+                  let path = dict["folderPath"] as? String, !path.isEmpty
+            else {
+                postToJS(["type": "projectStatsError", "message": "缺少 folderPath"])
+                return
+            }
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let stats = Self.collectStats(URL(fileURLWithPath: path))
+                DispatchQueue.main.async { self?.postToJS(stats) }
+            }
         case "ping":
             postToJS([
                 "type": "pong",
@@ -98,7 +111,129 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
         }
     }
 
+    // MARK: - 專案統計（儀表板用）
+
+    /**
+     * 只跑寫死的 git 子指令，資料夾路徑當工作目錄傳入 —— 不接受任何來自 JS 的
+     * 參數字串，避免命令注入。非 git 專案就安靜回空值，不當成錯誤。
+     */
+    private static func git(_ args: [String], in dir: URL) -> String? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        p.arguments = ["git", "-C", dir.path] + args
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        guard p.terminationStatus == 0 else { return nil }
+        return String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 走完整個資料夾：容量、副檔名分佈、manifest 檔名。文字檔那條路只收 .md/.txt，
+    /// 這裡要看到 .ts/.rs/.py 才算得出技術線，所以是另一趟走訪。
+    static func collectStats(_ root: URL) -> [String: Any] {
+        let fm = FileManager.default
+        let skip: Set<String> = [
+            "node_modules", ".git", "dist", "build", ".next", "target",
+            "coverage", "vendor", ".turbo", ".cache", "DerivedData", ".venv", "__pycache__",
+        ]
+        var totalBytes: Int64 = 0
+        var fileCount = 0
+        var extBytes: [String: Int64] = [:]
+        var extCount: [String: Int] = [:]
+        var manifests: [String] = []
+        /// 這些檔名決定框架判定，體積小，直接讀回內容交給 JS 判
+        let manifestNames: Set<String> = [
+            "package.json", "cargo.toml", "go.mod", "pyproject.toml", "requirements.txt",
+            "gemfile", "pom.xml", "build.gradle", "composer.json", "pubspec.yaml",
+            "package.swift", "podfile", "dockerfile", "docker-compose.yml", "makefile",
+        ]
+        var manifestBodies: [[String: String]] = []
+
+        if let e = fm.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .isDirectoryKey],
+            options: []
+        ) {
+            for case let url as URL in e {
+                if url.pathComponents.contains(where: { skip.contains($0) }) {
+                    e.skipDescendants()
+                    continue
+                }
+                let v = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+                guard v?.isRegularFile == true else { continue }
+                let size = Int64(v?.fileSize ?? 0)
+                totalBytes += size
+                fileCount += 1
+
+                let ext = url.pathExtension.lowercased()
+                if !ext.isEmpty {
+                    extBytes[ext, default: 0] += size
+                    extCount[ext, default: 0] += 1
+                }
+
+                let name = url.lastPathComponent.lowercased()
+                if manifestNames.contains(name), manifests.count < 20 {
+                    manifests.append(url.lastPathComponent)
+                    // 只讀小檔，framework 判定不需要整包
+                    if size < 96 * 1024,
+                       let d = try? Data(contentsOf: url),
+                       let text = String(data: d, encoding: .utf8) {
+                        manifestBodies.append(["name": url.lastPathComponent, "text": text])
+                    }
+                }
+            }
+        }
+
+        var payload: [String: Any] = [
+            "type": "projectStats",
+            "folderPath": root.path,
+            "totalBytes": totalBytes,
+            "fileCount": fileCount,
+            "extBytes": extBytes.mapValues { Int($0) },
+            "extCount": extCount,
+            "manifests": manifests,
+            "manifestBodies": manifestBodies,
+        ]
+
+        // git：不是 repo 就整段留空，前端顯示「非 git 專案」而不是報錯
+        if let head = git(["rev-parse", "--short", "HEAD"], in: root) {
+            var g: [String: Any] = ["head": head]
+            g["branch"] = git(["rev-parse", "--abbrev-ref", "HEAD"], in: root) ?? ""
+            g["lastMessage"] = git(["log", "-1", "--pretty=%s"], in: root) ?? ""
+            g["lastAt"] = git(["log", "-1", "--pretty=%cI"], in: root) ?? ""
+            g["author"] = git(["log", "-1", "--pretty=%an"], in: root) ?? ""
+            // porcelain 每行一個變更檔；空字串代表乾淨
+            let dirty = git(["status", "--porcelain"], in: root) ?? ""
+            g["dirtyCount"] = dirty.isEmpty ? 0 : dirty.split(separator: "\n").count
+            g["remote"] = git(["remote", "get-url", "origin"], in: root) ?? ""
+            // 落後／超前 origin：沒有 upstream 就留 -1，前端顯示「未追蹤遠端」
+            if let ab = git(["rev-list", "--left-right", "--count", "@{u}...HEAD"], in: root) {
+                let parts = ab.split(whereSeparator: { $0 == "\t" || $0 == " " })
+                g["behind"] = Int(parts.first ?? "0") ?? 0
+                g["ahead"] = Int(parts.count > 1 ? parts[1] : "0") ?? 0
+            } else {
+                g["behind"] = -1
+                g["ahead"] = -1
+            }
+            g["tag"] = git(["describe", "--tags", "--abbrev=0"], in: root) ?? ""
+            g["commitCount"] = Int(git(["rev-list", "--count", "HEAD"], in: root) ?? "0") ?? 0
+            payload["git"] = g
+        }
+
+        return payload
+    }
+
     /// 遞迴掃描文字檔；path 格式與 webkitRelativePath 對齊：FolderName/rel/path.md
+    /// 供 AppDelegate 的 handoff 流程重用同一份掃描邏輯
+    static func scanDirectoryPublic(_ root: URL) -> [[String: Any]] { scanDirectory(root) }
+
+    /// 供 AppDelegate 的 handoff 流程送資料進 JS
+    func postToJSPublic(_ payload: [String: Any]) { postToJS(payload) }
+
     private static func scanDirectory(_ root: URL) -> [[String: Any]] {
         var results: [[String: Any]] = []
         let fm = FileManager.default
@@ -397,6 +532,58 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
         // 資料夾內容由原生讀取後以 JSON 注入，不需擴張 allowingReadAccessTo
         webView.loadFileURL(indexURL, allowingReadAccessTo: distDir)
+    }
+
+    // MARK: - Agent 交接（handoff）
+    //
+    // agent（Skill）在終端問完問題、把資料夾與 seed 檔寫好之後，
+    // 會丟一個 handoff 檔再 `open -a` 這個 App。App 啟動／回到前景時讀它，
+    // 掃描該資料夾並把結果交給 JS，使用者不必自己去找「專案匯入」。
+    //
+    // 用 drop file 而不是註冊 URL scheme：少一半程式碼，而且未簽章的 app
+    // 走 LaunchServices 註冊 scheme 常常靜默失敗。
+    private static var handoffURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".specforge/handoff.json")
+    }
+
+    func consumeHandoffIfAny() {
+        let url = Self.handoffURL
+        guard let data = try? Data(contentsOf: url),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let folderPath = obj["folderPath"] as? String
+        else { return }
+
+        // 消費即刪除：同一份交接只生效一次，否則每次切回前景都會重跑
+        try? FileManager.default.removeItem(at: url)
+
+        let folderURL = URL(fileURLWithPath: folderPath)
+        guard FileManager.default.fileExists(atPath: folderURL.path) else {
+            NSLog("SpecForge handoff: folder not found \(folderPath)")
+            return
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let files = SpecForgeBridge.scanDirectoryPublic(folderURL)
+            let payload: [String: Any] = [
+                "type": "agentHandoff",
+                "folderName": folderURL.lastPathComponent,
+                "folderPath": folderURL.path,
+                "files": files,
+                "title": obj["title"] as? String ?? folderURL.lastPathComponent,
+                "section": obj["section"] as? String ?? "",
+            ]
+            DispatchQueue.main.async { self.bridge.postToJSPublic(payload) }
+        }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        // App 已經開著時，agent 再丟一份交接也要吃得到
+        consumeHandoffIfAny()
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        consumeHandoffIfAny()
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {

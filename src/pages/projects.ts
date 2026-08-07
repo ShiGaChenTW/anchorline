@@ -3,8 +3,6 @@ import { APP_VARIANT } from "../data/seed";
 import { projectDisplayName, type Project, type ProjectStatus } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import {
-  BEGINNER_EXAMPLES,
-  BEGINNER_STEPS,
   setBeginnerMode,
 } from "../lib/beginner-flow";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile, exportOpenspecBundle } from "../lib/export";
@@ -18,6 +16,7 @@ import {
   type NativeFolderFile,
   type ProjectCandidate,
 } from "../lib/folder-import";
+import { initFirstRunTour } from "../lib/first-run-tour";
 import { initHelpOverlay } from "../lib/help-overlay";
 import {
   applyTasksReadback,
@@ -49,6 +48,7 @@ if (!requireAuth()) {
   bindLogout();
   initHelpOverlay();
   bindRailProjects();
+  initFirstRunTour();
 
   // L1–L6 strip under toolbar
   {
@@ -396,57 +396,60 @@ if (!requireAuth()) {
 
   /* ─── PRD 新手撰寫流程（7 步） ─── */
   let wizStep = 0;
-  const WIZ_MAX = BEGINNER_STEPS.length - 1;
-  let beginnerPath = true; // true=新手引導；false=快速新建（仍走同精靈，可跳過說明）
+  /** 3 個問題 + 1 個確認頁 */
+  const WIZ_MAX = 3;
+  const DRAFT_KEY = "specforge:new-prd-draft:v1";
+  let beginnerPath = true;
 
+  /** 三題的欄位與範例句。範例句是任務啟動的坡道，不是裝飾。 */
+  const ASK: { id: string; label: string; example: string }[] = [
+    {
+      id: "wiz-what",
+      label: "做什麼",
+      example: "在登入流程加入 TOTP 與 WebAuthn 第二因素，並支援工作區強制政策。",
+    },
+    { id: "wiz-who", label: "給誰", example: "租戶管理員與資安團隊；一般使用者為受影響對象。" },
+    {
+      id: "wiz-why",
+      label: "為何現在",
+      example: "兩家企業客戶把 2FA 列為續約條件，合約在 Q3 到期。",
+    },
+  ];
+
+  const askEl = (id: string) =>
+    document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
+
+  /** 進度條：填充式而非離散編號，看得出「快到了」 */
   function renderWizardChrome() {
     const stepsEl = document.getElementById("wizard-steps");
     if (stepsEl) {
-      stepsEl.innerHTML = BEGINNER_STEPS.map(
-        (s) =>
-          `<span data-ws="${s.n}" class="${s.n === wizStep ? "on" : s.n < wizStep ? "done" : ""}">${s.n + 1} ${escapeHtml(s.label)}</span>`,
-      ).join("");
-    }
-    const step = BEGINNER_STEPS[wizStep];
-    const titleEl = document.getElementById("wiz-coach-title");
-    const bodyEl = document.getElementById("wiz-coach-body");
-    const tipsEl = document.getElementById("wiz-coach-tips");
-    if (step && titleEl) titleEl.textContent = step.title;
-    if (step && bodyEl) bodyEl.textContent = step.coach;
-    if (step && tipsEl) {
-      tipsEl.innerHTML = step.tips.map((t) => `<li>${escapeHtml(t)}</li>`).join("");
+      stepsEl.setAttribute("aria-valuenow", String(Math.min(wizStep + 1, WIZ_MAX)));
+      stepsEl.innerHTML = Array.from({ length: WIZ_MAX }, (_, i) => {
+        const state = i < wizStep ? "done" : i === wizStep ? "on" : "";
+        return `<span class="ask-seg ${state}"></span>`;
+      }).join("");
     }
     const modeLabel = document.getElementById("wiz-mode-label");
     if (modeLabel) {
-      modeLabel.textContent = beginnerPath
-        ? "新手引導 · 7 步完成可送審骨架"
-        : "快速新建 · 同一套骨架，可略過提示直接填";
+      modeLabel.textContent =
+        wizStep >= WIZ_MAX
+          ? beginnerPath
+            ? "建立後新手教練會在編輯台逐節帶你寫。"
+            : "答不出來的欄位進編輯台再補就好。"
+          : `第 ${wizStep + 1} 題 / 共 3 · 約還需 ${Math.max(1, (WIZ_MAX - wizStep) * 30)} 秒`;
     }
   }
 
   function renderConfirmSummary() {
     const dl = document.getElementById("wiz-confirm-dl");
     if (!dl) return;
-    const title =
-      (document.getElementById("new-title") as HTMLInputElement | null)?.value.trim() || "（未填標題）";
-    const what =
-      (document.getElementById("wiz-what") as HTMLInputElement | null)?.value.trim() || "—";
-    const who =
-      (document.getElementById("wiz-who") as HTMLInputElement | null)?.value.trim() || "—";
-    const why =
-      (document.getElementById("wiz-why") as HTMLTextAreaElement | null)?.value.trim() || "—";
-    const ngs = ["wiz-ng1", "wiz-ng2", "wiz-ng3"]
-      .map((id) => (document.getElementById(id) as HTMLInputElement).value.trim())
-      .filter(Boolean);
-    const metrics =
-      (document.getElementById("wiz-metrics") as HTMLTextAreaElement | null)?.value.trim() || "—";
+    const val = (id: string) => askEl(id)?.value.trim() || "";
+    const what = val("wiz-what");
     const rows: [string, string][] = [
-      ["標題", title],
-      ["做什麼", what],
-      ["給誰", who],
-      ["為何現在", why],
-      ["Non-Goals", ngs.length ? ngs.map((x, i) => `${i + 1}. ${x}`).join("\n") : "（未滿 3 條）"],
-      ["成功指標", metrics],
+      ["標題", val("new-title") || what || "（未填）"],
+      ["做什麼", what || "（跳過了 — 進編輯台再補）"],
+      ["給誰", val("wiz-who") || "（跳過了 — 進編輯台再補）"],
+      ["為何現在", val("wiz-why") || "（跳過了 — 進編輯台再補）"],
     ];
     dl.innerHTML = rows
       .map(
@@ -459,81 +462,93 @@ if (!requireAuth()) {
   function setWizardStep(step: number) {
     wizStep = Math.max(0, Math.min(WIZ_MAX, step));
     document.querySelectorAll(".wizard-pane").forEach((p) => {
-      const n = Number((p as HTMLElement).dataset.pane);
-      (p as HTMLElement).hidden = n !== wizStep;
+      (p as HTMLElement).hidden = Number((p as HTMLElement).dataset.pane) !== wizStep;
     });
     renderWizardChrome();
     if (wizStep === WIZ_MAX) renderConfirmSummary();
+
     const prev = document.getElementById("wizard-prev") as HTMLButtonElement | null;
     const next = document.getElementById("wizard-next") as HTMLButtonElement | null;
+    const skip = document.getElementById("wizard-skip") as HTMLButtonElement | null;
     const create = document.getElementById("modal-create") as HTMLButtonElement | null;
     if (prev) prev.hidden = wizStep === 0;
-    if (next) next.hidden = wizStep === WIZ_MAX;
+    if (next) {
+      next.hidden = wizStep === WIZ_MAX;
+      next.textContent = wizStep === WIZ_MAX - 1 ? "看一下再建立" : "下一題";
+    }
+    if (skip) skip.hidden = wizStep === WIZ_MAX;
     if (create) create.hidden = wizStep !== WIZ_MAX;
+
+    // 焦點直接落在輸入框：ADHD 少一個「現在要點哪裡」的判斷
+    if (wizStep < WIZ_MAX) {
+      const el = askEl(ASK[wizStep]!.id);
+      window.setTimeout(() => el?.focus(), 30);
+    }
   }
 
+  /**
+   * 草稿：中途關掉不該懲罰使用者。ADHD 的中斷率高，
+   * 丟掉半份輸入等於保證下次不會再開這個對話框。
+   */
+  function saveDraft() {
+    try {
+      const data: Record<string, string> = {};
+      for (const a of ASK) data[a.id] = askEl(a.id)?.value ?? "";
+      data["new-title"] = (askEl("new-title")?.value ?? "");
+      if (Object.values(data).every((v) => !v.trim())) {
+        localStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ step: wizStep, data }));
+      const flag = document.getElementById("ask-draft");
+      if (flag) flag.hidden = false;
+    } catch {
+      /* private mode */
+    }
+  }
+
+  function loadDraft(): boolean {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return false;
+      const { step, data } = JSON.parse(raw) as { step: number; data: Record<string, string> };
+      for (const [id, v] of Object.entries(data)) {
+        const el = askEl(id);
+        if (el) el.value = v;
+      }
+      setWizardStep(Math.min(step ?? 0, WIZ_MAX));
+      const flag = document.getElementById("ask-draft");
+      if (flag) flag.hidden = false;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function clearDraft() {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
+    const flag = document.getElementById("ask-draft");
+    if (flag) flag.hidden = true;
+  }
+
+  /** 不擋。空著也能往下走，缺的欄位在編輯台由 gate 接手。 */
   function validateWizardStep(): boolean {
-    if (wizStep === 1) {
-      const title = (document.getElementById("new-title") as HTMLInputElement).value.trim();
-      const what = (document.getElementById("wiz-what") as HTMLInputElement).value.trim();
-      if (!title || !what) {
-        toast("請填標題與「做什麼」");
-        return false;
-      }
-    }
-    if (wizStep === 2) {
-      const who = (document.getElementById("wiz-who") as HTMLInputElement).value.trim();
-      const why = (document.getElementById("wiz-why") as HTMLTextAreaElement).value.trim();
-      if (!who || !why) {
-        toast("請填「給誰」與「為何現在」");
-        return false;
-      }
-    }
-    if (wizStep === 3) {
-      const problem = (document.getElementById("wiz-problem") as HTMLTextAreaElement).value.trim();
-      if (problem.length < 20) {
-        toast("問題陳述請再具體一些（至少約 20 字）");
-        return false;
-      }
-    }
-    if (wizStep === 4) {
-      const ngs = ["wiz-ng1", "wiz-ng2", "wiz-ng3"].map(
-        (id) => (document.getElementById(id) as HTMLInputElement).value.trim(),
-      );
-      if (ngs.filter(Boolean).length < 3) {
-        toast("Non-Goals 需滿 3 條（送審結構契約）");
-        return false;
-      }
-    }
-    if (wizStep === 5) {
-      const metrics = (document.getElementById("wiz-metrics") as HTMLTextAreaElement).value.trim();
-      if (!metrics) {
-        toast("請至少填一條成功指標");
-        return false;
-      }
-    }
     return true;
   }
 
   function resetWizard() {
-    const ids = [
-      "new-title",
-      "wiz-what",
-      "wiz-who",
-      "wiz-why",
-      "wiz-problem",
-      "wiz-ng1",
-      "wiz-ng2",
-      "wiz-ng3",
-      "wiz-goals",
-      "wiz-metrics",
-    ];
-    for (const id of ids) {
-      const el = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
+    for (const id of [...ASK.map((a) => a.id), "new-title"]) {
+      const el = askEl(id);
       if (el) el.value = "";
     }
     const target = document.getElementById("new-target") as HTMLInputElement | null;
     if (target) target.value = "Q3 · 2026-09";
+    const flag = document.getElementById("ask-draft");
+    if (flag) flag.hidden = true;
     setWizardStep(0);
   }
 
@@ -545,52 +560,50 @@ if (!requireAuth()) {
     beginnerPath = asBeginner;
     setBeginnerMode(asBeginner);
     resetWizard();
-    if (!asBeginner) {
-      // 快速新建：跳過說明，直達一句話
-      setWizardStep(1);
-    }
+    if (loadDraft()) toast("接續上次未完成的草稿");
     openModal("modal");
   }
+
+  // 每次輸入都存草稿
+  for (const a of ASK) {
+    document.getElementById(a.id)?.addEventListener("input", saveDraft);
+  }
+  document.getElementById("new-title")?.addEventListener("input", saveDraft);
+
+  // 「不知道怎麼寫？先用這句」— 填入後直接把游標放到結尾，讓人接著改
+  document.querySelectorAll<HTMLButtonElement>(".ask-fill").forEach((btn, i) => {
+    btn.addEventListener("click", () => {
+      const a = ASK[i];
+      if (!a) return;
+      const el = askEl(a.id);
+      if (!el) return;
+      el.value = a.example;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+      saveDraft();
+      toast("放進去了 — 直接改成你的版本");
+    });
+  });
+
+  // 換題也要存 —— 只存欄位不存題號的話，接續草稿會回到第 1 題
+  document.getElementById("wizard-skip")?.addEventListener("click", () => {
+    setWizardStep(wizStep + 1);
+    saveDraft();
+  });
 
   document.getElementById("btn-new")?.addEventListener("click", () => openWizard(false));
   document.getElementById("btn-beginner")?.addEventListener("click", () => openWizard(true));
   document.getElementById("btn-beginner-cta")?.addEventListener("click", () => openWizard(true));
   document.getElementById("modal-close")?.addEventListener("click", () => closeModal("modal"));
   document.getElementById("modal-cancel")?.addEventListener("click", () => closeModal("modal"));
-  document.getElementById("wizard-prev")?.addEventListener("click", () => setWizardStep(wizStep - 1));
+  document.getElementById("wizard-prev")?.addEventListener("click", () => {
+    setWizardStep(wizStep - 1);
+    saveDraft();
+  });
   document.getElementById("wizard-next")?.addEventListener("click", () => {
     if (!validateWizardStep()) return;
     setWizardStep(wizStep + 1);
-  });
-
-  // 範例句填入
-  document.querySelectorAll("[data-fill]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const kind = (btn as HTMLElement).dataset.fill;
-      const ex = BEGINNER_EXAMPLES;
-      if (kind === "oneliner") {
-        const t = document.getElementById("new-title") as HTMLInputElement;
-        const w = document.getElementById("wiz-what") as HTMLInputElement;
-        if (t && !t.value.trim()) t.value = ex.title;
-        if (w) w.value = ex.what;
-      } else if (kind === "who") {
-        const who = document.getElementById("wiz-who") as HTMLInputElement;
-        const why = document.getElementById("wiz-why") as HTMLTextAreaElement;
-        if (who) who.value = ex.who;
-        if (why) why.value = ex.why;
-      } else if (kind === "problem") {
-        const p = document.getElementById("wiz-problem") as HTMLTextAreaElement;
-        if (p) p.value = ex.problem;
-      } else if (kind === "goals") {
-        (document.getElementById("wiz-ng1") as HTMLInputElement).value = ex.ng1;
-        (document.getElementById("wiz-ng2") as HTMLInputElement).value = ex.ng2;
-        (document.getElementById("wiz-ng3") as HTMLInputElement).value = ex.ng3;
-        (document.getElementById("wiz-goals") as HTMLTextAreaElement).value = ex.goals;
-      } else if (kind === "metrics") {
-        (document.getElementById("wiz-metrics") as HTMLTextAreaElement).value = ex.metrics;
-      }
-      toast("已填入範例句，請改成你的場景");
-    });
+    saveDraft();
   });
 
   document.getElementById("modal-create")?.addEventListener("click", () => {
@@ -601,19 +614,12 @@ if (!requireAuth()) {
     }
     if (!validateWizardStep()) return;
 
-    const title =
-      (document.getElementById("new-title") as HTMLInputElement | null)?.value.trim() ||
-      "新功能規格";
     const tpl = (document.getElementById("new-tpl") as HTMLSelectElement | null)?.value ?? "";
-    const what = (document.getElementById("wiz-what") as HTMLInputElement).value.trim();
-    const who = (document.getElementById("wiz-who") as HTMLInputElement).value.trim();
-    const why = (document.getElementById("wiz-why") as HTMLTextAreaElement).value.trim();
-    const problem = (document.getElementById("wiz-problem") as HTMLTextAreaElement).value.trim();
-    const ngs = ["wiz-ng1", "wiz-ng2", "wiz-ng3"]
-      .map((id) => (document.getElementById(id) as HTMLInputElement).value.trim())
-      .filter(Boolean);
-    const goals = (document.getElementById("wiz-goals") as HTMLTextAreaElement).value.trim();
-    const metrics = (document.getElementById("wiz-metrics") as HTMLTextAreaElement).value.trim();
+    const what = askEl("wiz-what")?.value.trim() ?? "";
+    const who = askEl("wiz-who")?.value.trim() ?? "";
+    const why = askEl("wiz-why")?.value.trim() ?? "";
+    // 標題留白就用「做什麼」那句 —— 少問一題
+    const title = askEl("new-title")?.value.trim() || what || "新功能規格";
 
     const p: Project = {
       id: `p${Date.now()}`,
@@ -639,26 +645,21 @@ if (!requireAuth()) {
       who: who || user.name,
       why: why || "",
     });
-    if (problem) store.setSectionField("problem", "problem", problem);
-    store.setSectionValues("goals", {
-      goals: goals || `• ${what || title}`,
-      nongoals: ngs.map((x) => `• ${x}`).join("\n"),
-    });
-    if (metrics) store.setSectionField("metrics", "m1", metrics);
-    store.updateSection("summary", { status: "warn" });
-    store.updateSection("problem", { status: problem ? "warn" : "empty" });
-    store.updateSection("goals", { status: "warn" });
-    store.updateSection("metrics", { status: metrics ? "warn" : "empty" });
+    // 問題／非目標／指標刻意不在這裡問：編輯台有起手骨架與結構 gate 帶著寫
+    store.updateSection("summary", { status: what || who || why ? "warn" : "empty" });
+    clearDraft();
 
-    setBeginnerMode(true);
-    toast(beginnerPath ? `已建立「${title}」· 進入新手教練編輯` : `已建立「${title}」`);
+    // 按「新手引導」才開編輯台的逐節教練；按「新建」就安靜進去
+    setBeginnerMode(beginnerPath);
+    toast(beginnerPath ? `已建立「${title}」· 新手教練會帶你逐節寫` : `已建立「${title}」`);
 
     // 手動新建沒有資料夾 → 主動問一次。使用者選「稍後再說」就直接進編輯台，
     // 綁定成功則等 toast 看得到再跳頁。
     closeModal("modal");
     askForProjectFolder(p.id, title);
 
-    const goEditor = () => location.href = "editor.html?beginner=1";
+    const goEditor = () =>
+      (location.href = beginnerPath ? "editor.html?beginner=1" : "editor.html");
     let done = false;
     const off = store.subscribe(() => {
       if (done) return;
@@ -1023,6 +1024,35 @@ if (!requireAuth()) {
 
   function handleNativeFolderPayload(payload: NativePayload) {
     if (!payload || typeof payload !== "object") return;
+
+    /**
+     * Agent 交接：Skill 在終端問完三題、把資料夾與 seed 檔寫好後丟 handoff 檔，
+     * App 啟動／回前景時讀到就走到這裡。直接掃描＋匯入＋跳編輯台 ——
+     * 使用者不必自己去找「專案匯入」按鈕。
+     */
+    if (payload.type === "agentHandoff") {
+      toast("agent 交接進來了，正在匯入…");
+      try {
+        const files = Array.isArray(payload.files) ? payload.files : [];
+        const result = scanFromNativeFolder(payload.folderName || "agent 專案", files);
+        const res = store.importProjectCandidates(
+          result.candidates.map((c) => ({ ...c, selected: true })),
+          payload.folderName || "agent 專案",
+        );
+        const first = res.projectIds[0];
+        if (first) {
+          store.setActiveProject(first);
+          setBeginnerMode(true);
+          window.setTimeout(() => (location.href = "editor.html"), 700);
+        } else {
+          applyScanResult(result);
+        }
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "agent 交接匯入失敗");
+      }
+      return;
+    }
+
     // 綁定專案資料夾走另一條路（不掃描評分），交給 project-folder.ts 的 callback
     if (payload.type === "projectFolderPickResult") {
       (window as Window & {

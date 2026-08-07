@@ -36,6 +36,9 @@
           <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086zM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064l6.286-6.286z"/></svg>
           編輯工作台
         </a>
+        <a class="nav-item" href="dashboard.html" data-od-id="nav-dashboard">
+          專案儀表板
+        </a>
         <a class="nav-item" href="templates.html" data-od-id="nav-templates">
           <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v3.5A1.75 1.75 0 0 1 14.25 7H1.75A1.75 1.75 0 0 1 0 5.25v-3.5zM1.75 1a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25H1.75zM0 10.75C0 9.784.784 9 1.75 9h12.5c.966 0 1.75.784 1.75 1.75v3.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25v-3.5zm1.75-.75a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25H1.75z"/></svg>
           章節範本
@@ -160,123 +163,74 @@
 </div>
 
 <div class="modal-back" id="modal" data-od-id="modal-new">
-  <div class="modal modal-wizard modal-wizard-beginner" role="dialog" aria-labelledby="modal-title" aria-describedby="wiz-coach">
+  <div class="modal modal-wizard modal-ask" role="dialog" aria-labelledby="modal-title">
     <header>
       <div>
-        <h3 id="modal-title">PRD 新手撰寫流程</h3>
-        <p class="sub" id="wiz-mode-label" style="margin:2px 0 0;font-size:12px">7 步完成第一份可送審骨架</p>
+        <h3 id="modal-title">建立新 PRD</h3>
+        <p class="sub" id="wiz-mode-label">3 個問題，約 90 秒。答不出來可以先跳過。</p>
       </div>
       <button type="button" class="btn btn-ghost btn-sm" id="modal-close">關閉</button>
     </header>
-    <div class="wizard-steps" id="wizard-steps" aria-label="撰寫步驟"></div>
-    <div class="wiz-coach" id="wiz-coach" aria-live="polite">
-      <div class="wiz-coach-title" id="wiz-coach-title">—</div>
-      <p class="wiz-coach-body" id="wiz-coach-body">—</p>
-      <ul class="wiz-coach-tips" id="wiz-coach-tips"></ul>
-    </div>
-    <div class="body">
-      <!-- 0 認識 -->
-      <div class="wizard-pane" data-pane="0">
-        <div class="beginner-intro">
-          <p>這份流程會帶你寫出 PRD 的<strong>最小可審閱骨架</strong>：</p>
-          <ol class="beginner-checklist">
-            <li>一句話交付物與受益角色</li>
-            <li>問題陳述（先不寫解法）</li>
-            <li>目標與至少 3 條 Non-Goals</li>
-            <li>可量測的成功指標</li>
-          </ol>
-          <p class="hint">正式版內建 1 份完整範例「SaaS 雙重驗證（2FA）」，卡住時可對照。</p>
-          <div class="field-row" style="margin-top:12px">
-            <div class="field">
-              <label>範本類型</label>
-              <select id="new-tpl">
-                <option>標準功能 PRD</option>
-                <option>平台／基礎設施</option>
-                <option>資安與合規</option>
-                <option>成長實驗</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>目標發布</label>
-              <input type="text" id="new-target" placeholder="Q3 · 2026-09" value="Q3 · 2026-09" />
-            </div>
+
+    <div class="ask-progress" id="wizard-steps" role="progressbar" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1" aria-label="建立進度"></div>
+
+    <div class="body ask-body">
+      <!-- Q1 交付物（同時推導標題） -->
+      <div class="wizard-pane ask-pane" data-pane="0">
+        <h4 class="ask-q">這次要交什麼？</h4>
+        <p class="ask-help">一句話寫可交付的東西，不要寫口號。標題留白的話我幫你用這句。</p>
+        <input type="text" id="wiz-what" class="ask-input" placeholder="例如：在登入流程加入 TOTP 與 WebAuthn" autocomplete="off" />
+        <button type="button" class="btn btn-sm ask-fill" data-fill="oneliner">不知道怎麼寫？先用這句</button>
+      </div>
+
+      <!-- Q2 對象 -->
+      <div class="wizard-pane ask-pane" data-pane="1" hidden>
+        <h4 class="ask-q">這是給誰用的？</h4>
+        <p class="ask-help">寫得出角色就好，不用寫到人名。</p>
+        <input type="text" id="wiz-who" class="ask-input" placeholder="例如：租戶管理員、資安團隊" autocomplete="off" />
+        <button type="button" class="btn btn-sm ask-fill" data-fill="who">不知道怎麼寫？先用這句</button>
+      </div>
+
+      <!-- Q3 時機 -->
+      <div class="wizard-pane ask-pane" data-pane="2" hidden>
+        <h4 class="ask-q">為什麼是現在？</h4>
+        <p class="ask-help">外部壓力、合約、法規、內部期限。有數字最好。</p>
+        <textarea id="wiz-why" class="ask-input ask-input-area" rows="3" placeholder="例如：兩家企業客戶把 2FA 列為續約條件，Q3 到期"></textarea>
+        <button type="button" class="btn btn-sm ask-fill" data-fill="why">不知道怎麼寫？先用這句</button>
+      </div>
+
+      <!-- 確認 -->
+      <div class="wizard-pane ask-pane" data-pane="3" hidden>
+        <h4 class="ask-q">這樣就可以開始了</h4>
+        <dl class="wiz-confirm-dl" id="wiz-confirm-dl"></dl>
+        <p class="ask-help ask-next-hint">問題陳述、非目標、成功指標進編輯台再補。那裡有起手骨架和結構檢查帶著你寫。</p>
+        <details class="ask-advanced">
+          <summary>進階設定</summary>
+          <div class="ask-advanced-body">
+            <label class="ask-adv-label" for="new-title">標題</label>
+            <input type="text" id="new-title" class="ask-input" placeholder="留白＝用「這次要交什麼」當標題" autocomplete="off" />
+            <label class="ask-adv-label" for="new-tpl">範本類型</label>
+            <select id="new-tpl">
+              <option value="">不套範本</option>
+              <option value="平台">平台</option>
+              <option value="資安">資安</option>
+              <option value="成長">成長</option>
+            </select>
+            <label class="ask-adv-label" for="new-target">目標發布</label>
+            <input type="text" id="new-target" class="ask-input" value="Q3 · 2026-09" autocomplete="off" />
           </div>
-        </div>
-      </div>
-      <!-- 1 一句話 -->
-      <div class="wizard-pane" data-pane="1" hidden>
-        <div class="field">
-          <label>標題</label>
-          <input type="text" id="new-title" placeholder="例如：企業版 SSO 強制政策" value="" />
-        </div>
-        <div class="field">
-          <label>做什麼（一句話交付物）</label>
-          <input type="text" id="wiz-what" placeholder="交付物一句話，避免口號" />
-        </div>
-        <button type="button" class="btn btn-sm btn-ghost" id="wiz-fill-oneliner" data-fill="oneliner">填入範例句（可再改）</button>
-      </div>
-      <!-- 2 對象與時機 -->
-      <div class="wizard-pane" data-pane="2" hidden>
-        <div class="field">
-          <label>給誰（角色，可多個）</label>
-          <input type="text" id="wiz-who" placeholder="例如：租戶管理員、資安團隊" />
-        </div>
-        <div class="field">
-          <label>為何現在</label>
-          <textarea id="wiz-why" rows="3" placeholder="外部壓力／合約／法規／內部期限（最好有數字）"></textarea>
-        </div>
-        <button type="button" class="btn btn-sm btn-ghost" id="wiz-fill-who" data-fill="who">填入範例句</button>
-      </div>
-      <!-- 3 問題 -->
-      <div class="wizard-pane" data-pane="3" hidden>
-        <div class="field">
-          <label>問題陳述</label>
-          <textarea id="wiz-problem" rows="6" placeholder="痛點、對象、佐證。先不要寫解法。"></textarea>
-        </div>
-        <button type="button" class="btn btn-sm btn-ghost" id="wiz-fill-problem" data-fill="problem">填入範例句</button>
-      </div>
-      <!-- 4 邊界 -->
-      <div class="wizard-pane" data-pane="4" hidden>
-        <p class="hint" style="margin-top:0">至少 <strong>3 條</strong> Non-Goals（結構契約，否則無法送審）</p>
-        <div class="field">
-          <label>非目標 1</label>
-          <input type="text" id="wiz-ng1" placeholder="這次刻意不做…" />
-        </div>
-        <div class="field">
-          <label>非目標 2</label>
-          <input type="text" id="wiz-ng2" placeholder="這次刻意不做…" />
-        </div>
-        <div class="field">
-          <label>非目標 3</label>
-          <input type="text" id="wiz-ng3" placeholder="這次刻意不做…" />
-        </div>
-        <div class="field">
-          <label>目標（可列點）</label>
-          <textarea id="wiz-goals" rows="3" placeholder="• 可驗收目標…"></textarea>
-        </div>
-        <button type="button" class="btn btn-sm btn-ghost" id="wiz-fill-goals" data-fill="goals">填入範例句</button>
-      </div>
-      <!-- 5 指標 -->
-      <div class="wizard-pane" data-pane="5" hidden>
-        <div class="field">
-          <label>成功指標（建議：指標 | 目標 | 量測）</label>
-          <textarea id="wiz-metrics" rows="4" placeholder="覆蓋率 | ≥ 80% | 90 天內統計"></textarea>
-        </div>
-        <button type="button" class="btn btn-sm btn-ghost" id="wiz-fill-metrics" data-fill="metrics">填入範例句</button>
-      </div>
-      <!-- 6 確認 -->
-      <div class="wizard-pane" data-pane="6" hidden>
-        <div class="beginner-confirm" id="wiz-confirm-summary">
-          <p class="hint">請確認下列摘要，建立後會寫入章節並開啟<strong>新手教練</strong>編輯台。</p>
-          <dl class="wiz-confirm-dl" id="wiz-confirm-dl"></dl>
-        </div>
+        </details>
       </div>
     </div>
+
+    <p class="ask-draft" id="ask-draft" hidden>已自動存草稿，關掉再回來會接續</p>
+
     <footer>
-      <button type="button" class="btn" id="modal-cancel">取消</button>
-      <button type="button" class="btn" id="wizard-prev" hidden>上一步</button>
-      <button type="button" class="btn btn-primary" id="wizard-next">下一步</button>
-      <button type="button" class="btn btn-primary" id="modal-create" hidden>建立並進入編輯</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn-ghost" id="wizard-prev" hidden>上一題</button>
+      <button type="button" class="btn btn-ghost" id="wizard-skip">先跳過</button>
+      <button type="button" class="btn btn-primary" id="wizard-next">下一題</button>
+      <button type="button" class="btn btn-primary" id="modal-create" hidden>建立並開始寫</button>
     </footer>
   </div>
 </div>

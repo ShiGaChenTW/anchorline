@@ -5946,3 +5946,265 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .ft-empty { padding: 12px; display: grid; gap: 10px; justify-items: start; }
 .ft-empty p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
 .pf-note { opacity: .8; }
+
+/* ═══════════════════════════════════════════════════════════════
+   新建 PRD ─ 三問流程
+   問句就是標題（不加 eyebrow）；範例句從 ghost link 升為主要動作；
+   進度用填充段而非離散編號 —— 看得出「快到了」。
+   ═══════════════════════════════════════════════════════════════ */
+
+.modal-ask { width: min(560px, 92vw); }
+.modal-ask header .sub {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 進度：3 段填充 */
+.ask-progress {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px 2px;
+}
+.ask-seg {
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 200ms ease;
+}
+.ask-seg.done { background: color-mix(in oklab, var(--accent) 55%, var(--border)); }
+.ask-seg.on { background: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .ask-seg { transition: none; } }
+
+.ask-body { padding: 20px 16px 8px; }
+
+/* 問句 = 標題。這是畫面上最大的字，因為它是唯一要回答的事。 */
+.ask-q {
+  margin: 0 0 6px;
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  color: var(--fg);
+}
+.ask-help {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 46em;
+}
+
+.ask-input {
+  width: 100%;
+  padding: 11px 13px;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--fg);
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.ask-input::placeholder { color: var(--muted); }
+.ask-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: transparent;
+}
+.ask-input-area { resize: vertical; min-height: 78px; }
+
+/* 啟動坡道：不是 ghost link，是看得見的按鈕，就在輸入框正下方 */
+.ask-fill { margin-top: 10px; }
+
+.ask-next-hint { margin: 14px 0 0; }
+
+.ask-advanced { margin-top: 16px; }
+.ask-advanced > summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+  padding: 6px 0;
+}
+.ask-advanced-body { display: grid; gap: 6px; padding-top: 8px; }
+.ask-adv-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg-2);
+  margin-top: 6px;
+}
+
+.ask-draft {
+  margin: 0;
+  padding: 0 16px 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.modal-ask footer { gap: 8px; }
+.modal-ask footer .spacer { flex: 1; }
+
+/* 專注模式：格式工具列只出現在正在打字的那一個欄位。
+   一節有 4 個欄位就有 4 套工具列，是編輯區最大宗的視覺噪音來源。
+   用 :focus-within 而非 JS：沒有狀態要同步，游標離開自動收回。 */
+.focus-mode .mdv-field:not(:focus-within) .mdv-toolbar,
+.focus-mode .mdv-field:not(:focus-within) .mdv-mode {
+  visibility: hidden;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   首次使用導覽 —— 三拍，指著真的按鈕講
+   ═══════════════════════════════════════════════════════════════ */
+.tour-root { position: fixed; inset: 0; z-index: 200; }
+
+/* 聚光燈：一個超大 box-shadow 把周圍壓暗，中間留洞。
+   不做 SVG mask —— 少一個節點，視覺結果一樣。 */
+.tour-spot {
+  position: fixed;
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, .62);
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  pointer-events: none;
+  transition: top 200ms ease, left 200ms ease, width 200ms ease, height 200ms ease;
+}
+@media (prefers-reduced-motion: reduce) { .tour-spot { transition: none; } }
+.reduce-motion .tour-spot { transition: none; }
+
+.tour-card {
+  position: fixed;
+  width: min(340px, calc(100vw - 24px));
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel, var(--bg));
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .45);
+}
+.tour-step {
+  margin: 0 0 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.tour-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.tour-body {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fg-2);
+}
+.tour-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.help-overlay footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.help-foot-note { font-size: 11px; color: var(--muted); }
+
+/* ═══════════════════════════════════════════════════════════════
+   專案儀表板
+   每張卡片一個結論在最上面，細節退到下面。
+   刻意不用「一排等大數字磚」——那是把解讀成本丟回給使用者。
+   ═══════════════════════════════════════════════════════════════ */
+.dash-content { overflow: auto; padding: 20px; }
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.dash-card {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel, var(--bg));
+}
+.dash-h {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+/* 卡片的結論句。這是整張卡唯一該先被讀到的東西。 */
+.dash-lead {
+  margin: 0 0 14px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.dash-git.tone-warn .dash-lead { color: var(--warn); }
+.dash-git.tone-ok .dash-lead { color: var(--success); }
+
+.dash-dl { display: grid; gap: 7px; margin: 0; }
+.dash-dl > div { display: flex; gap: 12px; align-items: baseline; }
+.dash-dl dt { flex: 0 0 6.5em; font-size: 12px; color: var(--muted); }
+.dash-dl dd {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dash-note { margin: 10px 0 0; font-size: 12px; line-height: 1.55; color: var(--muted); }
+.dash-sub-h { margin: 16px 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+
+/* 語言佔比：一條比例條勝過一張表 */
+.dash-bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; margin-bottom: 12px; }
+.dash-bar-seg { height: 100%; }
+.dash-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.dash-legend li { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--fg-2); }
+.dash-legend-b { margin-left: auto; color: var(--muted); font-size: 11.5px; }
+.dash-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.seg-0 { background: var(--accent); }
+.seg-1 { background: var(--success); }
+.seg-2 { background: var(--warn); }
+.seg-3 { background: color-mix(in oklab, var(--accent) 55%, var(--muted)); }
+.seg-4 { background: color-mix(in oklab, var(--success) 50%, var(--muted)); }
+.seg-5 { background: var(--muted); }
+
+.dash-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.dash-chip {
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--fg-2);
+  background: var(--inset);
+  border: 1px solid var(--border);
+}
+
+/* 取號：明確標成未完成，不要讓人以為壞掉 */
+.dash-reserved {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  opacity: .72;
+}
+.dash-reserved-label {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.dash-reserved-row { display: flex; gap: 8px; margin-top: 10px; }
+.dash-reserved-row .ask-input { flex: 1; }
+
+.dash-empty {
+  max-width: 42em;
+  padding: 28px 4px;
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--fg-2);
+}
+.dash-empty p { margin: 0; }
+.dash-measured { margin: 16px 0 0; font-size: 11px; color: var(--muted); }
