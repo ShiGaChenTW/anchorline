@@ -184,14 +184,22 @@
           <div class="sub">設定專案品質檢查規範、AI 模型金鑰與工作區資料備份</div>
         </div>
         <div class="spacer"></div>
-        <button type="button" class="btn btn-primary" id="btn-save-settings">儲存設定</button>
       </div>
 
-      <div class="content" style="overflow-y:auto">
-        <div class="settings-container">
+      <div class="content set-content">
+        <div class="set-shell">
+          <nav class="set-rail" aria-label="設定分類">
+            <button type="button" class="set-cat on" data-set-cat="general">一般</button>
+            <button type="button" class="set-cat" data-set-cat="appearance">外觀</button>
+            <button type="button" class="set-cat" data-set-cat="ai">AI 工具</button>
+            <button type="button" class="set-cat" data-set-cat="quality">品質檢查</button>
+            <button type="button" class="set-cat" data-set-cat="people">人員與權限</button>
+            <button type="button" class="set-cat" data-set-cat="data">資料</button>
+          </nav>
+          <div class="settings-container" id="set-pane">
 
           <!-- Section 1: AI Model & Key -->
-          <div class="settings-section">
+          <div class="settings-section" data-cat="ai">
             <h2>🤖 AI 寫作教練模型與金鑰設定</h2>
             <p class="sub">必須填入 API Key 後，編輯台「一鍵生稿／語調潤色／指令」才會呼叫真實模型。未設定時按鈕會停用，不會再產生假 demo 文案。</p>
             <div class="form-grid">
@@ -232,7 +240,7 @@
           </div>
 
           <!-- Section 2: Multi-Employee / Agent RBAC -->
-          <div class="settings-section">
+          <div class="settings-section" data-cat="people">
             <h2>👥 人員簽核與角色管理</h2>
             <p class="sub">管理員／核准人員／編輯人員。Agent 僅可為編輯或核准；同一 Agent 族系撰寫之文件不可由同族系核准。</p>
 
@@ -302,7 +310,7 @@
           </div>
 
           <!-- Section 2: Persona & Style -->
-          <div class="settings-section">
+          <div class="settings-section" data-cat="general">
             <h2>✍️ 寫作風範與團隊視角</h2>
             <p class="sub">控制 AI 助教輸出的語調 style 與審閱重點。</p>
             <div class="form-grid">
@@ -326,7 +334,7 @@
           </div>
 
           <!-- Section: Editor -->
-          <div class="settings-section">
+          <div class="settings-section" data-cat="appearance">
             <h2>📝 編輯台顯示與工具</h2>
             <p class="sub">控制 Markdown 編輯器行號、工具列與預設檢視模式（僅影響本機）。</p>
             <div class="form-grid full">
@@ -365,7 +373,7 @@
           </div>
 
           <!-- Section 3: Linters -->
-          <div class="settings-section">
+          <div class="settings-section" data-cat="quality">
             <h2>🛡️ PRD 品質檢查器 (Linter Rules)</h2>
             <p class="sub">啟用即時品質規則，在編輯畫布自動標示潛在風險與缺漏。</p>
             <div class="form-grid full">
@@ -389,7 +397,7 @@
           </div>
 
           <!-- Section 4: Data Management -->
-          <div class="settings-section">
+          <div class="settings-section" data-cat="data">
             <h2>💾 工作區資料控制與備份</h2>
             <p class="sub">匯出目前所有專案與草稿狀態，或重置為預設範本種子資料。</p>
             <div class="actions-row">
@@ -403,6 +411,11 @@
             </div>
           </div>
 
+          </div>
+        </div>
+        <div class="set-foot">
+          <span class="set-foot-note">變更立即生效，並會自動儲存。</span>
+          <a class="btn btn-primary" href="projects.html">完成</a>
         </div>
       </div>
     </main>

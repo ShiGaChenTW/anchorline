@@ -6757,3 +6757,106 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .opt-noop { font-size: 12.5px; color: var(--warn); }
 
 .opt-modal footer { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   偏好設定：左分類 + 右分組
+   一次只顯示一組設定 —— 原本六段全部攤在一頁，要捲很久才找得到東西。
+   ═══════════════════════════════════════════════════════════════ */
+.set-content { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+.set-shell {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+
+.set-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 18px 12px;
+  border-right: 1px solid var(--border);
+  overflow: auto;
+}
+.set-cat {
+  padding: 9px 12px;
+  text-align: left;
+  font-size: 13.5px;
+  color: var(--fg-2);
+  background: none;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.set-cat:hover { background: var(--inset); color: var(--fg); }
+.set-cat.on {
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  color: var(--fg);
+  font-weight: 600;
+}
+.set-cat:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+#set-pane { overflow: auto; padding: 24px 28px 32px; }
+#set-pane .settings-section[hidden] { display: none; }
+/* 分組卡：標題用 accent，說明一行，控制項在下 */
+#set-pane .settings-section {
+  max-width: 720px;
+  margin: 0 0 18px;
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel, var(--bg));
+}
+#set-pane .settings-section h2 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--accent);
+}
+#set-pane .settings-section > .sub {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 56em;
+}
+
+/* 開關列：整列是一個可點的框，標題與說明疊在右側 */
+#set-pane .toggle-row,
+#set-pane .checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 15px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  cursor: pointer;
+}
+#set-pane .toggle-row:hover,
+#set-pane .checkbox-row:hover { background: var(--inset); }
+#set-pane .toggle-row input[type="checkbox"],
+#set-pane .checkbox-row input[type="checkbox"] { margin-top: 2px; flex-shrink: 0; }
+
+/* 底部固定條：說明變更會自動存 */
+.set-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 28px;
+  border-top: 1px solid var(--border);
+  background: var(--panel, var(--bg));
+}
+.set-foot-note { font-size: 12.5px; color: var(--muted); transition: color 160ms ease; }
+.set-foot-note.is-saved { color: var(--success); }
+@media (prefers-reduced-motion: reduce) { .set-foot-note { transition: none; } }
+
+@media (max-width: 860px) {
+  .set-shell { grid-template-columns: 1fr; }
+  .set-rail { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+}
+/* 舊的 .settings-container 有 margin:auto 置中；分類版面要靠左，
+   否則左邊分類與右邊內容中間會空一大塊 */
+#set-pane.settings-container { margin: 0; max-width: none; }

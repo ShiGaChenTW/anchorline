@@ -155,17 +155,14 @@ export function renderRailProjects(host?: HTMLElement | null) {
       const id = btn.dataset.openId;
       if (!id) return;
       store.setActiveProject(id);
+      // 點專案卡片一律進儀表板 —— 與專案列表的卡片同一個行為。
+      // 已經在儀表板上就重載，讓量測與畫面對上新專案。
       const path = location.pathname + location.href;
-      if (path.includes("editor.html") || path.includes("review.html")) {
+      if (path.includes("dashboard.html")) {
         location.reload();
         return;
       }
-      if (path.includes("projects.html")) {
-        renderRailProjects(nav as HTMLElement);
-        document.dispatchEvent(new CustomEvent("specforge:project-changed", { detail: { id } }));
-        return;
-      }
-      location.href = "editor.html";
+      location.href = "dashboard.html";
     });
   });
 
