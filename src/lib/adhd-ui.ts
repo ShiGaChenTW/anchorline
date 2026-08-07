@@ -47,9 +47,9 @@ function nextStepForPage(page: RailPage | null): NextStep {
         label: active ? "下一步" : "先選一個專案",
         detail: active
           ? "左側章節由上往下填。空的先補齊，再送出審閱。"
-          : "回到專案列表，點一個專案卡片。",
+          : "回總覽，點一個專案。",
         cta: active ? undefined : "專案列表",
-        href: active ? undefined : "projects.html",
+        href: active ? undefined : "overview.html",
       };
     case "review":
       return {
@@ -67,7 +67,7 @@ function nextStepForPage(page: RailPage | null): NextStep {
     case "tracking":
       return {
         label: "下一步",
-        detail: "這裡只看計劃進度；要改規格請回編輯台。",
+        detail: "這裡只看任務進度；要改規格請回編輯台。",
         cta: "回編輯",
         href: "editor.html",
       };
@@ -75,8 +75,8 @@ function nextStepForPage(page: RailPage | null): NextStep {
       return {
         label: "下一步",
         detail: "人員與流程在此調整；日常寫作請回專案列表。",
-        cta: "回專案",
-        href: "projects.html",
+        cta: "回總覽",
+        href: "overview.html",
       };
     case "agents":
       return {
@@ -89,15 +89,25 @@ function nextStepForPage(page: RailPage | null): NextStep {
       return {
         label: "下一步",
         detail: "行號、主題、AI 金鑰與備份都在這裡；改完回專案。",
-        cta: "回專案",
-        href: "projects.html",
+        cta: "回總覽",
+        href: "overview.html",
+      };
+    case "overview":
+      return {
+        label: "下一步",
+        detail: "頭條指的那一個就是現在最該碰的。其餘稍後再看。",
+      };
+    case "dashboard":
+      return {
+        label: "下一步",
+        detail: "這頁只看現況。要動內容回編輯台。",
+        cta: "回編輯台",
+        href: "editor.html",
       };
     default:
       return {
         label: "從專案開始",
-        detail: "左側點「專案列表」。",
-        cta: "專案列表",
-        href: "projects.html",
+        detail: "側欄上方點一個專案卡片，或按「＋」新建。",
       };
   }
 }
@@ -106,6 +116,26 @@ function nextStepForPage(page: RailPage | null): NextStep {
  * 全站：工具列 + 焦點條合併為單一 chrome（對齊編輯工作台）
  * 避免標題列與「下一步」雙層重複、雙 CTA。
  */
+/** 引導列是否被使用者收起來 */
+const FOCUS_HIDDEN_KEY = "specforge:hide-focus-strip";
+function focusHidden(): boolean {
+  try {
+    return localStorage.getItem(FOCUS_HIDDEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+export function setFocusStripHidden(hidden: boolean) {
+  try {
+    localStorage.setItem(FOCUS_HIDDEN_KEY, hidden ? "1" : "0");
+  } catch {
+    /* private mode */
+  }
+  document.documentElement.classList.toggle("hide-focus-strip", hidden);
+  const btn = document.getElementById("btn-toggle-focus-strip");
+  if (btn) btn.textContent = hidden ? "顯示引導列" : "隱藏引導列";
+}
+
 function integratePageChrome(step: NextStep) {
   const main = document.querySelector(".main");
   const toolbar = main?.querySelector(".toolbar") as HTMLElement | null;
@@ -355,12 +385,22 @@ function collapseToolbar() {
     }
   });
 
-  if (!moveables.length) return;
+  // 引導列開關放「更多」裡 —— 偶爾才調一次的偏好，不該佔工具列。
+  // 必須在 early return 之前掛：沒有次要按鈕可搬的頁面（例如總覽）
+  // 也要有「更多」，否則開關整個消失。
+  const stripToggle = document.createElement("button");
+  stripToggle.type = "button";
+  stripToggle.id = "btn-toggle-focus-strip";
+  stripToggle.className = "btn adhd-more-item";
+  stripToggle.textContent = focusHidden() ? "顯示引導列" : "隱藏引導列";
+  stripToggle.addEventListener("click", () => setFocusStripHidden(!focusHidden()));
+  panel.appendChild(stripToggle);
 
   moveables.forEach((el) => {
     el.classList.add("adhd-more-item");
     panel.appendChild(el);
   });
+
   host.appendChild(moreHost);
 
   toggle.addEventListener("click", (e) => {
@@ -416,7 +456,7 @@ export function applyAdhdRail(nav: Element) {
   }
   nav.setAttribute("data-adhd-rail", "1");
 
-  const primary = new Set(["nav-projects", "nav-editor", "nav-review"]);
+  const primary = new Set(["nav-editor", "nav-tracking", "nav-review"]);
   const secondary: HTMLElement[] = [];
 
   nav.querySelectorAll<HTMLElement>("a.nav-item, button.nav-item").forEach((el) => {
@@ -542,6 +582,7 @@ function enhanceEmptyState() {
 
 export function initAdhdUi() {
   document.documentElement.classList.add("adhd-calm");
+  if (focusHidden()) document.documentElement.classList.add("hide-focus-strip");
   document.body?.classList.add("adhd-calm");
 
   import("./attention-motion")

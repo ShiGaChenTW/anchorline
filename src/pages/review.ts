@@ -96,7 +96,7 @@ function syncProjectChrome() {
   if (sub) {
     sub.textContent = p
       ? `${name} · ${meta}`
-      : "回到專案列表選擇一個專案";
+      : "回總覽選一個專案";
   }
 
   const docTitle = document.querySelector<HTMLElement>('[data-od-id="doc-title"]');
@@ -301,7 +301,7 @@ function renderDoc() {
   if (!p) {
     body.innerHTML = `<div class="review-empty-doc">
       <p>尚未選擇專案。</p>
-      <a class="btn btn-primary" href="projects.html">回專案列表</a>
+      <a class="btn btn-primary" href="overview.html">回總覽</a>
     </div>`;
     return;
   }

@@ -15,7 +15,7 @@ const PAGE_LABEL: Record<RailPage, string> = {
   overview: "全部專案總覽",
   templates: "章節範本",
   review: "審閱佇列",
-  tracking: "計劃追蹤",
+  tracking: "Task Tracking",
   admin: "管理中心",
   agents: "Agent 管理",
   settings: "偏好設定",

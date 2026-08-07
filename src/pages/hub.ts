@@ -4,11 +4,21 @@ import { toast } from "../lib/ui";
 import { store } from "../data/store";
 
 initTheme();
+
+/**
+ * 已登入就直接進總覽 —— 那是首頁。
+ * Hub 只留給未登入者當著陸頁；登入後再看一次它只是多一次點擊。
+ * 放在 initHelpOverlay 之前，免得為了馬上要離開的頁面裝一堆東西。
+ */
+if (store.get().session?.userId) {
+  location.replace("overview.html");
+}
+
 initHelpOverlay();
 // Hub 可免登入瀏覽；進入工作區由各頁 requireAuth
 
 const routes: Record<string, string> = {
-  "1": "projects.html",
+  "1": "overview.html",
   "2": "editor.html",
   "3": "templates.html",
   "4": "review.html",

@@ -5842,8 +5842,11 @@ html.adhd-calm .review-focus-bar {
    專案檔案樹 + 章節定位
    ═══════════════════════════════════════════════════════════════ */
 
-/* 大綱欄改雙層：上檔案樹、下章節。兩層都要能各自捲動 */
+/* 大綱欄雙層：上章節、下檔案樹。
+   章節在上是因為它是主線 —— 你來這一欄是為了寫某一節，檔案樹是佐證。
+   兩層都要能各自捲動。 */
 [data-od-id="outline-col"] { display: flex; flex-direction: column; min-height: 0; }
+#outline { flex: 1 1 auto; min-height: 0; overflow: auto; }
 .file-tree-host {
   flex: 0 1 auto;
   min-height: 0;
@@ -5855,6 +5858,31 @@ html.adhd-calm .review-focus-bar {
   border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
+
+/* 檔案樹可收合成一條。ADHD：不需要時整棵樹就是視覺噪音，
+   但完全拿掉又會忘記它存在 —— 留一條標題列當書籤。 */
+.ft-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ft-collapse {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--inset, transparent);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 140ms ease, color 140ms ease;
+}
+.ft-collapse:hover { color: var(--fg); border-color: var(--accent); }
+.ft-collapse:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ft-collapse span { transform: rotate(90deg); display: block; }
+[data-od-id="outline-col"].ft-collapsed .file-tree-host { display: none; }
+[data-od-id="outline-col"].ft-collapsed .ft-collapse span { transform: rotate(-90deg); }
+@media (prefers-reduced-motion: reduce) { .ft-collapse { transition: none; } }
 
 .ft-empty {
   margin: 0;
@@ -6962,3 +6990,65 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
    的按鈕，實際只是導到這一頁，而且延遲 400ms 才跳，按起來像壞的 */
 .tui-hint { color: var(--muted); }
 .tui-hint code { padding: 1px 5px; border-radius: 4px; background: var(--inset); font-size: 11.5px; }
+
+/* 引導列可收起。開關在工具列的「更多」裡 —— 偶爾調一次的偏好不該佔位置。
+   收起時整條連同上下留白一起消失，不留空行。 */
+html.hide-focus-strip .adhd-toolbar-focus,
+html.hide-focus-strip #adhd-focus-strip { display: none; }
+
+/* ═══════════════════════════════════════════════════════════════
+   偏好設定彈出視窗
+   預設 40% 視窗、置中、可拖右下角調整大小。
+   iframe 載入 settings.html —— 不複製一份設定畫面出來各自腐爛。
+   ═══════════════════════════════════════════════════════════════ */
+.set-modal-back {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklab, #000 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+.set-modal {
+  /* 使用者要的 40%；拉過之後由 inline style 記住 */
+  width: 40vw;
+  height: 40vh;
+  min-width: 420px;
+  min-height: 320px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  resize: both;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel, var(--bg));
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+.set-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.set-modal-head strong { font-size: 13.5px; color: var(--fg); }
+.set-modal-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.set-modal-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: var(--bg);
+}

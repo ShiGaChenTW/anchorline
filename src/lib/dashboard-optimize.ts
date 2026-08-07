@@ -52,7 +52,7 @@ export function localSuggestions(p: Project, s: ProjectStats | null): Suggestion
         .replace(/\s+/g, " ")
         .trim()
         .replace(/\b\w/g, (c) => c.toUpperCase()),
-      why: "目前用的是資料夾名稱。人在專案列表掃視時讀的是這一行，可讀性優先於路徑一致性。",
+      why: "目前用的是資料夾名稱。人在總覽掃視時讀的是這一行，可讀性優先於路徑一致性。",
       source: "本機規則",
     });
   }
@@ -70,7 +70,7 @@ export function localSuggestions(p: Project, s: ProjectStats | null): Suggestion
       proposed: bits.length
         ? `${bits.join("、")}的專案。（這句是從技術線推出來的骨架，請改成它實際在解決什麼問題）`
         : "（請寫一句話說明這個專案在解決什麼問題）",
-      why: "介紹空白時，專案列表與儀表板都只剩名稱可辨識。先放一句能改的骨架比留白容易起步。",
+      why: "介紹空白時，總覽與儀表板都只剩名稱可辨識。先放一句能改的骨架比留白容易起步。",
       source: "本機規則",
     });
   } else if (desc.length < 12) {

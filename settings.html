@@ -57,13 +57,18 @@
     font-size: 11px;
     color: var(--muted);
   }
+  /* 所有單列控制項共用同一個高度，欄位才會對齊成一條線。
+     掃視一個設定頁時，高低差本身就是雜訊。 */
+  .form-grid { --field-h: 40px; }
   .form-group input[type="text"],
   .form-group input[type="password"],
   .form-group select {
+    box-sizing: border-box;
+    height: var(--field-h);
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    padding: 8px 12px;
+    padding: 0 12px;
     color: var(--fg);
     font-size: 13px;
     font-family: inherit;
@@ -74,18 +79,33 @@
     border-color: var(--accent);
     box-shadow: var(--focus-ring);
   }
+  /* 勾選框在列首：眼睛沿左緣往下掃就能讀出「哪些開著」，
+     不必在每一列末端重新對焦一次。 */
   .switch-group {
+    box-sizing: border-box;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 10px 12px;
+    gap: 10px;
+    min-height: var(--field-h, 40px);
+    padding: 0 12px;
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+  .switch-group:hover { border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); }
+  .switch-group input[type="checkbox"] {
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--accent);
   }
   .switch-group span {
     font-size: 13px;
+    line-height: 1.45;
     color: var(--fg);
+    padding: 9px 0;
   }
   .range-val {
     font-family: var(--mono);
@@ -93,6 +113,28 @@
     color: var(--accent);
     margin-left: 8px;
   }
+  .linkish {
+    border: 0;
+    background: none;
+    padding: 0;
+    margin-left: 4px;
+    font: inherit;
+    color: var(--accent);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .hint.ok { color: var(--success); }
+  .hint.bad { color: var(--danger, #f85149); }
+  /* 在彈窗 iframe 裡：只留設定內容，側欄與標題列都是外層已經有的東西 */
+  html.in-modal .rail,
+  html.in-modal .titlebar,
+  html.in-modal .toolbar,
+  html.in-modal .statusbar,
+  html.in-modal .app-status-bar { display: none !important; }
+  html.in-modal .shell { grid-template-columns: 1fr !important; }
+  html.in-modal #set-pane { padding: 16px 18px 24px; }
+  html.in-modal #set-pane .settings-section { padding: 16px 18px; margin-bottom: 14px; }
+  html.in-modal .set-rail { padding: 8px; }
   .actions-row {
     display: flex;
     gap: 12px;
@@ -100,6 +142,7 @@
     margin-top: 10px;
   }
 </style>
+<script>if(window.self!==window.top)document.documentElement.classList.add("in-modal");</script>
 <script>(function(){try{var t=localStorage.getItem("specforge:theme");if(t==="warp")t="github";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
 </head>
 <body>
@@ -122,10 +165,6 @@
 
       <nav class="rail-nav">
         <div class="nav-label">工作區</div>
-        <a class="nav-item" href="projects.html" data-od-id="nav-projects">
-          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 2.5a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75z"/></svg>
-          專案列表
-        </a>
         <a class="nav-item" href="editor.html" data-od-id="nav-editor">
           <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086zM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064l6.286-6.286z"/></svg>
           編輯工作台
@@ -205,13 +244,23 @@
             <div class="form-grid">
               <div class="form-group">
                 <label for="ai-model">首選 AI 模型</label>
-                <select id="ai-model">
-                  <option value="gemini-1.5-flash">Google Gemini 1.5 Flash（推薦／快速）</option>
-                  <option value="gemini-1.5-pro">Google Gemini 1.5 Pro</option>
-                  <option value="claude-3-5-sonnet">Anthropic Claude 3.5 Sonnet</option>
-                  <option value="gpt-4o">OpenAI GPT-4o</option>
-                  <option value="local-smart">Ollama／本機 OpenAI 相容（推薦本機）</option>
-                </select>
+                <input type="text" id="ai-model" list="ai-model-options" autocomplete="off"
+                       placeholder="例如 claude-sonnet-4-5、gpt-5.1、gemini-2.5-pro" spellcheck="false" />
+                <datalist id="ai-model-options">
+                  <option value="claude-sonnet-4-5">Anthropic Claude Sonnet 4.5</option>
+                  <option value="claude-opus-4-5">Anthropic Claude Opus 4.5</option>
+                  <option value="claude-haiku-4-5">Anthropic Claude Haiku 4.5</option>
+                  <option value="gpt-5.1">OpenAI GPT-5.1</option>
+                  <option value="gpt-5-mini">OpenAI GPT-5 mini</option>
+                  <option value="gemini-2.5-pro">Google Gemini 2.5 Pro</option>
+                  <option value="gemini-2.5-flash">Google Gemini 2.5 Flash（快速）</option>
+                  <option value="local-smart">Ollama／本機 OpenAI 相容</option>
+                </datalist>
+                <span class="hint">
+                  可直接打字填任何模型 ID —— 清單只是常用捷徑，不是白名單。
+                  供應商依開頭判斷：<code>claude</code>／<code>gpt</code>／<code>gemini</code>／<code>local-smart</code>。
+                  <button type="button" class="linkish" id="btn-ai-fetch-models">從端點抓可用模型</button>
+                </span>
               </div>
               <div class="form-group" id="local-model-group">
                 <label for="ai-local-model">Ollama 模型名稱</label>
@@ -339,12 +388,12 @@
             <p class="sub">控制 Markdown 編輯器行號、工具列與預設檢視模式（僅影響本機）。</p>
             <div class="form-grid full">
               <label class="switch-group">
-                <span>顯示行號（左側灰字，與文字間距 5px）</span>
                 <input type="checkbox" id="editor-line-numbers" checked />
+                <span>顯示行號（左側灰字，與文字間距 5px）</span>
               </label>
               <label class="switch-group">
-                <span>顯示 Markdown 工具列（粗體、列表、連結…）</span>
                 <input type="checkbox" id="editor-toolbar" checked />
+                <span>顯示 Markdown 工具列（粗體、列表、連結…）</span>
               </label>
               <div class="form-group">
                 <label for="editor-default-mode">預設編輯模式</label>
@@ -355,8 +404,8 @@
                 </select>
               </div>
               <label class="switch-group">
-                <span>預覽語意高亮（待決／風險色塊，不改編輯欄文字）</span>
                 <input type="checkbox" id="editor-semantic-hl" checked />
+                <span>預覽語意高亮（待決／風險色塊，不改編輯欄文字）</span>
               </label>
               <div class="form-group">
                 <label for="editor-hl-intensity">高亮強度</label>
@@ -366,8 +415,8 @@
                 </select>
               </div>
               <label class="switch-group">
-                <span>減少動態（注意力導引動畫關閉；亦遵循系統「減少動態」）</span>
                 <input type="checkbox" id="editor-reduce-motion" />
+                <span>減少動態（注意力導引動畫關閉；亦遵循系統「減少動態」）</span>
               </label>
             </div>
           </div>
@@ -378,20 +427,20 @@
             <p class="sub">啟用即時品質規則，在編輯畫布自動標示潛在風險與缺漏。</p>
             <div class="form-grid full">
               <label class="switch-group">
-                <span>標示非目標 (Warn Missing Non-Goals) — 防止範疇蔓延</span>
                 <input type="checkbox" id="linter-nongoals" checked />
+                <span>標示非目標 (Warn Missing Non-Goals) — 防止範疇蔓延</span>
               </label>
               <label class="switch-group">
-                <span>強制要求量化成功指標 (Require Quantitative Metrics) — 拒絕虛榮描述</span>
                 <input type="checkbox" id="linter-metrics" checked />
+                <span>強制要求量化成功指標 (Require Quantitative Metrics) — 拒絕虛榮描述</span>
               </label>
               <label class="switch-group">
-                <span>檢查使用者故事驗收條件 (Story Acceptance Criteria)</span>
                 <input type="checkbox" id="linter-stories" checked />
+                <span>檢查使用者故事驗收條件 (Story Acceptance Criteria)</span>
               </label>
               <label class="switch-group">
-                <span>警告模糊非量化字詞 (Flag Vague Words: 優化、儘快、大幅)</span>
                 <input type="checkbox" id="linter-vague" checked />
+                <span>警告模糊非量化字詞 (Flag Vague Words: 優化、儘快、大幅)</span>
               </label>
             </div>
           </div>
@@ -415,7 +464,7 @@
         </div>
         <div class="set-foot">
           <span class="set-foot-note">變更立即生效，並會自動儲存。</span>
-          <a class="btn btn-primary" href="projects.html">完成</a>
+          <a class="btn btn-primary" href="overview.html">完成</a>
         </div>
       </div>
     </main>

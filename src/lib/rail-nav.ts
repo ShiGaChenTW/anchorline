@@ -58,11 +58,11 @@ export const RAIL_ITEMS: RailItem[] = [
   // 專案列表不進側欄 —— 側欄上方已經是專案清單本身，再放一個入口是重複
   { page: "projects", href: "projects.html", label: "專案列表", odId: "nav-projects", icon: IC.projects, count: true, hidden: true },
   { page: "editor", href: "editor.html", label: "編輯工作台", odId: "nav-editor", icon: IC.editor },
+  { page: "tracking", href: "tracking.html", label: "Task Tracking", odId: "nav-tracking", icon: IC.tracking },
   { page: "dashboard", href: "dashboard.html", label: "專案儀表板", odId: "nav-dashboard", icon: IC.dashboard, hidden: true },
   { page: "overview", href: "overview.html", label: "總覽", odId: "nav-overview", icon: IC.dashboard, hidden: true },
   { page: "templates", href: "templates.html", label: "章節範本", odId: "nav-templates", icon: IC.templates, count: true },
   { page: "review", href: "review.html", label: "審閱佇列", odId: "nav-review", icon: IC.review, count: true },
-  { page: "tracking", href: "tracking.html", label: "計劃追蹤", odId: "nav-tracking", icon: IC.tracking },
   { page: "admin", href: "admin.html", label: "管理中心", odId: "nav-admin", icon: IC.admin },
   { page: "agents", href: "agents.html", label: "Agent 管理", odId: "nav-agents", icon: IC.agents },
   // 偏好設定不進側欄清單 —— 入口改成品牌列右側的齒輪圖示
@@ -127,6 +127,13 @@ export function initRailNav(active: RailPage) {
   nav.setAttribute("data-rail-active", active);
 
   ensureBrandSettings(active);
+
+  // 齒輪改開彈窗，不整頁跳走
+  import("./settings-modal")
+    .then((m) => m.initSettingsModal())
+    .catch(() => {
+      /* ignore */
+    });
 
   // 專案清單掛回
   renderRailProjects(nav as HTMLElement);

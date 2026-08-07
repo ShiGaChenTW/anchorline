@@ -77,7 +77,7 @@ function resolveOpenAiModel(s: AISettings): string {
   // 自訂端點卻選了其他 model 選項時，仍優先 localModelName（若有）
   const local = (s.localModelName || "").trim();
   if (local && /localhost|127\.0\.0\.1|11434/i.test(s.endpoint || "")) return local;
-  return "gpt-4o";
+  return "gpt-5.1";
 }
 
 function normalizeOpenAiBase(endpoint: string, isLocal: boolean): string {
@@ -94,7 +94,7 @@ function normalizeOpenAiBase(endpoint: string, isLocal: boolean): string {
 }
 
 async function callGemini(system: string, user: string, s: AISettings): Promise<string> {
-  const model = s.model.startsWith("gemini") ? s.model : "gemini-1.5-flash";
+  const model = s.model.startsWith("gemini") ? s.model : "gemini-2.5-flash";
   const base = (s.endpoint || "https://generativelanguage.googleapis.com/v1beta").replace(
     /\/$/,
     "",
@@ -183,13 +183,15 @@ async function callOpenAICompat(system: string, user: string, s: AISettings): Pr
 async function callAnthropic(system: string, user: string, s: AISettings): Promise<string> {
   const base = (s.endpoint || "https://api.anthropic.com").replace(/\/$/, "");
   const url = base.includes("/messages") ? base : `${base}/v1/messages`;
-  const model = s.model.startsWith("claude") ? s.model : "claude-3-5-sonnet-20241022";
+  const model = s.model.startsWith("claude") ? s.model : "claude-sonnet-4-5";
   const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-api-key": s.apiKey.trim(),
       "anthropic-version": "2023-06-01",
+      // 少了這個標頭，Anthropic 一律回 401 CORS——不是金鑰壞了
+      "anthropic-dangerous-direct-browser-access": "true",
     },
     body: JSON.stringify({
       model,
@@ -284,4 +286,51 @@ export async function testAiConnection(): Promise<{ ok: true; sample: string } |
       reason: e instanceof Error ? e.message : String(e),
     };
   }
+}
+
+/**
+ * 向端點問「你現在有哪些模型」。
+ * 硬編一份模型清單一定會過期 —— 唯一不會過期的來源是供應商自己。
+ * 三家的列表 API 形狀不同，但都只是一層 map。
+ */
+export async function listModels(): Promise<string[]> {
+  const s = settings();
+  const key = (s.apiKey || "").trim();
+  const ready = getAiReadiness();
+  if (!ready.ok) throw new AiError(ready.reason, "not_configured");
+
+  let url = "";
+  const headers: Record<string, string> = {};
+
+  if (ready.provider === "gemini") {
+    const base = (s.endpoint || "https://generativelanguage.googleapis.com/v1beta").replace(/\/$/, "");
+    url = `${base}/models?key=${encodeURIComponent(key)}&pageSize=200`;
+  } else if (ready.provider === "anthropic") {
+    const base = (s.endpoint || "https://api.anthropic.com").replace(/\/$/, "");
+    url = `${base}/v1/models?limit=100`;
+    headers["x-api-key"] = key;
+    headers["anthropic-version"] = "2023-06-01";
+    headers["anthropic-dangerous-direct-browser-access"] = "true";
+  } else {
+    const isLocal = s.model === "local-smart" || /localhost|127\.0\.0\.1|11434/i.test(s.endpoint || "");
+    url = `${normalizeOpenAiBase(s.endpoint, isLocal)}/models`;
+    headers.Authorization = `Bearer ${key || (isLocal ? "ollama" : "")}`;
+  }
+
+  const res = await fetch(url, { headers });
+  const raw = await res.text();
+  if (!res.ok) throw new AiError(parseHttpError("列出模型", res.status, raw), "http");
+
+  let data: { models?: { name?: string }[]; data?: { id?: string }[] };
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw new AiError("模型列表回傳無法解析", "parse");
+  }
+  const names = [
+    ...(data.models ?? []).map((m) => (m.name ?? "").replace(/^models\//, "")),
+    ...(data.data ?? []).map((m) => m.id ?? ""),
+  ].filter(Boolean);
+  if (!names.length) throw new AiError("端點沒有回傳任何模型", "empty");
+  return Array.from(new Set(names)).sort();
 }

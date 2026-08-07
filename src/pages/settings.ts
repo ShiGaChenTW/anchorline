@@ -20,7 +20,7 @@ function syncUser() {
 
 function populateSettings() {
   const s = store.get().settings;
-  const modelEl = document.getElementById("ai-model") as HTMLSelectElement | null;
+  const modelEl = document.getElementById("ai-model") as HTMLInputElement | null;
   const tempEl = document.getElementById("ai-temp") as HTMLInputElement | null;
   const tempValEl = document.getElementById("temp-val");
   const keyEl = document.getElementById("ai-key") as HTMLInputElement | null;
@@ -250,13 +250,13 @@ document.getElementById("ai-temp")?.addEventListener("input", (e) => {
 });
 
 function syncLocalModelUi() {
-  const model = (document.getElementById("ai-model") as HTMLSelectElement | null)?.value;
+  const model = (document.getElementById("ai-model") as HTMLInputElement | null)?.value;
   const group = document.getElementById("local-model-group");
   if (group) group.style.display = model === "local-smart" ? "" : "none";
 }
 
-document.getElementById("ai-model")?.addEventListener("change", () => {
-  const model = (document.getElementById("ai-model") as HTMLSelectElement).value;
+document.getElementById("ai-model")?.addEventListener("input", () => {
+  const model = (document.getElementById("ai-model") as HTMLInputElement).value;
   const endpointEl = document.getElementById("ai-endpoint") as HTMLInputElement | null;
   const keyEl = document.getElementById("ai-key") as HTMLInputElement | null;
   if (model === "local-smart" && endpointEl) {
@@ -289,7 +289,7 @@ document.getElementById("ai-model")?.addEventListener("change", () => {
 });
 
 function saveSettings() {
-  const model = (document.getElementById("ai-model") as HTMLSelectElement).value as AISettings["model"];
+  const model = (document.getElementById("ai-model") as HTMLInputElement).value as AISettings["model"];
   const temperature = Number((document.getElementById("ai-temp") as HTMLInputElement).value);
   const apiKey = (document.getElementById("ai-key") as HTMLInputElement).value.trim();
   const endpoint = (document.getElementById("ai-endpoint") as HTMLInputElement).value.trim();
@@ -406,12 +406,48 @@ document.getElementById("set-pane")?.addEventListener("input", (e) => {
   showCat(initial);
 }
 
+// 「從端點抓可用模型」：把 datalist 換成端點當下真正支援的清單。
+// 寫死清單一定會過期；供應商自己的 /models 不會。
+document.getElementById("btn-ai-fetch-models")?.addEventListener("click", async () => {
+  const btn = document.getElementById("btn-ai-fetch-models") as HTMLButtonElement;
+  const list = document.getElementById("ai-model-options") as HTMLDataListElement | null;
+  const out = document.getElementById("ai-test-result");
+  // 先把畫面上的金鑰／端點暫存，否則用舊值去問
+  store.updateSettings({
+    apiKey: (document.getElementById("ai-key") as HTMLInputElement | null)?.value.trim() || store.get().settings.apiKey,
+    endpoint: (document.getElementById("ai-endpoint") as HTMLInputElement | null)?.value.trim() || store.get().settings.endpoint,
+    model: (document.getElementById("ai-model") as HTMLInputElement | null)?.value.trim() || store.get().settings.model,
+  });
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = "抓取中…";
+  try {
+    const { listModels } = await import("../lib/ai-client");
+    const names = await listModels();
+    if (list) {
+      list.innerHTML = names.map((n) => `<option value="${n}"></option>`).join("");
+    }
+    if (out) {
+      out.textContent = `已更新清單：${names.length} 個模型。點一下模型欄位即可挑選。`;
+      out.className = "hint ok";
+    }
+  } catch (e) {
+    if (out) {
+      out.textContent = `抓不到清單：${e instanceof Error ? e.message : String(e)}。你仍可直接手打模型 ID。`;
+      out.className = "hint bad";
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+});
+
 document.getElementById("btn-ai-test")?.addEventListener("click", async () => {
   const out = document.getElementById("ai-test-result");
   // 先把畫面上的 key 暫存進 store（避免未按儲存就測連線）
   const apiKey = (document.getElementById("ai-key") as HTMLInputElement | null)?.value.trim() ?? "";
   const endpoint = (document.getElementById("ai-endpoint") as HTMLInputElement | null)?.value.trim() ?? "";
-  const model = (document.getElementById("ai-model") as HTMLSelectElement | null)?.value as AISettings["model"];
+  const model = (document.getElementById("ai-model") as HTMLInputElement | null)?.value as AISettings["model"];
   const temperature = Number((document.getElementById("ai-temp") as HTMLInputElement | null)?.value ?? 0.7);
   const localModelName =
     (document.getElementById("ai-local-model") as HTMLInputElement | null)?.value.trim() || "llama3.2";
