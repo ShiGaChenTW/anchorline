@@ -1275,7 +1275,7 @@ table.data tbody tr.selected td.col-actions {
   color: var(--muted);
   font-weight: 400;
 }
-.section-list { padding: 8px; display: flex; flex-direction: column; gap: 2px; /* overflow set with coach-body above */ }
+.section-list { padding: 6px; display: flex; flex-direction: column; gap: 1px; /* overflow set with coach-body above */ }
 .sec {
   display: grid;
   grid-template-columns: 20px 1fr auto;
@@ -4957,11 +4957,13 @@ html.adhd-calm .content .mono {
 
 /* 大綱：較大點擊區、非 active 不顯示說明 */
 html.adhd-calm .sec.adhd-sec {
+  /* 七個章節要能一眼掃完，列高壓到 32px；選中時不再長出第二排，
+     所以也不需要為展開預留空間 */
   align-items: center;
-  padding: 10px 10px;
-  gap: 10px;
-  border-radius: 10px;
-  min-height: 44px;
+  padding: 5px 9px;
+  gap: 9px;
+  border-radius: 8px;
+  min-height: 32px;
 }
 html.adhd-calm .sec.adhd-sec .t {
   font-size: 13.5px;
@@ -7437,3 +7439,90 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
 .rail-proj-resize:hover::after,
 .rail-proj-resize.is-dragging::after { background: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .rail-proj-resize::after { transition: none; } }
+
+/* ═══════════════════════════════════════════════════════════════
+   編輯台大綱欄：OpenSpec 章節 + Task List
+   兩個都是「從既有資料推出來的視圖」，不是另外要人維護的清單。
+   ═══════════════════════════════════════════════════════════════ */
+.os-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.os-bar .mono { font-size: 11px; color: var(--muted); }
+
+.os-list, .task-list {
+  flex: 0 0 auto;
+  max-height: 22vh;
+  overflow: auto;
+  padding: 4px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.os-row, .task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.os-row:hover, .task-row:hover { background: var(--inset); }
+.os-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--meta);
+}
+.os-dot.done { background: var(--success); }
+.os-dot.warn { background: var(--warn); }
+.os-body { min-width: 0; flex: 1 1 auto; }
+.os-head {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.os-file {
+  display: block;
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 待辦用空框而不是 checkbox：這裡不能勾，勾的方式是把章節寫完 */
+.task-box {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--meta);
+  border-radius: 3px;
+}
+.task-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-sec {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+.task-empty { margin: 0; padding: 8px 10px; font-size: 12px; color: var(--success); }
