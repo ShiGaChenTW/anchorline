@@ -83,10 +83,21 @@ export function languageBreakdown(stats: ProjectStats): LanguageSlice[] {
   }
   const total = Object.values(byLang).reduce((a, b) => a + b, 0);
   if (!total) return [];
-  return Object.entries(byLang)
+  const all = Object.entries(byLang)
     .map(([lang, bytes]) => ({ lang, bytes, pct: Math.round((bytes / total) * 1000) / 10 }))
-    .sort((a, b) => b.bytes - a.bytes)
-    .slice(0, 8);
+    .sort((a, b) => b.bytes - a.bytes);
+
+  // 最多 6 類，尾巴摺成「其他」。超過就開始有相鄰色在 CVD 下分不開，
+  // 而且 0% 的段落本身不帶資訊。
+  if (all.length <= 6) return all;
+  const head = all.slice(0, 5);
+  const tailBytes = all.slice(5).reduce((a, x) => a + x.bytes, 0);
+  head.push({
+    lang: `其他 ${all.length - 5} 種`,
+    bytes: tailBytes,
+    pct: Math.round((tailBytes / total) * 1000) / 10,
+  });
+  return head;
 }
 
 export function frameworks(stats: ProjectStats): { label: string; from: string }[] {
