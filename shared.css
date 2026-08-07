@@ -6599,3 +6599,30 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 /* hero 被拉高時內容靠上，不要垂直置中留一大片空 */
 .d-hero { display: flex; flex-direction: column; }
 .d-hero .d-facts { margin-top: auto; }
+
+/* ── 所有卡片固定 400px ──
+   高度寫死就不需要 JS 量測等高（ResizeObserver 那套已移除）。
+   內容超出的在卡片內捲，標題與主數字固定在上方不跟著捲走。 */
+.d-hero,
+.d-card,
+.d-card.d-tall {
+  height: 400px;
+  min-height: 0;
+  overflow: hidden;
+}
+.d-hero .d-facts { margin-top: auto; }
+
+/* 每張卡的可捲區塊：撐滿剩餘高度後自己捲 */
+.d-commits,
+.d-tree,
+.d-card > .d-rows,
+.d-card > .d-tags {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+/* 版號卡有 tag 清單 + 提交紀錄兩段：tag 不捲，提交紀錄吃剩下的 */
+.d-card.d-tall > .d-tags { flex: 0 0 auto; overflow: visible; }
+
+/* 工作區狀態卡有兩段清單，一起放進同一個可捲容器 */
+.d-card > .d-rows--plain { flex: 0 1 auto; }

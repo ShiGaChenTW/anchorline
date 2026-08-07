@@ -332,50 +332,6 @@ if (!requireAuth()) {
     );
   }
 
-  /**
-   * 黃框那排等高：以「技術線」的自然高度 ×1.05 為準，其餘卡片對齊它。
-   * 用量測而非寫死數字 —— 語言類別數、框架數會變，寫死一定會爆或留白。
-   * 內容超出就在卡片內捲，不讓卡片自己長高破壞對齊。
-   */
-  /**
-   * 黃框那排等高：以「技術線」的自然高度 ×1.05 為準。
-   *
-   * 不賭時序 —— 用 ResizeObserver 盯住第一張卡，字體載入、內容變動、
-   * 換欄都會重算。`applying` 旗標擋掉自己改高度造成的回呼迴圈。
-   */
-  let ro: ResizeObserver | null = null;
-  let applying = false;
-
-  function equalizeGrid() {
-    const grid = document.querySelector<HTMLElement>(".d-grid");
-    if (!grid) return;
-    const cards = [...grid.children] as HTMLElement[];
-    if (!cards.length) return;
-
-    applying = true;
-    cards.forEach((c) => (c.style.height = ""));
-    const base = cards[0]!.getBoundingClientRect().height;
-    if (base) {
-      const h = `${Math.round(base * 1.05)}px`;
-      cards.forEach((c) => (c.style.height = h));
-    }
-    // 讓這一輪的 resize 回呼跑完再解鎖
-    requestAnimationFrame(() => (applying = false));
-  }
-
-  /** 每次重繪後重新掛 observer：renderState 會把整個 .d-grid 換掉 */
-  function watchGrid() {
-    ro?.disconnect();
-    const first = document.querySelector<HTMLElement>(".d-grid > *");
-    if (!first) return;
-    ro = new ResizeObserver(() => {
-      if (applying) return;
-      equalizeGrid();
-    });
-    ro.observe(first);
-    equalizeGrid();
-  }
-
   async function load(force = false) {
     const p = activeProject();
     syncChrome(p);
@@ -415,7 +371,6 @@ if (!requireAuth()) {
     const cached = !force && cache.get(path);
     if (cached) {
       renderStats(cached);
-      watchGrid();
       return;
     }
 
@@ -426,7 +381,6 @@ if (!requireAuth()) {
       const s = await requestProjectStats(path);
       cache.set(path, s);
       renderStats(s);
-      watchGrid();
     } catch (e) {
       renderState(
         `<div class="dash-empty"><p>${escapeHtml(e instanceof Error ? e.message : "量測失敗")}</p></div>`,
@@ -436,11 +390,6 @@ if (!requireAuth()) {
       busy = false;
     }
   }
-
-  // 視窗變寬變窄會換欄，等高要重算
-  window.addEventListener("resize", () => {
-    if (!applying) equalizeGrid();
-  });
 
   document.getElementById("btn-refresh-stats")?.addEventListener("click", () => {
     toast("重新量測中…");
