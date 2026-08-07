@@ -13,6 +13,7 @@ import { store } from "../data/store";
 import { projectDisplayName, type Project } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
+import { askForProjectFolder } from "../lib/project-folder";
 import { syncRailContext } from "../lib/rail-projects";
 import {
   formatBytes,
@@ -212,12 +213,18 @@ if (!requireAuth()) {
     }
     const path = p.importSummary?.rootPath;
     if (!path) {
+      // 當場就能解決，不要把人踢去別頁再自己找按鈕 ——
+      // 「沒綁資料夾」是這一頁最常見的狀態（多數專案都沒綁）
       renderState(
         `<div class="dash-empty">
-          <p>「${escapeHtml(projectDisplayName(p))}」還沒有綁定磁碟上的資料夾，所以量不到 git、技術線與容量。</p>
-          <a class="btn btn-primary" href="editor.html">去編輯台指定資料夾</a>
+          <p>「${escapeHtml(projectDisplayName(p))}」還沒有對應磁碟上的資料夾，所以量不到 git、技術線與容量。</p>
+          <button type="button" class="btn btn-primary" id="dash-bind">指定專案資料夾</button>
+          <p class="dash-note">綁定只記錄對應關係，不會動到你已經寫好的章節內容。</p>
         </div>`,
       );
+      document.getElementById("dash-bind")?.addEventListener("click", () => {
+        askForProjectFolder(p.id, projectDisplayName(p));
+      });
       return;
     }
     if (!isDesktop()) {
@@ -259,5 +266,15 @@ if (!requireAuth()) {
   });
 
   load();
-  store.subscribe(() => syncChrome(activeProject()));
+
+  // 綁完資料夾就自己重量一次，不用使用者再按「重新量測」
+  let lastFolder = activeProject()?.importSummary?.rootPath ?? "";
+  store.subscribe(() => {
+    const now = activeProject()?.importSummary?.rootPath ?? "";
+    syncChrome(activeProject());
+    if (now !== lastFolder) {
+      lastFolder = now;
+      load(true);
+    }
+  });
 }

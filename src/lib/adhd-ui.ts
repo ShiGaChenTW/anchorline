@@ -334,8 +334,9 @@ function collapseToolbar() {
     if (id && keepIds.has(id) && id !== "btn-outline") return;
     if (el.classList.contains("btn-primary") || el.classList.contains("btn-accent")) return;
     if (el.matches("a.btn-primary, a.btn-accent")) return;
-    // 預覽審閱保留在主列（主路徑）
+    // 預覽審閱與儀表板保留在主列（主路徑）
     if (el.matches('a[href="review.html"], a[data-od-id="btn-preview"]')) return;
+    if (el.matches('a[href="dashboard.html"], a[data-od-id="btn-dashboard"]')) return;
     if (el.matches('a[href="editor.html"]#btn-edit, a[data-od-id="btn-edit"]')) return;
 
     // export-menu、次要 btn、登出、大綱 → more
