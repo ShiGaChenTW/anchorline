@@ -209,9 +209,8 @@ function bindAddMenu(block: HTMLElement) {
                 <span class="rail-proj-card-top">
                   <span class="rail-proj-status rail-proj-status--${statusTone(p)}" title="${statusLabel(p)}"></span>
                   <span class="rail-proj-card-title">${escapeHtml(name)}</span>
-                  ${badge}
                 </span>
-                <span class="rail-proj-card-sub">${escapeHtml(when)}</span>
+                <span class="rail-proj-card-sub">${escapeHtml(when)}${badge}</span>
               </button>
               <button type="button" class="rail-proj-card-rename" data-rename-id="${escapeHtml(p.id)}" title="自訂專案名稱" aria-label="重新命名 ${escapeHtml(name)}">✎</button>
             </article>`;

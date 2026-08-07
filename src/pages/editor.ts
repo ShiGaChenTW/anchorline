@@ -165,6 +165,67 @@ function valuesFor(s: Section): Record<string, string> {
 let lastTreeSig = "__init__";
 
 const FT_COLLAPSE_KEY = "specforge:file-tree-collapsed";
+const FT_HEIGHT_KEY = "specforge:file-tree-height";
+
+/**
+ * 檔案樹高度拖曳。
+ * 「章節」與「專案檔案」誰該多分一點，只有當下在做什麼的你知道 ——
+ * 寫死一個比例一定會有人不滿意，給把手比猜便宜。
+ */
+function initFileTreeResize() {
+  const col = document.querySelector('[data-od-id="outline-col"]') as HTMLElement | null;
+  const grip = document.getElementById("file-tree-resize") as HTMLElement | null;
+  const host = document.getElementById("file-tree") as HTMLElement | null;
+  if (!col || !grip || !host) return;
+
+  const MIN = 90;
+  const apply = (h: number) => col.style.setProperty("--ft-h", `${Math.round(h)}px`);
+
+  try {
+    const saved = Number(localStorage.getItem(FT_HEIGHT_KEY));
+    if (saved >= MIN) apply(saved);
+  } catch {
+    /* private mode */
+  }
+
+  let startY = 0;
+  let startH = 0;
+  const max = () => Math.max(MIN, col.clientHeight - 180); // 章節至少留 180px
+
+  const onMove = (e: PointerEvent) => {
+    // 把手在檔案樹「上方」，往上拖 = 變高，所以要取負號
+    apply(Math.min(max(), Math.max(MIN, startH - (e.clientY - startY))));
+  };
+  const onUp = () => {
+    // 監聽掛在 window：滑鼠拖到把手外面（很常見）仍然要跟得上，
+    // 而且 setPointerCapture 失敗時不會整個拖不動。
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    grip.classList.remove("is-dragging");
+    document.body.style.userSelect = "";
+    try {
+      localStorage.setItem(FT_HEIGHT_KEY, String(host.offsetHeight));
+    } catch {
+      /* private mode */
+    }
+  };
+
+  grip.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    startY = e.clientY;
+    startH = host.offsetHeight;
+    grip.classList.add("is-dragging");
+    document.body.style.userSelect = "none";
+    try {
+      grip.setPointerCapture(e.pointerId);
+    } catch {
+      /* 沒有 capture 也能拖，只是拖太快可能掉幀 */
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  });
+}
+
 
 /** 檔案樹收合成一條標題列。狀態要留著 —— 每次開編輯台都要重收一次是懲罰。 */
 function initFileTreeCollapse() {
@@ -937,6 +998,7 @@ document.getElementById("editor-body")?.addEventListener(
 
 // ⌥F 快捷鍵與狀態還原；同步執行，不能靠 rAF（分頁在背景時 rAF 不觸發）
 initFileTreeCollapse();
+initFileTreeResize();
 initFocusMode();
 initHyperfocusGuard();
 render();
