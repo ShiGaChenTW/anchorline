@@ -39,6 +39,7 @@ export default defineConfig({
         projects: resolve(root, "projects.html"),
         editor: resolve(root, "editor.html"),
         dashboard: resolve(root, "dashboard.html"),
+        overview: resolve(root, "overview.html"),
         templates: resolve(root, "templates.html"),
         review: resolve(root, "review.html"),
         settings: resolve(root, "settings.html"),

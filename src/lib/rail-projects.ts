@@ -114,7 +114,9 @@ export function renderRailProjects(host?: HTMLElement | null) {
   }
 
   block.innerHTML = `
-    <div class="nav-label">專案 <span class="rail-proj-count">${projects.length}</span></div>
+    <div class="nav-label">專案 <span class="rail-proj-count">${projects.length}</span>
+      <a class="rail-overview" href="overview.html" title="所有專案的總覽儀表板">總覽</a>
+    </div>
     <div class="rail-projects" role="list" aria-label="專案清單">
       ${projects
         .map((p) => {

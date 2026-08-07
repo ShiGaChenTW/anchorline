@@ -9,6 +9,7 @@ export type RailPage =
   | "projects"
   | "editor"
   | "dashboard"
+  | "overview"
   | "templates"
   | "review"
   | "tracking"
@@ -58,12 +59,14 @@ export const RAIL_ITEMS: RailItem[] = [
   { page: "projects", href: "projects.html", label: "專案列表", odId: "nav-projects", icon: IC.projects, count: true },
   { page: "editor", href: "editor.html", label: "編輯工作台", odId: "nav-editor", icon: IC.editor },
   { page: "dashboard", href: "dashboard.html", label: "專案儀表板", odId: "nav-dashboard", icon: IC.dashboard, hidden: true },
+  { page: "overview", href: "overview.html", label: "總覽", odId: "nav-overview", icon: IC.dashboard, hidden: true },
   { page: "templates", href: "templates.html", label: "章節範本", odId: "nav-templates", icon: IC.templates, count: true },
   { page: "review", href: "review.html", label: "審閱佇列", odId: "nav-review", icon: IC.review, count: true },
   { page: "tracking", href: "tracking.html", label: "計劃追蹤", odId: "nav-tracking", icon: IC.tracking },
   { page: "admin", href: "admin.html", label: "管理中心", odId: "nav-admin", icon: IC.admin },
   { page: "agents", href: "agents.html", label: "Agent 管理", odId: "nav-agents", icon: IC.agents },
-  { page: "settings", href: "settings.html", label: "偏好設定", odId: "nav-settings", icon: IC.settings },
+  // 偏好設定不進側欄清單 —— 入口改成品牌列右側的齒輪圖示
+  { page: "settings", href: "settings.html", label: "偏好設定", odId: "nav-settings", icon: IC.settings, hidden: true },
 ];
 
 function svg(paths: string): string {
@@ -84,6 +87,27 @@ function itemHtml(item: RailItem, active: RailPage): string {
  * 重建整個 rail-nav（含 icon），再掛回專案清單。
  * 不再「補純文字連結」——那會造成雙重節點重疊。
  */
+/**
+ * 偏好設定的入口：品牌列右側的齒輪，跟收合鍵並排。
+ * 設定是「偶爾才碰一次」的東西，放在每天要掃視的清單裡只是佔位置。
+ * 用 JS 插入而不是改 12 個 HTML 檔 —— 品牌列是靜態 markup，每頁一份。
+ */
+function ensureBrandSettings(active: RailPage) {
+  const brand = document.querySelector(".rail-brand");
+  if (!brand || document.getElementById("rail-settings-btn")) return;
+  const a = document.createElement("a");
+  a.id = "rail-settings-btn";
+  a.className = "rail-brand-gear" + (active === "settings" ? " on" : "");
+  a.href = "settings.html";
+  a.title = "偏好設定";
+  a.setAttribute("aria-label", "偏好設定");
+  a.innerHTML = svg(IC.settings);
+  // 插在收合鍵之前，兩顆並排
+  const collapse = brand.parentElement?.querySelector(".panel-collapse-btn, [data-rail-collapse]");
+  if (collapse) collapse.insertAdjacentElement("beforebegin", a);
+  else brand.appendChild(a);
+}
+
 export function initRailNav(active: RailPage) {
   const nav = document.querySelector(".rail-nav");
   if (!nav) return;
@@ -105,6 +129,8 @@ export function initRailNav(active: RailPage) {
   `;
   nav.setAttribute("data-rail-built", "1");
   nav.setAttribute("data-rail-active", active);
+
+  ensureBrandSettings(active);
 
   const tui = document.getElementById("btn-tui-hint");
   tui?.addEventListener("click", () => {
