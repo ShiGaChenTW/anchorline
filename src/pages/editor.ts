@@ -297,12 +297,103 @@ function renderFileTree() {
   });
 }
 
+/**
+ * OpenSpec 章節：每一段 PRD 匯出後會落在 OpenSpec 文件的哪個標題底下。
+ *
+ * 顯示的是「對應關係 + 這段寫完了沒」，不是檔案內容 —— App 只存掃到的
+ * 路徑不存內文，硬要顯示內容就得說謊。點一下跳到對應的 PRD 章節。
+ */
+function renderOpenSpec() {
+  const el = document.getElementById("openspec-list");
+  if (!el) return;
+  const list = sections();
+  const rows = list
+    .map((sec, i) => ({ sec, i, target: SECTION_TO_OPENSPEC[sec.id] }))
+    .filter((r) => r.target);
+
+  const doneCount = rows.filter((r) => r.sec.status === "done").length;
+  const countEl = document.getElementById("os-count");
+  if (countEl) countEl.textContent = `${doneCount}/${rows.length}`;
+
+  el.innerHTML = rows
+    .map(({ sec, i, target }) => {
+      const [file, heading = ""] = target!.split(" › ");
+      const st = sec.status === "done" ? "done" : sec.status === "warn" ? "warn" : "empty";
+      return `<button type="button" class="os-row" data-i="${i}" title="由「${escapeHtml(sec.title)}」產出">
+        <span class="os-dot ${st}"></span>
+        <span class="os-body">
+          <span class="os-head">${escapeHtml(heading || file)}</span>
+          <span class="os-file">${escapeHtml(file)} · ${escapeHtml(sec.n)} ${escapeHtml(sec.title)}</span>
+        </span>
+      </button>`;
+    })
+    .join("");
+
+  el.querySelectorAll(".os-row").forEach((btn) => {
+    (btn as HTMLButtonElement).onclick = () => {
+      idx = Number((btn as HTMLElement).dataset.i);
+      const sec = sections()[idx];
+      if (sec) store.setActiveSection(sec.id);
+      render();
+    };
+  });
+}
+
+/**
+ * Task List：把所有章節「還沒過的檢查項」攤成一張待辦清單。
+ *
+ * 這是從結構檢查 gate 推出來的，不是另一份要人維護的清單 ——
+ * 多一份手寫待辦只會跟真相分岔。點一下跳到那一章。
+ */
+function renderTaskList() {
+  const el = document.getElementById("task-list");
+  if (!el) return;
+  const list = sections();
+  const todo: { i: number; sec: string; n: string; label: string }[] = [];
+  let total = 0;
+  list.forEach((sec, i) => {
+    const vals = valuesFor(sec);
+    for (const c of evaluateChecks(sec, vals)) {
+      total += 1;
+      if (!c.pass) todo.push({ i, sec: sec.title, n: sec.n, label: c.label });
+    }
+  });
+
+  const countEl = document.getElementById("task-count");
+  if (countEl) countEl.textContent = `${total - todo.length}/${total}`;
+
+  if (!todo.length) {
+    el.innerHTML = `<p class="task-empty">全部檢查項都過了。</p>`;
+    return;
+  }
+
+  el.innerHTML = todo
+    .map(
+      (t) => `<button type="button" class="task-row" data-i="${t.i}" title="跳到 ${escapeHtml(t.n)} ${escapeHtml(t.sec)}">
+        <span class="task-box" aria-hidden="true"></span>
+        <span class="task-text">${escapeHtml(t.label)}</span>
+        <span class="task-sec">${escapeHtml(t.n)}</span>
+      </button>`,
+    )
+    .join("");
+
+  el.querySelectorAll(".task-row").forEach((btn) => {
+    (btn as HTMLButtonElement).onclick = () => {
+      idx = Number((btn as HTMLElement).dataset.i);
+      const sec = sections()[idx];
+      if (sec) store.setActiveSection(sec.id);
+      render();
+    };
+  });
+}
+
 function renderOutline() {
   renderFileTree();
   const el = document.getElementById("outline");
   if (!el) return;
   const list = sections();
-  // ADHD：大綱只顯示編號＋標題＋狀態；說明改 title tooltip，減少並列文字
+  // ADHD：大綱只顯示編號＋標題＋狀態。說明一律走 title tooltip ——
+  // 選中時展開第二排會讓整列跳動，而且那段字在右邊的教練欄已經有了。
   el.innerHTML = list
     .map((s, i) => {
       const st = s.status === "done" ? "done" : s.status === "warn" ? "warn" : "empty";
@@ -310,9 +401,7 @@ function renderOutline() {
       const active = i === idx;
       return `<button type="button" class="sec adhd-sec ${active ? "active" : ""}" data-i="${i}" role="option" aria-selected="${active}" data-od-id="sec-${s.id}" title="${escapeHtml(s.desc)}">
       <span class="n">${s.n}</span>
-      <span class="adhd-sec-body"><div class="t">${escapeHtml(s.title)}</div>${
-        active ? `<div class="d adhd-sec-hint">${escapeHtml(s.desc)}</div>` : ""
-      }</span>
+      <span class="adhd-sec-body"><div class="t">${escapeHtml(s.title)}</div></span>
       <span class="st ${st}">${label}</span>
     </button>`;
     })
@@ -332,6 +421,9 @@ function renderOutline() {
   );
   const pct = document.getElementById("outline-pct");
   if (pct) pct.textContent = `${avg}%`;
+
+  renderOpenSpec();
+  renderTaskList();
 }
 
 function renderEditor() {
