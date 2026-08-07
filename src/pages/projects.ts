@@ -174,6 +174,16 @@ if (!requireAuth()) {
   /** 顯示方式：列表／卡片／資料夾。存 localStorage —— 換了頁回來不該重來。 */
   type ViewMode = "list" | "card" | "folder";
   const VIEW_KEY = "specforge:project-view";
+  /** 資料夾模式裡，群組內部要用清單還是卡片 */
+  type SubMode = "list" | "card";
+  const SUB_KEY = "specforge:folder-sub";
+  let sub: SubMode = (() => {
+    try {
+      return localStorage.getItem(SUB_KEY) === "card" ? "card" : "list";
+    } catch {
+      return "list";
+    }
+  })();
   let view: ViewMode = (() => {
     try {
       const v = localStorage.getItem(VIEW_KEY);
@@ -265,15 +275,15 @@ if (!requireAuth()) {
         const label = path
           ? escapeHtml(path.split("/").filter(Boolean).pop() || path)
           : "未綁定資料夾";
-        const sub = path ? escapeHtml(path) : "量不到 git、技術線與容量";
+        const pathHint = path ? escapeHtml(path) : "量不到 git、技術線與容量";
         return `<section class="folder-group">
           <header class="folder-group-head">
             <svg class="ic" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.75 1h4.5c.29 0 .56.14.72.38L8.13 3h6.12c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75C0 1.784.784 1 1.75 1z"/></svg>
             <span class="folder-group-name">${label}</span>
             <span class="folder-group-count">${list.length}</span>
-            <span class="folder-group-path mono">${sub}</span>
+            <span class="folder-group-path mono">${pathHint}</span>
           </header>
-          <div class="folder-group-body">${list.map((p) => cardHtml(p, true)).join("")}</div>
+          <div class="folder-group-body sub-${sub}">${list.map((p) => cardHtml(p, true)).join("")}</div>
         </section>`;
       })
       .join("");
@@ -417,9 +427,30 @@ if (!requireAuth()) {
     });
   });
 
+  document.querySelectorAll<HTMLButtonElement>("[data-sub]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      sub = btn.dataset.sub === "card" ? "card" : "list";
+      try {
+        localStorage.setItem(SUB_KEY, sub);
+      } catch {
+        /* private mode */
+      }
+      syncViewSwitch();
+      render();
+    });
+  });
+
   function syncViewSwitch() {
     document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((b) => {
       const on = b.dataset.view === view;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    // 子切換只在資料夾模式有意義，其他模式藏起來不佔位
+    const subHost = document.getElementById("folder-sub");
+    if (subHost) subHost.hidden = view !== "folder";
+    document.querySelectorAll<HTMLButtonElement>("[data-sub]").forEach((b) => {
+      const on = b.dataset.sub === sub;
       b.classList.toggle("on", on);
       b.setAttribute("aria-pressed", on ? "true" : "false");
     });

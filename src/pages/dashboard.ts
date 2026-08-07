@@ -64,64 +64,51 @@ if (!requireAuth()) {
 
   // ── 各張卡片 ────────────────────────────────────────────────
 
-  function cardGit(s: ProjectStats): string {
-    const g = s.git;
-    const head = gitHeadline(g);
-    const rows: [string, string][] = g
-      ? [
-          ["分支", g.branch || "—"],
-          ["最新 commit", `${g.head} · ${g.lastMessage || "（無訊息）"}`],
-          ["作者 / 時間", `${g.author || "—"} · ${g.lastAt ? g.lastAt.slice(0, 16).replace("T", " ") : "—"}`],
-          ["遠端", g.remote || "（未設定 origin）"],
-          [
-            "與 origin",
-            g.ahead < 0
-              ? "未追蹤遠端分支"
-              : `領先 ${g.ahead} · 落後 ${g.behind}`,
-          ],
-          ["累計 commit", String(g.commitCount)],
-        ]
-      : [];
-
-    return `<section class="dash-card dash-git tone-${head.tone}">
-      <h2 class="dash-h">版本控制</h2>
-      <p class="dash-lead">${escapeHtml(head.text)}</p>
-      ${
-        rows.length
-          ? `<dl class="dash-dl">${rows
-              .map(
-                ([k, v]) =>
-                  `<div><dt>${escapeHtml(k)}</dt><dd class="mono">${escapeHtml(v)}</dd></div>`,
-              )
-              .join("")}</dl>`
-          : `<p class="dash-note">用 <code>git init</code> 起版控後，這裡會顯示提交與推送狀態。</p>`
-      }
-    </section>`;
+  /** 一個列表元件供技術線與容量共用：兩者資料形狀相同，長不一樣就是雜亂的來源 */
+  function statRows(
+    rows: { swatch?: number; label: string; value: string; sub?: string }[],
+  ): string {
+    return `<ul class="d-rows">${rows
+      .map(
+        (r) => `<li>
+          ${r.swatch != null ? `<span class="d-swatch s${r.swatch}"></span>` : ""}
+          <span class="d-rows-label">${escapeHtml(r.label)}</span>
+          <span class="d-rows-value">${escapeHtml(r.value)}</span>
+          ${r.sub ? `<span class="d-rows-sub">${escapeHtml(r.sub)}</span>` : ""}
+        </li>`,
+      )
+      .join("")}</ul>`;
   }
 
-  function cardRelease(s: ProjectStats): string {
+  /** 頭條：整頁唯一該先被讀到的東西，佔滿一行 */
+  function heroGit(s: ProjectStats): string {
     const g = s.git;
-    const tag = g?.tag || "";
-    const since = tag && g ? g.commitCount : 0;
-    return `<section class="dash-card">
-      <h2 class="dash-h">版號與 Release</h2>
-      <p class="dash-lead">${
-        tag ? `最近的 tag 是 <span class="mono">${escapeHtml(tag)}</span>` : "還沒有任何 tag"
-      }</p>
-      <dl class="dash-dl">
-        <div><dt>目前 tag</dt><dd class="mono">${escapeHtml(tag || "—")}</dd></div>
-        <div><dt>HEAD</dt><dd class="mono">${escapeHtml(g?.head || "—")}</dd></div>
-        <div><dt>累計 commit</dt><dd class="mono">${since || "—"}</dd></div>
-      </dl>
-
-      <div class="dash-reserved">
-        <p class="dash-reserved-label">取號（尚未實作）</p>
-        <p class="dash-note">先佔下一個版號，避免兩邊同時發版撞號。目前只有介面骨架，配號邏輯還沒接。</p>
-        <div class="dash-reserved-row">
-          <input type="text" class="ask-input" id="dash-next-ver" placeholder="v1.2.0" disabled />
-          <button type="button" class="btn btn-sm" id="dash-take-number" disabled>取號</button>
-        </div>
-      </div>
+    const head = gitHeadline(g);
+    const facts = g
+      ? [
+          ["分支", g.branch || "—"],
+          ["HEAD", g.head || "—"],
+          ["累計 commit", String(g.commitCount)],
+          [
+            "與 origin",
+            g.ahead < 0 ? "未追蹤遠端" : `領先 ${g.ahead} · 落後 ${g.behind}`,
+          ],
+        ]
+      : [];
+    return `<section class="d-hero tone-${head.tone}">
+      <p class="d-eyebrow">版本控制</p>
+      <p class="d-hero-figure">${escapeHtml(head.text)}</p>
+      ${
+        g
+          ? `<p class="d-hero-sub">${escapeHtml(g.lastMessage || "（無 commit 訊息）")}</p>
+             <p class="d-hero-meta">${escapeHtml(g.author || "—")} · ${escapeHtml(
+               g.lastAt ? g.lastAt.slice(0, 16).replace("T", " ") : "—",
+             )}${g.remote ? ` · ${escapeHtml(g.remote.replace(/^https:\/\//, ""))}` : " · 未設定 origin"}</p>
+             <dl class="d-facts">${facts
+               .map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`)
+               .join("")}</dl>`
+          : `<p class="d-hero-sub">用 <code>git init</code> 起版控後，這裡會顯示提交與推送狀態。</p>`
+      }
     </section>`;
   }
 
@@ -129,39 +116,34 @@ if (!requireAuth()) {
     const langs = languageBreakdown(s);
     const fws = frameworks(s);
     const top = langs[0];
-    return `<section class="dash-card">
-      <h2 class="dash-h">技術線</h2>
-      <p class="dash-lead">${
-        top
-          ? `主要是 <strong>${escapeHtml(top.lang)}</strong>（${top.pct}%）`
-          : "沒有偵測到程式碼檔案"
-      }</p>
+    return `<section class="d-card">
+      <p class="d-eyebrow">技術線</p>
+      <p class="d-figure">${top ? escapeHtml(top.lang) : "—"}</p>
+      <p class="d-figure-sub">${top ? `佔 ${top.pct}%　共 ${langs.length} 類` : "沒有偵測到程式碼檔案"}</p>
       ${
         langs.length
-          ? `<div class="dash-bar" role="img" aria-label="語言佔比">${langs
-              .map(
-                (l, i) =>
-                  `<span class="dash-bar-seg seg-${i % 6}" style="width:${l.pct}%" title="${escapeHtml(l.lang)} ${l.pct}%"></span>`,
-              )
+          ? `<div class="d-bar" role="img" aria-label="語言佔比：${langs
+              .map((l) => `${l.lang} ${l.pct}%`)
+              .join("、")}">${langs
+              .map((l, i) => `<span class="d-bar-seg s${i}" style="flex:${l.pct}"></span>`)
               .join("")}</div>
-          <ul class="dash-legend">${langs
-            .map(
-              (l, i) =>
-                `<li><span class="dash-dot seg-${i % 6}"></span>${escapeHtml(l.lang)} <span class="mono">${l.pct}%</span> <span class="dash-legend-b">${formatBytes(l.bytes)}</span></li>`,
-            )
-            .join("")}</ul>`
+             ${statRows(
+               langs.map((l, i) => ({
+                 swatch: i,
+                 label: l.lang,
+                 value: `${l.pct}%`,
+                 sub: formatBytes(l.bytes),
+               })),
+             )}`
           : ""
       }
-      <p class="dash-sub-h">框架與工具</p>
       ${
         fws.length
-          ? `<div class="dash-chips">${fws
-              .map(
-                (f) =>
-                  `<span class="dash-chip" title="偵測自 ${escapeHtml(f.from)}">${escapeHtml(f.label)}</span>`,
-              )
-              .join("")}</div>`
-          : `<p class="dash-note">沒有從 ${s.manifests.length ? escapeHtml(s.manifests.join("、")) : "任何 manifest"} 認出已知框架。</p>`
+          ? `<p class="d-sub-h">框架與工具</p>
+             <div class="d-chips">${fws
+               .map((f) => `<span class="d-chip" title="偵測自 ${escapeHtml(f.from)}">${escapeHtml(f.label)}</span>`)
+               .join("")}</div>`
+          : ""
       }
     </section>`;
   }
@@ -170,20 +152,37 @@ if (!requireAuth()) {
     const tops = Object.entries(s.extBytes ?? {})
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6);
-    return `<section class="dash-card">
-      <h2 class="dash-h">資料夾容量</h2>
-      <p class="dash-lead"><strong>${formatBytes(s.totalBytes)}</strong> · ${s.fileCount} 個檔案</p>
-      <p class="dash-note">已排除 node_modules、.git、dist、target 等建置與相依目錄。</p>
-      ${
-        tops.length
-          ? `<dl class="dash-dl">${tops
-              .map(
-                ([ext, bytes]) =>
-                  `<div><dt class="mono">.${escapeHtml(ext)}</dt><dd class="mono">${formatBytes(bytes)} · ${s.extCount[ext] ?? 0} 檔</dd></div>`,
-              )
-              .join("")}</dl>`
-          : ""
-      }
+    return `<section class="d-card">
+      <p class="d-eyebrow">資料夾容量</p>
+      <p class="d-figure">${formatBytes(s.totalBytes)}</p>
+      <p class="d-figure-sub">${s.fileCount} 個檔案　已排除 node_modules、.git、dist 等</p>
+      ${statRows(
+        tops.map(([ext, bytes]) => ({
+          label: `.${ext}`,
+          value: formatBytes(bytes),
+          sub: `${s.extCount[ext] ?? 0} 檔`,
+        })),
+      )}
+    </section>`;
+  }
+
+  function cardRelease(s: ProjectStats): string {
+    const g = s.git;
+    const tag = g?.tag || "";
+    return `<section class="d-card">
+      <p class="d-eyebrow">版號與 Release</p>
+      <p class="d-figure">${tag ? escapeHtml(tag) : "無 tag"}</p>
+      <p class="d-figure-sub">${
+        tag ? `HEAD ${escapeHtml(g?.head || "—")}` : "還沒發過版"
+      }　累計 ${g?.commitCount ?? "—"} 個 commit</p>
+      <div class="d-reserved">
+        <span class="d-reserved-tag">尚未實作</span>
+        <p>取號：先佔下一個版號，避免兩邊同時發版撞號。目前只有介面骨架。</p>
+        <div class="d-reserved-row">
+          <input type="text" class="ask-input" id="dash-next-ver" placeholder="v1.2.0" disabled />
+          <button type="button" class="btn btn-sm" id="dash-take-number" disabled>取號</button>
+        </div>
+      </div>
     </section>`;
   }
 
@@ -196,8 +195,9 @@ if (!requireAuth()) {
 
   function renderStats(s: ProjectStats) {
     renderState(
-      `<div class="dash-grid">${cardGit(s)}${cardRelease(s)}${cardStack(s)}${cardSize(s)}</div>
-       <p class="dash-measured mono">量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")} · ${escapeHtml(s.folderPath)}</p>`,
+      `${heroGit(s)}
+       <div class="d-grid">${cardStack(s)}${cardSize(s)}${cardRelease(s)}</div>
+       <p class="d-measured">量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")}　<span class="mono">${escapeHtml(s.folderPath)}</span></p>`,
     );
   }
 
