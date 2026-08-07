@@ -1,87 +1,135 @@
 /**
- * 歡迎畫面（試作）—— 開啟 App 時顯示目前專案的 onefetch 資訊。
+ * 歡迎畫面 —— 開 App 時的第一眼。
  *
- * 用 `onefetch --output json` 而不是解析終端輸出：ANSI 色碼與方塊字元
- * 拿到瀏覽器裡重組是自找麻煩，而且 onefetch 改版就會壞。
+ * 這是 **App 的**歡迎畫面，不是某個 repo 的。所以上半是「你是誰、這個 App
+ * 是什麼版本、你手上有幾個專案」，下半是 `fastfetch` 給的機器狀態。
+ * 原本用 onefetch 顯示單一 repo 的 git 資訊 —— 那件事儀表板已經做得更好，
+ * 而且開 App 的當下你還沒決定要進哪個專案。
+ *
+ * 用 `fastfetch --format json` 而不是解析終端輸出：ANSI 色碼與方塊字元
+ * 拿到瀏覽器裡重組是自找麻煩，而且 fastfetch 改版就會壞。
  *
  * ADHD 取捨：
- * - 預設每次開啟都跳 —— 「你上次離開後這個專案長怎樣」是每次回來都想知道的事，
- *   而不是一天一次。要靜音由使用者自己勾「今天不再顯示」，是他的決定不是我的。
+ * - 預設每次開啟都跳 —— 一句問候 + 你手上有幾件事，是每次回來都該先看到的。
+ *   要靜音由使用者自己勾「今天不再顯示」，是他的決定不是我的。
  * - Esc／點背景就關，不強迫讀完。
- * - 內容是「你上次離開後這個專案長怎樣」，不是操作教學（那是首次導覽的事）。
- * - 沒有 onefetch、沒綁資料夾、不是 git 專案 → 安靜不顯示，不要為了跳而跳。
+ * - 沒裝 fastfetch 也照跳，只是下半留白 —— 問候與專案數不該被一個外部工具綁架。
  */
+import { store } from "../data/store";
 
 const SHOWN_KEY = "specforge:welcome-shown-date";
+/**
+ * 「這次啟動已經跳過了」。
+ * 用 sessionStorage 而不是 localStorage —— 這個 App 是多頁式的，換頁就是一次
+ * 真的 page load，用 localStorage 會變成每點一次側欄就彈一次。
+ * sessionStorage 在同一個 WebView session 內跨頁保留、App 整個關掉才清空，
+ * 正好就是「開啟當下跳一次，關掉再開才會再跳」的語意。
+ */
+const SESSION_KEY = "specforge:welcome-seen-session";
+const APP_VERSION = "1.1.0";
 
-/** onefetch 的 infoFields 是一個 { TypeName: {...} } 陣列 */
-type InfoField = Record<string, Record<string, unknown>>;
+/** fastfetch --format json 是一個 [{type, result}] 陣列 */
+export type FastfetchEntry = { type?: string; result?: unknown; error?: string };
 
-export type Onefetch = {
-  title?: { gitUsername?: string; gitVersion?: string };
-  infoFields?: InfoField[];
-};
-
-function field<T = Record<string, unknown>>(o: Onefetch, name: string): T | null {
-  for (const f of o.infoFields ?? []) {
-    if (name in f) return f[name] as T;
-  }
-  return null;
+function pick(list: FastfetchEntry[], type: string): Record<string, unknown> | null {
+  const hit = list.find((e) => e.type === type && e.result != null);
+  return hit ? (hit.result as Record<string, unknown>) : null;
 }
 
-/** 挑出要顯示的幾項。onefetch 給的欄位很多，全列出來就是一面數字牆。 */
-export function summarize(o: Onefetch): { label: string; value: string }[] {
+function bytes(n: number): string {
+  if (!n) return "0 B";
+  const u = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.min(u.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
+  const v = n / Math.pow(1024, i);
+  return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${u[i]}`;
+}
+
+/** fastfetch 的 uptime 是毫秒 */
+function uptimeLabel(ms: number): string {
+  const min = Math.floor(ms / 60000);
+  const d = Math.floor(min / 1440);
+  const h = Math.floor((min % 1440) / 60);
+  const m = min % 60;
+  if (d) return `${d} 天 ${h} 小時`;
+  if (h) return `${h} 小時 ${m} 分`;
+  return `${m} 分`;
+}
+
+/**
+ * 挑出要顯示的幾項。fastfetch 給二十幾個模組，全列出來就是一面數字牆。
+ * 挑過才是這個畫面的價值。
+ */
+export function summarizeSystem(list: FastfetchEntry[]): { label: string; value: string }[] {
   const out: { label: string; value: string }[] = [];
   const push = (label: string, value: unknown) => {
     const v = value == null ? "" : String(value).trim();
     if (v) out.push({ label, value: v });
   };
 
-  const head = field<{ headRefs?: { shortCommitId?: string; refs?: string[] } }>(o, "HeadInfo");
-  push("HEAD", head?.headRefs
-    ? `${head.headRefs.shortCommitId ?? ""}${head.headRefs.refs?.length ? ` (${head.headRefs.refs.join(", ")})` : ""}`
-    : "");
+  push("機型", pick(list, "Host")?.name);
+  push("系統", pick(list, "OS")?.prettyName);
 
-  const pending = field<{ added?: number; deleted?: number; modified?: number }>(o, "PendingInfo");
-  if (pending) {
-    const n = (pending.added ?? 0) + (pending.deleted ?? 0) + (pending.modified ?? 0);
-    push("未提交", n ? `${n} 項變更` : "無");
+  const cpu = pick(list, "CPU");
+  const cores = cpu?.cores as { logical?: number } | undefined;
+  push("處理器", cpu?.cpu ? `${cpu.cpu}${cores?.logical ? ` · ${cores.logical} 核` : ""}` : "");
+
+  const mem = pick(list, "Memory") as { total?: number; used?: number } | null;
+  if (mem?.total) {
+    const pct = mem.used ? Math.round((mem.used / mem.total) * 100) : 0;
+    push("記憶體", `${bytes(mem.used ?? 0)} / ${bytes(mem.total)}（${pct}%）`);
   }
 
-  push("版本", field<{ version?: string }>(o, "VersionInfo")?.version);
-  push("建立於", field<{ creationDate?: string }>(o, "CreatedInfo")?.creationDate);
-  push("最後變更", field<{ lastChange?: string }>(o, "LastChangeInfo")?.lastChange);
-  push("Commits", field<{ numberOfCommits?: number }>(o, "CommitsInfo")?.numberOfCommits);
+  const disks = pick(list, "Disk") as unknown as
+    | { bytes?: { used?: number; total?: number } }[]
+    | null;
+  const root = Array.isArray(disks) ? disks[0] : null;
+  if (root?.bytes?.total) {
+    const free = (root.bytes.total ?? 0) - (root.bytes.used ?? 0);
+    push("磁碟", `剩 ${bytes(free)} / ${bytes(root.bytes.total)}`);
+  }
 
-  const loc = field<{ linesOfCode?: number }>(o, "LocInfo")?.linesOfCode;
-  push("程式碼行數", typeof loc === "number" ? loc.toLocaleString("en-US") : loc);
+  const up = pick(list, "Uptime")?.uptime;
+  push("開機時間", typeof up === "number" ? uptimeLabel(up) : "");
 
-  const size = field<{ repoSize?: string; fileCount?: number }>(o, "SizeInfo");
-  push("儲存庫大小", size?.repoSize
-    ? `${size.repoSize}${size.fileCount ? ` · ${size.fileCount} 檔` : ""}`
-    : "");
+  const pkg = pick(list, "Packages") as { all?: number; brew?: number } | null;
+  push("套件", pkg?.all ? `${pkg.all}${pkg.brew ? `（brew ${pkg.brew}）` : ""}` : "");
 
-  const deps = field<{ numOfDependencies?: number; dependencyManager?: string }>(o, "DependenciesInfo");
-  push("相依套件", deps?.numOfDependencies
-    ? `${deps.numOfDependencies}${deps.dependencyManager ? `（${deps.dependencyManager}）` : ""}`
-    : "");
+  const bat = pick(list, "Battery") as unknown as { capacity?: number }[] | null;
+  const cap = Array.isArray(bat) ? bat[0]?.capacity : undefined;
+  push("電池", typeof cap === "number" ? `${Math.round(cap)}%` : "");
 
-  push("遠端", field<{ repoUrl?: string }>(o, "UrlInfo")?.repoUrl);
+  const ip = pick(list, "LocalIp") as unknown as { ipv4?: string }[] | null;
+  push("區網 IP", Array.isArray(ip) ? ip[0]?.ipv4 : "");
+
+  // 不放 Shell：fastfetch 讀的是父行程，從 App 裡叫出來會顯示 SpecForge 自己 —— 誤導。
   return out;
 }
 
-export type LangSlice = { language: string; percentage: number };
-
-export function languages(o: Onefetch): LangSlice[] {
-  const li = field<{ languagesWithPercentage?: LangSlice[] }>(o, "LanguagesInfo");
-  return (li?.languagesWithPercentage ?? []).slice(0, 6);
+/** 依時間問候。凌晨還在寫 PRD 的人值得被特別對待。 */
+export function greeting(h = new Date().getHours()): string {
+  if (h < 5) return "夜深了";
+  if (h < 11) return "早安";
+  if (h < 14) return "午安";
+  if (h < 18) return "下午好";
+  return "晚安";
 }
 
-export function repoName(o: Onefetch): string {
-  return field<{ repoName?: string }>(o, "ProjectInfo")?.repoName ?? "專案";
+function seenThisLaunch(): boolean {
+  try {
+    return sessionStorage.getItem(SESSION_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function markSeenThisLaunch() {
+  try {
+    sessionStorage.setItem(SESSION_KEY, "1");
+  } catch {
+    /* private mode */
+  }
 }
 
-/** 使用者今天勾過「不再顯示」才靜音。沒勾就每次開啟都跳。 */
+/** 使用者今天勾過「不再顯示」才靜音。沒勾就每次啟動都跳。 */
 function mutedToday(): boolean {
   try {
     return localStorage.getItem(SHOWN_KEY) === new Date().toDateString();
@@ -106,49 +154,53 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export function renderWelcome(o: Onefetch, projectTitle: string) {
+export function renderWelcome(list: FastfetchEntry[] | null) {
   document.getElementById("welcome-root")?.remove();
-  const rows = summarize(o);
-  const langs = languages(o);
+
+  const st = store.get();
+  const who = (st.currentUser?.name ?? "").trim();
+  const projects = st.projects.filter((p) => !p.isSample || st.showSamples);
+  const open = projects.filter((p) => p.status === "draft" || p.status === "review").length;
+  const rows = list ? summarizeSystem(list) : [];
 
   const root = document.createElement("div");
   root.id = "welcome-root";
   root.className = "modal-back open";
   root.innerHTML = `
     <div class="modal welcome-modal" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
-      <header>
-        <div>
-          <h3 id="welcome-title">${escapeHtml(projectTitle)}</h3>
-          <p class="sub mono">${escapeHtml(repoName(o))}${
-            o.title?.gitUsername ? ` · ${escapeHtml(o.title.gitUsername)}` : ""
-          }</p>
+      <header class="welcome-head">
+        <div class="welcome-mark" aria-hidden="true">PR</div>
+        <div class="welcome-hello">
+          <h3 id="welcome-title">${escapeHtml(greeting())}${who ? `，${escapeHtml(who)}` : ""}</h3>
+          <p class="welcome-appline">
+            <span>PRD 開發監控台</span>
+            <span class="welcome-ver mono">v${escapeHtml(APP_VERSION)}</span>
+          </p>
         </div>
         <button type="button" class="btn btn-ghost btn-sm" data-welcome="close">關閉</button>
       </header>
       <div class="body">
+        <div class="welcome-counts">
+          <div class="welcome-count">
+            <strong>${projects.length}</strong>
+            <span>管理中的專案</span>
+          </div>
+          <div class="welcome-count">
+            <strong>${open}</strong>
+            <span>草稿／審閱中</span>
+          </div>
+        </div>
         ${
-          langs.length
-            ? `<div class="dash-bar" role="img" aria-label="語言佔比">${langs
+          rows.length
+            ? `<dl class="dash-dl welcome-dl">${rows
                 .map(
-                  (l, i) =>
-                    `<span class="dash-bar-seg seg-${i % 6}" style="width:${l.percentage}%" title="${escapeHtml(l.language)} ${l.percentage.toFixed(1)}%"></span>`,
+                  (r) =>
+                    `<div><dt>${escapeHtml(r.label)}</dt><dd class="mono">${escapeHtml(r.value)}</dd></div>`,
                 )
-                .join("")}</div>
-              <ul class="dash-legend welcome-langs">${langs
-                .map(
-                  (l, i) =>
-                    `<li><span class="dash-dot seg-${i % 6}"></span>${escapeHtml(l.language)} <span class="mono">${l.percentage.toFixed(1)}%</span></li>`,
-                )
-                .join("")}</ul>`
-            : ""
+                .join("")}</dl>
+              <p class="dash-note">系統資訊來自 <code>fastfetch</code>。</p>`
+            : `<p class="dash-note">沒抓到系統資訊。裝了 <code>brew install fastfetch</code> 之後這裡會顯示機器狀態。</p>`
         }
-        <dl class="dash-dl welcome-dl">${rows
-          .map(
-            (r) =>
-              `<div><dt>${escapeHtml(r.label)}</dt><dd class="mono">${escapeHtml(r.value)}</dd></div>`,
-          )
-          .join("")}</dl>
-        <p class="dash-note">資料來自 <code>onefetch</code>。</p>
       </div>
       <footer class="welcome-foot">
         <label class="welcome-mute">
@@ -156,12 +208,13 @@ export function renderWelcome(o: Onefetch, projectTitle: string) {
           <span>今天不再顯示</span>
         </label>
         <span class="spacer"></span>
-        <a class="btn" href="dashboard.html">看完整儀表板</a>
+        <a class="btn" href="overview.html">看全部專案</a>
         <button type="button" class="btn btn-primary" data-welcome="close">開始工作</button>
       </footer>
     </div>
   `;
   document.body.appendChild(root);
+  markSeenThisLaunch();
 
   // 勾了就當天靜音，取消勾選就馬上還原 —— 誤按不該要等到明天。
   const mute = root.querySelector('[data-welcome="mute"]') as HTMLInputElement | null;
@@ -186,48 +239,52 @@ export function renderWelcome(o: Onefetch, projectTitle: string) {
 }
 
 /**
- * 啟動時嘗試顯示。任何一個前提不成立就安靜跳過：
- * 已經跳過、不是桌面版、沒綁資料夾、沒裝 onefetch、不是 git 專案。
+ * 啟動時嘗試顯示。
+ * 三個前提會擋下來：這次啟動已經跳過、今天勾過靜音、不是桌面版。
+ * fastfetch 抓不到不算前提 —— 問候與專案數本來就不需要它。
  */
-export function initWelcome(folderPath: string | undefined, projectTitle: string) {
-  if (!folderPath || mutedToday()) return;
+export function initWelcome() {
+  if (seenThisLaunch() || mutedToday()) return;
 
   const w = window as Window & {
-    __SPECFORGE_NATIVE__?: boolean;
     webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
   };
   const bridge = w.webkit?.messageHandlers?.specforge;
-  if (!bridge) return; // 瀏覽器版沒有 onefetch，安靜跳過
+  if (!bridge) return; // 瀏覽器版沒有原生橋，安靜跳過
 
-  const timer = window.setTimeout(() => {
+  let done = false;
+  const finish = (list: FastfetchEntry[] | null) => {
+    if (done) return;
+    done = true;
+    window.clearTimeout(timer);
     window.removeEventListener("specforge-native", onNative);
-  }, 10000);
+    renderWelcome(list);
+  };
+
+  // 抓不到就照跳，只是少了下半段 —— 不讓一個外部工具決定畫面出不出現
+  const timer = window.setTimeout(() => finish(null), 4000);
 
   function onNative(e: Event) {
     const p = (e as CustomEvent<{ type?: string; raw?: string }>).detail;
-    if (p?.type === "onefetchError") {
-      window.clearTimeout(timer);
-      window.removeEventListener("specforge-native", onNative);
-      return; // 安靜失敗：沒裝 onefetch 不該變成一則錯誤訊息
+    if (p?.type === "fastfetchError") {
+      finish(null);
+      return;
     }
-    if (p?.type !== "onefetch" || !p.raw) return;
-    window.clearTimeout(timer);
-    window.removeEventListener("specforge-native", onNative);
+    if (p?.type !== "fastfetch" || !p.raw) return;
     try {
-      renderWelcome(JSON.parse(p.raw) as Onefetch, projectTitle);
+      finish(JSON.parse(p.raw) as FastfetchEntry[]);
     } catch {
-      /* JSON 壞掉就不顯示 */
+      finish(null);
     }
   }
 
   window.addEventListener("specforge-native", onNative);
   try {
-    bridge.postMessage({ action: "onefetch", folderPath });
+    bridge.postMessage({ action: "fastfetch" });
   } catch {
-    window.clearTimeout(timer);
-    window.removeEventListener("specforge-native", onNative);
+    finish(null);
   }
 }
 
-// ponytail: 欄位挑選寫死在 summarize()，不做可設定。
-// onefetch 給二十幾個欄位，全列出來就是一面數字牆 —— 挑過才是這個畫面的價值。
+// ponytail: 欄位挑選寫死在 summarizeSystem()，不做可設定。
+// fastfetch 給二十幾個模組，全列出來就是一面數字牆 —— 挑過才是這個畫面的價值。

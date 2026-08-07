@@ -101,6 +101,69 @@ export function renderRailProjects(host?: HTMLElement | null) {
     }
   }
 
+/**
+ * 「＋」的選單。三條進場路徑放在同一顆按鈕底下：
+ * 匯入既有資料夾、從零新建、新手引導。
+ *
+ * ADHD：三顆並排的按鈕會逼人先比較再決定；一顆 ＋ 打開才做選擇，
+ * 決策點只有一個，而且選項自帶一句說明。
+ */
+const ADD_ITEMS: { href: string; label: string; desc: string }[] = [
+  { href: "projects.html?import=1", label: "專案匯入", desc: "掃描既有資料夾，自動對應 PRD 章節" },
+  { href: "projects.html?new=1", label: "新建 PRD", desc: "從空白開始，精靈帶你走一遍" },
+  { href: "projects.html?beginner=1", label: "新手引導", desc: "多一點提示與範例，第一次寫就選這個" },
+];
+
+function bindAddMenu(block: HTMLElement) {
+  const btn = block.querySelector("#rail-proj-add") as HTMLButtonElement | null;
+  if (!btn) return;
+
+  const close = () => {
+    document.getElementById("rail-add-menu")?.remove();
+    btn.setAttribute("aria-expanded", "false");
+    document.removeEventListener("click", onDocClick, true);
+    document.removeEventListener("keydown", onKey);
+  };
+  function onDocClick(e: MouseEvent) {
+    const menu = document.getElementById("rail-add-menu");
+    if (!menu) return;
+    if (menu.contains(e.target as Node) || btn!.contains(e.target as Node)) return;
+    close();
+  }
+  function onKey(e: KeyboardEvent) {
+    if (e.key === "Escape") close();
+  }
+
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (document.getElementById("rail-add-menu")) {
+      close();
+      return;
+    }
+    const menu = document.createElement("div");
+    menu.id = "rail-add-menu";
+    menu.className = "rail-add-menu";
+    menu.setAttribute("role", "menu");
+    menu.innerHTML = ADD_ITEMS.map(
+      (it) => `
+        <a class="rail-add-item" role="menuitem" href="${it.href}">
+          <strong>${it.label}</strong>
+          <span>${it.desc}</span>
+        </a>`,
+    ).join("");
+    // 掛在 body 而不是側欄裡：側欄有 overflow: auto，掛在裡面會被裁掉
+    document.body.appendChild(menu);
+    const r = btn.getBoundingClientRect();
+    menu.style.top = `${Math.round(r.bottom + 6)}px`;
+    menu.style.left = `${Math.round(Math.min(r.left - 8, window.innerWidth - menu.offsetWidth - 12))}px`;
+    btn.setAttribute("aria-expanded", "true");
+    document.addEventListener("click", onDocClick, true);
+    document.addEventListener("keydown", onKey);
+    (menu.querySelector("a") as HTMLElement | null)?.focus();
+  });
+}
+
   const projects = store.visibleProjects();
   const activeId = store.get().activeProjectId;
 
@@ -108,10 +171,11 @@ export function renderRailProjects(host?: HTMLElement | null) {
     block.innerHTML = `
       <div class="nav-label rail-proj-head">
         <span>專案</span>
-        <a class="rail-proj-add" href="projects.html?new=1" title="新建專案" aria-label="新建專案">+</a>
+        <button type="button" class="rail-proj-add" id="rail-proj-add" title="新增" aria-label="新增" aria-haspopup="true" aria-expanded="false">+</button>
       </div>
       <div class="rail-projects-empty">尚無專案<br /><span class="muted">新建或匯入資料夾</span></div>
     `;
+    bindAddMenu(block);
     bumpCounts();
     return;
   }
@@ -120,7 +184,7 @@ export function renderRailProjects(host?: HTMLElement | null) {
     <div class="nav-label rail-proj-head">
       <span>專案 <span class="rail-proj-count">${projects.length}</span></span>
       <a class="rail-overview" href="overview.html" title="所有專案的總覽儀表板">總覽</a>
-      <a class="rail-proj-add" href="projects.html?new=1" title="新建專案" aria-label="新建專案">+</a>
+      <button type="button" class="rail-proj-add" id="rail-proj-add" title="新增" aria-label="新增" aria-haspopup="true" aria-expanded="false">+</button>
     </div>
     <div class="rail-projects" role="list" aria-label="專案清單">
       ${projects
@@ -183,6 +247,7 @@ export function renderRailProjects(host?: HTMLElement | null) {
     });
   });
 
+  bindAddMenu(block);
   bumpCounts();
 }
 

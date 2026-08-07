@@ -6247,8 +6247,60 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   outline-offset: 2px;
 }
 
-/* 歡迎畫面（onefetch 摘要） */
+/* 歡迎畫面：上半是 App 身分與手上的量，下半是 fastfetch 機器狀態 */
 .welcome-modal { width: min(520px, 92vw); }
+
+/* icon + 問候。問候是這個畫面唯一的情緒成分，字級要壓得住標題位。 */
+.welcome-head { display: flex; align-items: center; gap: 13px; }
+.welcome-mark {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: color-mix(in oklab, var(--accent) 22%, transparent);
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.welcome-hello { flex: 1 1 auto; min-width: 0; }
+.welcome-hello h3 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
+.welcome-appline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.welcome-ver {
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: var(--inset, transparent);
+  font-size: 11px;
+  color: var(--fg-2);
+}
+
+/* 兩個數字：手上總共幾個、其中幾個還沒結案。
+   ADHD：開 App 的第一個問題是「我有幾件事沒收」，不是機器資訊。 */
+.welcome-counts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.welcome-count {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--inset, transparent);
+}
+.welcome-count strong {
+  display: block;
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+.welcome-count span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
 /* 靜音勾選放 footer 左邊，跟兩顆行動鈕拉開 ——
    它是「以後別再問我」，不是這次要做的動作。 */
 .welcome-foot { display: flex; align-items: center; gap: 10px; }
@@ -6998,8 +7050,44 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   text-decoration: none;
   flex-shrink: 0;
 }
+.rail-proj-add {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
 .rail-proj-add:hover { background: color-mix(in oklab, var(--accent) 20%, transparent); color: var(--accent); }
 .rail-proj-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rail-proj-add[aria-expanded="true"] {
+  background: color-mix(in oklab, var(--accent) 24%, transparent);
+  color: var(--accent);
+}
+
+/* ＋ 的選單。掛在 body 上 —— 側欄有 overflow: auto，掛在裡面會被裁掉。 */
+.rail-add-menu {
+  position: fixed;
+  z-index: 500;
+  min-width: 264px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel, var(--bg));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+}
+.rail-add-item {
+  display: block;
+  padding: 9px 11px;
+  border-radius: 7px;
+  text-decoration: none;
+}
+.rail-add-item:hover, .rail-add-item:focus-visible {
+  background: var(--inset);
+  outline: none;
+}
+.rail-add-item strong { display: block; font-size: 13.5px; font-weight: 600; color: var(--fg); }
+/* 每個選項自帶一句說明 —— 三條路徑光看名字分不出差別 */
+.rail-add-item span { display: block; margin-top: 2px; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
 /* TUI 提示放在計劃追蹤頁本身 —— 原本它是側欄一顆叫「開啟 TUI 追蹤」
    的按鈕，實際只是導到這一頁，而且延遲 400ms 才跳，按起來像壞的 */
 .tui-hint { color: var(--muted); }

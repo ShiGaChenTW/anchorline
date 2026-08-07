@@ -1,5 +1,4 @@
 import { store } from "../data/store";
-import { projectDisplayName } from "../data/types";
 import type { Employee } from "../data/types";
 import { summarizePermissions } from "./permissions";
 import { initAdhdUi } from "./adhd-ui";
@@ -83,16 +82,11 @@ export function requireAuth(): boolean {
             welcomeBound = true;
             // 「開啟時」的歡迎畫面：接在共用 bootstrap 而不是某一頁，
             // 因為 agent 交接會直接落在編輯台，接在 projects 就永遠不會跳。
-            // 每天只跳一次、首次導覽優先、缺任何前提就安靜跳過。
+            // 首次導覽優先；其餘由 welcome 自己判斷（今日靜音、是否桌面版）。
             window.setTimeout(() => {
               if (document.getElementById("tour-root")) return;
-              const st = store.get();
-              const cur =
-                st.projects.find((x) => x.id === st.activeProjectId) ?? st.projects[0];
-              const root = cur?.importSummary?.rootPath;
-              if (!root) return;
               import("./welcome")
-                .then((m) => m.initWelcome(root, projectDisplayName(cur!)))
+                .then((m) => m.initWelcome())
                 .catch(() => {});
             }, 700);
           }
