@@ -6958,3 +6958,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 .rail-proj-add:hover { background: color-mix(in oklab, var(--accent) 20%, transparent); color: var(--accent); }
 .rail-proj-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* TUI 提示放在計劃追蹤頁本身 —— 原本它是側欄一顆叫「開啟 TUI 追蹤」
+   的按鈕，實際只是導到這一頁，而且延遲 400ms 才跳，按起來像壞的 */
+.tui-hint { color: var(--muted); }
+.tui-hint code { padding: 1px 5px; border-radius: 4px; background: var(--inset); font-size: 11.5px; }
