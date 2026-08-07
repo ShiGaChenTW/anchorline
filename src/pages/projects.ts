@@ -234,9 +234,9 @@ if (!requireAuth()) {
           .filter(Boolean)
           .join(" · ");
         return `<article class="project-card${p.id === store.get().activeProjectId ? " is-active" : ""}" data-id="${p.id}" role="listitem">
-  <div class="project-card-main">
+  <div class="project-card-main" data-card-open="${p.id}" role="link" tabindex="0" title="看這個專案的儀表板">
     <div class="project-card-title-row">
-      <a class="project-card-title" href="${actionHref}" data-open-project="${p.id}">${escapeHtml(display)}</a>
+      <a class="project-card-title" href="dashboard.html" data-open-project="${p.id}">${escapeHtml(display)}</a>
       <span class="pill ${s.cls}">${s.label}</span>
       ${tags.join("")}
     </div>
@@ -317,9 +317,33 @@ if (!requireAuth()) {
         const id = openEl.dataset.openProject;
         if (id) store.setActiveProject(id);
         // 讓 <a href> 正常導向
+        return;
+      }
+
+      // 卡片主體（標題以外的空白處）也算點卡片 → 進儀表板。
+      // 「繼續寫／審閱」是明確的行動，維持直達編輯台／審閱頁，不繞路。
+      const cardEl = t.closest<HTMLElement>("[data-card-open]");
+      if (cardEl) {
+        const id = cardEl.dataset.cardOpen;
+        if (!id) return;
+        store.setActiveProject(id);
+        location.href = "dashboard.html";
       }
     });
   }
+
+  // role="link" + tabindex 就必須吃鍵盤，否則只有滑鼠使用者進得去
+  document.getElementById("tbody")?.addEventListener("keydown", (e) => {
+    const ke = e as KeyboardEvent;
+    if (ke.key !== "Enter" && ke.key !== " ") return;
+    const card = (ke.target as HTMLElement).closest<HTMLElement>("[data-card-open]");
+    if (!card) return;
+    ke.preventDefault();
+    const id = card.dataset.cardOpen;
+    if (!id) return;
+    store.setActiveProject(id);
+    location.href = "dashboard.html";
+  });
 
   document.querySelectorAll("[data-filter]").forEach((btn) => {
     btn.addEventListener("click", () => {

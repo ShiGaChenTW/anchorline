@@ -6208,3 +6208,11 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 .dash-empty p { margin: 0; }
 .dash-measured { margin: 16px 0 0; font-size: 11px; color: var(--muted); }
+
+/* 專案卡片主體＝進儀表板。要看起來可點，但不能搶走「繼續寫」的主行動地位。 */
+.project-card-main[data-card-open] { cursor: pointer; border-radius: 6px; }
+.project-card-main[data-card-open]:hover .project-card-title { text-decoration: underline; }
+.project-card-main[data-card-open]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
