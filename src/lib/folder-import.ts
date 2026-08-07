@@ -259,6 +259,8 @@ export async function readFileList(files: FileList | File[]): Promise<ScannedFil
 function groupCandidates(
   files: ScannedFile[],
   folderName: string,
+  /** 原生選夾／交接會給磁碟上的絕對路徑；瀏覽器 webkitdirectory 給不到 */
+  absPath = "",
 ): { name: string; rootPath: string; files: ScannedFile[] }[] {
   const name =
     (folderName && folderName.trim()) ||
@@ -267,7 +269,9 @@ function groupCandidates(
   return [
     {
       name,
-      rootPath: "",
+      // 這裡以前寫死空字串 —— 導致每個匯入專案都沒有磁碟路徑，
+      // 儀表板與 onefetch 全部量不到東西。
+      rootPath: absPath,
       files,
     },
   ];
@@ -388,13 +392,14 @@ function buildCandidate(
 export function scanFromScannedFiles(
   scanned: ScannedFile[],
   folderNameHint?: string,
+  absPath = "",
 ): FolderScanResult {
   const folderName =
     folderNameHint ||
     (scanned[0]?.path.split("/")[0] ?? "") ||
     "匯入資料夾";
 
-  const groups = groupCandidates(scanned, folderName);
+  const groups = groupCandidates(scanned, folderName, absPath);
   const candidates = groups.map((g, i) =>
     buildCandidate(g.name || folderName, g.rootPath, g.files, `imp-${Date.now()}-${i}`),
   );
@@ -427,6 +432,8 @@ export type NativeFolderFile = {
 export function scanFromNativeFolder(
   folderName: string,
   files: NativeFolderFile[],
+  /** 原生端一定會給；沒有它，匯入的專案就沒有磁碟路徑可量測 */
+  folderPath = "",
 ): FolderScanResult {
   const scanned: ScannedFile[] = files.map((f) => ({
     path: normalizePath(f.path),
@@ -434,7 +441,7 @@ export function scanFromNativeFolder(
     size: f.size ?? f.text.length,
     text: f.text ?? "",
   }));
-  return scanFromScannedFiles(scanned, folderName);
+  return scanFromScannedFiles(scanned, folderName, folderPath);
 }
 
 /**

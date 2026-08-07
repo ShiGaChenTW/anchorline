@@ -6216,3 +6216,12 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* 歡迎畫面（onefetch 摘要） */
+.welcome-modal { width: min(520px, 92vw); }
+.welcome-modal header .sub { margin: 3px 0 0; font-size: 11.5px; color: var(--muted); }
+.welcome-modal .body { padding: 18px 16px 12px; }
+.welcome-langs { margin-bottom: 16px; grid-template-columns: 1fr 1fr; display: grid; }
+.welcome-dl { border-top: 1px solid var(--border); padding-top: 14px; }
+.welcome-dl dt { flex: 0 0 6.5em; }
+.welcome-modal footer { display: flex; justify-content: flex-end; gap: 8px; }

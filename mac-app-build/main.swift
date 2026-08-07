@@ -44,6 +44,29 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
                 let stats = Self.collectStats(URL(fileURLWithPath: path))
                 DispatchQueue.main.async { self?.postToJS(stats) }
             }
+        case "onefetch":
+            // 歡迎畫面用。onefetch 有 --output json，不必解析 ANSI。
+            guard let dict = message.body as? [String: Any],
+                  let path = dict["folderPath"] as? String, !path.isEmpty
+            else {
+                postToJS(["type": "onefetchError", "message": "缺少 folderPath"])
+                return
+            }
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let dir = URL(fileURLWithPath: path)
+                guard let raw = Self.runTool("onefetch", ["--output", "json"], in: dir) else {
+                    DispatchQueue.main.async {
+                        self?.postToJS([
+                            "type": "onefetchError",
+                            "message": "找不到 onefetch，或這不是 git 專案。可用 brew install onefetch 安裝。",
+                        ])
+                    }
+                    return
+                }
+                DispatchQueue.main.async {
+                    self?.postToJS(["type": "onefetch", "folderPath": dir.path, "raw": raw])
+                }
+            }
         case "ping":
             postToJS([
                 "type": "pong",
@@ -130,6 +153,29 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
         guard p.terminationStatus == 0 else { return nil }
         return String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /**
+     * 跑一個外部 CLI。走 /usr/bin/env 並補上 Homebrew 路徑 ——
+     * GUI app 繼承的 PATH 通常沒有 /opt/homebrew/bin，直接 env onefetch 會找不到。
+     */
+    static func runTool(_ tool: String, _ args: [String], in dir: URL) -> String? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        p.arguments = [tool] + args
+        p.currentDirectoryURL = dir
+        var env = ProcessInfo.processInfo.environment
+        let extra = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        env["PATH"] = (env["PATH"].map { "\($0):\(extra)" }) ?? extra
+        p.environment = env
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        guard p.terminationStatus == 0 else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     /// 走完整個資料夾：容量、副檔名分佈、manifest 檔名。文字檔那條路只收 .md/.txt，
