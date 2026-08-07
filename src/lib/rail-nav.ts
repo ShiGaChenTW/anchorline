@@ -3,7 +3,6 @@
  */
 import { store } from "../data/store";
 import { renderRailProjects } from "./rail-projects";
-import { toast } from "./ui";
 
 export type RailPage =
   | "projects"
@@ -123,23 +122,11 @@ export function initRailNav(active: RailPage) {
     <div class="nav-label">工作區</div>
     <div id="rail-projects-block" class="rail-projects-block"></div>
     ${RAIL_ITEMS.filter((it) => !it.hidden).map((it) => itemHtml(it, active)).join("\n")}
-    <div class="nav-label">快捷</div>
-    <button type="button" class="nav-item" id="btn-tui-hint" data-od-id="nav-tui">
-      ${svg(IC.tui)}開啟 TUI 追蹤
-    </button>
   `;
   nav.setAttribute("data-rail-built", "1");
   nav.setAttribute("data-rail-active", active);
 
   ensureBrandSettings(active);
-
-  const tui = document.getElementById("btn-tui-hint");
-  tui?.addEventListener("click", () => {
-    toast("終端 TUI：專案目錄執行 bun run track · Web：計劃追蹤頁");
-    window.setTimeout(() => {
-      location.href = "tracking.html";
-    }, 400);
-  });
 
   // 專案清單掛回
   renderRailProjects(nav as HTMLElement);
