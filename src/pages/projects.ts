@@ -824,6 +824,13 @@ if (!requireAuth()) {
   // 初始化步驟列（關閉時也有正確 DOM）
   renderWizardChrome();
 
+  // 側欄「＋」直接開新建精靈（非新手路徑）
+  if (new URLSearchParams(location.search).get("new") === "1") {
+    window.setTimeout(() => {
+      if (canEditContent(store.get().currentUser)) openWizard(false);
+    }, 120);
+  }
+
   // 正式版首次引導選「新手流程」→ 自動開啟精靈
   if (new URLSearchParams(location.search).get("beginner") === "1") {
     setBeginnerMode(true);

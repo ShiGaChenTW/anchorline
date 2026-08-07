@@ -106,7 +106,10 @@ export function renderRailProjects(host?: HTMLElement | null) {
 
   if (!projects.length) {
     block.innerHTML = `
-      <div class="nav-label">專案</div>
+      <div class="nav-label rail-proj-head">
+        <span>專案</span>
+        <a class="rail-proj-add" href="projects.html?new=1" title="新建專案" aria-label="新建專案">+</a>
+      </div>
       <div class="rail-projects-empty">尚無專案<br /><span class="muted">新建或匯入資料夾</span></div>
     `;
     bumpCounts();
@@ -114,8 +117,10 @@ export function renderRailProjects(host?: HTMLElement | null) {
   }
 
   block.innerHTML = `
-    <div class="nav-label">專案 <span class="rail-proj-count">${projects.length}</span>
+    <div class="nav-label rail-proj-head">
+      <span>專案 <span class="rail-proj-count">${projects.length}</span></span>
       <a class="rail-overview" href="overview.html" title="所有專案的總覽儀表板">總覽</a>
+      <a class="rail-proj-add" href="projects.html?new=1" title="新建專案" aria-label="新建專案">+</a>
     </div>
     <div class="rail-projects" role="list" aria-label="專案清單">
       ${projects
