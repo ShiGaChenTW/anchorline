@@ -6972,6 +6972,21 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 .rail-overview:hover { background: color-mix(in oklab, var(--accent) 26%, transparent); }
 
+/* 「清單」跟「總覽」是同一層的兩個入口：總覽是彙整，清單是可篩可搜的原始列表。
+   用中性色跟總覽分開 —— 兩顆同樣是 accent 會互相搶。 */
+.rail-list {
+  float: right;
+  margin-right: 6px;
+  padding: 0 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-2);
+  background: var(--inset, color-mix(in oklab, var(--fg) 10%, transparent));
+  text-decoration: none;
+}
+.rail-list:hover { color: var(--fg); background: color-mix(in oklab, var(--fg) 18%, transparent); }
+
 /* 總覽頭條窄一點，專案清單需要寬度放進度條 */
 .ov-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
 .ov-hero-cta { margin: 16px 0 0; }

@@ -184,6 +184,7 @@ function bindAddMenu(block: HTMLElement) {
     <div class="nav-label rail-proj-head">
       <span>專案 <span class="rail-proj-count">${projects.length}</span></span>
       <a class="rail-overview" href="overview.html" title="所有專案的總覽儀表板">總覽</a>
+      <a class="rail-list" href="projects.html" title="專案清單：篩選、搜尋、切換檢視">清單</a>
       <button type="button" class="rail-proj-add" id="rail-proj-add" title="新增" aria-label="新增" aria-haspopup="true" aria-expanded="false">+</button>
     </div>
     <div class="rail-projects" role="list" aria-label="專案清單">
