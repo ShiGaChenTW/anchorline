@@ -6600,13 +6600,18 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .d-hero { display: flex; flex-direction: column; }
 .d-hero .d-facts { margin-top: auto; }
 
-/* ── 所有卡片固定 400px ──
-   高度寫死就不需要 JS 量測等高（ResizeObserver 那套已移除）。
-   內容超出的在卡片內捲，標題與主數字固定在上方不跟著捲走。 */
+/* ── 卡片高度：跟著視窗高度走 ──
+   寫死 400px 在矮螢幕會逼出捲軸、在高螢幕留一大片空。
+   用 clamp 讓兩排卡片盡量剛好填滿一屏：
+     260px ≈ 工具列 + 流程條 + 下一步條 + 量測時間 + 間距
+     除以 2 是因為版面就是上下兩排
+   仍是純 CSS，不需要 JS 量測。 */
+:root { --d-card-h: clamp(300px, calc((100vh - 260px) / 2), 520px); }
+
 .d-hero,
 .d-card,
 .d-card.d-tall {
-  height: 400px;
+  height: var(--d-card-h);
   min-height: 0;
   overflow: hidden;
 }
