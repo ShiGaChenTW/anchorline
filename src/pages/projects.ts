@@ -171,10 +171,117 @@ if (!requireAuth()) {
     host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps }));
   }
 
+  /** 顯示方式：列表／卡片／資料夾。存 localStorage —— 換了頁回來不該重來。 */
+  type ViewMode = "list" | "card" | "folder";
+  const VIEW_KEY = "specforge:project-view";
+  let view: ViewMode = (() => {
+    try {
+      const v = localStorage.getItem(VIEW_KEY);
+      return v === "list" || v === "card" || v === "folder" ? v : "card";
+    } catch {
+      return "card";
+    }
+  })();
+
+  function actionOf(p: Project): { href: string; label: string } {
+    const href =
+      p.status === "review" || p.status === "approved" || p.status === "withdrawn"
+        ? "review.html"
+        : "editor.html";
+    const label =
+      p.status === "approved"
+        ? "檢視"
+        : p.status === "review"
+          ? "審閱"
+          : p.status === "withdrawn"
+            ? "抽單"
+            : "繼續寫";
+    return { href, label };
+  }
+
+  function tagsOf(p: Project): string {
+    const t: string[] = [];
+    if (p.isImported) t.push(`<span class="p-tag p-tag--import">匯入</span>`);
+    if (p.isSample) t.push(`<span class="p-tag">範例</span>`);
+    if (p.id === store.get().activeProjectId) t.push(`<span class="p-tag p-tag--now">目前</span>`);
+    return t.join("");
+  }
+
+  /** compact=true 時收掉低頻操作（重新命名／退出追蹤），一行才塞得下 */
+  function cardHtml(p: Project, compact: boolean): string {
+    const st = STATUS[p.status];
+    const { href, label } = actionOf(p);
+    const barCls = p.pct >= 100 ? "ok" : "";
+    const display = projectDisplayName(p);
+    const meta = [p.owner, p.updated].filter(Boolean).map((x) => escapeHtml(String(x))).join(" · ");
+    const untrack = canDelete(store.get().currentUser)
+      ? `<button type="button" class="btn btn-sm btn-ghost btn-untrack" data-untrack-id="${escapeHtml(p.id)}" title="僅從工作區退出追蹤，不刪除磁碟檔案">退出追蹤</button>`
+      : "";
+
+    return `<article class="project-card${p.id === store.get().activeProjectId ? " is-active" : ""}" data-id="${p.id}" role="listitem">
+  <div class="project-card-main" data-card-open="${p.id}" role="link" tabindex="0" title="看這個專案的儀表板">
+    <div class="project-card-title-row">
+      <a class="project-card-title" href="dashboard.html" data-open-project="${p.id}">${escapeHtml(display)}</a>
+      <span class="pill ${st.cls}">${st.label}</span>
+      ${tagsOf(p)}
+    </div>
+    <div class="project-card-meta">${meta || "—"}</div>
+    <div class="project-card-progress">
+      <div class="progress"><div class="progress-bar ${barCls}"><i style="width:${p.pct}%"></i></div></div>
+      <span class="project-card-pct">${p.pct}%</span>
+    </div>
+  </div>
+  <div class="project-card-actions">
+    <a class="btn btn-primary row-action-main" href="${href}" data-open-project="${p.id}">${label}</a>
+    ${compact ? "" : `<button type="button" class="btn btn-sm btn-ghost" data-rename-project="${escapeHtml(p.id)}" title="自訂顯示名稱">重新命名</button>${untrack}`}
+  </div>
+</article>`;
+  }
+
+  function renderFlatView(rows: Project[], mode: ViewMode): string {
+    return rows.map((p) => cardHtml(p, mode === "list")).join("");
+  }
+
+  /**
+   * 資料夾模式：依磁碟位置分群。沒綁資料夾的收在最後一組 ——
+   * 那本身就是有用的資訊（這些專案量不到 git／容量）。
+   */
+  function renderFolderView(rows: Project[]): string {
+    const groups = new Map<string, Project[]>();
+    for (const p of rows) {
+      const key = p.importSummary?.rootPath || p.sourceFolder || "";
+      const g = groups.get(key);
+      if (g) g.push(p);
+      else groups.set(key, [p]);
+    }
+    const ordered = [...groups.entries()].sort((a, b) => {
+      if (!a[0]) return 1; // 未綁定永遠排最後
+      if (!b[0]) return -1;
+      return a[0].localeCompare(b[0]);
+    });
+
+    return ordered
+      .map(([path, list]) => {
+        const label = path
+          ? escapeHtml(path.split("/").filter(Boolean).pop() || path)
+          : "未綁定資料夾";
+        const sub = path ? escapeHtml(path) : "量不到 git、技術線與容量";
+        return `<section class="folder-group">
+          <header class="folder-group-head">
+            <svg class="ic" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.75 1h4.5c.29 0 .56.14.72.38L8.13 3h6.12c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75C0 1.784.784 1 1.75 1z"/></svg>
+            <span class="folder-group-name">${label}</span>
+            <span class="folder-group-count">${list.length}</span>
+            <span class="folder-group-path mono">${sub}</span>
+          </header>
+          <div class="folder-group-body">${list.map((p) => cardHtml(p, true)).join("")}</div>
+        </section>`;
+      })
+      .join("");
+  }
+
   function render() {
     const tbody = document.getElementById("tbody");
     if (!tbody) return;
-    const user = store.get().currentUser;
     const projects = store.visibleProjects();
     const planHits = loadPlanHits();
     renderPlanBar(planHits);
@@ -203,58 +310,9 @@ if (!requireAuth()) {
       return;
     }
 
-    tbody.innerHTML = rows
-      .map((p) => {
-        const s = STATUS[p.status];
-        const barCls = p.pct >= 100 ? "ok" : "";
-        const actionHref =
-          p.status === "review" || p.status === "approved" || p.status === "withdrawn"
-            ? "review.html"
-            : "editor.html";
-        const actionLabel =
-          p.status === "approved"
-            ? "檢視"
-            : p.status === "review"
-              ? "審閱"
-              : p.status === "withdrawn"
-                ? "抽單"
-                : "繼續寫";
-        const tags: string[] = [];
-        if (p.isImported) tags.push(`<span class="p-tag p-tag--import">匯入</span>`);
-        if (p.isSample) tags.push(`<span class="p-tag">範例</span>`);
-        if (p.id === store.get().activeProjectId) tags.push(`<span class="p-tag p-tag--now">目前</span>`);
-        const untrack =
-          canDelete(user)
-            ? `<button type="button" class="btn btn-sm btn-ghost btn-untrack" data-untrack-id="${escapeHtml(p.id)}" title="僅從工作區退出追蹤，不刪除磁碟檔案">退出追蹤</button>`
-            : "";
-        const display = projectDisplayName(p);
-        const metaBits = [
-          p.owner ? escapeHtml(p.owner) : "",
-          p.updated ? escapeHtml(p.updated) : "",
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        return `<article class="project-card${p.id === store.get().activeProjectId ? " is-active" : ""}" data-id="${p.id}" role="listitem">
-  <div class="project-card-main" data-card-open="${p.id}" role="link" tabindex="0" title="看這個專案的儀表板">
-    <div class="project-card-title-row">
-      <a class="project-card-title" href="dashboard.html" data-open-project="${p.id}">${escapeHtml(display)}</a>
-      <span class="pill ${s.cls}">${s.label}</span>
-      ${tags.join("")}
-    </div>
-    <div class="project-card-meta">${metaBits || "—"}</div>
-    <div class="project-card-progress">
-      <div class="progress"><div class="progress-bar ${barCls}"><i style="width:${p.pct}%"></i></div></div>
-      <span class="project-card-pct">${p.pct}%</span>
-    </div>
-  </div>
-  <div class="project-card-actions">
-    <a class="btn btn-primary row-action-main" href="${actionHref}" data-open-project="${p.id}">${actionLabel}</a>
-    <button type="button" class="btn btn-sm btn-ghost" data-rename-project="${escapeHtml(p.id)}" title="自訂顯示名稱">重新命名</button>
-    ${untrack}
-  </div>
-</article>`;
-      })
-      .join("");
+    tbody.className = `project-board-list view-${view}`;
+    tbody.innerHTML =
+      view === "folder" ? renderFolderView(rows) : renderFlatView(rows, view);
 
     renderStats(projects);
     renderFlow();
@@ -345,6 +403,28 @@ if (!requireAuth()) {
     store.setActiveProject(id);
     location.href = "dashboard.html";
   });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      view = (btn.dataset.view as ViewMode) ?? "card";
+      try {
+        localStorage.setItem(VIEW_KEY, view);
+      } catch {
+        /* private mode */
+      }
+      syncViewSwitch();
+      render();
+    });
+  });
+
+  function syncViewSwitch() {
+    document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((b) => {
+      const on = b.dataset.view === view;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+  syncViewSwitch();
 
   document.querySelectorAll("[data-filter]").forEach((btn) => {
     btn.addEventListener("click", () => {
