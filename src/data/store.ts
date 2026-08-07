@@ -249,6 +249,10 @@ function migrateProject(raw: Record<string, unknown>, employees: Employee[]): Pr
         ? (raw.importSummary as ProjectImportSummary).scannedAt
         : undefined,
     tag: String(raw.tag ?? "product"),
+    // migrateProject 是逐欄位重建，忘了列的欄位會在重新載入時無聲消失
+    tags: Array.isArray(raw.tags)
+      ? (raw.tags as unknown[]).map((t) => String(t)).filter(Boolean)
+      : undefined,
     isSample: raw.isSample === false ? false : Boolean(raw.isSample ?? true),
     isImported: Boolean(raw.isImported),
     sourceFolder: raw.sourceFolder ? String(raw.sourceFolder) : undefined,
@@ -876,6 +880,45 @@ export const store = {
       ),
     };
     emit();
+  },
+
+  /**
+   * 專案標籤。全部走同一個 setter，不做 add/remove 兩支 ——
+   * 呼叫端本來就拿得到完整清單，兩支 API 只會多出「誰負責去重」的問題。
+   * 去重與正規化（去頭尾空白、丟掉空字串、忽略大小寫重複）統一在這裡做。
+   */
+  setProjectTags(id: string, tags: string[]) {
+    const seen = new Set<string>();
+    const clean: string[] = [];
+    for (const raw of tags) {
+      const t = raw.trim().replace(/\s+/g, " ");
+      if (!t) continue;
+      const key = t.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      clean.push(t);
+    }
+    state = {
+      ...state,
+      projects: state.projects.map((p) =>
+        p.id === id ? { ...p, tags: clean.length ? clean : undefined } : p,
+      ),
+    };
+    emit();
+  },
+
+  /** 目前所有專案用過的標籤，依使用次數多到少 —— 給輸入建議與篩選列用 */
+  allTags(): { tag: string; count: number }[] {
+    const by = new Map<string, { tag: string; count: number }>();
+    for (const p of state.projects) {
+      for (const t of p.tags ?? []) {
+        const key = t.toLowerCase();
+        const hit = by.get(key);
+        if (hit) hit.count += 1;
+        else by.set(key, { tag: t, count: 1 });
+      }
+    }
+    return [...by.values()].sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
   },
 
   renameProject(id: string, customName: string): { ok: boolean; reason?: string } {

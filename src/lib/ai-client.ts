@@ -184,24 +184,30 @@ async function callAnthropic(system: string, user: string, s: AISettings): Promi
   const base = (s.endpoint || "https://api.anthropic.com").replace(/\/$/, "");
   const url = base.includes("/messages") ? base : `${base}/v1/messages`;
   const model = s.model.startsWith("claude") ? s.model : "claude-sonnet-4-5";
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": s.apiKey.trim(),
-      "anthropic-version": "2023-06-01",
-      // 少了這個標頭，Anthropic 一律回 401 CORS——不是金鑰壞了
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
+  const headers = {
+    "Content-Type": "application/json",
+    "x-api-key": s.apiKey.trim(),
+    "anthropic-version": "2023-06-01",
+    // 少了這個標頭，Anthropic 一律回 401 CORS——不是金鑰壞了
+    "anthropic-dangerous-direct-browser-access": "true",
+  };
+  const body = (withTemp: boolean) =>
+    JSON.stringify({
       model,
       max_tokens: 4096,
-      temperature: Math.min(1, Math.max(0, s.temperature ?? 0.7)),
+      ...(withTemp ? { temperature: Math.min(1, Math.max(0, s.temperature ?? 0.7)) } : {}),
       system,
       messages: [{ role: "user", content: user }],
-    }),
-  });
-  const raw = await res.text();
+    });
+
+  let res = await fetch(url, { method: "POST", headers, body: body(true) });
+  let raw = await res.text();
+  // 新一代模型不收 temperature（回 400 "temperature is deprecated for this model"）。
+  // 直接不送會讓舊模型失去這個設定，所以是「先送、被打回再重試」。
+  if (!res.ok && res.status === 400 && /temperature/i.test(raw)) {
+    res = await fetch(url, { method: "POST", headers, body: body(false) });
+    raw = await res.text();
+  }
   if (!res.ok) throw new AiError(parseHttpError("Anthropic", res.status, raw), "http");
   let data: {
     content?: { type?: string; text?: string }[];
