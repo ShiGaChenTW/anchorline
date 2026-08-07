@@ -142,8 +142,161 @@ function buildTestProjects(): Project[] {
       tag: "growth",
       isSample: true,
     },
+    ...TEST_CASE_PROJECTS,
   ];
 }
+
+/**
+ * 三個驗收用測試案例（僅測試版）。
+ *
+ * 刻意走三個不同方向，各自打中不同的程式路徑，
+ * 三個都看過就等於把最近這批改動走完一遍：
+ *
+ *   A 匯入專案      → 檔案樹的「來源／產出」徽章、章節定位列、tasks.md 回讀
+ *   B 手動無資料夾  → 檔案樹空狀態、「指定專案資料夾」、綁定詢問對話框
+ *   C 全空白        → 反轉揭露（gate 有阻擋仍收合）、灰 ○ 不用紅 ✗、起手式骨架、進度膠囊
+ */
+export const TEST_CASE_PROJECTS: Project[] = [
+  {
+    id: "t1",
+    title: "測試案例 A · 匯入專案（含 OpenSpec 產出）",
+    status: "draft",
+    pct: 72,
+    owner: "Scott",
+    ownerId: "scott",
+    authorId: "scott",
+    authorAgentFamily: null,
+    mine: true,
+    updated: "剛剛",
+    tag: "測試",
+    isSample: true,
+    isImported: true,
+    sourceFolder: "checkout-revamp",
+    importSummary: {
+      folderName: "checkout-revamp",
+      rootPath: "/Users/scott/code/checkout-revamp",
+      scannedAt: "2026-08-07T04:00:00.000Z",
+      overallScore: 72,
+      coveragePct: 71,
+      progressPct: 72,
+      matchedFiles: [
+        { slot: "readme", path: "checkout-revamp/README.md", contentScore: 80 },
+        { slot: "problem", path: "checkout-revamp/docs/problem.md", contentScore: 76 },
+        { slot: "goals", path: "checkout-revamp/docs/goals.md", contentScore: 71 },
+        { slot: "metrics", path: "checkout-revamp/docs/metrics.md", contentScore: 64 },
+        { slot: "stories", path: "checkout-revamp/docs/stories.md", contentScore: 58 },
+        { slot: "prd", path: "checkout-revamp/openspec/PRD.md", contentScore: 90 },
+        { slot: "tasks", path: "checkout-revamp/openspec/tasks.md", contentScore: 86 },
+        { slot: "proposal", path: "checkout-revamp/openspec/proposal.md", contentScore: 83 },
+      ],
+      missingRequired: [],
+      allPaths: [
+        "checkout-revamp/README.md",
+        "checkout-revamp/LICENSE",
+        "checkout-revamp/docs/problem.md",
+        "checkout-revamp/docs/goals.md",
+        "checkout-revamp/docs/metrics.md",
+        "checkout-revamp/docs/stories.md",
+        "checkout-revamp/openspec/PRD.md",
+        "checkout-revamp/openspec/tasks.md",
+        "checkout-revamp/openspec/proposal.md",
+        "checkout-revamp/src/checkout.ts",
+        "checkout-revamp/notes/scratch.md",
+      ],
+    },
+  },
+  {
+    id: "t2",
+    title: "測試案例 B · 手動新建（沒有資料夾）",
+    status: "draft",
+    pct: 34,
+    owner: "Scott",
+    ownerId: "scott",
+    authorId: "scott",
+    authorAgentFamily: null,
+    mine: true,
+    updated: "剛剛",
+    tag: "測試",
+    isSample: true,
+  },
+  {
+    id: "t3",
+    title: "測試案例 C · 全空白（結構 gate 全擋）",
+    status: "draft",
+    pct: 0,
+    owner: "Scott",
+    ownerId: "scott",
+    authorId: "scott",
+    authorAgentFamily: null,
+    mine: true,
+    updated: "剛剛",
+    tag: "測試",
+    isSample: true,
+  },
+];
+
+/** 三個測試案例各自的章節正文（掛進 projectSectionValues） */
+export const TEST_CASE_DOCS: Record<string, Record<string, Record<string, string>>> = {
+  // A：填到接近可送審 —— gate 只剩警告，用來驗「快過關才展開」那一側
+  t1: {
+    summary: {
+      what: "把結帳流程從三頁式改成單頁，並支援 Apple Pay / Google Pay 一鍵付款。",
+      who: "行動端一般消費者，以及客服退單處理人員。",
+      why: "行動端結帳放棄率 68%，遠高於桌面端 31%，Q3 營收目標缺口的主因。",
+      tech: "沿用既有 Stripe Payment Element；刻意不自建卡號欄位、不導入新的 state 管理套件。",
+    },
+    problem: {
+      problem:
+        "行動端使用者在三頁式結帳中平均要點 11 次才能完成付款，其中第二頁（配送方式）放棄率最高。\n客服每週約 40 通電話與「按了付款沒反應」有關，實際是第三頁 timeout 後靜默失敗。",
+      quote: "「我以為付好了，隔天才發現訂單根本沒成立。」— 客服工單 #48213",
+    },
+    goals: {
+      goals:
+        "- 行動端結帳放棄率由 68% 降到 45% 以下\n- 完成付款平均點擊數由 11 降到 4 以內\n- 付款失敗有明確錯誤訊息，不再靜默失敗",
+      nongoals:
+        "- 不做訂閱制與分期付款\n- 不重寫購物車，只動結帳\n- 不支援桌面端版面調整（本期只針對行動端）",
+    },
+    metrics: {
+      m1: "放棄率 ≤ 45%（目前 68%）· 完成付款 p95 ≤ 8 秒 · 付款失敗有訊息比例 100%",
+    },
+    stories: {
+      stories:
+        "- As a 行動端消費者, I want 一鍵用 Apple Pay 付款, so that 我不用手動輸入卡號。\n- As a 客服, I want 看到付款失敗的實際原因, so that 我能直接告訴客人下一步。",
+    },
+    scope: {
+      ms: "- M0 單頁結帳骨架（可演示的垂直切片）\n- M1 Apple Pay / Google Pay 接入\n- M2 錯誤訊息與 timeout 處理\n- M3 灰度 10% → 100%",
+    },
+    open: { oq: "" },
+  },
+  // B：手動寫了一半 —— 有內容但沒有資料夾，用來驗綁定流程
+  t2: {
+    summary: {
+      what: "內部工具：把每週營運報表從人工貼 Excel 改成自動產生。",
+      who: "營運團隊 6 人，每週一早上要交報表給主管。",
+      why: "",
+      tech: "",
+    },
+    problem: {
+      problem: "每週一早上有人要花 90 分鐘手動貼數字，貼錯過三次，其中一次讓主管在會議上引用了錯的數字。",
+      quote: "",
+    },
+    goals: { goals: "- 報表產生時間由 90 分鐘降到 5 分鐘以內", nongoals: "" },
+    metrics: { m1: "" },
+    stories: { stories: "" },
+    scope: { ms: "" },
+    open: { oq: "" },
+  },
+  // C：完全空白 —— 全部欄位留空，用來驗「還沒開始 ≠ 做錯了」與安靜失敗
+  t3: {
+    summary: { what: "", who: "", why: "", tech: "" },
+    problem: { problem: "", quote: "" },
+    goals: { goals: "", nongoals: "" },
+    metrics: { m1: "" },
+    stories: { stories: "" },
+    scope: { ms: "" },
+    open: { oq: "" },
+  },
+};
 
 /** 依建置變體：test=多範例，正式版=空列表 */
 export const SEED_PROJECTS: Project[] =

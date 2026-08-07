@@ -80,11 +80,17 @@
 `specs/<capability>/spec.md` 的 delta 撰寫與追蹤 UI。
 且 tracking 頁讀的是 vite 編譯期 glob，改檔要重 build。
 
-## 順手發現的既有 bug（未修，不在本次範圍）
+## 更正：先前記錄的「grid 錯位 bug」是誤判
 
-`.shell` 與 `.wb` 的 grid 軌道指派錯位：`main.main` 被放進 6px 的 resize-handle 軌道，
-編輯欄寬度歸零，整個主區在乾淨 profile 下不可見。**用 `git stash` 清空本次改動後重現，
-確認為既有問題。** 疑似 `resize-panels.ts` 的 track 指派與 DOM 順序不同步。
+2026-08-07 稍早記錄為「`resize-panels.ts` track 指派與 DOM 順序不同步」。**這是錯的。**
+
+實際原因：驗證用的 Chrome profile 裡有擴充功能注入 `<style>`，其中包含
+`.resize-handle { position: absolute; }`（同一份樣式也定義 `.hover-editor`）。
+App 的 `.resize-handle` 被蓋成 absolute 而脫離 grid 流，三條軌道只剩兩個 in-flow
+項目，`main` 因此掉進 6px 的第二軌。
+
+App 本身沒有問題 —— macOS 版跑 WKWebView，沒有擴充，三欄正常。
+之後在瀏覽器驗證版面時，先注入 `.resize-handle{position:relative!important}` 抵銷。
 
 ## 驗證
 

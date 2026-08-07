@@ -91,10 +91,18 @@ export function ensureHelpOverlay(extra?: HelpSection[]) {
           )
           .join("")}
       </div>
-      <footer class="mono">按 ? 或 Esc 關閉 · PM-SPEC+SCVB</footer>
+      <footer>
+        <button type="button" class="btn btn-sm btn-ghost" data-help-tour>重看首次導覽</button>
+        <span class="mono help-foot-note">按 ? 或 Esc 關閉 · PM-SPEC+SCVB</span>
+      </footer>
     </div>`;
 
   root.querySelector("[data-help-close]")?.addEventListener("click", () => hideHelp());
+  // 導覽不是一次性消耗品：忘了就回來看
+  root.querySelector("[data-help-tour]")?.addEventListener("click", () => {
+    hideHelp();
+    import("./first-run-tour").then((m) => m.startTour()).catch(() => {});
+  });
   root.addEventListener("click", (e) => {
     if (e.target === root) hideHelp();
   });

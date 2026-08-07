@@ -59,7 +59,7 @@ export type MobileNavPage =
   | "tracking"
   | "admin"
   | "agents"
-  | "settings";
+  | "settings" | "dashboard";
 
 export function initMobileNav(active: MobileNavPage) {
   const app = document.querySelector(".app");

@@ -7,6 +7,7 @@ SpecForge.app
 SpecForge Test.app
 PRD開發監控台.app
 PRD開發監控台 Test.app
+PRD開發監控台 測試.app
 *.dmg
 mac-app-build/SpecForge
 mac-app-build/SpecForgeTest
