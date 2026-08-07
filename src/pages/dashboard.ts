@@ -190,52 +190,62 @@ if (!requireAuth()) {
   }
 
   /**
-   * 版號與 commit —— 目前版本要一眼認出來。
+   * 版號紀錄 —— 目前版本要一眼認出來。
    * ADHD：清單裡「我在哪」如果要靠比對雜湊字串才找得到，等於沒標。
    */
-  function cardHistory(s: ProjectStats): string {
+  function cardTags(s: ProjectStats): string {
     const g = s.git;
     if (!g) {
-      return `<section class="d-card d-tall">
-        <p class="d-eyebrow">版號與 commit</p>
+      return `<section class="d-card">
+        <p class="d-eyebrow">版號紀錄</p>
         <p class="d-figure">不是 git 專案</p>
-        <p class="d-figure-sub">起了版控之後這裡會列出版號與提交紀錄。</p>
+        <p class="d-figure-sub">起了版控之後這裡會列出版號。</p>
       </section>`;
     }
-
     const tags = g.tags ?? [];
-    const commits = g.commits ?? [];
-    const current = tags[0]?.name || "";
-    /** tag 掛在哪個 commit 上，畫列表時要標出來 */
-    const tagByHash = new Map(tags.map((t) => [t.hash, t.name]));
+    const current = tags[0];
 
-    return `<section class="d-card d-tall">
-      <p class="d-eyebrow">版號與 commit</p>
-      <p class="d-figure">${escapeHtml(current || "尚無版號")}</p>
+    return `<section class="d-card">
+      <p class="d-eyebrow">版號紀錄</p>
+      <p class="d-figure">${escapeHtml(current?.name || "尚無版號")}</p>
       <p class="d-figure-sub">${
-        current
-          ? `目前版本　共 ${tags.length} 個 tag　${g.commitCount} 個 commit`
-          : `還沒發過版　${g.commitCount} 個 commit`
+        current ? `目前版本　共 ${tags.length} 個 tag` : "還沒發過版"
       }</p>
-
       ${
         tags.length
           ? `<ul class="d-tags">${tags
-              .slice(0, 6)
               .map(
                 (t, i) =>
                   `<li class="${i === 0 ? "is-current" : ""}">
-                     <span class="d-tag-name">${escapeHtml(t.name)}</span>
-                     ${i === 0 ? `<span class="d-tag-badge">目前版本</span>` : ""}
-                     <span class="d-tag-hash mono">${escapeHtml(t.hash)}</span>
-                     <span class="d-tag-at">${escapeHtml(t.at.slice(0, 10))}</span>
+                     <span class="d-tag-head">
+                       <span class="d-tag-name">${escapeHtml(t.name)}</span>
+                       ${i === 0 ? `<span class="d-tag-badge">目前版本</span>` : ""}
+                       <span class="d-tag-hash mono">${escapeHtml(t.hash)}</span>
+                       <span class="d-tag-at">${escapeHtml(t.at.slice(0, 10))}</span>
+                     </span>
+                     ${
+                       t.subject
+                         ? `<span class="d-tag-note">${escapeHtml(t.subject)}</span>`
+                         : ""
+                     }
                    </li>`,
               )
               .join("")}</ul>`
-          : ""
+          : `<p class="d-note-empty">用 <code>git tag v1.0.0</code> 標一版之後，這裡會列出版號與它的說明。</p>`
       }
+    </section>`;
+  }
 
-      <p class="d-sub-h">提交紀錄</p>
+  /** commit 紀錄 —— HEAD 那筆要標出來 */
+  function cardCommits(s: ProjectStats): string {
+    const g = s.git;
+    const commits = g?.commits ?? [];
+    const tagByHash = new Map((g?.tags ?? []).map((t) => [t.hash, t.name]));
+
+    return `<section class="d-card d-tall">
+      <p class="d-eyebrow">提交紀錄</p>
+      <p class="d-figure">${g?.commitCount ?? "—"}</p>
+      <p class="d-figure-sub">個 commit　最近 ${commits.length} 筆</p>
       <ol class="d-commits">${commits
         .map((c) => {
           const isHead = /\bHEAD\b/.test(c.refs);
@@ -250,7 +260,7 @@ if (!requireAuth()) {
           </li>`;
         })
         .join("")}</ol>
-      ${commits.length ? "" : `<p class="d-figure-sub">讀不到提交紀錄。</p>`}
+      ${commits.length ? "" : `<p class="d-note-empty">讀不到提交紀錄。</p>`}
     </section>`;
   }
 
@@ -338,8 +348,8 @@ if (!requireAuth()) {
 
   function renderStats(s: ProjectStats) {
     renderState(
-      `<div class="d-top">${heroGit(s)}${cardHistory(s)}</div>
-       <div class="d-grid">${cardStack(s)}${cardSize(s)}${cardWorkspace(s)}</div>
+      `<div class="d-top">${heroGit(s)}${cardTags(s)}</div>
+       <div class="d-grid">${cardCommits(s)}${cardStack(s)}${cardSize(s)}${cardWorkspace(s)}</div>
        <p class="d-measured">量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")}　<span class="mono">${escapeHtml(s.folderPath)}</span></p>`,
     );
     bindIdentEditing();

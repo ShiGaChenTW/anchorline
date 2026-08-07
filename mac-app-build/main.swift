@@ -327,7 +327,9 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
             // tag 依建立時間新到舊，附上指向的 commit
             if let tags = git(
                 ["for-each-ref", "--sort=-creatordate", "--count=20",
-                 "--format=%(refname:short)\u{1F}%(objectname:short)\u{1F}%(creatordate:iso8601)",
+                 // contents:subject：annotated tag 給 tag 訊息，
+                 // lightweight tag 給它指向的 commit 主旨 —— 兩種都是「這版做了什麼」
+                 "--format=%(refname:short)\u{1F}%(objectname:short)\u{1F}%(creatordate:iso8601)\u{1F}%(contents:subject)",
                  "refs/tags"],
                 in: root
             ), !tags.isEmpty {
@@ -337,6 +339,7 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
                         "name": f.count > 0 ? f[0] : "",
                         "hash": f.count > 1 ? f[1] : "",
                         "at": f.count > 2 ? f[2] : "",
+                        "subject": f.count > 3 ? f[3] : "",
                     ]
                 }
             }
