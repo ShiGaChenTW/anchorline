@@ -174,7 +174,9 @@ export const TEST_CASE_PROJECTS: Project[] = [
     sourceFolder: "checkout-revamp",
     importSummary: {
       folderName: "checkout-revamp",
-      rootPath: "/Users/scott/code/checkout-revamp",
+      // 刻意留空：指向不存在的假路徑會讓儀表板量出一片空白，
+      // 看起來像壞掉。空字串會走「還沒指定資料夾」，那是誠實的狀態。
+      rootPath: "",
       scannedAt: "2026-08-07T04:00:00.000Z",
       overallScore: 72,
       coveragePct: 71,
