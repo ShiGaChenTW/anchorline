@@ -334,93 +334,68 @@ function renderFileTree() {
 }
 
 /**
- * OpenSpec 章節：每一段 PRD 匯出後會落在 OpenSpec 文件的哪個標題底下。
+ * OpenSpec：偵測專案資料夾底下有沒有 `openspec/`，有就列出裡面的檔案。
  *
- * 顯示的是「對應關係 + 這段寫完了沒」，不是檔案內容 —— App 只存掃到的
- * 路徑不存內文，硬要顯示內容就得說謊。點一下跳到對應的 PRD 章節。
+ * 讀的是匯入掃描留下的相對路徑（importSummary.allPaths）——
+ * App 只存路徑不存內文，所以這裡回答的是「有沒有、有哪些」，不是內容。
+ * 沒有這個資料夾就直說，不要用 PRD 章節假裝成 OpenSpec 結構。
  */
 function renderOpenSpec() {
   const el = document.getElementById("openspec-list");
   if (!el) return;
-  const list = sections();
-  const rows = list
-    .map((sec, i) => ({ sec, i, target: SECTION_TO_OPENSPEC[sec.id] }))
-    .filter((r) => r.target);
+  const p = activeProject();
+  const all = p?.importSummary?.allPaths ?? [];
+  const files = all
+    .filter((x) => /(^|\/)openspec\//i.test(x))
+    .sort((a, b) => a.localeCompare(b));
 
-  const doneCount = rows.filter((r) => r.sec.status === "done").length;
   const countEl = document.getElementById("os-count");
-  if (countEl) countEl.textContent = `${doneCount}/${rows.length}`;
+  if (countEl) countEl.textContent = files.length ? `${files.length} 檔` : "無";
 
-  el.innerHTML = rows
-    .map(({ sec, i, target }) => {
-      const [file, heading = ""] = target!.split(" › ");
-      const st = sec.status === "done" ? "done" : sec.status === "warn" ? "warn" : "empty";
-      return `<button type="button" class="os-row" data-i="${i}" title="由「${escapeHtml(sec.title)}」產出">
-        <span class="os-dot ${st}"></span>
-        <span class="os-body">
-          <span class="os-head">${escapeHtml(heading || file)}</span>
-          <span class="os-file">${escapeHtml(file)} · ${escapeHtml(sec.n)} ${escapeHtml(sec.title)}</span>
-        </span>
-      </button>`;
-    })
-    .join("");
-
-  el.querySelectorAll(".os-row").forEach((btn) => {
-    (btn as HTMLButtonElement).onclick = () => {
-      idx = Number((btn as HTMLElement).dataset.i);
-      const sec = sections()[idx];
-      if (sec) store.setActiveSection(sec.id);
-      render();
-    };
-  });
-}
-
-/**
- * Task List：把所有章節「還沒過的檢查項」攤成一張待辦清單。
- *
- * 這是從結構檢查 gate 推出來的，不是另一份要人維護的清單 ——
- * 多一份手寫待辦只會跟真相分岔。點一下跳到那一章。
- */
-function renderTaskList() {
-  const el = document.getElementById("task-list");
-  if (!el) return;
-  const list = sections();
-  const todo: { i: number; sec: string; n: string; label: string }[] = [];
-  let total = 0;
-  list.forEach((sec, i) => {
-    const vals = valuesFor(sec);
-    for (const c of evaluateChecks(sec, vals)) {
-      total += 1;
-      if (!c.pass) todo.push({ i, sec: sec.title, n: sec.n, label: c.label });
-    }
-  });
-
-  const countEl = document.getElementById("task-count");
-  if (countEl) countEl.textContent = `${total - todo.length}/${total}`;
-
-  if (!todo.length) {
-    el.innerHTML = `<p class="task-empty">全部檢查項都過了。</p>`;
+  if (!p) {
+    el.innerHTML = `<p class="os-empty">還沒有選擇專案。</p>`;
+    return;
+  }
+  if (!all.length) {
+    el.innerHTML = `<p class="os-empty">這份 PRD 還沒有對應的資料夾，掃不到 <code>openspec/</code>。</p>`;
+    return;
+  }
+  if (!files.length) {
+    el.innerHTML = `<p class="os-empty">專案目錄底下沒有 <code>openspec/</code> 資料夾。匯出 OpenSpec 後會出現在這裡。</p>`;
     return;
   }
 
-  el.innerHTML = todo
+  // 依 openspec/ 底下的第一層分群（changes / specs / …），只有一層就不分群
+  const groups = new Map<string, string[]>();
+  for (const f of files) {
+    const rest = f.replace(/^.*?openspec\//i, "");
+    const parts = rest.split("/");
+    const key = parts.length > 1 ? parts[0] : "";
+    const arr = groups.get(key) ?? [];
+    arr.push(f);
+    groups.set(key, arr);
+  }
+
+  // 沒有子資料夾的（openspec/project.md 之類）排最前面 ——
+  // 夾在兩個有標題的群組中間會看不出它屬於誰
+  el.innerHTML = [...groups.entries()]
+    .sort((a, b) => (a[0] === "" ? -1 : b[0] === "" ? 1 : a[0].localeCompare(b[0])))
     .map(
-      (t) => `<button type="button" class="task-row" data-i="${t.i}" title="跳到 ${escapeHtml(t.n)} ${escapeHtml(t.sec)}">
-        <span class="task-box" aria-hidden="true"></span>
-        <span class="task-text">${escapeHtml(t.label)}</span>
-        <span class="task-sec">${escapeHtml(t.n)}</span>
-      </button>`,
+      ([key, list]) => `${key ? `<p class="os-group">openspec/${escapeHtml(key)}</p>` : ""}
+        ${list
+          .map((f) => {
+            const name = f.split("/").pop() ?? f;
+            return `<div class="os-row os-file-row" title="${escapeHtml(f)}">
+              <span class="os-dot done"></span>
+              <span class="os-body">
+                <span class="os-head">${escapeHtml(name)}</span>
+                <span class="os-file">${escapeHtml(f)}</span>
+              </span>
+            </div>`;
+          })
+          .join("")}`,
     )
     .join("");
-
-  el.querySelectorAll(".task-row").forEach((btn) => {
-    (btn as HTMLButtonElement).onclick = () => {
-      idx = Number((btn as HTMLElement).dataset.i);
-      const sec = sections()[idx];
-      if (sec) store.setActiveSection(sec.id);
-      render();
-    };
-  });
 }
 
 function renderOutline() {
@@ -459,7 +434,6 @@ function renderOutline() {
   if (pct) pct.textContent = `${avg}%`;
 
   renderOpenSpec();
-  renderTaskList();
 }
 
 function renderEditor() {
@@ -1128,7 +1102,6 @@ document.getElementById("editor-body")?.addEventListener(
 initFileTreeCollapse();
 initFileTreeResize();
 initCollapsible("btn-openspec-toggle", "openspec-list", "specforge:openspec-collapsed", "OpenSpec 章節");
-initCollapsible("btn-tasklist-toggle", "task-list", "specforge:tasklist-collapsed", "Task List");
 initFocusMode();
 initHyperfocusGuard();
 render();

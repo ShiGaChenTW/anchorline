@@ -7447,7 +7447,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
 .os-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .os-bar .mono { font-size: 11px; color: var(--muted); }
 
-.os-list, .task-list {
+.os-list {
   flex: 0 0 auto;
   max-height: 22vh;
   overflow: auto;
@@ -7456,7 +7456,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   flex-direction: column;
   gap: 1px;
 }
-.os-row, .task-row {
+.os-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -7470,7 +7470,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   text-align: left;
   cursor: pointer;
 }
-.os-row:hover, .task-row:hover { background: var(--inset); }
+.os-row.os-file-row { cursor: default; }
 .os-dot {
   flex: 0 0 auto;
   width: 6px;
@@ -7501,31 +7501,6 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   white-space: nowrap;
 }
 
-/* 待辦用空框而不是 checkbox：這裡不能勾，勾的方式是把章節寫完 */
-.task-box {
-  flex: 0 0 auto;
-  width: 11px;
-  height: 11px;
-  border: 1.5px solid var(--meta);
-  border-radius: 3px;
-}
-.task-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--fg-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.task-sec {
-  flex: 0 0 auto;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-}
-.task-empty { margin: 0; padding: 8px 10px; font-size: 12px; color: var(--success); }
 
 /* OpenSpec / Task List 的收合鍵：跟專案檔案同一顆按鈕樣式，
    差別是狀態掛在按鈕自己身上（專案檔案掛在整個 outline-col）。 */
@@ -7533,3 +7508,27 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
 /* 計數靠右、收合鍵在最右 */
 .os-bar { justify-content: flex-start; }
 .os-bar .mono { margin-left: auto; }
+
+/* OpenSpec 區塊：分群小標與空狀態 */
+.os-group {
+  margin: 8px 0 2px;
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+.os-group:first-child { margin-top: 2px; }
+.os-empty {
+  margin: 0;
+  padding: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.os-empty code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--inset);
+  font-size: 11px;
+}
