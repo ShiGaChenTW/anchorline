@@ -125,7 +125,7 @@ function syncProjectChrome() {
   if (sub) {
     sub.textContent = p
       ? `${meta} · 自動儲存 ${hh}:${mm}`
-      : "回到專案列表選擇一個專案";
+      : "回總覽選一個專案";
   }
 
   document.title = `${name} · 編輯 · PRD開發監控台`;
@@ -163,6 +163,39 @@ function valuesFor(s: Section): Record<string, string> {
  * 使用者的展開／捲動狀態。
  */
 let lastTreeSig = "__init__";
+
+const FT_COLLAPSE_KEY = "specforge:file-tree-collapsed";
+
+/** 檔案樹收合成一條標題列。狀態要留著 —— 每次開編輯台都要重收一次是懲罰。 */
+function initFileTreeCollapse() {
+  const col = document.querySelector('[data-od-id="outline-col"]') as HTMLElement | null;
+  const btn = document.getElementById("btn-file-tree-toggle") as HTMLButtonElement | null;
+  if (!col || !btn) return;
+
+  const apply = (collapsed: boolean) => {
+    col.classList.toggle("ft-collapsed", collapsed);
+    btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    btn.title = collapsed ? "展開專案檔案" : "收合專案檔案";
+  };
+
+  let collapsed = false;
+  try {
+    collapsed = localStorage.getItem(FT_COLLAPSE_KEY) === "1";
+  } catch {
+    /* private mode */
+  }
+  apply(collapsed);
+
+  btn.addEventListener("click", () => {
+    collapsed = !collapsed;
+    apply(collapsed);
+    try {
+      localStorage.setItem(FT_COLLAPSE_KEY, collapsed ? "1" : "0");
+    } catch {
+      /* private mode */
+    }
+  });
+}
 
 function renderFileTree() {
   const host = document.getElementById("file-tree");
@@ -767,7 +800,7 @@ function renderBeginnerCoach() {
   document.getElementById("btn-beginner-dismiss")?.addEventListener("click", () => {
     setBeginnerMode(false);
     bar?.remove();
-    toast("已關閉新手教練（可從專案列表再開新手引導）");
+    toast("已關閉新手教練");
   });
 }
 
@@ -903,6 +936,7 @@ document.getElementById("editor-body")?.addEventListener(
 );
 
 // ⌥F 快捷鍵與狀態還原；同步執行，不能靠 rAF（分頁在背景時 rAF 不觸發）
+initFileTreeCollapse();
 initFocusMode();
 initHyperfocusGuard();
 render();

@@ -71,10 +71,10 @@ export function initMobileNav(active: MobileNavPage) {
   bar.setAttribute("aria-label", "行動導覽");
   // 窄屏 5 鍵：專案 / 編輯 / 審閱 / 追蹤 / 設定（其餘走側欄或專案頁）
   const items: { page: MobileNavPage; href: string; label: string }[] = [
-    { page: "projects", href: "projects.html", label: "專案" },
+    { page: "overview", href: "overview.html", label: "總覽" },
     { page: "editor", href: "editor.html", label: "編輯" },
     { page: "review", href: "review.html", label: "審閱" },
-    { page: "tracking", href: "tracking.html", label: "追蹤" },
+    { page: "tracking", href: "tracking.html", label: "Tasks" },
     { page: "settings", href: "settings.html", label: "設定" },
   ];
   // admin / agents / templates 落在「設定」鄰近；若當前是這些頁，高亮設定或對應項

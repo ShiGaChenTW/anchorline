@@ -184,7 +184,11 @@ export type Approval = {
 };
 
 export type AISettings = {
-  model: "gemini-1.5-pro" | "gemini-1.5-flash" | "claude-3-5-sonnet" | "gpt-4o" | "local-smart";
+  /**
+   * 模型名稱自由填。寫死聯集只會在下一次模型改版時過期，
+   * 而使用者永遠比這份型別新。供應商靠前綴判斷（gemini/claude/gpt/local-smart）。
+   */
+  model: string;
   apiKey: string;
   endpoint: string;
   /**

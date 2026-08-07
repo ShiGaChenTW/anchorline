@@ -12,7 +12,7 @@ if (APP_VARIANT === "test") {
 
 // 已完成引導且有管理員 → 登入頁或工作區
 if (!store.needsOnboarding()) {
-  if (store.get().session?.userId) location.href = "projects.html";
+  if (store.get().session?.userId) location.href = "overview.html";
   else location.href = "login.html";
 }
 
@@ -147,7 +147,7 @@ function finishOnboarding() {
     return;
   }
 
-  location.href = "projects.html";
+  location.href = "overview.html";
 }
 
 $("ob-prev")?.addEventListener("click", () => setStep(step - 1));

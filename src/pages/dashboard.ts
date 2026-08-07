@@ -366,7 +366,7 @@ if (!requireAuth()) {
 
     if (!p) {
       renderState(
-        `<div class="dash-empty"><p>還沒有選擇專案。</p><a class="btn btn-primary" href="projects.html">回專案列表</a></div>`,
+        `<div class="dash-empty"><p>還沒有選擇專案。</p><a class="btn btn-primary" href="overview.html">回總覽</a></div>`,
       );
       return;
     }

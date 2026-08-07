@@ -15,7 +15,7 @@ if (store.needsOnboarding()) {
 if (store.get().session?.userId) {
   const u = store.get().employees.find((e) => e.id === store.get().session!.userId);
   if (u && u.active !== false) {
-    location.href = "projects.html";
+    location.href = "overview.html";
   }
 }
 
@@ -79,7 +79,7 @@ document.getElementById("login-form")?.addEventListener("submit", (e) => {
     errEl.textContent = "登入失敗：帳號或密碼不正確";
     return;
   }
-  location.href = "projects.html";
+  location.href = "overview.html";
 });
 
 renderOptions();

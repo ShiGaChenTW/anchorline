@@ -117,7 +117,7 @@ if (!requireAuth()) {
       return `<section class="d-hero">
         <p class="d-eyebrow">現在做這一個</p>
         <p class="d-hero-figure">還沒有專案</p>
-        <p class="d-hero-sub">從專案列表新建或匯入一個資料夾開始。</p>
+        <p class="d-hero-sub">側欄上方按「＋」新建，或用「專案匯入」選一個資料夾。</p>
       </section>`;
     }
 
