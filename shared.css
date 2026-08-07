@@ -7019,10 +7019,10 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   min-height: 600px;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  resize: both;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--panel, var(--bg));
@@ -7108,3 +7108,29 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
 }
 .set-modal-note { font-size: 13px; color: var(--muted); }
 .set-modal-foot .btn-primary { padding: 9px 26px; font-size: 13.5px; }
+
+/* 縮放把手。CSS resize: both 在內含 iframe 的視窗裡是壞的 ——
+   指標一進 iframe 就換它接事件，拖曳當場斷掉。所以自己畫、自己接。 */
+.set-modal-grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 22px;
+  height: 22px;
+  cursor: nwse-resize;
+  touch-action: none;
+  z-index: 2;
+}
+.set-modal-grip::after {
+  content: "";
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  border-bottom-right-radius: 3px;
+  opacity: 0.65;
+}
+.set-modal-grip:hover::after { border-color: var(--accent); opacity: 1; }

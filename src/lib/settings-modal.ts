@@ -52,6 +52,7 @@ export function openSettingsModal() {
         <span class="set-modal-note">變更立即生效，並會自動儲存。</span>
         <button type="button" class="btn btn-primary" data-set-modal="close">關閉</button>
       </footer>
+      <div class="set-modal-grip" role="separator" aria-label="調整視窗大小" title="拖曳調整大小"></div>
     </div>
   `;
   document.body.appendChild(back);
@@ -94,6 +95,56 @@ export function openSettingsModal() {
   );
   back.addEventListener("click", (e) => {
     if (e.target === back) close();
+  });
+
+  initResizeGrip(box, frame);
+}
+
+/**
+ * 自製縮放把手。
+ *
+ * CSS `resize: both` 在這裡是壞的：把手一旦被拖進 iframe 的範圍，
+ * 指標事件就歸 iframe 所有，瀏覽器的縮放邏輯當場斷掉 —— 看起來就是「拉不動」。
+ * 自己接 pointer 事件並在拖曳期間把 iframe 的 pointer-events 關掉才穩。
+ */
+function initResizeGrip(box: HTMLElement, frame: HTMLIFrameElement) {
+  const grip = box.querySelector(".set-modal-grip") as HTMLElement | null;
+  if (!grip) return;
+
+  const MIN_W = 900;
+  const MIN_H = 600;
+  let startX = 0;
+  let startY = 0;
+  let startW = 0;
+  let startH = 0;
+
+  const onMove = (e: PointerEvent) => {
+    const w = Math.min(window.innerWidth - 32, Math.max(MIN_W, startW + (e.clientX - startX) * 2));
+    const h = Math.min(window.innerHeight - 32, Math.max(MIN_H, startH + (e.clientY - startY) * 2));
+    box.style.width = `${w}px`;
+    box.style.height = `${h}px`;
+  };
+  const onUp = (e: PointerEvent) => {
+    grip.releasePointerCapture(e.pointerId);
+    grip.removeEventListener("pointermove", onMove);
+    grip.removeEventListener("pointerup", onUp);
+    frame.style.pointerEvents = "";
+    document.body.style.userSelect = "";
+    saveSize(box.offsetWidth, box.offsetHeight);
+  };
+
+  grip.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    startX = e.clientX;
+    startY = e.clientY;
+    startW = box.offsetWidth;
+    startH = box.offsetHeight;
+    // 拖過 iframe 時事件會被它吃掉 —— 拖曳期間先讓它不接收指標
+    frame.style.pointerEvents = "none";
+    document.body.style.userSelect = "none";
+    grip.setPointerCapture(e.pointerId);
+    grip.addEventListener("pointermove", onMove);
+    grip.addEventListener("pointerup", onUp);
   });
 }
 
