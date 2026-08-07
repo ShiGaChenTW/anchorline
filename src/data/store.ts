@@ -234,6 +234,7 @@ function migrateProject(raw: Record<string, unknown>, employees: Employee[]): Pr
     id: String(raw.id ?? `p_${Date.now()}`),
     title: String(raw.title ?? "未命名"),
     customName: raw.customName ? String(raw.customName) : undefined,
+    description: raw.description ? String(raw.description) : undefined,
     status: (raw.status as Project["status"]) || "draft",
     pct: Number(raw.pct ?? 0),
     owner,
@@ -865,6 +866,18 @@ export const store = {
   },
 
   /** 自訂側欄顯示名稱（空字串＝清除自訂，改回資料夾／標題） */
+  /** 專案介紹：純顯示用文字，不進 PRD 章節，也不影響任何 gate */
+  setProjectDescription(id: string, description: string) {
+    const text = description.trim();
+    state = {
+      ...state,
+      projects: state.projects.map((p) =>
+        p.id === id ? { ...p, description: text || undefined } : p,
+      ),
+    };
+    emit();
+  },
+
   renameProject(id: string, customName: string): { ok: boolean; reason?: string } {
     const user = state.currentUser;
     if (user.accessRole !== "admin" && user.accessRole !== "editor") {

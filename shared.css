@@ -6626,3 +6626,46 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 
 /* 工作區狀態卡有兩段清單，一起放進同一個可捲容器 */
 .d-card > .d-rows--plain { flex: 0 1 auto; }
+
+/* ── hero 的專案身分區：名稱與介紹可直接編輯 ──
+   看起來是文字，點下去才像輸入框。ADHD：多一顆「編輯」按鈕
+   就多一次「現在要點哪裡」的判斷。 */
+.d-ident {
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.d-ident-name,
+.d-ident-desc {
+  display: block;
+  width: 100%;
+  padding: 4px 6px;
+  margin-left: -6px;
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  resize: none;
+}
+.d-ident-name {
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.d-ident-desc {
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--fg-2);
+}
+.d-ident-name::placeholder,
+.d-ident-desc::placeholder { color: var(--muted); font-weight: 400; }
+.d-ident-name:hover,
+.d-ident-desc:hover { background: var(--inset); }
+.d-ident-name:focus,
+.d-ident-desc:focus {
+  outline: none;
+  background: var(--inset);
+  border-color: var(--accent);
+}
