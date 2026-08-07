@@ -3057,6 +3057,10 @@ a.is-disabled {
 .rail-proj-card {
   /* 單欄。改名鍵改成絕對定位疊在右下角 —— 它以前是 grid 的第二欄，
      每張卡永遠被吃掉 38px，專案名剩不到 100px 一定卡字。 */
+  /* flex-shrink: 0 是必要的：外層是有 max-height 的 flex column，
+     專案一多，每張卡就被壓成十幾 px，再被自己的 overflow: hidden 切掉字。
+     卡片不該縮，該縮的是清單 —— 它本來就有 overflow: auto。 */
+  flex: 0 0 auto;
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -3118,7 +3122,8 @@ a.is-disabled {
   font-size: 13px;
   font-weight: 600;
   color: var(--fg);
-  line-height: 1.25;
+  /* 1.25 會把底線與下伸部切掉（Fork_WTF、Project_sysapp-tui 這種名字很常見） */
+  line-height: 1.45;
 }
 .rail-proj-card-sub {
   display: flex;
