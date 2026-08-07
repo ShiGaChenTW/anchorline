@@ -12,7 +12,6 @@
 import { store } from "../data/store";
 import { projectDisplayName, type Project } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
-import { buildFileTree, renderFileTreeHtml } from "../lib/file-tree";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { askForProjectFolder } from "../lib/project-folder";
 import { syncRailContext } from "../lib/rail-projects";
@@ -96,7 +95,29 @@ if (!requireAuth()) {
           ],
         ]
       : [];
+    const p = activeProject();
+    const name = p ? projectDisplayName(p) : "未選擇專案";
+    const desc = p?.description ?? "";
+
     return `<section class="d-hero tone-${head.tone}">
+      <div class="d-ident">
+        <input
+          type="text"
+          id="d-name"
+          class="d-ident-name"
+          value="${escapeHtml(name)}"
+          aria-label="專案名稱"
+          placeholder="專案名稱"
+        />
+        <textarea
+          id="d-desc"
+          class="d-ident-desc"
+          rows="2"
+          aria-label="專案介紹"
+          placeholder="一句話說明這個專案在做什麼（點這裡就能寫）"
+        >${escapeHtml(desc)}</textarea>
+      </div>
+
       <p class="d-eyebrow">版本控制</p>
       <p class="d-hero-figure">${escapeHtml(head.text)}</p>
       ${
@@ -307,16 +328,6 @@ if (!requireAuth()) {
     </section>`;
   }
 
-  /** 綠框：專案檔案樹。沿用編輯台那份 buildFileTree，不另外做一套。 */
-  function cardTree(): string {
-    const p = activeProject();
-    const tree = p ? buildFileTree(p, store.get().sections) : null;
-    return `<section class="d-card">
-      <p class="d-eyebrow">專案檔案</p>
-      <div class="d-tree">${renderFileTreeHtml(tree, store.get().activeSectionId ?? "")}</div>
-    </section>`;
-  }
-
   // ── 版面 ────────────────────────────────────────────────────
 
   function renderState(html: string) {
@@ -327,9 +338,10 @@ if (!requireAuth()) {
   function renderStats(s: ProjectStats) {
     renderState(
       `<div class="d-top">${heroGit(s)}${cardHistory(s)}</div>
-       <div class="d-grid">${cardStack(s)}${cardSize(s)}${cardTree()}${cardWorkspace(s)}</div>
-       <p class="d-measured" data-equalize>量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")}　<span class="mono">${escapeHtml(s.folderPath)}</span></p>`,
+       <div class="d-grid">${cardStack(s)}${cardSize(s)}${cardWorkspace(s)}</div>
+       <p class="d-measured">量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")}　<span class="mono">${escapeHtml(s.folderPath)}</span></p>`,
     );
+    bindIdentEditing();
   }
 
   async function load(force = false) {
@@ -388,6 +400,56 @@ if (!requireAuth()) {
       toast(e instanceof Error ? e.message : "量測失敗");
     } finally {
       busy = false;
+    }
+  }
+
+  /**
+   * 名稱與介紹就地編輯：blur 或 Enter 存檔，沒有儲存按鈕。
+   * 存檔不重繪整頁 —— 重繪會把游標踢掉，那是最惱人的編輯體驗。
+   */
+  function bindIdentEditing() {
+    const p = activeProject();
+    if (!p) return;
+
+    const nameEl = document.getElementById("d-name") as HTMLInputElement | null;
+    if (nameEl && nameEl.dataset.bound !== "1") {
+      nameEl.dataset.bound = "1";
+      const save = () => {
+        const v = nameEl.value.trim();
+        if (v === projectDisplayName(p)) return;
+        const r = store.renameProject(p.id, v);
+        if (!r.ok) {
+          toast(r.reason ?? "改名失敗");
+          nameEl.value = projectDisplayName(p);
+          return;
+        }
+        toast("已更新專案名稱");
+      };
+      nameEl.addEventListener("blur", save);
+      nameEl.addEventListener("keydown", (e) => {
+        if ((e as KeyboardEvent).key === "Enter") {
+          e.preventDefault();
+          nameEl.blur();
+        }
+      });
+    }
+
+    const descEl = document.getElementById("d-desc") as HTMLTextAreaElement | null;
+    if (descEl && descEl.dataset.bound !== "1") {
+      descEl.dataset.bound = "1";
+      descEl.addEventListener("blur", () => {
+        if (descEl.value.trim() === (p.description ?? "")) return;
+        store.setProjectDescription(p.id, descEl.value);
+        toast("已更新專案介紹");
+      });
+      // ⌘↵ 存檔並離開；單純 Enter 要能換行
+      descEl.addEventListener("keydown", (e) => {
+        const ke = e as KeyboardEvent;
+        if (ke.key === "Enter" && (ke.metaKey || ke.ctrlKey)) {
+          e.preventDefault();
+          descEl.blur();
+        }
+      });
     }
   }
 

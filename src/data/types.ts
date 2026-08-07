@@ -74,6 +74,8 @@ export type Project = {
   isImported?: boolean;
   /** 來源資料夾名稱（顯示用） */
   sourceFolder?: string;
+  /** 專案介紹，使用者手寫。與 PRD 章節無關，是給人看的一句話。 */
+  description?: string;
   /** 匯入評分與對應摘要 */
   importSummary?: ProjectImportSummary;
 };
