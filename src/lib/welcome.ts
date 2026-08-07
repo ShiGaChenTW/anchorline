@@ -5,8 +5,9 @@
  * 拿到瀏覽器裡重組是自找麻煩，而且 onefetch 改版就會壞。
  *
  * ADHD 取捨：
- * - 歡迎畫面每次開啟都跳，本身就是干擾。所以**同一天只跳一次**，
- *   而且 Esc／點背景就關，不強迫讀完。
+ * - 預設每次開啟都跳 —— 「你上次離開後這個專案長怎樣」是每次回來都想知道的事，
+ *   而不是一天一次。要靜音由使用者自己勾「今天不再顯示」，是他的決定不是我的。
+ * - Esc／點背景就關，不強迫讀完。
  * - 內容是「你上次離開後這個專案長怎樣」，不是操作教學（那是首次導覽的事）。
  * - 沒有 onefetch、沒綁資料夾、不是 git 專案 → 安靜不顯示，不要為了跳而跳。
  */
@@ -80,17 +81,18 @@ export function repoName(o: Onefetch): string {
   return field<{ repoName?: string }>(o, "ProjectInfo")?.repoName ?? "專案";
 }
 
-/** 今天已經跳過就不再跳。歡迎畫面每次開啟都出現本身就是干擾。 */
-function shownToday(): boolean {
+/** 使用者今天勾過「不再顯示」才靜音。沒勾就每次開啟都跳。 */
+function mutedToday(): boolean {
   try {
     return localStorage.getItem(SHOWN_KEY) === new Date().toDateString();
   } catch {
     return true;
   }
 }
-function markShown() {
+function setMutedToday(muted: boolean) {
   try {
-    localStorage.setItem(SHOWN_KEY, new Date().toDateString());
+    if (muted) localStorage.setItem(SHOWN_KEY, new Date().toDateString());
+    else localStorage.removeItem(SHOWN_KEY);
   } catch {
     /* private mode */
   }
@@ -146,16 +148,24 @@ export function renderWelcome(o: Onefetch, projectTitle: string) {
               `<div><dt>${escapeHtml(r.label)}</dt><dd class="mono">${escapeHtml(r.value)}</dd></div>`,
           )
           .join("")}</dl>
-        <p class="dash-note">資料來自 <code>onefetch</code>。今天不會再跳這個畫面。</p>
+        <p class="dash-note">資料來自 <code>onefetch</code>。</p>
       </div>
-      <footer>
+      <footer class="welcome-foot">
+        <label class="welcome-mute">
+          <input type="checkbox" data-welcome="mute" />
+          <span>今天不再顯示</span>
+        </label>
+        <span class="spacer"></span>
         <a class="btn" href="dashboard.html">看完整儀表板</a>
         <button type="button" class="btn btn-primary" data-welcome="close">開始工作</button>
       </footer>
     </div>
   `;
   document.body.appendChild(root);
-  markShown();
+
+  // 勾了就當天靜音，取消勾選就馬上還原 —— 誤按不該要等到明天。
+  const mute = root.querySelector('[data-welcome="mute"]') as HTMLInputElement | null;
+  mute?.addEventListener("change", () => setMutedToday(mute.checked));
 
   const close = () => {
     root.remove();
@@ -180,7 +190,7 @@ export function renderWelcome(o: Onefetch, projectTitle: string) {
  * 已經跳過、不是桌面版、沒綁資料夾、沒裝 onefetch、不是 git 專案。
  */
 export function initWelcome(folderPath: string | undefined, projectTitle: string) {
-  if (!folderPath || shownToday()) return;
+  if (!folderPath || mutedToday()) return;
 
   const w = window as Window & {
     __SPECFORGE_NATIVE__?: boolean;
