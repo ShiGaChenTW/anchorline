@@ -6682,7 +6682,9 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   background: color-mix(in oklab, var(--accent) 20%, transparent);
 }
 .d-tag-hash { font-size: 11.5px; color: var(--muted); }
-.d-tag-at { margin-left: auto; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.d-tag-at { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* 版號說明縮排到與版號文字切齊，視覺上從屬於它 */
+.d-tag-note { padding-left: 2px; }
 
 /* ── 提交紀錄：卡片內捲，不讓卡片自己長高 ── */
 .d-commits {
@@ -6821,9 +6823,18 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-/* ── 版號紀錄：每個版號帶一行說明 ── */
-.d-tags li { flex-direction: column; align-items: stretch; gap: 2px; padding: 7px 8px; }
-.d-tag-head { display: flex; align-items: baseline; gap: 8px; }
+/* ── 版號紀錄：一版一列，版號｜雜湊｜日期 三欄對齊 ── */
+.d-tags li { flex-direction: column; align-items: stretch; gap: 1px; padding: 6px 8px; }
+/* 用 grid 而不是 flex：版號寬度不一（v0.3.0 / v0.10.0），
+   flex 會讓後面的雜湊與日期跟著左右跳，一整欄掃下來對不齊。 */
+.d-tag-head {
+  display: grid;
+  grid-template-columns: minmax(0, auto) auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+}
+.d-tag-head .d-tag-hash { grid-column: 3; justify-self: start; }
+.d-tags li:not(.is-current) .d-tag-name { min-width: 4.5em; }
 /* 版本說明：annotated tag 給 tag 訊息，lightweight 給它指向的 commit 主旨 */
 .d-tag-note {
   font-size: 12px;
@@ -7300,8 +7311,11 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
    使用者自訂、可複選篩選、可搜尋。
    ═══════════════════════════════════════════════════════════════ */
 
-/* 儀表板身分區的標籤列 */
-.d-tags {
+/* 儀表板身分區的標籤列。
+   類別名不能再叫 .d-tags —— 版號紀錄的清單早就用了這個名字，
+   而這段在檔案後面，會把版號清單的 display: grid 蓋成 flex-wrap，
+   五個版號就被擠成兩欄爛掉。同名不同義是這種 bug 的溫床。 */
+.d-ident-tags {
   display: flex;
   flex-wrap: wrap;
   align-items: center;

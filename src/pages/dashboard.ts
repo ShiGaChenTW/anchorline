@@ -106,7 +106,7 @@ if (!requireAuth()) {
                aria-label="專案名稱" placeholder="未命名專案" />
         <textarea id="d-desc" class="d-ident-desc" rows="1" aria-label="專案介紹"
                   placeholder="一句話說明這個專案在做什麼">${escapeHtml(desc)}</textarea>
-        <div class="d-tags" id="d-tags">${tagsInnerHtml(p)}</div>
+        <div class="d-ident-tags" id="d-tags">${tagsInnerHtml(p)}</div>
       </div>`;
   }
 
