@@ -168,7 +168,12 @@ const verdict = (r: Row) =>
       ? "⚠️ WARN"
       : "✅ CLEAR";
 
-const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+// ponytail: 本地時間，plans/ 的檔名慣例是本地日期，不是 UTC
+const now = new Date();
+const stamp = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+  .toISOString()
+  .slice(0, 16)
+  .replace("T", " ");
 const out = [
   `# 命名撞名體檢 — ${NAMES.join(" / ")}`,
   "",

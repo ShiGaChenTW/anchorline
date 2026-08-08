@@ -1,7 +1,7 @@
 # Tauri × MIT — W1〜W3 實作
 
 **建立時間：** 2026-08-09 03:47
-**最後更新：** 2026-08-09 05:05
+**最後更新：** 2026-08-09 05:30
 **狀態：** 進行中
 
 ## 目標
@@ -37,12 +37,12 @@
 
 ### W3 — 開源化
 
-- [ ] W3-1 `LICENSE`（MIT）+ README 重寫 <!-- sf:t=7G7DH8SC -->
-- [ ] W3-2 `docs/SECURITY.md`：shell allowlist · appendAllowed 謂詞 · 為什麼不執行寫入動作 <!-- sf:t=EWVTW65P -->
-- [ ] W3-3 `CONTRIBUTING.md` + issue 範本 <!-- sf:t=Z0CN3PP3 -->
-- [ ] W3-4 上游相容承諾寫進 README：不解析 spec.md，該段呼叫 CLI <!-- sf:t=AE310QY8 -->
-- [ ] W3-5 GitHub Actions：三平台 build + test <!-- sf:t=BJC12Q71 -->
-- [ ] W3-6 資料落點文件：`.specforge/log` 是什麼、為何預設 gitignore、怎麼脫敏匯出 <!-- sf:t=MM1J4FK8 -->
+- [x] W3-1 `LICENSE`（MIT）+ README 重寫 <!-- sf:t=7G7DH8SC -->
+- [x] W3-2 `docs/SECURITY.md`：shell allowlist · appendAllowed 謂詞 · 為什麼不執行寫入動作 <!-- sf:t=EWVTW65P -->
+- [x] W3-3 `CONTRIBUTING.md` + issue 範本 <!-- sf:t=Z0CN3PP3 -->
+- [x] W3-4 上游相容承諾寫進 README：不解析 spec.md，該段呼叫 CLI <!-- sf:t=AE310QY8 -->
+- [x] W3-5 GitHub Actions：三平台 build + test <!-- sf:t=BJC12Q71 -->
+- [x] W3-6 資料落點文件：`.specforge/log` 是什麼、為何預設 gitignore、怎麼脫敏匯出 <!-- sf:t=MM1J4FK8 -->
 - [ ] W3-✅ 出貨儀式：repo 轉公開，README 有截圖 <!-- sf:t=EYCK55RF -->
 
 ### 明確不做
