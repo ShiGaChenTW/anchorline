@@ -55,7 +55,7 @@ export function syncRailContext(opts: RailContextOpts) {
 
   // 側欄品牌名固定（titlebar 已移除）
   document.querySelectorAll(".rail-brand strong, .rail-brand-text strong").forEach((n) => {
-    n.textContent = "PRD開發監控台";
+    n.textContent = "Anchorline";
   });
 }
 

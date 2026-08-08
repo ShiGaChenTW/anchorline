@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PRD開發監控台 — App Icon Final (Layers · Kami)</title>
+<title>Anchorline — App Icon Final (Layers · Kami)</title>
 <style>
   :root {
     --bg: #f3f2ec; --fg: #141413; --muted: #5c5a54; --card: #faf9f5;
@@ -99,7 +99,7 @@
 
     <section class="hero">
       <div class="stage">
-        <img src="export/logo-512.png" alt="PRD開發監控台 app icon">
+        <img src="export/logo-512.png" alt="Anchorline app icon">
       </div>
       <div class="meta">
         <h2>章節分層 · 紙面深藍</h2>
@@ -133,8 +133,8 @@
     <ul class="files">
       <li><strong>主 SVG</strong> — <code>logos/export/logo.svg</code></li>
       <li><strong>PNG</strong> — <code>logo-16</code> … <code>logo-2048.png</code></li>
-      <li><strong>macOS</strong> — <code>logos/export/AppIcon.icns</code> → <code>mac-app-build/resources/AppIcon.icns</code></li>
-      <li><strong>打包</strong> — <code>build-dmg.sh</code> 已設 <code>CFBundleIconFile = AppIcon</code></li>
+      <li><strong>macOS</strong> — <code>src-tauri/icons/</code>（<code>bunx tauri icon logos/export/logo-1024.png</code> 產生）</li>
+      <li><strong>打包</strong> — <code>bun run app</code>（Tauri，圖示取自 <code>src-tauri/tauri.conf.json</code> 的 icon 陣列）</li>
     </ul>
 
     <footer>若 Dock 仍顯示舊圖示：重開 App，或 <code>killall Dock</code> / 重新登入以清 icon cache。</footer>
