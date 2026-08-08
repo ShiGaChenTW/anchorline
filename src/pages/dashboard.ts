@@ -18,6 +18,8 @@ import {
   type Suggestion,
 } from "../lib/dashboard-optimize";
 import { initHelpOverlay } from "../lib/help-overlay";
+import { diagnoseGit, hasActionableIssue, usesConventionalCommits } from "../lib/git-doctor";
+import type { GitIssue } from "../lib/git-doctor";
 import { askForProjectFolder } from "../lib/project-folder";
 import { syncRailContext } from "../lib/rail-projects";
 import {
@@ -153,7 +155,14 @@ if (!requireAuth()) {
     return `<section class="d-hero tone-${head.tone}">
       ${identHtml(p)}
 
-      <p class="d-eyebrow">版本控制</p>
+      <div class="d-hero-head">
+        <p class="d-eyebrow">版本控制</p>
+        ${
+          hasActionableIssue(diagnoseGit(g))
+            ? `<button type="button" class="btn btn-sm d-fix-btn" id="btn-git-doctor">版控健檢 <span>${diagnoseGit(g).filter((i) => i.level !== "info").length}</span></button>`
+            : ""
+        }
+      </div>
       <p class="d-hero-figure">${escapeHtml(head.text)}</p>
       ${
         g
@@ -387,6 +396,9 @@ if (!requireAuth()) {
        <p class="d-measured">量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")}　<span class="mono">${escapeHtml(s.folderPath)}</span></p>`,
     );
     bindIdentEditing();
+    document.getElementById("btn-git-doctor")?.addEventListener("click", () => {
+      openGitDoctor(s.git);
+    });
   }
 
   async function load(force = false) {
@@ -581,6 +593,73 @@ if (!requireAuth()) {
       if (e.target === back) back.remove();
     });
     return back;
+  }
+
+  /**
+   * 版控健檢。
+   *
+   * **只給指令，不執行。** git commit / push / remote add 都會改動使用者的
+   * repo，而且 push 出去收不回來。一個從 WebView 按下去就悄悄改 repo 的
+   * 按鈕，出錯時使用者連發生了什麼都不知道 —— 所以這裡的產物是可複製的
+   * 文字，執行的決定留在人身上。
+   *
+   * 判斷邏輯在 lib/git-doctor.ts（純函式、22 個測試）。
+   */
+  function openGitDoctor(g: NonNullable<ProjectStats["git"]> | undefined) {
+    const issues = diagnoseGit(g);
+    const conventional = usesConventionalCommits((g?.commits ?? []).map((c) => c.subject));
+
+    const card = (i: GitIssue) => `
+      <li class="gd-item gd-${i.level}">
+        <div class="gd-head">
+          <span class="gd-tag">${i.level === "block" ? "先處理" : i.level === "warn" ? "該處理" : "知道就好"}</span>
+          <strong>${escapeHtml(i.title)}</strong>
+        </div>
+        <p class="gd-why">${escapeHtml(i.why)}</p>
+        <pre class="gd-cmd"><code>${i.commands.map((c) => escapeHtml(c)).join("\n")}</code></pre>
+        <button type="button" class="btn btn-sm gd-copy" data-gd-copy="${escapeHtml(i.commands.join("\n"))}">複製指令</button>
+      </li>`;
+
+    const back = optimizeModal(`
+      <header>
+        <div>
+          <h3 id="opt-title">版控健檢</h3>
+          <p class="sub">找出這個 repo 現在的版控問題，並給出對應指令。</p>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" data-opt-close>關閉</button>
+      </header>
+      <div class="body">
+        ${
+          issues.length
+            ? `<ul class="gd-list">${issues.map(card).join("")}</ul>
+               ${
+                 conventional
+                   ? `<p class="gd-note">偵測到這個 repo 使用 conventional commits，提交訊息建議沿用 <code>type(scope): 說明</code>。</p>`
+                   : ""
+               }`
+            : `<p class="gd-none">目前沒有發現版控問題。</p>`
+        }
+        <p class="gd-warn">這些指令不會自動執行 —— 複製到終端機自己跑。改動 repo 的決定留給你。</p>
+      </div>
+      <footer>
+        <button type="button" class="btn btn-primary" data-opt-close>知道了</button>
+      </footer>
+    `);
+
+    back.querySelectorAll<HTMLButtonElement>("[data-gd-copy]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(btn.dataset.gdCopy ?? "");
+          const prev = btn.textContent;
+          btn.textContent = "已複製";
+          window.setTimeout(() => {
+            btn.textContent = prev;
+          }, 1200);
+        } catch {
+          toast("複製失敗，請手動選取");
+        }
+      });
+    });
   }
 
   /** 第一步：選 agent */
