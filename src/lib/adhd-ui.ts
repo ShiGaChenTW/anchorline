@@ -456,7 +456,9 @@ export function applyAdhdRail(nav: Element) {
   }
   nav.setAttribute("data-adhd-rail", "1");
 
-  const primary = new Set(["nav-editor", "nav-tracking", "nav-review"]);
+  // editor / tracking / review 都已經從固定導覽移走（改掛在專案卡片下方
+  // 與「工作區」那一行），這裡留 templates 當主路徑，其餘收進「其他功能」。
+  const primary = new Set(["nav-templates"]);
   const secondary: HTMLElement[] = [];
 
   nav.querySelectorAll<HTMLElement>("a.nav-item, button.nav-item").forEach((el) => {

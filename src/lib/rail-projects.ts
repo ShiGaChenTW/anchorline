@@ -4,6 +4,7 @@
  */
 import { store } from "../data/store";
 import { projectDisplayName, type Project } from "../data/types";
+import { IC } from "./rail-nav";
 import { formatLastUpdate } from "./time-format";
 import { escapeHtml, toast } from "./ui";
 
@@ -64,6 +65,53 @@ function bumpCounts() {
     .catch(() => {
       /* ignore */
     });
+}
+
+/**
+ * 選中專案後掛在那張卡片底下的動作列。
+ *
+ * 「編輯工作台」與「Task Tracking」都是**對某一個專案**做的事，放在固定導覽區
+ * 等於要人先在腦裡把「我選的是哪個專案」跟「這顆按鈕會作用在誰身上」接起來。
+ * 貼在卡片下方，主詞就寫在正上方一行。
+ *
+ * 字級與圖示比主導覽小一號 —— 它是卡片的附屬動作，不該跟導覽搶重量。
+ */
+/**
+ * 審閱佇列掛在「工作區」那一行。
+ *
+ * 它是跨專案的收件匣，不屬於任何一張卡片，但也不該和專案動作混在同一區 ——
+ * 放在區塊標題右側，和「總覽／清單」同一層。
+ *
+ * 每次 render 都呼叫（自帶存在性守衛）：initRailNav 會整段重建 nav.innerHTML，
+ * 只在建立 projects block 那一次掛的話，之後任何一次重建都會把它抹掉。
+ */
+function ensureReviewChip(nav: Element) {
+  const workLabel = Array.from(nav.querySelectorAll(".nav-label")).find(
+    (el) => /工作區/.test(el.textContent || "") && !el.classList.contains("rail-proj-head"),
+  );
+  if (!workLabel || workLabel.querySelector(".rail-review-chip")) return;
+  workLabel.classList.add("rail-work-head");
+  const a = document.createElement("a");
+  a.className = "rail-review-chip";
+  a.href = "review.html";
+  a.title = "審閱佇列：待審與待簽核的規格";
+  a.innerHTML = `審閱佇列<span class="rail-review-count" id="rail-review-count">0</span>`;
+  workLabel.appendChild(a);
+}
+
+function projActionsHtml(): string {
+  const items = [
+    { href: "editor.html", label: "編輯工作台", icon: IC.editor },
+    { href: "tracking.html", label: "Task Tracking", icon: IC.tracking },
+  ];
+  return `<div class="rail-proj-actions" role="group" aria-label="這個專案可以做的事">
+    ${items
+      .map(
+        (it) =>
+          `<a class="rail-proj-action" href="${it.href}"><svg class="ic" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${it.icon}</svg><span>${it.label}</span></a>`,
+      )
+      .join("")}
+  </div>`;
 }
 
 function statusTone(p: Project): string {
@@ -164,6 +212,8 @@ function bindAddMenu(block: HTMLElement) {
   });
 }
 
+  ensureReviewChip(nav);
+
   const projects = store.visibleProjects();
   const activeId = store.get().activeProjectId;
 
@@ -213,7 +263,7 @@ function bindAddMenu(block: HTMLElement) {
                 <span class="rail-proj-card-sub">${escapeHtml(when)}${badge}</span>
               </button>
               <button type="button" class="rail-proj-card-rename" data-rename-id="${escapeHtml(p.id)}" title="自訂專案名稱" aria-label="重新命名 ${escapeHtml(name)}">✎</button>
-            </article>`;
+            </article>${on ? projActionsHtml() : ""}`;
         })
         .join("")}
     </div>
