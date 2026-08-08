@@ -248,11 +248,23 @@ if (!requireAuth()) {
     const tags = g.tags ?? [];
     const current = tags[0];
 
+    // 使用者自己取的版號優先顯示 —— git tag 是「已經標下去的」，
+    // releases 是「決定了但可能還沒標」，後者才是現在在推的那一版。
+    const mine = store.releasesOf();
+    const headline = mine[0]?.version || current?.name || "尚無版號";
+
     return `<section class="d-card">
-      <p class="d-eyebrow">版號紀錄</p>
-      <p class="d-figure">${escapeHtml(current?.name || "尚無版號")}</p>
+      <div class="d-hero-head">
+        <p class="d-eyebrow">版號紀錄</p>
+        <a class="btn btn-sm d-take-btn" href="releases.html" title="自己決定版號與這一版收哪些功能">版本取號</a>
+      </div>
+      <p class="d-figure">${escapeHtml(headline)}</p>
       <p class="d-figure-sub">${
-        current ? `目前版本　共 ${tags.length} 個 tag` : "還沒發過版"
+        mine.length
+          ? `你取的版號 ${mine.length} 個　git tag ${tags.length} 個`
+          : current
+            ? `目前版本　共 ${tags.length} 個 tag`
+            : "還沒發過版"
       }</p>
       ${
         tags.length
