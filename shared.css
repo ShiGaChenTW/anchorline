@@ -7470,7 +7470,8 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   text-align: left;
   cursor: pointer;
 }
-.os-row.os-file-row { cursor: default; }
+.os-row:hover { background: var(--inset); }
+.os-file-row { cursor: pointer; }
 .os-dot {
   flex: 0 0 auto;
   width: 6px;
@@ -7519,6 +7520,17 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   color: var(--muted);
 }
 .os-group:first-child { margin-top: 2px; }
+.os-group { display: flex; align-items: center; gap: 6px; }
+/* change 是 OpenSpec 的工作單位，用 accent 讓它比 spec domain 重 */
+.os-group--change { color: var(--accent); font-weight: 600; font-size: 11px; }
+.os-group span {
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--inset);
+  font-size: 9.5px;
+  color: var(--muted);
+}
 .os-empty {
   margin: 0;
   padding: 10px;

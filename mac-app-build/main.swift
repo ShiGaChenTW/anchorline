@@ -101,6 +101,33 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
                 let payload = Self.scanPlans(dirs)
                 DispatchQueue.main.async { self?.postToJS(payload) }
             }
+        case "openPath":
+            // 在預設應用程式裡開一個檔。限制在家目錄底下、且是文件類副檔名 ——
+            // WebView 端可以送任意字串進來，不設界線等於把 open(1) 開放給頁面。
+            guard let dict = message.body as? [String: Any],
+                  let path = dict["path"] as? String, !path.isEmpty
+            else {
+                postToJS(["type": "openPathError", "message": "缺少 path"])
+                return
+            }
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            let allowedExt = ["md", "markdown", "yaml", "yml", "json", "txt", "toml"]
+            let url = URL(fileURLWithPath: path).standardizedFileURL
+            var isDir: ObjCBool = false
+            guard url.path.hasPrefix(home),
+                  allowedExt.contains(url.pathExtension.lowercased()),
+                  FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+                  !isDir.boolValue
+            else {
+                postToJS([
+                    "type": "openPathError",
+                    "message": "不開這個路徑：必須是家目錄底下的文件檔",
+                    "path": path,
+                ])
+                return
+            }
+            NSWorkspace.shared.open(url)
+            postToJS(["type": "openPath", "path": url.path])
         case "ping":
             postToJS([
                 "type": "pong",
