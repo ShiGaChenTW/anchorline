@@ -111,7 +111,7 @@ function syncProjectChrome() {
     docStatus.textContent = stInfo.label;
   }
 
-  document.title = `審閱 · ${name} · PRD開發監控台`;
+  document.title = `審閱 · ${name} · Anchorline`;
 }
 
 /** 章節欄位 → Markdown 字串 */

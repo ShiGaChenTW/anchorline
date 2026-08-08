@@ -1394,6 +1394,11 @@ table.data tbody tr.selected td.col-actions {
   white-space: nowrap;
 }
 .field:first-of-type label { margin-top: 8px; }
+/* 上面那條收掉「表單第一個欄位」多餘的上留白，但 :first-of-type 只看
+   「在父層裡是不是第一個」。.field-row 是並排的兩欄，左欄剛好是 row 的第一個
+   div，於是它拿 8px、右欄拿 22px —— 兩欄差 14px，看起來就是右邊掉下去。
+   實際偏掉的是左欄。並排時兩欄必須同一個起跑線。 */
+.field-row > .field:first-of-type label { margin-top: 22px; }
 .field textarea,
 .field input[type="text"],
 .field select {

@@ -66,7 +66,7 @@ if (!requireAuth()) {
       statusTone: p?.status === "approved" ? "ok" : p?.status === "review" ? "review" : "draft",
       meta: p?.sourceFolder,
     });
-    document.title = `${name} · 儀表板 · PRD開發監控台`;
+    document.title = `${name} · 儀表板 · Anchorline`;
   }
 
   // ── 各張卡片 ────────────────────────────────────────────────
