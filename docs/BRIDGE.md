@@ -22,7 +22,7 @@ WebView 看不到磁碟、跑不了 git、拿不到 mtime。這三件事是這�
 
 ```js
 window.webkit.messageHandlers.anchorline.postMessage({ action, ...params })
-window.addEventListener("specforge-native", (e) => { e.detail.type === "..." })
+window.addEventListener("anchorline-native", (e) => { e.detail.type === "..." })
 ```
 
 請求與回應沒有關聯 id，靠 `type` 比對——**同一個 action 併發兩次會拿錯結果**。這是舊設計的已知缺陷，移植時修掉。
@@ -131,7 +131,7 @@ canonicalize(path) 仍位於某個「已註冊專案根目錄」之內   ← 擋
 | 失敗 | 不 reject。讀不到的目錄跳過 |
 
 `PlanStat`：`{ path, name, mtimeMs, text }` — 只收 `.md`，非遞迴，單檔 ≤ 512 KB，總數 ≤ 300，跨目錄去重。
-`TrackingSignal`：`{ raw, mtimeMs }`，來源 `$XDG_CONFIG_HOME/specforge/active`（見 `SPEC-live-tracking.md` §4）。
+`TrackingSignal`：`{ raw, mtimeMs }`，來源 `$XDG_CONFIG_HOME/anchorline/active`（見 `SPEC-live-tracking.md` §4）。
 
 > `mtimeMs` 是**毫秒浮點數**。整個 live tracking 判定只靠它，精度掉了追蹤點就會抖。
 
@@ -242,7 +242,7 @@ gh search prs --author=@me --state=open --limit 30 --json repository,number,titl
 要參數化、不要硬編碼：
 
 - [ ] PATH 補丁 `/opt/homebrew/bin:...` 是 macOS 專屬，換成 §5 的探測
-- [ ] 訊號檔路徑 `$XDG_CONFIG_HOME/specforge/active`（Windows 沒有 XDG，用 `%APPDATA%`）
+- [ ] 訊號檔路徑 `$XDG_CONFIG_HOME/anchorline/active`（Windows 沒有 XDG，用 `%APPDATA%`）
 - [ ] 家目錄判斷（`editable` 用）
 - [ ] 副檔名白名單
 

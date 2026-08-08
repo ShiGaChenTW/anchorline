@@ -49,7 +49,7 @@ final class AnchorlineBridge: NSObject, WKScriptMessageHandler {
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
-        guard message.name == "specforge" else { return }
+        guard message.name == "anchorline" else { return }
 
         var action = ""
         if let dict = message.body as? [String: Any] {
@@ -712,7 +712,7 @@ final class AnchorlineBridge: NSObject, WKScriptMessageHandler {
         let base = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"]
             ?? FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent(".config").path
-        let url = URL(fileURLWithPath: base).appendingPathComponent("specforge/active")
+        let url = URL(fileURLWithPath: base).appendingPathComponent("anchorline/active")
         guard let raw = try? String(contentsOf: url, encoding: .utf8),
               let mdate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
                   .contentModificationDate
@@ -808,12 +808,12 @@ final class AnchorlineBridge: NSObject, WKScriptMessageHandler {
         (function(){
           try {
             var payload = \(json);
-            if (typeof window.__specforgeNativeFolderResult === 'function') {
-              window.__specforgeNativeFolderResult(payload);
+            if (typeof window.__anchorlineNativeFolderResult === 'function') {
+              window.__anchorlineNativeFolderResult(payload);
             }
-            window.dispatchEvent(new CustomEvent('specforge-native', { detail: payload }));
+            window.dispatchEvent(new CustomEvent('anchorline-native', { detail: payload }));
           } catch (e) {
-            console.error('specforge native callback', e);
+            console.error('anchorline native callback', e);
           }
         })();
         """
@@ -960,11 +960,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
         config.defaultWebpagePreferences.allowsContentJavaScript = true
 
-        config.userContentController.add(bridge, name: "specforge")
+        config.userContentController.add(bridge, name: "anchorline")
         let boot = WKUserScript(
             source: """
             window.__ANCHORLINE_NATIVE__ = true;
-            window.__specforgeHasNativeFolder = true;
+            window.__anchorlineHasNativeFolder = true;
             """,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true

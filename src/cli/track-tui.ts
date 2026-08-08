@@ -38,7 +38,7 @@ const CLI_DIR = dirname(fileURLToPath(import.meta.url));
 /** spec §4 的跨進程介面。目前沒有寫入端，讀不到就是段 2 全責。 */
 const SIGNAL_PATH = join(
   process.env.XDG_CONFIG_HOME || join(homedir(), ".config"),
-  "specforge",
+  "anchorline",
   "active",
 );
 
