@@ -1,7 +1,7 @@
 # Tauri × MIT — W1〜W3 實作
 
 **建立時間：** 2026-08-09 03:47
-**最後更新：** 2026-08-09 06:05
+**最後更新：** 2026-08-09 06:20
 **狀態：** 已完成（僅餘 repo 轉公開，需 Scott）
 
 ## 目標
@@ -43,7 +43,7 @@
 - [x] W3-4 上游相容承諾寫進 README：不解析 spec.md，該段呼叫 CLI <!-- sf:t=AE310QY8 -->
 - [x] W3-5 GitHub Actions：三平台 build + test <!-- sf:t=BJC12Q71 -->
 - [x] W3-6 資料落點文件：`.specforge/log` 是什麼、為何預設 gitignore、怎麼脫敏匯出 <!-- sf:t=MM1J4FK8 -->
-- [ ] W3-✅ 出貨儀式：repo 轉公開 —— **需 Scott 執行**，且轉公開前要先處理 plans/ 的個人策略內容（見下） <!-- sf:t=EYCK55RF -->
+- [ ] W3-✅ 出貨儀式：repo 轉公開 —— **需 Scott 執行**（不可逆對外動作）。內容面已清乾淨，指令見結束摘要 <!-- sf:t=EYCK55RF -->
 
 ### 明確不做
 
@@ -113,11 +113,18 @@
 - **Tauri 視窗未實機目視**：進程、視窗標題、無 crash 都驗過，但兩次
   screencapture 都拍到 Scott 其他視窗，隱私風險大於驗證價值，改用契約測試
 - **Linux 已驗**（Docker，Debian 12 / aarch64，15 測試全過）。**Windows 仍未實機**，只能靠 CI
-- **轉公開前必須處理**：`plans/` 有 13 份文件會一起公開，其中 `2026-08-09_dev-workbench-upgrade-eval.md` 提到 G0/G1/C0/C1（Scott 的 TELOS 目標與個人挑戰）、求職脈絡、以及「顧問作品」定位。那些是**策略文件不是技術文件**
+- ~~轉公開前必須處理 plans/ 的個人策略內容~~ → **已處理（2026-08-09 06:20）**。評估報告裡的 TELOS 代號、求職脈絡、個人挑戰全部改寫成中性技術理由，技術判斷一字未刪（789 行維持不變）。全 repo 重掃無殘留。轉公開的**內容面已無阻礙**，剩下的是 push 與切換可見性——那是 Scott 的動作
 - **W4 散佈未做**：未簽章，macOS Gatekeeper 與 Windows SmartScreen 都會擋
 
 ### 後續建議
 
-1. 把 repo 推上去讓 CI 跑一次——三平台 build 是唯一還沒被驗證的假設
-2. 三個出貨儀式做完，W1〜W3 才算真的收掉
-3. W4 簽章（$99/年）——MIT 開源實質上已經回答了「會有別人用」
+1. **push + 轉公開**（下方指令）。CI 一跑，Windows 就從「未驗證的假設」變成事實
+2. W4 簽章（$99/年）——MIT 開源實質上已經回答了「會有別人用」
+
+```bash
+git push -u origin 評估專案升級成為開發專案工作台
+git push origin v1.1.0-pre-workbench
+gh repo edit ShiGaChenTW/PM-SPEC-SCVB --visibility public --accept-visibility-change-consequences
+```
+
+第三行不可逆。跑之前建議先 `gh repo view --json visibility` 確認你在改的是對的 repo。
