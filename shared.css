@@ -7041,32 +7041,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
    全部專案總覽
    沿用儀表板的 d-* 語法；差別在頭條指的是「哪一個專案」而不是狀態。
    ═══════════════════════════════════════════════════════════════ */
-.rail-overview {
-  float: right;
-  padding: 0 7px;
-  border-radius: 5px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent);
-  background: color-mix(in oklab, var(--accent) 14%, transparent);
-  text-decoration: none;
-}
-.rail-overview:hover { background: color-mix(in oklab, var(--accent) 26%, transparent); }
 
-/* 「清單」跟「總覽」是同一層的兩個入口：總覽是彙整，清單是可篩可搜的原始列表。
-   用中性色跟總覽分開 —— 兩顆同樣是 accent 會互相搶。 */
-.rail-list {
-  float: right;
-  margin-right: 6px;
-  padding: 0 7px;
-  border-radius: 5px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--fg-2);
-  background: var(--inset, color-mix(in oklab, var(--fg) 10%, transparent));
-  text-decoration: none;
-}
-.rail-list:hover { color: var(--fg); background: color-mix(in oklab, var(--fg) 18%, transparent); }
 
 /* 總覽頭條窄一點，專案清單需要寬度放進度條 */
 .ov-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
@@ -7131,7 +7106,6 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   align-items: center;
   gap: 8px;
 }
-.rail-proj-head .rail-overview { float: none; margin-left: 0; }
 .rail-proj-add {
   margin-left: auto;
   width: 20px;
@@ -7880,21 +7854,6 @@ p.gd-warn {
 /* ═══════════════════════════════════════════════════════════════
    側欄：專案卡片下方的情境動作 + 工作區列的審閱佇列
    ═══════════════════════════════════════════════════════════════ */
-.rail-work-head { display: flex; align-items: center; gap: 8px; }
-.rail-review-chip {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 1px 7px;
-  border-radius: 5px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--fg-2);
-  background: var(--inset, color-mix(in oklab, var(--fg) 10%, transparent));
-  text-decoration: none;
-}
-.rail-review-chip:hover { color: var(--fg); background: color-mix(in oklab, var(--fg) 18%, transparent); }
 .rail-review-count {
   padding: 0 4px;
   border-radius: 4px;
@@ -7938,3 +7897,44 @@ p.gd-warn {
   color: var(--accent);
 }
 .d-take-btn:hover { background: color-mix(in oklab, var(--accent) 14%, transparent); }
+
+/* 工作區三個入口自成一列：專案總覽／專案清單／審閱佇列。
+   三者都是「看全部」的視圖，散在兩三個地方每次都要重新找。 */
+.rail-wsnav {
+  display: flex;
+  gap: 4px;
+  padding: 0 12px 8px;
+}
+.rail-wsnav-item {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--inset, color-mix(in oklab, var(--fg) 8%, transparent));
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--fg-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.rail-wsnav-item:hover { color: var(--fg); background: color-mix(in oklab, var(--fg) 16%, transparent); }
+.rail-wsnav-item.on {
+  border-color: color-mix(in oklab, var(--accent) 45%, transparent);
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  color: var(--fg);
+  font-weight: 600;
+}
+.rail-review-count {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--warn) 30%, transparent);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+/* 沒有待審時不要用警示色喊人 */
+.rail-review-count.is-zero { background: color-mix(in oklab, var(--fg) 14%, transparent); color: var(--muted); }
