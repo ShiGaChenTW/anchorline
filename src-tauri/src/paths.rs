@@ -103,7 +103,10 @@ pub fn editable(p: &Path) -> bool {
 /// 最後一條由 command 分流保證 —— 這個函式看不到動作是什麼。
 pub fn append_allowed(p: &Path, roots: &RegisteredRoots) -> bool {
     let target = canonical(p);
-    if target.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase())
+    if target
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
         != Some("jsonl".into())
     {
         return false;
@@ -113,7 +116,9 @@ pub fn append_allowed(p: &Path, roots: &RegisteredRoots) -> bool {
     }
     // 相對路徑必須落在 .specforge/ 底下。用 components 比對而不是字串 contains，
     // 否則 `~/x/not-.specforge-really/a.jsonl` 這種名字會過。
-    let Ok(set) = roots.0.lock() else { return false };
+    let Ok(set) = roots.0.lock() else {
+        return false;
+    };
     set.iter().any(|root| {
         target
             .strip_prefix(root)
@@ -190,9 +195,15 @@ mod tests {
         // 不在 .specforge/ 底下
         assert!(!append_allowed(&tmp.join("other/a.jsonl"), &roots));
         // 名字很像但不是那個目錄
-        assert!(!append_allowed(&tmp.join(".specforge-really/a.jsonl"), &roots));
+        assert!(!append_allowed(
+            &tmp.join(".specforge-really/a.jsonl"),
+            &roots
+        ));
         // 逃出根目錄
-        assert!(!append_allowed(&tmp.join("../escape/.specforge/a.jsonl"), &roots));
+        assert!(!append_allowed(
+            &tmp.join("../escape/.specforge/a.jsonl"),
+            &roots
+        ));
     }
 
     #[test]

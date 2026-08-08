@@ -140,9 +140,7 @@ pub fn openspec_list(dir: &Path, overrides: &CliOverrides) -> CliResult {
     match locate("openspec", overrides) {
         Some(bin) => match run(&bin, &["list", "--json"], Some(dir)) {
             Some(s) => CliResult::Ok(s),
-            None => CliResult::Missing(
-                "openspec 執行失敗，或這不是 openspec 專案。".into(),
-            ),
+            None => CliResult::Missing("openspec 執行失敗，或這不是 openspec 專案。".into()),
         },
         None => CliResult::Missing(
             "找不到 openspec。安裝：npm i -g @fission-ai/openspec，或在設定裡指定路徑。".into(),
@@ -180,9 +178,7 @@ pub fn gh_search_prs(overrides: &CliOverrides) -> CliResult {
             Some(s) => CliResult::Ok(s),
             None => CliResult::Missing("gh 執行失敗，可能尚未登入（gh auth login）。".into()),
         },
-        None => CliResult::Missing(
-            "找不到 gh。安裝：brew install gh，或在設定裡指定路徑。".into(),
-        ),
+        None => CliResult::Missing("找不到 gh。安裝：brew install gh，或在設定裡指定路徑。".into()),
     }
 }
 
@@ -243,7 +239,11 @@ mod tests {
     #[test]
     fn locate_finds_a_universally_present_binary() {
         let o = CliOverrides::default();
-        let tool = if cfg!(target_os = "windows") { "cmd" } else { "sh" };
+        let tool = if cfg!(target_os = "windows") {
+            "cmd"
+        } else {
+            "sh"
+        };
         assert!(locate(tool, &o).is_some(), "PATH 探測壞了");
     }
 

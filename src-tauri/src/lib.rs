@@ -8,6 +8,17 @@ mod commands;
 mod exec;
 mod paths;
 
+/// 契約測試用的入口。
+///
+/// `#[tauri::command]` 函式吃 `State<..>`，整合測試裡拿不到 App handle，
+/// 所以把可測的核心抽出來從這裡露出去。**只給測試用**——正式流程一律走
+/// command，那裡才有守門。
+pub mod testing {
+    pub use crate::commands::{append_line, scan_plans};
+    pub use crate::exec::strip_ansi;
+    pub use crate::paths::{append_allowed, editable, normalize_line, RegisteredRoots};
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()

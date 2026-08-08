@@ -1,7 +1,7 @@
 # Tauri × MIT — W1〜W3 實作
 
 **建立時間：** 2026-08-09 03:47
-**最後更新：** 2026-08-09 03:55
+**最後更新：** 2026-08-09 04:35
 **狀態：** 進行中
 
 ## 目標
@@ -17,11 +17,11 @@
 ### W1 — Tauri 遷移
 
 - [x] W1-1 凍結 bridge 契約 → `docs/BRIDGE.md`（12 action 的輸入／輸出／錯誤形狀） <!-- sf:t=8SDBME8W -->
-- [ ] W1-2 Tauri 骨架：`src-tauri/`、`tauri.conf.json`、shell allowlist <!-- sf:t=PFD99YKD -->
-- [ ] W1-3a 移植五個承載功能的 action：projectStats · trackingScan · appendFile · openspecStatus · ghStatus <!-- sf:t=H86YKX5P -->
-- [ ] W1-3b 移植其餘：pickFolder · pickProjectFolder · readFile · writeFile · openPath · ping <!-- sf:t=7ZK3RH1R -->
-- [ ] W1-4 新增 `src/lib/native.ts` 單一抽象層，改寫 8 個碰 bridge 的 TS 檔 <!-- sf:t=NQXPZ6C7 -->
-- [ ] W1-5 契約測試：Rust 端與 `docs/BRIDGE.md` 一致 <!-- sf:t=MK44H1WP -->
+- [x] W1-2 Tauri 骨架：`src-tauri/`、`tauri.conf.json`、shell allowlist <!-- sf:t=PFD99YKD -->
+- [x] W1-3a 移植五個承載功能的 action：projectStats · trackingScan · appendFile · openspecStatus · ghStatus <!-- sf:t=H86YKX5P -->
+- [x] W1-3b 移植其餘：pickFolder · pickProjectFolder · readFile · writeFile · openPath · ping <!-- sf:t=7ZK3RH1R -->
+- [x] W1-4 新增 `src/lib/native.ts` 單一抽象層，改寫 8 個碰 bridge 的 TS 檔 <!-- sf:t=NQXPZ6C7 -->
+- [x] W1-5 契約測試：Rust 端與 `docs/BRIDGE.md` 一致 <!-- sf:t=MK44H1WP -->
 - [ ] W1-6 三平台建置：macOS 本機驗證 + CI 設定 <!-- sf:t=VDYQG8F1 -->
 - [ ] W1-✅ 出貨儀式：在非 mac 環境跑起來並截圖 <!-- sf:t=27Z4BYVF -->
 
@@ -59,6 +59,9 @@
 ## 決策紀錄
 
 - 03:47 — W1-4 改成先做一層 `native.ts` 抽象再改 8 個檔；理由：postMessage+event 換成 invoke() 是同一種變換做八次，抽出來只做一次，也讓契約有單一落點
+- 04:10 — 不引入 tauri-plugin-shell；理由：那個 plugin 讓前端呼叫 shell，即使配 allowlist 參數仍由前端組。改成 Rust 端 std::process::Command 把參數寫死，比 allowlist 嚴格
+- 04:25 — 移植中發現契約漏了 ScannedFile.size，三處同步補（Rust/native.ts/BRIDGE.md）。這正是先凍結契約的價值：漏的欄位在編譯期就被抓出來
+- 04:30 — 放棄用 screencapture 驗證原生視窗；理由：兩次都拍到 Scott 其他視窗，隱私風險大於驗證價值。改用契約測試
 
 ## 阻塞 / 待決議
 
