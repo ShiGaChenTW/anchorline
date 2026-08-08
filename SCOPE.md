@@ -50,7 +50,7 @@
 
 ### 重寫（Swift → Rust）
 
-`mac-app-build/main.swift` **1157 行 · 12 個 action**：
+`mac-app-build/main.swift` **1157 行 · 12 個 action**（移植完成後已刪，見 git 歷史）：
 
 ```
 pickFolder  pickProjectFolder  projectStats  onefetch  fastfetch
