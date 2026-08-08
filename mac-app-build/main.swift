@@ -8,6 +8,43 @@ import WebKit
 final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
     weak var webView: WKWebView?
 
+    /**
+     * 這個 session 裡使用者透過 NSOpenPanel 明確授權過的專案根目錄。
+     *
+     * appendFile 的守門靠它 —— **不接受 JS 傳任意路徑當根目錄**。JS 只能說
+     * 「寫到這個路徑」，能不能寫由這份清單決定，而清單只有使用者親手選過的資料夾
+     * 才進得來。這是 pickProjectFolder 之外唯一的加入途徑。
+     */
+    private var registeredRoots = Set<String>()
+
+    func registerRoot(_ url: URL) {
+        registeredRoots.insert(url.standardizedFileURL.path)
+    }
+
+    /**
+     * append 的路徑謂詞。**與 isEditablePath 是兩條不同的規則，刻意不共用。**
+     *
+     * isEditablePath 管的是「改一個使用者點開的既有檔」；這裡管的是
+     * 「在專案裡建立並持續追加一份稽核軌跡」。後者會建新檔，所以守門必須更緊：
+     *
+     *   1. resolvingSymlinksInPath 之後仍落在某個「已授權根目錄」內（擋 symlink 逃逸）
+     *   2. 相對路徑必須是 .specforge/ 底下
+     *   3. 副檔名只允許 jsonl
+     *   4. 只 append，永不覆寫、永不刪除（由呼叫端的 action 分流保證）
+     */
+    func appendAllowed(_ url: URL) -> Bool {
+        let resolved = url.resolvingSymlinksInPath().standardizedFileURL
+        guard resolved.pathExtension.lowercased() == "jsonl" else { return false }
+        for root in registeredRoots {
+            let rootResolved = URL(fileURLWithPath: root).resolvingSymlinksInPath()
+                .standardizedFileURL.path
+            guard resolved.path.hasPrefix(rootResolved + "/") else { continue }
+            let rel = String(resolved.path.dropFirst(rootResolved.count + 1))
+            if rel.hasPrefix(".specforge/") { return true }
+        }
+        return false
+    }
+
     func userContentController(
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
@@ -168,6 +205,62 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
             }
             NSWorkspace.shared.open(url)
             postToJS(["type": "openPath", "path": url.path])
+        case "appendFile":
+            // 稽核軌跡的寫入端。**真 O_APPEND**，不是 read-modify-write ——
+            // 三類 writer（App 內動作 / Claude Code hook / git 回填）會併發，
+            // 讀整檔再寫回會直接吃掉別人剛寫的事件。
+            //
+            // 與 writeFile 分成兩個 action 也是刻意的：這個永遠不覆寫、不刪除，
+            // 而且守門走 appendAllowed 而不是 isEditablePath（規則更緊，見上）。
+            guard let dict = message.body as? [String: Any],
+                  let path = dict["path"] as? String, !path.isEmpty,
+                  let line = dict["line"] as? String
+            else {
+                postToJS(["type": "fileError", "message": "缺少 path 或 line"])
+                return
+            }
+            let logURL = URL(fileURLWithPath: path).standardizedFileURL
+            guard appendAllowed(logURL) else {
+                postToJS([
+                    "type": "fileError",
+                    "message": "不能追加到這個路徑：必須是已授權專案內的 .specforge/*.jsonl",
+                    "path": path,
+                ])
+                return
+            }
+            // 單行、單筆、有結尾換行。上限 4KB 保住 append 的原子性。
+            var payloadLine = line.replacingOccurrences(of: "\n", with: " ")
+            if payloadLine.utf8.count > 4096 { payloadLine = String(payloadLine.prefix(2000)) }
+            payloadLine += "\n"
+            guard let data = payloadLine.data(using: .utf8) else {
+                postToJS(["type": "fileError", "message": "編碼失敗", "path": logURL.path])
+                return
+            }
+            do {
+                let fm = FileManager.default
+                let dir = logURL.deletingLastPathComponent()
+                try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+                // *.jsonl merge=union：append-only 檔在分支合併時 100% 衝突在檔尾，
+                // 而事件自帶時間戳可重排，union 是一行解法。只在缺檔時種下，不覆寫。
+                let attrs = dir.deletingLastPathComponent().appendingPathComponent(".gitattributes")
+                if !fm.fileExists(atPath: attrs.path) {
+                    try? "*.jsonl merge=union\n".write(to: attrs, atomically: true, encoding: .utf8)
+                }
+                if !fm.fileExists(atPath: logURL.path) {
+                    fm.createFile(atPath: logURL.path, contents: nil)
+                }
+                let handle = try FileHandle(forWritingTo: logURL)
+                defer { try? handle.close() }
+                try handle.seekToEnd()
+                try handle.write(contentsOf: data)
+                postToJS(["type": "fileAppended", "path": logURL.path])
+            } catch {
+                postToJS([
+                    "type": "fileError",
+                    "message": "追加失敗：\(error.localizedDescription)",
+                    "path": logURL.path,
+                ])
+            }
         case "openspecStatus":
             // 唯讀。子指令全部寫死，只有工作目錄來自 JS —— 與 git() 同一套注入防護。
             // 找不到 openspec 就回 openspecMissing，比照 fastfetch 的處理：安靜降級，
@@ -241,7 +334,7 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
                 "native": true,
                 "capabilities": [
                     "pickFolder", "pickProjectFolder", "createDirectories", "trackingScan",
-                    "openspecStatus", "ghStatus",
+                    "openspecStatus", "ghStatus", "appendFile",
                 ],
             ])
         default:
@@ -284,6 +377,9 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
                 defer {
                     if accessed { url.stopAccessingSecurityScopedResource() }
                 }
+
+                // 使用者親手選過 = 授權。這是 registeredRoots 唯一的加入途徑。
+                DispatchQueue.main.async { self.registerRoot(url) }
 
                 let files = Self.scanDirectory(url)
                 let payload: [String: Any] = [

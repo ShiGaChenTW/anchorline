@@ -8,6 +8,18 @@ import { initTheme } from "../lib/theme";
 import { sortByRecency, trackingTarget } from "../lib/tracking";
 import { canScanPlans, plansDirsOf, requestTrackingScan } from "../lib/tracking-bridge";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+import { byNewest, parseLog, type LogEvent } from "../lib/event-log";
+import { hookInstallSnippet } from "../lib/event-writer";
+import {
+  buildResumeCard,
+  exportCsv,
+  exportMarkdown,
+  filterForExport,
+  kindLabel,
+  todayLine,
+  todaySummary,
+} from "../lib/log-views";
+import { buildReplay, replayMarkdown } from "../lib/replay";
 
 /**
  * Vite 編譯期嵌入本 repo 自己的 plans/*.md。
@@ -20,6 +32,19 @@ const planFiles = import.meta.glob("../../plans/*.md", {
   import: "default",
   eager: true,
 }) as Record<string, string>;
+
+/**
+ * 稽核軌跡的事件。桌面版由 bridge 讀 .specforge/log/*.jsonl 灌進來；
+ * 瀏覽器版永遠是空的 —— 那是誠實的降級，不是 bug。
+ */
+let auditEvents: LogEvent[] = [];
+
+/** 讓桌面版把讀到的 JSONL 交進來。壞行由 parseLog 跳過，不會毀掉整份。 */
+export function loadAuditLog(text: string): number {
+  const { events, skipped } = parseLog(text);
+  auditEvents = events;
+  return skipped;
+}
 
 type PlanEntry = {
   id: string;
@@ -373,6 +398,97 @@ if (__authed) {
       .join("")}</dl>`;
   }
 
+  /**
+   * 稽核軌跡的三層。**預設停在第一層。**
+   *
+   * 一條無限捲動的事件流對 ADHD 使用者是注意力黑洞：進得去出不來，看完沒有產出。
+   * 整理資料很爽，但那不是做事。所以時間軸要點兩下才到，而打開時看到的是
+   * 「回到工作」三行——context recovery，不是稽核。兩個價值主張分開。
+   */
+  function renderAudit() {
+    const el = document.getElementById("audit-panel");
+    if (!el) return;
+    const p = plans[idx];
+    if (!p) {
+      el.innerHTML = "";
+      return;
+    }
+
+    const now = Date.now();
+    const openTasks = p.meta.steps
+      .filter((s) => s.state === "pending")
+      .map((s) => ({ id: s.id, text: s.text }));
+    const card = buildResumeCard(auditEvents, openTasks, now);
+    const groups = todaySummary(auditEvents, now);
+
+    const empty = !auditEvents.length;
+    el.innerHTML = `<section class="tk-audit">
+      <div class="tk-hd">稽核軌跡</div>
+
+      <div class="tk-resume">
+        <p class="tk-resume-a">上次動 ${escapeHtml(card.lastActive)}</p>
+        <p class="tk-resume-b">${escapeHtml(card.lastDone)}</p>
+        <p class="tk-resume-c">${escapeHtml(card.nextOpen)}</p>
+      </div>
+
+      ${
+        empty
+          ? `<p class="tk-audit-empty">還沒有事件。裝上 Claude Code hook 之後，agent 每次編輯都會留下一筆。
+             <button type="button" class="btn btn-sm" id="btn-hook-snippet">複製安裝指令</button></p>`
+          : `<details class="tk-audit-more">
+              <summary>${escapeHtml(todayLine(groups))}</summary>
+              <details class="tk-audit-timeline">
+                <summary>完整時間軸（${auditEvents.length} 筆）</summary>
+                <ul class="tk-timeline">${byNewest(auditEvents)
+                  .slice(0, 200)
+                  .map(
+                    (e) =>
+                      `<li><span class="mono">${escapeHtml(e.ts.slice(0, 16).replace("T", " "))}</span>
+                       <b>${escapeHtml(kindLabel(e.kind))}</b>
+                       <span class="muted">${escapeHtml(e.subject)}</span></li>`
+                  )
+                  .join("")}</ul>
+                <p class="tk-audit-actions">
+                  <button type="button" class="btn btn-sm" id="btn-export-md">匯出 Markdown</button>
+                  <button type="button" class="btn btn-sm" id="btn-export-csv">匯出 CSV</button>
+                  <button type="button" class="btn btn-sm" id="btn-export-replay">治理鏈 replay</button>
+                </p>
+              </details>
+            </details>`
+      }
+    </section>`;
+
+    document.getElementById("btn-hook-snippet")?.addEventListener("click", () => {
+      // 只複製，不代寫 ~/.claude/settings.json —— 那是使用者的全域設定
+      void navigator.clipboard?.writeText(hookInstallSnippet());
+      toast("已複製。貼進 ~/.claude/settings.json 的 hooks 區段");
+    });
+    document.getElementById("btn-export-md")?.addEventListener("click", () => {
+      download(`稽核軌跡-${p.name}.md`, exportMarkdown(filterForExport(auditEvents, {}), `稽核軌跡 · ${p.meta.title}`));
+    });
+    document.getElementById("btn-export-csv")?.addEventListener("click", () => {
+      download(`稽核軌跡-${p.name}.csv`, exportCsv(filterForExport(auditEvents, {})));
+    });
+    // 治理鏈 replay：作品用。撰寫者族系從專案的 authorAgentFamily 來，
+    // 職務分離違規會被標出來 —— 一條沒有標示違規的治理鏈沒有說服力。
+    document.getElementById("btn-export-replay")?.addEventListener("click", () => {
+      const st = store.get();
+      const proj = st.projects.find((x) => x.id === st.activeProjectId);
+      const r = buildReplay(auditEvents, `prd:${proj?.id ?? ""}`, proj?.authorAgentFamily ?? null, Date.now());
+      download(`治理鏈-${p.name}.md`, replayMarkdown(r, `治理鏈 · ${proj ? proj.title : p.meta.title}`));
+    });
+  }
+
+  function download(name: string, text: string) {
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast(`已匯出 ${name}`);
+  }
+
   function render(force = false) {
     const sig = signature();
     if (!force && sig === lastSig) return;
@@ -382,6 +498,7 @@ if (__authed) {
     renderMain();
     renderGates();
     renderLayers();
+    renderAudit();
   }
 
   function select(i: number) {
