@@ -63,12 +63,33 @@ fn candidate_dirs() -> Vec<PathBuf> {
     v
 }
 
-fn exe_name(tool: &str) -> String {
-    if cfg!(target_os = "windows") {
-        format!("{tool}.cmd")
-    } else {
-        tool.to_string()
+/// Windows 上一個「指令」可能是好幾種副檔名的檔案。
+///
+/// **這裡原本只試 `.cmd`，那是個真 bug**：`.cmd` 是 npm global 裝出來的 shim
+/// （`openspec.cmd`），而原生二進位是 `.exe`（`git.exe` / `gh.exe`）。
+/// 只試一種等於在 Windows 上永遠找不到 git 與 gh —— 而那兩個是必要依賴。
+///
+/// 抓到它的是三平台 CI 的 `locate_finds_a_universally_present_binary`
+/// （macOS/Linux 找 `sh`、Windows 找 `cmd`）。在 macOS 上跑一萬次都不會紅。
+///
+/// 順序照 `PATHEXT`（Windows 自己的優先序），拿不到就退回常見的三種。
+/// 最後補一個裸名，因為使用者在設定裡指定的路徑可能沒有副檔名。
+fn exe_candidates(tool: &str) -> Vec<String> {
+    if !cfg!(target_os = "windows") {
+        return vec![tool.to_string()];
     }
+    let pathext = std::env::var("PATHEXT").unwrap_or_default();
+    let mut exts: Vec<String> = pathext
+        .split(';')
+        .map(|e| e.trim().to_ascii_lowercase())
+        .filter(|e| e.starts_with('.'))
+        .collect();
+    if exts.is_empty() {
+        exts = vec![".exe".into(), ".cmd".into(), ".bat".into()];
+    }
+    let mut v: Vec<String> = exts.iter().map(|e| format!("{tool}{e}")).collect();
+    v.push(tool.to_string());
+    v
 }
 
 /// 找一個 CLI。順序見 `docs/BRIDGE.md` §5。
@@ -82,7 +103,7 @@ pub fn locate(tool: &str, overrides: &CliOverrides) -> Option<PathBuf> {
     // 2. PATH
     if let Some(paths) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&paths) {
-            for name in [tool.to_string(), exe_name(tool)] {
+            for name in exe_candidates(tool) {
                 let c = dir.join(&name);
                 if c.is_file() {
                     return Some(c);
@@ -92,7 +113,7 @@ pub fn locate(tool: &str, overrides: &CliOverrides) -> Option<PathBuf> {
     }
     // 3. 常見安裝點
     for dir in candidate_dirs() {
-        for name in [tool.to_string(), exe_name(tool)] {
+        for name in exe_candidates(tool) {
             let c = dir.join(&name);
             if c.is_file() {
                 return Some(c);
@@ -245,6 +266,29 @@ mod tests {
             "sh"
         };
         assert!(locate(tool, &o).is_some(), "PATH 探測壞了");
+    }
+
+    /// 這條守的是「Windows 上只試 .cmd」那個 bug。
+    /// `.cmd` 是 npm shim，`.exe` 是原生二進位 —— 少一個就少一半的工具。
+    #[test]
+    fn exe_candidates_covers_exe_and_cmd_on_windows() {
+        let c = exe_candidates("git");
+        if cfg!(target_os = "windows") {
+            assert!(
+                c.iter().any(|x| x == "git.exe"),
+                "漏了 .exe：git/gh 會找不到"
+            );
+            assert!(
+                c.iter().any(|x| x == "git.cmd"),
+                "漏了 .cmd：npm global 會找不到"
+            );
+            assert!(
+                c.iter().any(|x| x == "git"),
+                "漏了裸名：使用者指定的路徑可能沒副檔名"
+            );
+        } else {
+            assert_eq!(c, vec!["git".to_string()]);
+        }
     }
 
     #[test]
