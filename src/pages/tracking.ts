@@ -134,37 +134,103 @@ if (__authed) {
     updateUserRailFooter(toRailUser(u));
   }
 
+  /**
+   * 計劃清單依狀態分組。
+   *
+   * 13 份計劃裡有 9 份是 `未知 · 0/0 · 0%`（沒有 Plan Steps 區段的筆記檔），
+   * 全部平鋪等重量，等於把「哪一份在動」藏進雜訊裡。分組後預設只看到
+   * 追蹤中／進行中，沒有步驟的收進可展開的那一組 —— 需要時打開就有，
+   * 不需要時不佔視野。
+   */
+  type Group = { key: string; label: string; items: { p: PlanEntry; i: number }[]; open: boolean };
+
+  function groupPlans(): Group[] {
+    const tracked: Group["items"] = [];
+    const active: Group["items"] = [];
+    const done: Group["items"] = [];
+    const noSteps: Group["items"] = [];
+    plans.forEach((p, i) => {
+      const entry = { p, i };
+      if (live && p.path === trackingPath) tracked.push(entry);
+      else if (p.meta.total_steps === 0) noSteps.push(entry);
+      else if (p.meta.done_steps >= p.meta.total_steps) done.push(entry);
+      else active.push(entry);
+    });
+    return [
+      { key: "tracked", label: "agent 正在寫", items: tracked, open: true },
+      { key: "active", label: "進行中", items: active, open: true },
+      { key: "done", label: "已完成", items: done, open: done.length <= 4 },
+      { key: "none", label: "沒有步驟的檔案", items: noSteps, open: false },
+    ].filter((g) => g.items.length);
+  }
+
+  function planRow({ p, i }: { p: PlanEntry; i: number }): string {
+    const pct = planProgressPct(p.meta);
+    const isTracked = live && p.path === trackingPath;
+    return `<button type="button" class="tk-row${i === idx ? " on" : ""}${isTracked ? " tracked" : ""}" data-i="${i}">
+      <span class="tk-row-t">${escapeHtml(p.meta.title)}</span>
+      <span class="tk-row-m">
+        ${
+          p.meta.total_steps
+            ? `<span class="tk-mini"><i style="width:${pct}%"></i></span><span class="tk-num">${p.meta.done_steps}/${p.meta.total_steps}</span>`
+            : `<span class="tk-num tk-num--none">沒有步驟</span>`
+        }
+      </span>
+    </button>`;
+  }
+
   function renderList() {
     const el = document.getElementById("plan-list");
     if (!el) return;
     if (!plans.length) {
-      // 說出範圍，否則空清單看起來像壞掉。清單是照當前專案過濾的，
-      // 使用者要能一眼看出「是這個專案沒有」而不是「功能沒反應」。
       const name = activeProjectName();
       const scope = name ? `「${name}」` : "當前專案";
-      el.innerHTML = `<div style="padding:16px;color:var(--muted)">${scope} 的 plans/ 尚無計劃檔</div>`;
+      el.innerHTML = `<div class="tk-empty">
+        <p>${escapeHtml(scope)} 的 <code>plans/</code> 還沒有計劃檔。</p>
+        <p class="tk-empty-how">在專案資料夾建一個 <code>plans/</code>，放入含 <code>## Plan Steps</code> 的 markdown，這裡就會列出進度。</p>
+      </div>`;
       return;
     }
-    el.innerHTML = plans
-      .map((p, i) => {
-        const pct = planProgressPct(p.meta);
-        // 追蹤點與選取態刻意分開：同一列可以同時是「我在看的」和「agent 在寫的」，
-        // 也經常不是同一列。
-        const dot =
-          live && p.path === trackingPath
-            ? `<span title="追蹤中 · agent 最近寫入這一份" style="color:var(--accent);margin-left:6px">•</span>`
-            : "";
-        return `<button type="button" class="tui-plan-item ${i === idx ? "active" : ""}" data-i="${i}">
-          <div class="t">${escapeHtml(p.meta.title)}${dot}</div>
-          <div class="m">${escapeHtml(p.meta.status)} · ${p.meta.done_steps}/${p.meta.total_steps} · ${pct}%</div>
-        </button>`;
-      })
+
+    el.innerHTML = groupPlans()
+      .map(
+        (g) => `<details class="tk-group" ${g.open ? "open" : ""}>
+          <summary><span>${g.label}</span><span class="tk-count">${g.items.length}</span></summary>
+          <div class="tk-rows">${g.items.map(planRow).join("")}</div>
+        </details>`,
+      )
       .join("");
-    el.querySelectorAll(".tui-plan-item").forEach((btn) => {
-      (btn as HTMLButtonElement).onclick = () => {
-        select(Number((btn as HTMLElement).dataset.i));
-      };
+
+    el.querySelectorAll<HTMLButtonElement>(".tk-row").forEach((btn) => {
+      btn.onclick = () => select(Number(btn.dataset.i));
     });
+  }
+
+  /**
+   * 「現在該做什麼」。
+   *
+   * 這一頁原本最上面寫的是 `下一步：—`，等於花掉最顯眼的位置說「不知道」。
+   * 改成永遠給一個具體動作：有未完成步驟就指那一步，沒有步驟就說怎麼補，
+   * 全做完就指向下一個該處理的計劃。找不到事做才是好消息，也要說出來。
+   */
+  function nextActionHtml(p: PlanEntry | undefined): string {
+    if (!p) return "";
+    const pending = p.meta.steps.find((s) => s.state === "pending");
+    if (pending) {
+      return `<p class="tk-do-what">${escapeHtml(pending.text)}</p>
+        <p class="tk-do-why">這是這份計劃第一個還沒完成的步驟。</p>`;
+    }
+    if (!p.meta.total_steps) {
+      return `<p class="tk-do-what">這份檔案還沒有可追蹤的步驟</p>
+        <p class="tk-do-why">加一個 <code>## Plan Steps</code> 區段，底下用 <code>- [ ]</code> 列步驟，進度就會自動算。</p>`;
+    }
+    const nextPlan = groupPlans().find((g) => g.key === "active")?.items[0];
+    return `<p class="tk-do-what tk-do-clear">這份做完了</p>
+      <p class="tk-do-why">${
+        nextPlan
+          ? `下一份可以接「${escapeHtml(nextPlan.p.meta.title)}」。`
+          : "沒有其他進行中的計劃了。"
+      }</p>`;
   }
 
   function renderMain() {
@@ -173,99 +239,138 @@ if (__authed) {
     const sum = document.getElementById("plan-summary");
     const steps = document.getElementById("step-list");
     if (!p) {
-      if (hd) hd.textContent = "步驟";
+      if (hd) hd.textContent = "還沒選計劃";
       if (sum) sum.innerHTML = "";
-      if (steps) steps.innerHTML = `<div style="padding:20px;color:var(--muted)">無計劃</div>`;
+      if (steps) steps.innerHTML = `<div class="tk-empty"><p>從左邊挑一份計劃。</p></div>`;
       return;
     }
     const pct = planProgressPct(p.meta);
-    if (hd) hd.textContent = `步驟 · ${p.name}`;
+    if (hd) hd.innerHTML = `<span class="mono">${escapeHtml(p.name)}</span>`;
+
     if (sum) {
       sum.innerHTML = `
-        <div style="font-weight:600;font-size:14px;color:var(--fg);font-family:var(--font-body)">${escapeHtml(p.meta.title)}</div>
-        <div style="color:var(--muted);margin-top:4px">${escapeHtml(p.meta.status)} · 建立 ${escapeHtml(p.meta.created)} · 更新 ${escapeHtml(p.meta.updated)}</div>
-        <div class="tui-bar"><i style="width:${pct}%"></i></div>
-        <div style="color:var(--muted)">${p.meta.done_steps} done · ${p.meta.pending_steps} pending · ${p.meta.skipped_steps} skipped · ${pct}%</div>
-        <div style="margin-top:8px;color:var(--fg-2)">下一步：<strong style="color:var(--accent)">${escapeHtml(p.meta.next_step)}</strong></div>
+        <h2 class="tk-title">${escapeHtml(p.meta.title)}</h2>
+        <div class="tk-do">
+          <p class="tk-do-k">現在該做什麼</p>
+          ${nextActionHtml(p)}
+        </div>
+        <div class="tk-prog">
+          <div class="tk-bar"><i style="width:${pct}%"></i></div>
+          <p class="tk-prog-m">
+            <strong>${p.meta.done_steps}/${p.meta.total_steps}</strong> 完成
+            ${p.meta.skipped_steps ? ` · 跳過 ${p.meta.skipped_steps}` : ""}
+            · 更新 ${escapeHtml(p.meta.updated)}
+          </p>
+        </div>
       `;
     }
+
     if (steps) {
       if (!p.meta.steps.length) {
-        steps.innerHTML = `<div style="padding:16px;color:var(--muted)">此檔無 Plan Steps checkbox</div>`;
+        steps.innerHTML = `<div class="tk-empty">
+          <p>這個檔案沒有 <code>## Plan Steps</code> 區段，所以算不出進度。</p>
+          <p class="tk-empty-how">格式是這樣：</p>
+          <pre class="tk-code"><code>## Plan Steps
+- [ ] 第一步
+- [x] 已完成的那一步</code></pre>
+        </div>`;
       } else {
-        steps.innerHTML = p.meta.steps
-          .map((s) => {
-            const mark = s.state === "done" ? "✔" : s.state === "skipped" ? "—" : "○";
-            return `<div class="tui-step ${s.state}"><span class="mark">${mark}</span><span>${escapeHtml(s.text)}</span></div>`;
-          })
+        // 未完成的排前面：要動手的事不該混在一堆勾好的後面往下找
+        const order = { pending: 0, skipped: 1, done: 2 } as const;
+        const sorted = p.meta.steps
+          .map((s, n) => ({ s, n }))
+          .sort((a, b) => order[a.s.state] - order[b.s.state] || a.n - b.n);
+        steps.innerHTML = sorted
+          .map(
+            ({ s }) => `<div class="tk-step ${s.state}">
+              <span class="tk-step-mark" aria-hidden="true"></span>
+              <span class="tk-step-t">${escapeHtml(s.text)}</span>
+            </div>`,
+          )
           .join("");
       }
     }
   }
 
+  /**
+   * 結構檢查。
+   *
+   * 原本一次列 7 條（1 BLOCK + 4 WARN + 2 PASS）。同時要記住七件事已經超過
+   * 工作記憶能扛的量，而且 PASS 是「不用做的事」—— 把它排在待處理項目旁邊
+   * 只會稀釋注意力。改成：只展開最該先處理的那一條，其餘收起來；PASS 不列。
+   */
   function renderGates() {
     const el = document.getElementById("gate-panel");
     if (!el) return;
     const report = evaluatePrdGates(store.get());
     const foot = document.getElementById("tui-footer");
     if (foot) {
-      // 空狀態不暴露判定細節（訊號過期？退回段 2？）—— 內部機制對使用者無意義
       const tracked = plans.find((p) => p.path === trackingPath);
       const liveLine = !live
         ? "靜態快照 · 桌面版才能即時追蹤"
         : tracked
-          ? `追蹤中 • ${tracked.name}`
+          ? `追蹤中 · ${tracked.name}`
           : "等待 agent 開始執行…";
-      foot.textContent = `${gateSummaryLine(report)} · j/k 切計劃 · t 跳到追蹤中 · score ${report.score} · ${liveLine}`;
+      foot.innerHTML = `<span>${escapeHtml(gateSummaryLine(report))}</span>
+        <span class="tk-foot-sp"></span>
+        <span class="tk-keys"><kbd>j</kbd><kbd>k</kbd> 切計劃　<kbd>t</kbd> 跳到追蹤中</span>
+        <span class="tk-foot-live">${escapeHtml(liveLine)}</span>`;
     }
-    el.innerHTML =
-      `<div style="margin-bottom:8px;color:var(--fg)">score <strong>${report.score}</strong> · block ${report.blocks} · warn ${report.warns}</div>` +
-      report.findings
-        .map((f) => {
-          const cls =
-            f.level === "block" ? "pill-draft" : f.level === "warn" ? "pill-review" : "pill-approved";
-          const label = f.level === "block" ? "BLOCK" : f.level === "warn" ? "WARN" : "PASS";
-          return `<div class="gate-item">
-            <span class="pill ${cls} lv">${label}</span>
-            <div><div style="color:var(--fg)">${escapeHtml(f.label)}</div>
-            <div style="color:var(--muted);margin-top:2px">${escapeHtml(f.detail)}</div></div>
-          </div>`;
-        })
-        .join("");
+
+    const actionable = report.findings.filter((f) => f.level !== "pass");
+    if (!actionable.length) {
+      el.innerHTML = `<div class="tk-gate-ok">結構檢查全部通過。</div>`;
+      return;
+    }
+    const [first, ...rest] = actionable.sort((a, b) =>
+      a.level === b.level ? 0 : a.level === "block" ? -1 : 1,
+    );
+    const card = (f: (typeof actionable)[number]) => `<div class="tk-gate tk-gate--${f.level}">
+      <p class="tk-gate-lv">${f.level === "block" ? "先處理" : "該處理"}</p>
+      <p class="tk-gate-t">${escapeHtml(f.label)}</p>
+      <p class="tk-gate-d">${escapeHtml(f.detail)}</p>
+    </div>`;
+
+    el.innerHTML = `${card(first)}${
+      rest.length
+        ? `<details class="tk-gate-rest"><summary>還有 ${rest.length} 項<span class="tk-count">${rest.length}</span></summary>${rest
+            .map(card)
+            .join("")}</details>`
+        : ""
+    }`;
   }
 
+  /**
+   * L1–L6 進度。三張空的中繼卡（目標／最近決策／阻塞）原本永遠佔著位置，
+   * 內容多半是「—」。改成有值才畫。
+   */
   function renderLayers() {
     const el = document.getElementById("layer-panel");
     if (!el) return;
     const hasPlan = plans.some((p) => p.meta.total_steps > 0);
     const layers = deriveFlowLayers(store.get(), { hasPlanSteps: hasPlan });
-    el.innerHTML = layers
-      .map((l) => {
-        const mark = l.done ? "●" : l.active ? "▶" : "○";
-        const color = l.done ? "var(--success)" : l.active ? "var(--accent)" : "var(--meta)";
-        return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border-muted)" title="${escapeHtml(l.hint)}">
-        <span>${l.code} ${l.name}</span>
-        <span style="color:${color}">${mark}</span>
-      </div>`;
-      })
-      .join("");
+    el.innerHTML = `<div class="tk-layers">${layers
+      .map(
+        (l) =>
+          `<div class="tk-layer${l.done ? " done" : l.active ? " active" : ""}" title="${escapeHtml(l.hint)}">
+            <span class="tk-layer-c">${l.code}</span>
+            <span class="tk-layer-n">${escapeHtml(l.name)}</span>
+          </div>`,
+      )
+      .join("")}</div>`;
 
     const p = plans[idx];
-    if (p) {
-      el.innerHTML += `
-        <div class="tui-meta-card" style="margin:12px 0 0">
-          <div class="k">目標</div>
-          <div class="v">${escapeHtml(p.meta.goal)}</div>
-        </div>
-        <div class="tui-meta-card">
-          <div class="k">最近決策</div>
-          <div class="v">${escapeHtml(p.meta.last_decision)}</div>
-        </div>
-        <div class="tui-meta-card">
-          <div class="k">阻塞</div>
-          <div class="v">${p.meta.blockers} 項</div>
-        </div>`;
-    }
+    if (!p) return;
+    const facts: [string, string][] = [];
+    const goal = (p.meta.goal || "").trim();
+    const dec = (p.meta.last_decision || "").trim();
+    if (goal && goal !== "—") facts.push(["目標", goal]);
+    if (dec && dec !== "—") facts.push(["最近決策", dec]);
+    if (p.meta.blockers > 0) facts.push(["阻塞", `${p.meta.blockers} 項`]);
+    if (!facts.length) return;
+    el.innerHTML += `<dl class="tk-facts">${facts
+      .map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`)
+      .join("")}</dl>`;
   }
 
   function render(force = false) {
