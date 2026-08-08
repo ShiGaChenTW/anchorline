@@ -563,6 +563,22 @@ function bindChangeTooltip(host: HTMLElement) {
     hide();
   });
   host.addEventListener("scroll", hide, true);
+
+  // 背板現在疊在 textarea 上面，改過的行會吃掉點擊。
+  // 點下去要能把游標放進那一行，不然橘色行等於變成不能編輯。
+  host.addEventListener("mousedown", (e) => {
+    const line = (e.target as HTMLElement).closest(".fv-changed") as HTMLElement | null;
+    if (!line) return;
+    e.preventDefault();
+    const ta = document.getElementById("fv-text") as HTMLTextAreaElement | null;
+    if (!ta) return;
+    const i = Number(line.dataset.fvLine ?? "0");
+    const lines = ta.value.split("\n");
+    const start = lines.slice(0, i).reduce((n, l) => n + l.length + 1, 0);
+    ta.focus();
+    ta.setSelectionRange(start + lines[i].length, start + lines[i].length);
+    hide();
+  });
 }
 
 function snapshotListHtml(path: string): string {
