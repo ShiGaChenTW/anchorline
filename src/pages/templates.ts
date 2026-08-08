@@ -21,6 +21,9 @@ const CAT_LABEL: Record<TemplateCat, string> = {
   security: "資安",
   growth: "成長",
   platform: "平台",
+  openspec: "OpenSpec",
+  delivery: "交付",
+  research: "研究",
 };
 
 let cat: "all" | TemplateCat = "all";
@@ -150,6 +153,7 @@ document.getElementById("m-insert")?.addEventListener("click", (e) => {
   e.preventDefault();
   if (!current) return;
   store.setPendingInsert(current.body);
+  store.bumpTemplateUse(current.id);
   toast("已排入插入 — 開啟編輯器");
   location.href = "editor.html";
 });

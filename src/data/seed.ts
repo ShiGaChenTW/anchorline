@@ -495,18 +495,41 @@ export const SEED_SECTIONS: Section[] = [
 ];
 
 export const SEED_TEMPLATES: Template[] = [
-  { id: "t1", cat: "core", title: "三行摘要", blurb: "做什麼 / 給誰 / 為何現在 — 審閱者 10 秒抓重點。", uses: 128, body: "## 摘要\n- **做什麼：** …\n- **給誰：** …\n- **為何現在：** …" },
-  { id: "t2", cat: "core", title: "問題陳述 + 引言", blurb: "痛點段落搭配具名客戶引言，禁止先寫解法。", uses: 96, body: "## 問題\n[現況傷害誰、頻率、代價]\n\n> 「引言」— 姓名 · 職稱，公司" },
-  { id: "t3", cat: "core", title: "目標 / 非目標", blurb: "雙欄邊界，非目標寫延後原因。", uses: 140, body: "## 目標\n- [可驗收]\n\n## 非目標\n- [延後原因]" },
-  { id: "t4", cat: "core", title: "成功指標表", blurb: "指標 | 目標 | 量測 — 含領先與落後指標。", uses: 88, body: "| 指標 | 目標 | 量測 |\n|---|---|---|\n| … | … | … |" },
-  { id: "t5", cat: "core", title: "使用者故事", blurb: "As-a / I-want / So-that，含例外路徑。", uses: 112, body: "作為 [角色]，我想要 [能力]，以便 [價值]。\n驗收：\n- …" },
-  { id: "t6", cat: "core", title: "里程碑切片", blurb: "3–4 階段，每段可單獨上線。", uses: 74, body: "### M1 — 名稱（工期）\n- 產出：\n- 依賴：\n- 風險：" },
-  { id: "t7", cat: "security", title: "威脅模型摘要", blurb: "資產、攻擊者、緩解 — 資安審閱友善。", uses: 41, body: "## 威脅模型\n- **資產：**\n- **攻擊者：**\n- **緩解控制：**\n- **殘餘風險：**" },
-  { id: "t8", cat: "security", title: "合規對照", blurb: "對應 SOC 2 / ISO 控制項與證據。", uses: 36, body: "| 控制 | 需求 | 本功能證據 |\n|---|---|---|\n| CC6.1 | … | … |" },
-  { id: "t9", cat: "security", title: "資料分類與滯留", blurb: "PII 欄位、加密、保存期限。", uses: 29, body: "## 資料\n- 欄位：\n- 分類：\n- 加密：靜態 / 傳輸\n- 滯留：" },
-  { id: "t10", cat: "growth", title: "實驗設計", blurb: "假設、變體、成功門檻、停止條件。", uses: 52, body: "## 實驗\n- 假設：\n- 變體：\n- 主要指標：\n- 門檻：\n- 停止條件：" },
-  { id: "t11", cat: "growth", title: "定價與包裝影響", blurb: "方案可用性、升級路徑、溝通。", uses: 33, body: "## 包裝\n- Free / Pro / Ent：\n- 升級觸發：\n- 對客溝通：" },
-  { id: "t12", cat: "platform", title: "API 契約草稿", blurb: "端點、錯誤碼、相容性承諾。", uses: 47, body: "## API\n`POST /v1/…`\n- 請求：\n- 回應：\n- 錯誤：\n- 相容性：" },
+  { id: "t1", cat: "core", title: "三行摘要", blurb: "做什麼 / 給誰 / 為何現在 — 審閱者 10 秒抓重點。", uses: 0, body: "## 摘要\n- **做什麼：** …\n- **給誰：** …\n- **為何現在：** …" },
+  { id: "t2", cat: "core", title: "問題陳述 + 引言", blurb: "痛點段落搭配具名客戶引言，禁止先寫解法。", uses: 0, body: "## 問題\n[現況傷害誰、頻率、代價]\n\n> 「引言」— 姓名 · 職稱，公司" },
+  { id: "t3", cat: "core", title: "目標 / 非目標", blurb: "雙欄邊界，非目標寫延後原因。", uses: 0, body: "## 目標\n- [可驗收]\n\n## 非目標\n- [延後原因]" },
+  { id: "t4", cat: "core", title: "成功指標表", blurb: "指標 | 目標 | 量測 — 含領先與落後指標。", uses: 0, body: "| 指標 | 目標 | 量測 |\n|---|---|---|\n| … | … | … |" },
+  { id: "t5", cat: "core", title: "使用者故事", blurb: "As-a / I-want / So-that，含例外路徑。", uses: 0, body: "作為 [角色]，我想要 [能力]，以便 [價值]。\n驗收：\n- …" },
+  { id: "t6", cat: "core", title: "里程碑切片", blurb: "3–4 階段，每段可單獨上線。", uses: 0, body: "### M1 — 名稱（工期）\n- 產出：\n- 依賴：\n- 風險：" },
+  { id: "t7", cat: "security", title: "威脅模型摘要", blurb: "資產、攻擊者、緩解 — 資安審閱友善。", uses: 0, body: "## 威脅模型\n- **資產：**\n- **攻擊者：**\n- **緩解控制：**\n- **殘餘風險：**" },
+  { id: "t8", cat: "security", title: "合規對照", blurb: "對應 SOC 2 / ISO 控制項與證據。", uses: 0, body: "| 控制 | 需求 | 本功能證據 |\n|---|---|---|\n| CC6.1 | … | … |" },
+  { id: "t9", cat: "security", title: "資料分類與滯留", blurb: "PII 欄位、加密、保存期限。", uses: 0, body: "## 資料\n- 欄位：\n- 分類：\n- 加密：靜態 / 傳輸\n- 滯留：" },
+  { id: "t10", cat: "growth", title: "實驗設計", blurb: "假設、變體、成功門檻、停止條件。", uses: 0, body: "## 實驗\n- 假設：\n- 變體：\n- 主要指標：\n- 門檻：\n- 停止條件：" },
+  { id: "t11", cat: "growth", title: "定價與包裝影響", blurb: "方案可用性、升級路徑、溝通。", uses: 0, body: "## 包裝\n- Free / Pro / Ent：\n- 升級觸發：\n- 對客溝通：" },
+  { id: "t12", cat: "platform", title: "API 契約草稿", blurb: "端點、錯誤碼、相容性承諾。", uses: 0, body: "## API\n`POST /v1/…`\n- 請求：\n- 回應：\n- 錯誤：\n- 相容性：" },
+  // ── OpenSpec ────────────────────────────────────────────────
+  // 格式取自 openspec 官方文件（docs/concepts.md）：三層固定
+  // ## Purpose → ### Requirement: → #### Scenario:，動詞用 RFC 2119。
+  { id: "t13", cat: "openspec", title: "Requirement + Scenario", blurb: "OpenSpec 規格的最小單位 — 行為契約配可驗證情境。", uses: 0, body: "### Requirement: [這個系統應該做到什麼]\nThe system SHALL [可觀察的行為]。\n\n#### Scenario: [正常路徑]\n- GIVEN [前提狀態]\n- WHEN [觸發動作]\n- THEN [可驗證的結果]\n- AND [附帶結果]\n\n#### Scenario: [例外路徑]\n- GIVEN [異常前提]\n- WHEN [同樣的動作]\n- THEN [錯誤處理]" },
+  { id: "t14", cat: "openspec", title: "Delta Spec（ADDED / MODIFIED / REMOVED）", blurb: "只描述這次改什麼，不重述整份規格 — brownfield 用。", uses: 0, body: "## ADDED Requirements\n\n### Requirement: [新行為]\nThe system MUST [行為]。\n\n#### Scenario: [情境]\n- GIVEN …\n- WHEN …\n- THEN …\n\n## MODIFIED Requirements\n\n### Requirement: [既有行為名稱（原字不動）]\n[新的敘述]\n（Previously: [舊的敘述]）\n\n## REMOVED Requirements\n\n### Requirement: [要移除的行為]\n（[為什麼不再需要]）" },
+  { id: "t15", cat: "openspec", title: "OpenSpec Proposal", blurb: "Intent / Scope / Approach — change 資料夾的入口文件。", uses: 0, body: "# Proposal: [變更名稱]\n\n## Intent\n[為什麼現在要做這件事，誰在痛]\n\n## Scope\nIn scope:\n- …\n\nOut of scope:\n- …（寫明延後原因）\n\n## Approach\n[高層次做法。技術取捨留給 design.md]" },
+  { id: "t16", cat: "openspec", title: "Tasks 實作清單", blurb: "階層編號 + checkbox，agent 與人共用同一份進度。", uses: 0, body: "# Tasks\n\n## 1. [第一組]\n- [ ] 1.1 [一次能做完的動作]\n- [ ] 1.2 …\n\n## 2. [第二組]\n- [ ] 2.1 …\n- [ ] 2.2 …\n\n## 3. 驗證\n- [ ] 3.1 [怎麼知道真的做完了]" },
+
+  // ── 交付 ────────────────────────────────────────────────────
+  { id: "t17", cat: "delivery", title: "上線與回滾計畫", blurb: "分階段放量、回滾條件、負責人 — 出事時照著做。", uses: 0, body: "## 上線\n| 階段 | 範圍 | 觀察指標 | 停留時間 |\n|---|---|---|---|\n| 1 | 內部 | … | 1 天 |\n| 2 | 5% | … | 2 天 |\n| 3 | 全量 | … | — |\n\n## 回滾條件（任一成立就回滾）\n- [指標] 惡化超過 [門檻]\n- …\n\n## 回滾步驟\n1. …\n\n## 負責人\n- 上線：\n- On-call：" },
+  { id: "t18", cat: "delivery", title: "決策紀錄（ADR）", blurb: "背景、選項、決定、後果 — 半年後還看得懂為什麼。", uses: 0, body: "# ADR-[編號]：[決策標題]\n\n**狀態：** 提案中 / 已採用 / 已取代\n**日期：** \n\n## 背景\n[什麼情況逼我們必須做決定]\n\n## 選項\n| 選項 | 優點 | 代價 |\n|---|---|---|\n| A | … | … |\n| B | … | … |\n\n## 決定\n選 [X]，因為 […]。\n\n## 後果\n- 我們接受：…\n- 我們放棄：…\n- 之後若 [條件] 成立，應重新評估。" },
+  { id: "t19", cat: "delivery", title: "風險登記表", blurb: "機率 × 影響 × 緩解 × 負責人，不寫負責人等於沒登記。", uses: 0, body: "| 風險 | 機率 | 影響 | 緩解措施 | 負責人 | 觸發訊號 |\n|---|---|---|---|---|---|\n| … | 高/中/低 | 高/中/低 | … | … | … |" },
+  { id: "t20", cat: "delivery", title: "相依與阻塞", blurb: "誰擋住我們、我們擋住誰，含最晚需要的日期。", uses: 0, body: "## 我們依賴\n| 對象 | 需要什麼 | 最晚需要 | 目前狀態 |\n|---|---|---|---|\n| … | … | … | 已確認/等待中/未接洽 |\n\n## 依賴我們\n| 對象 | 需要我們什麼 | 承諾時間 |\n|---|---|---|\n| … | … | … |" },
+  { id: "t21", cat: "delivery", title: "發布檢查清單", blurb: "上線前最後一關 — 每一項都要有人勾。", uses: 0, body: "## 發布前\n- [ ] 功能開關預設為關\n- [ ] 監控與告警已建立\n- [ ] 回滾步驟已實測\n- [ ] 文件／說明已更新\n- [ ] 客服與業務已告知\n\n## 發布後 24 小時\n- [ ] 錯誤率在基準內\n- [ ] 核心指標無異常\n- [ ] 回報管道無新型客訴" },
+
+  // ── 研究 ────────────────────────────────────────────────────
+  { id: "t22", cat: "research", title: "使用者訪談摘要", blurb: "原話優先於歸納 — 歸納會漂，原話不會。", uses: 0, body: "## 受訪者\n[角色 · 情境 · 日期]\n\n## 他實際說的（原話）\n> 「…」\n> 「…」\n\n## 他實際做的（觀察）\n- …\n\n## 我的解讀\n- …（標明這是解讀，不是他說的）\n\n## 對這份 PRD 的影響\n- …" },
+  { id: "t23", cat: "research", title: "競品對照", blurb: "比行為不比功能清單 — 功能清單誰都寫得長。", uses: 0, body: "| 面向 | 我們 | [競品 A] | [競品 B] |\n|---|---|---|---|\n| 使用者第一次要做什麼 | … | … | … |\n| 最常用的路徑幾步 | … | … | … |\n| 失敗時怎麼處理 | … | … | … |\n| 收費方式 | … | … | … |\n\n## 我們刻意不做的\n- …（以及為什麼）" },
+  { id: "t24", cat: "research", title: "開放問題紀錄", blurb: "問題、卡住誰、需要誰回答、最晚何時要答案。", uses: 0, body: "| # | 問題 | 卡住什麼 | 誰能回答 | 最晚需要 | 狀態 |\n|---|---|---|---|---|---|\n| 1 | … | … | … | … | 待回覆 |" },
+
+  // ── 核心補充 ────────────────────────────────────────────────
+  { id: "t25", cat: "core", title: "非功能需求（NFR）", blurb: "效能、可用性、無障礙 — 沒寫數字就不算需求。", uses: 0, body: "| 面向 | 要求 | 怎麼量 |\n|---|---|---|\n| 效能 | [p95 < N ms] | … |\n| 可用性 | [月度 99.x%] | … |\n| 容量 | [同時 N 人 / N req/s] | … |\n| 無障礙 | [WCAG 2.2 AA] | … |\n| 相容性 | [瀏覽器／OS 範圍] | … |\n| 在地化 | [語系] | … |" },
+  { id: "t26", cat: "core", title: "量測與埋點計畫", blurb: "先想清楚要回答什麼問題，再決定埋什麼點。", uses: 0, body: "## 這個功能要回答的問題\n1. …\n\n## 事件\n| 事件名 | 何時觸發 | 屬性 | 回答上面哪一題 |\n|---|---|---|---|\n| … | … | … | 1 |\n\n## 判定成功的門檻\n- [指標] 在 [期間] 內達到 [數值]\n\n## 什麼情況算失敗（要收手）\n- …" },
 ];
 
 export const SEED_COMMENTS: Comment[] = [
