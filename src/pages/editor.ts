@@ -32,6 +32,7 @@ import {
   SECTION_TO_OPENSPEC,
   sourceFileForSection,
 } from "../lib/file-tree";
+import { absolutePathFor, groupOpenspecFiles, openspecFiles } from "../lib/openspec-tree";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { askForProjectFolder } from "../lib/project-folder";
 import { initFocusMode, renderProgress } from "../lib/focus-mode";
@@ -333,31 +334,14 @@ function renderFileTree() {
   });
 }
 
-/** allPaths 存的是含資料夾名的相對路徑；接回 rootPath 才是真正的檔案位置 */
-function absolutePathFor(rootPath: string, rel: string): string {
-  const base = rootPath.replace(/\/$/, "");
-  const folder = base.split("/").pop() ?? "";
-  const trimmed = folder && rel.startsWith(`${folder}/`) ? rel.slice(folder.length + 1) : rel;
-  return `${base}/${trimmed}`;
-}
-
-/** artifact 依 schema 順序排，不是字母序 —— proposal 先於 tasks 是有意義的 */
-const OS_ARTIFACT_ORDER = ["proposal.md", "design.md", "tasks.md", ".openspec.yaml"];
-function artifactRank(name: string): number {
-  const i = OS_ARTIFACT_ORDER.indexOf(name);
-  return i >= 0 ? i : OS_ARTIFACT_ORDER.length;
-}
-
 /**
  * OpenSpec：偵測專案資料夾底下有沒有 `openspec/`，有就列出裡面的檔案。
  *
- * **依 change 分群**，不是依 `openspec/` 的第一層。OpenSpec 的工作單位是
- * 一個 change 資料夾（proposal + design + tasks + delta specs），
- * 把三個 change 全部塞進一個叫 `changes` 的群組只會看到三份 tasks.md
- * 和八份 spec.md，分不出誰是誰。
+ * 分群與排序的邏輯在 `lib/openspec-tree.ts`（純函式、有測試）——
+ * 這裡只負責畫出來與接點擊。
  *
- * 讀的是匯入掃描留下的相對路徑 —— App 只存路徑不存內文，所以這裡回答的是
- * 「有沒有、有哪些」，不是內容。點檔名交給系統預設應用程式開。
+ * App 只存掃到的路徑不存內文，所以這一塊回答的是「有沒有、有哪些」，
+ * 不是內容。點檔名交給系統預設應用程式開。
  */
 function renderOpenSpec() {
   const el = document.getElementById("openspec-list");
@@ -365,7 +349,7 @@ function renderOpenSpec() {
   const p = activeProject();
   const root = p?.importSummary?.rootPath ?? "";
   const all = p?.importSummary?.allPaths ?? [];
-  const files = all.filter((x) => /(^|\/)openspec\//i.test(x));
+  const files = openspecFiles(all);
 
   const countEl = document.getElementById("os-count");
   if (countEl) countEl.textContent = files.length ? `${files.length} 檔` : "無";
@@ -383,43 +367,9 @@ function renderOpenSpec() {
     return;
   }
 
-  // 分群：changes/<id> 一群、specs/<domain> 一群、其餘歸 openspec 根目錄
-  type Row = { rel: string; name: string; sub: string };
-  const groups = new Map<string, { label: string; kind: "change" | "spec" | "root"; rows: Row[] }>();
-  for (const f of files) {
-    const rest = f.replace(/^.*?openspec\//i, "");
-    const parts = rest.split("/");
-    let key: string;
-    let label: string;
-    let kind: "change" | "spec" | "root";
-    if (parts[0] === "changes" && parts.length > 2) {
-      key = `c:${parts[1]}`;
-      label = parts[1];
-      kind = "change";
-    } else if (parts[0] === "specs" && parts.length > 1) {
-      key = `s:${parts[1]}`;
-      label = `specs/${parts[1]}`;
-      kind = "spec";
-    } else {
-      key = "root";
-      label = "openspec/";
-      kind = "root";
-    }
-    const g = groups.get(key) ?? { label, kind, rows: [] };
-    const name = parts[parts.length - 1];
-    // change 底下的 delta spec 要標出是哪個 domain，不然三個 spec.md 一模一樣
-    const sub =
-      kind === "change" && parts[2] === "specs" && parts.length > 3 ? `specs/${parts[3]}` : "";
-    g.rows.push({ rel: f, name, sub });
-    groups.set(key, g);
-  }
-
-  const order = { root: 0, change: 1, spec: 2 };
-  el.innerHTML = [...groups.values()]
-    .sort((a, b) => order[a.kind] - order[b.kind] || a.label.localeCompare(b.label))
+  el.innerHTML = groupOpenspecFiles(files)
     .map((g) => {
       const rows = g.rows
-        .sort((a, b) => artifactRank(a.name) - artifactRank(b.name) || a.rel.localeCompare(b.rel))
         .map(
           (r) => `<button type="button" class="os-row os-file-row"
               data-os-path="${escapeHtml(absolutePathFor(root, r.rel))}"
@@ -438,7 +388,6 @@ function renderOpenSpec() {
 
   el.querySelectorAll<HTMLButtonElement>("[data-os-path]").forEach((btn) => {
     btn.onclick = () => {
-      const path = btn.dataset.osPath ?? "";
       const w = window as Window & {
         webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
       };
@@ -447,7 +396,7 @@ function renderOpenSpec() {
         toast("開檔需要桌面版 App");
         return;
       }
-      bridge.postMessage({ action: "openPath", path });
+      bridge.postMessage({ action: "openPath", path: btn.dataset.osPath ?? "" });
     };
   });
 }
