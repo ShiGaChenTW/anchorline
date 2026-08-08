@@ -21,7 +21,7 @@ const ev = (o: Partial<LogEvent> = {}): LogEvent => ({
   v: EVENT_SCHEMA_VERSION,
   event_id: "01K2Q9V4B7XM8N",
   ts: "2026-08-09T10:00:00Z",
-  project: "PM-SPEC-SCVB",
+  project: "anchorline",
   actor: { kind: "agent", family: "claude", name: "Claude" },
   kind: "task.done",
   subject: "sf:t=HNTPRY5R",

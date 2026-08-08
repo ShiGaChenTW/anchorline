@@ -16,7 +16,7 @@ export function buildMarkdown(state: AppState, project?: Project | null): string
     state.projects.find((x) => x.id === "p1") ??
     state.projects[0] ??
     null;
-  const title = p?.title ?? "SpecForge PRD";
+  const title = p?.title ?? "Anchorline PRD";
   const status = p?.status ?? "draft";
   const owner = p?.owner ?? state.currentUser.name;
   let md = `# ${title}\n\n`;
@@ -69,7 +69,7 @@ export function buildHtmlDocument(state: AppState, project?: Project | null): st
     .replace(/^# (.+)$/gm, "<h1>$1</h1>")
     .replace(/\n\n/g, "</p><p>")
     .replace(/\n/g, "<br/>");
-  const title = project?.title ?? "SpecForge PRD";
+  const title = project?.title ?? "Anchorline PRD";
   return `<!doctype html>
 <html lang="zh-TW"><head><meta charset="utf-8"/>
 <title>${title.replace(/</g, "")}</title>
@@ -127,7 +127,7 @@ export function buildOpenspecPrd(state: AppState, project?: Project | null): str
     state.projects.find((x) => x.id === state.activeProjectId) ??
     state.projects[0] ??
     null;
-  const title = p?.title ?? "SpecForge PRD";
+  const title = p?.title ?? "Anchorline PRD";
   const changeId = (p?.tag || p?.id || "change").replace(/[^a-zA-Z0-9_-]/g, "-");
   const summary = state.sectionValues.summary ?? {};
   const goals = state.sectionValues.goals ?? {};
@@ -188,8 +188,8 @@ profile: A
   }
 
   md += `\n## AI System Requirements\n`;
-  md += `- Agent 編輯／核准角色見 SpecForge Agent 管理（family 隔離）\n`;
-  md += `- 結構檢查：Non-Goals ≥ 3（PM-SPEC+SCVB gate）\n`;
+  md += `- Agent 編輯／核准角色見 Anchorline Agent 管理（family 隔離）\n`;
+  md += `- 結構檢查：Non-Goals ≥ 3（Anchorline gate）\n`;
 
   md += `\n## Technical Specifications\n`;
   for (const s of state.sections) {
@@ -204,7 +204,7 @@ profile: A
   const oq = (state.sectionValues.open?.oq || "").trim();
   md += oq ? oq.split(/\n/).map((l) => (l.trim().startsWith("-") ? l : `- ${l.trim()}`)).join("\n") : `- （開放問題待補）\n`;
 
-  md += `\n---\n_Exported from PM-SPEC+SCVB · ${new Date().toISOString()}_\n`;
+  md += `\n---\n_Exported from Anchorline · ${new Date().toISOString()}_\n`;
   return md;
 }
 
@@ -217,7 +217,7 @@ export function buildOpenspecTasks(state: AppState, project?: Project | null): s
   const title = p?.title ?? "PRD";
   let md = `# Tasks — ${title}\n\n`;
   md += `> OpenSpec tasks skeleton（可由 Claude Code / Codex 勾選進度）\n`;
-  md += `> 勾完可用 SpecForge 專案頁「回讀 tasks.md」把檢查項狀態讀回來。\n`;
+  md += `> 勾完可用 Anchorline 專案頁「回讀 tasks.md」把檢查項狀態讀回來。\n`;
   md += `> 行尾的 \`<!-- sf:… -->\` 是回讀錨點，請勿刪除（markdown 渲染時不顯示）。\n\n`;
   md += `## Plan Steps\n\n`;
 

@@ -1,6 +1,12 @@
-# SpecForge — PRD 開發監控台
+# Anchorline
 
 **本機優先的開發專案工作台。** 一條治理鏈，加一份落在磁碟上的稽核軌跡。
+
+缺的從來不是一個資料庫，是一把 join key。`plans/*.md` 的 checkbox、git commit、
+簽核、openspec change 各有各的身分，對不起來就只能各自顯示。Anchorline 給每個
+工作單元一個穩定錨點（`<!-- anc:t=XXXXXXXX -->`），四份資料才串得成一條線。
+
+> 前身為 SpecForge / PM-SPEC+SCVB。舊的 `sf:` 錨點仍可讀取。
 
 ```
 PRD 撰寫 → 結構 gate → 簽核 → openspec change → commits → PR → release
@@ -58,8 +64,8 @@ GitHub 的 CODEOWNERS 與 branch protection 只認人，不認 AI 族系，抓�
 目前請自行建置（未簽章產物的發布流程還在做）：
 
 ```bash
-git clone https://github.com/ShiGaChenTW/PM-SPEC-SCVB.git
-cd PM-SPEC-SCVB
+git clone https://github.com/ShiGaChenTW/anchorline.git
+cd anchorline
 bun install
 bun run tauri build          # 產物在 src-tauri/target/release/bundle/
 ```

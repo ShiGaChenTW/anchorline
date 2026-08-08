@@ -179,10 +179,10 @@ if (!requireAuth()) {
 
   /** 顯示方式：列表／卡片／資料夾。存 localStorage —— 換了頁回來不該重來。 */
   type ViewMode = "list" | "card" | "folder";
-  const VIEW_KEY = "specforge:project-view";
+  const VIEW_KEY = "anchorline:project-view";
   /** 資料夾模式裡，群組內部要用清單還是卡片 */
   type SubMode = "list" | "card";
-  const SUB_KEY = "specforge:folder-sub";
+  const SUB_KEY = "anchorline:folder-sub";
   let sub: SubMode = (() => {
     try {
       return localStorage.getItem(SUB_KEY) === "card" ? "card" : "list";
@@ -575,7 +575,7 @@ if (!requireAuth()) {
 
   // 一次性清空：先前錯誤拆分子目錄匯入的追蹤資料，方便重新匯入
   {
-    const MIGRATE_KEY = "specforge:clear-split-import-v1";
+    const MIGRATE_KEY = "anchorline:clear-split-import-v1";
     try {
       if (!localStorage.getItem(MIGRATE_KEY) && store.get().projects.length > 0) {
         const r = store.untrackAllProjects();
@@ -595,7 +595,7 @@ if (!requireAuth()) {
   let wizStep = 0;
   /** 3 個問題 + 1 個確認頁 */
   const WIZ_MAX = 3;
-  const DRAFT_KEY = "specforge:new-prd-draft:v1";
+  const DRAFT_KEY = "anchorline:new-prd-draft:v1";
   let beginnerPath = true;
 
   /** 三題的欄位與範例句。範例句是任務啟動的坡道，不是裝飾。 */
@@ -1324,7 +1324,7 @@ if (!requireAuth()) {
     // 瀏覽器 fallback：不可使用 [hidden]（會擋 dialog），改用 visually-hidden
     const input = document.getElementById("folder-import-input") as HTMLInputElement | null;
     if (!input) {
-      importErr("找不到檔案選擇器。若在 App 內，請重啟 SpecForge 以載入原生橋。");
+      importErr("找不到檔案選擇器。若在 App 內，請重啟 Anchorline 以載入原生橋。");
       toast("無法開啟選夾");
       return;
     }
@@ -1335,7 +1335,7 @@ if (!requireAuth()) {
     window.setTimeout(() => {
       if (!input.files?.length && !scanResult) {
         importErr(
-          "瀏覽器未開啟資料夾選擇器。請在 SpecForge App 使用（原生選夾），或改用 Chrome 開 dev server。",
+          "瀏覽器未開啟資料夾選擇器。請在 Anchorline App 使用（原生選夾），或改用 Chrome 開 dev server。",
         );
       }
     }, 1200);
@@ -1382,7 +1382,7 @@ if (!requireAuth()) {
     location.href = "editor.html";
   });
 
-  document.addEventListener("specforge:project-changed", () => {
+  document.addEventListener("anchorline:project-changed", () => {
     render();
     toast("已切換目前專案（內容獨立）");
   });

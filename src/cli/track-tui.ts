@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * PM-SPEC+SCVB · 真·終端 TUI（計劃追蹤）
+ * Anchorline · 真·終端 TUI（計劃追蹤）
  *
  * 用法：
  *   bun run track              # 互動 TUI
@@ -58,7 +58,8 @@ function findPlansDir(cliDir?: string): string {
   const cwd = process.cwd();
   const candidates = [
     join(cwd, "plans"),
-    join(cwd, "PM-SPEC+SCVB", "plans"),
+    join(cwd, "anchorline", "plans"),
+    join(cwd, "PM-SPEC+SCVB", "plans"), // 過渡：改名前的資料夾名，之後可拔
     resolve(CLI_DIR, "../../plans"),
   ];
   for (const p of candidates) {
@@ -129,7 +130,7 @@ function render(state: UiState): string[] {
     `${pal.border}${hline(W, "═")}${c.reset}`,
   );
   push(
-    `${c.bold}${pal.title} PM-SPEC+SCVB · TRACK TUI ${c.reset}${pal.muted}  ${state.plansDir}${c.reset}`,
+    `${c.bold}${pal.title} Anchorline · TRACK TUI ${c.reset}${pal.muted}  ${state.plansDir}${c.reset}`,
   );
   push(`${pal.border}${hline(W, "─")}${c.reset}`);
 
@@ -154,7 +155,7 @@ function render(state: UiState): string[] {
   if (!state.plans.length) {
     push(`${pal.warn}  plans/ 沒有 .md 計劃檔${c.reset}`);
     push(`${pal.muted}  目錄：${state.plansDir}${c.reset}`);
-    push(`${pal.muted}  可在 SpecForge Web 或手動建立 plans/*.md（含 Plan Steps checkbox）${c.reset}`);
+    push(`${pal.muted}  可在 Anchorline Web 或手動建立 plans/*.md（含 Plan Steps checkbox）${c.reset}`);
     while (lines.length < H - 2) push("");
     push(`${pal.border}${hline(W, "─")}${c.reset}`);
     push(`${pal.muted}  q 離開 · r 重新整理${c.reset}`);
@@ -294,7 +295,7 @@ function clearDownSeq() {
 }
 
 function printOnce(plans: PlanEntry[], dir: string, tracking: string | null) {
-  console.log(`${c.bold}PM-SPEC+SCVB · track${c.reset}  ${pal.muted}${dir}${c.reset}`);
+  console.log(`${c.bold}Anchorline · track${c.reset}  ${pal.muted}${dir}${c.reset}`);
   console.log(hline(Math.min(80, termSize().cols)));
   if (!plans.length) {
     console.log("（無 plan 檔）");

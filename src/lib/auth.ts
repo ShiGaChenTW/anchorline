@@ -14,7 +14,7 @@ let adhdBound = false;
 let statusBarBound = false;
 let welcomeBound = false;
 
-const SESSION_KEY = "specforge:session:v1";
+const SESSION_KEY = "anchorline:session:v1";
 
 export function isLoginPage(): boolean {
   const path = location.pathname.replace(/\\/g, "/");

@@ -117,7 +117,7 @@ function nextStepForPage(page: RailPage | null): NextStep {
  * 避免標題列與「下一步」雙層重複、雙 CTA。
  */
 /** 引導列是否被使用者收起來 */
-const FOCUS_HIDDEN_KEY = "specforge:hide-focus-strip";
+const FOCUS_HIDDEN_KEY = "anchorline:hide-focus-strip";
 function focusHidden(): boolean {
   try {
     return localStorage.getItem(FOCUS_HIDDEN_KEY) === "1";

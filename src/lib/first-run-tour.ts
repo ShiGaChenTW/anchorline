@@ -13,7 +13,7 @@
  * - 尊重 prefers-reduced-motion。
  */
 
-const SEEN_KEY = "specforge:tour-seen:v1";
+const SEEN_KEY = "anchorline:tour-seen:v1";
 
 type Beat = {
   /** 聚光燈打在誰身上；找不到就置中顯示，不會整段消失 */
