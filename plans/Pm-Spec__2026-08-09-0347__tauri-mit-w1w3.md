@@ -1,8 +1,8 @@
 # Tauri × MIT — W1〜W3 實作
 
 **建立時間：** 2026-08-09 03:47
-**最後更新：** 2026-08-09 06:35
-**狀態：** 已完成（實作 18/18；轉公開為擁有者動作）
+**最後更新：** 2026-08-09 06:50
+**狀態：** 已完成
 
 ## 目標
 
@@ -71,6 +71,7 @@
 - 04:10 — 不引入 tauri-plugin-shell；理由：那個 plugin 讓前端呼叫 shell，即使配 allowlist 參數仍由前端組。改成 Rust 端 std::process::Command 把參數寫死，比 allowlist 嚴格
 - 04:25 — 移植中發現契約漏了 ScannedFile.size，三處同步補（Rust/native.ts/BRIDGE.md）。這正是先凍結契約的價值：漏的欄位在編譯期就被抓出來
 - 04:30 — 放棄用 screencapture 驗證原生視窗；理由：兩次都拍到 Scott 其他視窗，隱私風險大於驗證價值。改用契約測試
+- 06:50 — 此專案暫時不開放。W3-✅ 從「待授權」改為「不執行」，W4 簽章連帶暫緩。開源化的文件產出全部保留——它們描述的是這個 App 實際的行為，自己用一樣需要
 
 ## 阻塞 / 待決議
 
@@ -122,18 +123,16 @@
 - **Tauri 視窗未實機目視**：進程、視窗標題、無 crash 都驗過，但兩次
   screencapture 都拍到 Scott 其他視窗，隱私風險大於驗證價值，改用契約測試
 - **Linux 已驗**（Docker，Debian 12 / aarch64，15 測試全過）。**Windows 仍未實機**，只能靠 CI
-- ~~轉公開前必須處理 plans/ 的個人策略內容~~ → **已處理（2026-08-09 06:20）**。評估報告裡的 TELOS 代號、求職脈絡、個人挑戰全部改寫成中性技術理由，技術判斷一字未刪（789 行維持不變）。全 repo 重掃無殘留。轉公開的**內容面已無阻礙**，剩下的是 push 與切換可見性——那是 Scott 的動作
-- **W4 散佈未做**：未簽章，macOS Gatekeeper 與 Windows SmartScreen 都會擋
+- ~~轉公開前必須處理 plans/ 的個人策略內容~~ → **已處理（06:20）**，且 **06:50 決定暫不開放**，這條連帶失效。清理仍然保留：評估報告的 TELOS 代號、求職脈絡、個人挑戰已改寫成中性技術理由，技術判斷一字未刪（789 行不變）
+- **W4 散佈未做** → 暫緩。簽章解的是散佈問題，不散佈就沒有那個問題
 
 ### 後續建議
 
-1. **push + 轉公開**（下方指令）。CI 一跑，Windows 就從「未驗證的假設」變成事實
-2. W4 簽章（$99/年）——MIT 開源實質上已經回答了「會有別人用」
+1. ~~轉公開~~ → 暫不開放（06:50 決定）
+2. **仍建議 push 到私有 remote。** Windows 建置是目前唯一還沒被驗證的假設，而 CI 在私有 repo 一樣會跑——驗證它不需要公開
+3. LICENSE 與開源文件保留。它們現在的作用是「把設計理由寫下來給未來的自己和 agent 看」，那個價值與公不公開無關
 
 ```bash
 git push -u origin 評估專案升級成為開發專案工作台
 git push origin v1.1.0-pre-workbench
-gh repo edit ShiGaChenTW/PM-SPEC-SCVB --visibility public --accept-visibility-change-consequences
 ```
-
-第三行不可逆。跑之前建議先 `gh repo view --json visibility` 確認你在改的是對的 repo。
