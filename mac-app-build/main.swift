@@ -94,11 +94,20 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
                     self?.postToJS(["type": "fastfetch", "raw": json])
                 }
             }
+        case "trackingScan":
+            // Live tracking 的資料通道。WebView 拿不到 mtime，而整個判定只靠 mtime。
+            let dirs = (message.body as? [String: Any])?["plansDirs"] as? [String] ?? []
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let payload = Self.scanPlans(dirs)
+                DispatchQueue.main.async { self?.postToJS(payload) }
+            }
         case "ping":
             postToJS([
                 "type": "pong",
                 "native": true,
-                "capabilities": ["pickFolder", "pickProjectFolder", "createDirectories"],
+                "capabilities": [
+                    "pickFolder", "pickProjectFolder", "createDirectories", "trackingScan",
+                ],
             ])
         default:
             NSLog("SpecForge bridge unknown action: \(action)")
@@ -380,6 +389,73 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
     /// 遞迴掃描文字檔；path 格式與 webkitRelativePath 對齊：FolderName/rel/path.md
     /// 供 AppDelegate 的 handoff 流程重用同一份掃描邏輯
     static func scanDirectoryPublic(_ root: URL) -> [[String: Any]] { scanDirectory(root) }
+
+    /**
+     * 每個 plans/ 目錄掃一層，回傳 (path, mtime, 內文)。
+     *
+     * 非遞迴 —— 對齊 spec §6 的 watch 語意，也對齊段 1「目錄內最新 .md」的定義。
+     * 目錄不存在或沒權限一律跳過：那只代表「這個專案沒有 plans/」，不是錯誤。
+     */
+    static func scanPlans(_ dirs: [String]) -> [String: Any] {
+        let fm = FileManager.default
+        let maxBytes = 512 * 1024
+        let maxFiles = 300
+        var files: [[String: Any]] = []
+        var seen = Set<String>()
+
+        outer: for dir in dirs {
+            let root = URL(fileURLWithPath: dir).standardizedFileURL
+            guard let entries = try? fm.contentsOfDirectory(
+                at: root,
+                includingPropertiesForKeys: [
+                    .contentModificationDateKey, .fileSizeKey, .isRegularFileKey,
+                ],
+                options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+            ) else { continue }
+
+            for url in entries {
+                if files.count >= maxFiles { break outer }
+                guard url.pathExtension.lowercased() == "md" else { continue }
+                let std = url.standardizedFileURL
+                // 兩個專案綁到同一個資料夾時會重複掃到同一份
+                if !seen.insert(std.path).inserted { continue }
+
+                let v = try? std.resourceValues(forKeys: [
+                    .contentModificationDateKey, .fileSizeKey, .isRegularFileKey,
+                ])
+                guard v?.isRegularFile == true, let mdate = v?.contentModificationDate else { continue }
+                let size = v?.fileSize ?? 0
+                if size <= 0 || size > maxBytes { continue }
+                guard let data = try? Data(contentsOf: std),
+                      let text = String(data: data, encoding: .utf8)
+                else { continue }
+
+                files.append([
+                    "path": std.path,
+                    "name": std.lastPathComponent,
+                    "mtimeMs": mdate.timeIntervalSince1970 * 1000,
+                    "text": text,
+                ])
+            }
+        }
+
+        var payload: [String: Any] = ["type": "trackingScan", "files": files]
+        if let sig = readTrackingSignal() { payload["signal"] = sig }
+        return payload
+    }
+
+    /// spec §4 的訊號檔。目前沒有寫入端，讀不到就是段 2 全責 —— 全程 fail-soft。
+    private static func readTrackingSignal() -> [String: Any]? {
+        let base = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"]
+            ?? FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".config").path
+        let url = URL(fileURLWithPath: base).appendingPathComponent("specforge/active")
+        guard let raw = try? String(contentsOf: url, encoding: .utf8),
+              let mdate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+                  .contentModificationDate
+        else { return nil }
+        return ["raw": raw, "mtimeMs": mdate.timeIntervalSince1970 * 1000]
+    }
 
     /// 供 AppDelegate 的 handoff 流程送資料進 JS
     func postToJSPublic(_ payload: [String: Any]) { postToJS(payload) }

@@ -5,16 +5,32 @@ import { initHelpOverlay } from "../lib/help-overlay";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
 import { initTheme } from "../lib/theme";
+import { sortByRecency, trackingTarget } from "../lib/tracking";
+import { canScanPlans, plansDirsOf, requestTrackingScan } from "../lib/tracking-bridge";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
-/** Vite 編譯期嵌入 plans/*.md */
+/**
+ * Vite 編譯期嵌入本 repo 自己的 plans/*.md。
+ *
+ * 這是**降級路徑**：瀏覽器拿不到 mtime，所以拿不到追蹤目標，只能顯示靜態快照。
+ * 桌面版走 tracking-bridge 讀使用者實際綁定的專案資料夾，那條路才是活的。
+ */
 const planFiles = import.meta.glob("../../plans/*.md", {
   query: "?raw",
   import: "default",
   eager: true,
 }) as Record<string, string>;
 
-type PlanEntry = { id: string; name: string; raw: string; meta: PlanMeta };
+type PlanEntry = {
+  id: string;
+  name: string;
+  /** 絕對路徑。降級路徑沒有真實路徑，退回用檔名當 key */
+  path: string;
+  /** 降級路徑為 NaN —— sortByRecency 與 trackingTarget 都會略過 */
+  mtimeMs: number;
+  raw: string;
+  meta: PlanMeta;
+};
 
 const __authed = requireAuth();
 if (__authed) {
@@ -24,17 +40,75 @@ if (__authed) {
   initHelpOverlay();
 
   let plans: PlanEntry[] = [];
+  /** 使用者選的。按鍵／點擊才變 */
   let idx = 0;
+  /** 系統判定的。隨檔案活動變，永遠不寫進 idx —— 那會把使用者正在讀的畫面搶走 */
+  let trackingPath: string | null = null;
+  /** 有沒有真實 mtime 可用。決定要不要顯示追蹤點，而不是顯示一個永遠不亮的點 */
+  let live = false;
+  let lastSig = "";
 
-  function loadPlans() {
+  /** 降級路徑：編譯期嵌入的靜態快照，沒有 mtime 就沒有追蹤目標 */
+  function loadStatic() {
     plans = Object.entries(planFiles)
-      .map(([path, raw]) => {
-        const name = path.split("/").pop() ?? path;
-        const meta = parsePlanMeta(raw, name);
-        return { id: name, name, raw, meta };
+      .map(([p, raw]) => {
+        const name = p.split("/").pop() ?? p;
+        return { id: name, name, path: name, mtimeMs: NaN, raw, meta: parsePlanMeta(raw, name) };
       })
       .sort((a, b) => b.name.localeCompare(a.name));
-    if (idx >= plans.length) idx = 0;
+    live = false;
+    trackingPath = null;
+    restoreIdx();
+  }
+
+  /** 活路徑：原生橋回報各專案 plans/ 的真實 mtime */
+  async function loadLive(): Promise<boolean> {
+    const dirs = plansDirsOf(store.get().projects);
+    if (!dirs.length) return false;
+    let scan;
+    try {
+      scan = await requestTrackingScan(dirs);
+    } catch {
+      return false; // 橋壞了／逾時 —— 不是錯誤，退回靜態快照
+    }
+    if (!scan.files.length) return false;
+
+    plans = sortByRecency(
+      scan.files.map((f) => ({
+        id: f.path,
+        name: f.name,
+        path: f.path,
+        mtimeMs: f.mtimeMs,
+        raw: f.text,
+        meta: parsePlanMeta(f.text, f.name),
+      })),
+    );
+    live = true;
+    // 每次重繪重算，不快取 —— 快取只會製造「追蹤點卡住不動」這類 bug
+    trackingPath = trackingTarget({ files: plans, signal: scan.signal }, Date.now());
+    restoreIdx();
+    return true;
+  }
+
+  /** 清單重載後把選取黏回同一份檔案，而不是同一個索引 */
+  let selectedPath = "";
+  function restoreIdx() {
+    const i = plans.findIndex((p) => p.path === selectedPath);
+    idx = i >= 0 ? i : 0;
+    selectedPath = plans[idx]?.path ?? "";
+  }
+
+  async function loadPlans() {
+    if (canScanPlans() && (await loadLive())) return;
+    loadStatic();
+  }
+
+  /**
+   * 畫面去重：輪詢每秒觸發，無變化時重畫會讓捲動位置跳掉、也白燒 CPU。
+   * 比對 (檔案 + mtime + 選取 + 追蹤) 的指紋，相同就跳過。
+   */
+  function signature(): string {
+    return `${idx}|${trackingPath}|${plans.map((p) => `${p.path}:${p.mtimeMs}`).join(",")}`;
   }
 
   function syncUser() {
@@ -52,16 +126,21 @@ if (__authed) {
     el.innerHTML = plans
       .map((p, i) => {
         const pct = planProgressPct(p.meta);
+        // 追蹤點與選取態刻意分開：同一列可以同時是「我在看的」和「agent 在寫的」，
+        // 也經常不是同一列。
+        const dot =
+          live && p.path === trackingPath
+            ? `<span title="追蹤中 · agent 最近寫入這一份" style="color:var(--accent);margin-left:6px">•</span>`
+            : "";
         return `<button type="button" class="tui-plan-item ${i === idx ? "active" : ""}" data-i="${i}">
-          <div class="t">${escapeHtml(p.meta.title)}</div>
+          <div class="t">${escapeHtml(p.meta.title)}${dot}</div>
           <div class="m">${escapeHtml(p.meta.status)} · ${p.meta.done_steps}/${p.meta.total_steps} · ${pct}%</div>
         </button>`;
       })
       .join("");
     el.querySelectorAll(".tui-plan-item").forEach((btn) => {
       (btn as HTMLButtonElement).onclick = () => {
-        idx = Number((btn as HTMLElement).dataset.i);
-        render();
+        select(Number((btn as HTMLElement).dataset.i));
       };
     });
   }
@@ -108,7 +187,14 @@ if (__authed) {
     const report = evaluatePrdGates(store.get());
     const foot = document.getElementById("tui-footer");
     if (foot) {
-      foot.textContent = `${gateSummaryLine(report)} · j/k 切計劃 · r 重新整理 · score ${report.score}`;
+      // 空狀態不暴露判定細節（訊號過期？退回段 2？）—— 內部機制對使用者無意義
+      const tracked = plans.find((p) => p.path === trackingPath);
+      const liveLine = !live
+        ? "靜態快照 · 桌面版才能即時追蹤"
+        : tracked
+          ? `追蹤中 • ${tracked.name}`
+          : "等待 agent 開始執行…";
+      foot.textContent = `${gateSummaryLine(report)} · j/k 切計劃 · t 跳到追蹤中 · score ${report.score} · ${liveLine}`;
     }
     el.innerHTML =
       `<div style="margin-bottom:8px;color:var(--fg)">score <strong>${report.score}</strong> · block ${report.blocks} · warn ${report.warns}</div>` +
@@ -160,7 +246,10 @@ if (__authed) {
     }
   }
 
-  function render() {
+  function render(force = false) {
+    const sig = signature();
+    if (!force && sig === lastSig) return;
+    lastSig = sig;
     syncUser();
     renderList();
     renderMain();
@@ -168,10 +257,21 @@ if (__authed) {
     renderLayers();
   }
 
-  document.getElementById("btn-refresh")?.addEventListener("click", () => {
-    loadPlans();
+  function select(i: number) {
+    idx = Math.max(0, Math.min(plans.length - 1, i));
+    selectedPath = plans[idx]?.path ?? "";
     render();
-    toast("已重新解析 plans/");
+  }
+
+  async function refresh(force = false) {
+    await loadPlans();
+    render(force);
+  }
+
+  document.getElementById("btn-refresh")?.addEventListener("click", () => {
+    void refresh(true).then(() =>
+      toast(live ? "已重新掃描各專案 plans/" : "靜態快照 · 桌面版才能即時追蹤"),
+    );
   });
 
   document.addEventListener("keydown", (e) => {
@@ -179,27 +279,34 @@ if (__authed) {
     if (t.matches("input, textarea, select")) return;
     if (e.key === "j" || e.key === "ArrowDown") {
       e.preventDefault();
-      idx = Math.min(plans.length - 1, idx + 1);
-      render();
+      select(idx + 1);
     }
     if (e.key === "k" || e.key === "ArrowUp") {
       e.preventDefault();
-      idx = Math.max(0, idx - 1);
-      render();
+      select(idx - 1);
     }
     if (e.key === "r") {
       e.preventDefault();
-      loadPlans();
-      render();
+      void refresh(true);
       toast("重新整理");
+    }
+    // 判定是自動的，呈現是手動的 —— 畫面永遠不自己跳去追蹤目標
+    if (e.key === "t") {
+      e.preventDefault();
+      const i = plans.findIndex((p) => p.path === trackingPath);
+      if (live && i >= 0) select(i);
+      else toast(live ? "等待 agent 開始執行…" : "靜態快照 · 桌面版才能即時追蹤");
     }
     if (e.key === "?") {
       e.preventDefault();
-      toast("j/k 切計劃 · r 重新整理 · 右欄為 PRD 結構 gate（送審阻擋用）");
+      toast("j/k 切計劃 · t 跳到追蹤中 · r 重新整理 · 右欄為 PRD 結構 gate（送審阻擋用）");
     }
   });
 
-  loadPlans();
-  render();
-  store.subscribe(render);
+  // ponytail: 只做 1 秒輪詢，不掛 fs watcher。mtime 重比較本來就得每秒做一次，
+  // 畫面去重讓沒變化的那幾百次輪詢不產生任何 DOM 動作。瀏覽器沒有資料通道，不輪詢。
+  if (canScanPlans()) window.setInterval(() => void refresh(), 1000);
+
+  void refresh(true);
+  store.subscribe(() => render(true));
 }
