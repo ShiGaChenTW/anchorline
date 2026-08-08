@@ -133,8 +133,8 @@
     <ul class="files">
       <li><strong>主 SVG</strong> — <code>logos/export/logo.svg</code></li>
       <li><strong>PNG</strong> — <code>logo-16</code> … <code>logo-2048.png</code></li>
-      <li><strong>macOS</strong> — <code>logos/export/AppIcon.icns</code> → <code>mac-app-build/resources/AppIcon.icns</code></li>
-      <li><strong>打包</strong> — <code>build-dmg.sh</code> 已設 <code>CFBundleIconFile = AppIcon</code></li>
+      <li><strong>macOS</strong> — <code>src-tauri/icons/</code>（<code>bunx tauri icon logos/export/logo-1024.png</code> 產生）</li>
+      <li><strong>打包</strong> — <code>bun run app</code>（Tauri，圖示取自 <code>src-tauri/tauri.conf.json</code> 的 icon 陣列）</li>
     </ul>
 
     <footer>若 Dock 仍顯示舊圖示：重開 App，或 <code>killall Dock</code> / 重新登入以清 icon cache。</footer>
