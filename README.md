@@ -1,131 +1,150 @@
-# PM-SPEC+SCVB
+# SpecForge — PRD 開發監控台
 
-**SpecForge PRD 引導工作台** + **S.CodingFlow（SCVB）** 結構 gate 與計劃追蹤整合版。
+**本機優先的開發專案工作台。** 一條治理鏈，加一份落在磁碟上的稽核軌跡。
 
-- 來源基底：SpecForge（`Pm-Spec-Final`）
-- 整合參考：S.CodingFlow / scvb-dashboard / SpecGate 方法論
-- **原 SpecForge repo 保持獨立、未改動**
+```
+PRD 撰寫 → 結構 gate → 簽核 → openspec change → commits → PR → release
+```
 
-## 與純 SpecForge 的差異
+市面上的 AI 開發工作台都在解「怎麼讓 agent 跑得更多」。這個解另一件事：
+**怎麼證明這些 agent 做的事是被治理過的。**
 
-| 能力 | 說明 |
-|------|------|
-| **結構 gate** | Non-Goals ≥ 3、摘要完整、成功指標等（程式判定）→ 擋送審／核准 |
-| **計劃追蹤頁** | `tracking.html`：解析 `plans/*.md` checkbox、完成度、下一步（SCVB tracking 概念） |
-| **L1–L6** | 專案／編輯／審閱頂部流程條 + 追蹤頁側欄 |
-| **新建 PRD 精靈** | 4 步：基本 → 問題 → Non-Goals≥3 → 成果指標 |
-| **`?` help** | 全站快捷鍵與 SCVB 說明浮層（1–5 導覽） |
+> ⚠️ **早期階段。** 目前產物**未簽章**，macOS 會被 Gatekeeper 擋、Windows 會被
+> SmartScreen 擋。簽章與 notarization 尚未做（見 `SCOPE.md` W4）。
 
-## 畫面
+---
 
-| 畫面 | 角色 |
-|------|------|
-| `login.html` | 登入（Scott + Agents，密碼 `demo`） |
-| `projects.html` | 專案列表 · **專案匯入**（資料夾掃描／評分） |
-| `editor.html` | 引導編輯 + **結構 gate 面板** |
-| `templates.html` | 範本庫 |
-| `review.html` | 審閱簽核（gate 擋核准） |
-| `tracking.html` | **SCVB 計劃追蹤** |
-| `admin.html` | 人員／流程／個案 |
-| `agents.html` | Agent prompt / 啟停 / 進場 |
+## 它解決什麼
+
+一個開發專案工作台要回答四個問題。多數工具答得出前兩個：
+
+| | 問題 | 這裡怎麼答 |
+|---|---|---|
+| Q1 | 下一步做什麼？ | 焦點卡 · openspec 的第一個 `ready` artifact |
+| Q2 | 現在到哪了？ | plan checkbox × openspec artifact 的加權 rollup |
+| Q3 | **為什麼變成這樣？** | 決策紀錄（讀 ISA 的 `Decisions` / `Changelog`） |
+| Q4 | **實際發生了什麼？** | append-only 稽核軌跡 |
+
+Q3 與 Q4 是差異化所在。2026 年 ADR 復甦的理由很直白：**AI agent 現在寫掉大部分
+程式碼，而看不到「為什麼」的 agent 會很開心地把理由重構掉。**
+
+### 一個市面上沒有的機制
+
+`authorAgentFamily` — **同一個 agent 族系撰寫的文件，不能由同族系核准。**
+
+GitHub 的 CODEOWNERS 與 branch protection 只認人，不認 AI 族系，抓不到這一類。
+治理鏈 replay 會把違規標出來——一條沒有標示違規的治理鏈沒有說服力。
+
+---
+
+## 主要畫面
+
+| 畫面 | 回答 |
+|---|---|
+| **專案總覽** | 焦點卡（下一步／進度／上次動／待推）+ 跨 repo PR 雷達 |
+| **編輯台** | PRD 引導撰寫 + 結構 gate + Markdown 即時預覽 |
+| **審閱** | 簽核關卡，gate 未過擋核准 |
+| **Task Tracking** | `plans/*.md` 進度、可直接勾選、右欄稽核軌跡三層 |
+| **Agents** | Agent 角色、prompt、進場作業 |
+
+設計上有一條貫穿的取捨：**一次只指一個。** 焦點卡欄位硬性封頂 4 個，
+其餘專案摺疊；稽核軌跡預設停在「回到工作」三行，完整時間軸要點兩下才到。
+理由寫在 `src/lib/focus-card.ts` 與 `src/lib/log-views.ts` 的檔頭。
+
+---
+
+## 安裝
+
+目前請自行建置（未簽章產物的發布流程還在做）：
+
+```bash
+git clone https://github.com/ShiGaChenTW/PM-SPEC-SCVB.git
+cd PM-SPEC-SCVB
+bun install
+bun run tauri build          # 產物在 src-tauri/target/release/bundle/
+```
+
+### 需求
+
+| | 版本 | 必要性 |
+|---|---|---|
+| [Bun](https://bun.sh) | ≥ 1.3 | 必要 |
+| [Rust](https://rustup.rs) | ≥ 1.77 | 必要 |
+| `git` | 任意 | 必要（沒有它就沒有專案統計） |
+| [`openspec`](https://github.com/Fission-AI/OpenSpec) | ≥ 1.6 | 選用 · `npm i -g @fission-ai/openspec` |
+| [`gh`](https://cli.github.com) | 任意 | 選用 · PR 雷達要用 |
+
+**選用的 CLI 找不到時不會報錯**，畫面會顯示一行安裝提示。App 會依序找：
+你在設定裡指定的路徑 → `PATH` → 三平台常見安裝點。找不到就在設定裡填絕對路徑——
+任何猜路徑的邏輯都會漏掉某個人的環境。
+
+平台：macOS · Windows · Linux（CI 三平台都建置，但目前只有 macOS 有實機驗證）。
+
+---
 
 ## 開發
 
 ```bash
-bun install
-bun run dev
-# 開啟 login.html 或 tracking.html
+bun run dev            # 只跑前端（vite）
+bun run tauri dev      # 完整 App
+bun run typecheck
+bun test ./tests/*.test.ts
+cd src-tauri && cargo test    # 契約測試
 ```
-
-## 終端 TUI（真·Terminal）
-
-讀取 `plans/*.md` 的計劃進度（SCVB tracking 概念，零 blessed 依賴）：
 
 ```bash
-bun run track          # 全螢幕互動 TUI
-bun run track:once     # 單次輸出（可 pipe）
-bun run track -- --dir ./plans
+bun run track          # 終端 TUI：plans/ 進度，j/k 切換，i 補鑄錨點
+bun run track:frame    # 印一張完整畫面就結束（截圖／CI 用）
+bun run backfill       # 把 git 歷史回填成稽核軌跡（冪等）
 ```
 
-| 鍵 | 功能 |
-|----|------|
-| `j` / `k` | 下／上一個 plan |
-| `J` / `K` | 步驟清單捲動 |
-| `r` | 重新載入 |
-| `?` | 說明 |
-| `q` / `Esc` | 離開 |
+### 架構
 
-Web 版追蹤頁：`tracking.html`（App 內）。終端版：`bun run track`。
-
-## 建置 / macOS App
-
-```bash
-bun run build
-
-# 正式版 → SpecForge.app + SpecForge-{version}-macOS.dmg
-bun run app:prod
-
-# 測試版 → SpecForge Test.app + SpecForge-Test-{version}-macOS.dmg
-bun run app:test
-
-# 一次打兩包
-bun run app:all
+```
+src/lib/        47 個模組，其中 40 個是純函式（I/O 全推到呼叫端）
+src/lib/native.ts   ← 原生 bridge 的唯一入口
+src-tauri/      Rust 殼，12 個 action
+docs/BRIDGE.md  ← 契約：移植規格 + 契約測試依據 + 安全介面說明
 ```
 
-| 變體 | App 名稱 | Bundle ID | 內容 | DMG |
-|------|----------|-----------|------|-----|
-| **正式** | `SpecForge.app` | `com.specforge.prd.workbench` | **無示範** + 首次引導 | `SpecForge-{ver}-macOS.dmg` |
-| **測試** | `SpecForge Test.app` | `com.specforge.prd.workbench.test` | 8 份示範 + demo 帳號 | `SpecForge-Test-{ver}-macOS.dmg` |
+判定邏輯一律是純函式、`nowMs` 一律可注入。那不是潔癖：從 WKWebView 換到
+Tauri 時，47 個 lib 檔裡有 39 個一行都不用改。
 
-測試版在 Dock／選單列／Finder 顯示名稱含 **Test**，可與正式版並存。
+---
 
-### 正式版首次使用引導（`onboarding.html`）
+## 與 OpenSpec 的關係
 
-1. **建立管理員** — 姓名／Email／密碼  
-2. **專案導入** — 新手流程 / 匯入 Markdown / 空白工作區  
-3. **Agent 互動** — 說明人員 vs Agent、進場作業、簽核鏈；可選安裝入門 Agent 包  
+**這個專案不解析 `openspec/specs/*.md` 的內文。**
 
-完成後進入工作區。狀態 key：`specforge:state:v6:prod`。
+Requirement / Scenario / delta 的語法是 OpenSpec 上游的活規格，自己解析等於
+維護一份會分岔的第二實作。我們只呼叫官方 CLI 的 `--json`，並且只在原生端做
+一件最小解析——從 `list --json` 取出 change 名稱，為了跑下一輪 `status`。
 
-### PRD 新手撰寫流程
+這是一句**對上游的相容承諾**，不是實作細節。要改它請先開 issue。
 
-專案列表 → **🌱 新手引導**（或空狀態 CTA）：
-
-1. 認識 PRD  
-2. 一句話交付物  
-3. 給誰 · 為何現在  
-4. 問題陳述  
-5. 目標 / Non-Goals≥3  
-6. 成功指標  
-7. 確認建立 → 編輯台 **新手教練列**
-
-快速路徑：**＋ 新建 PRD**（略過說明，同一套骨架）。
-
-### 編輯台 · marka.md 引擎
-
-文件編輯台（`editor.html`）長文欄位使用 **[marka.md](https://github.com/mattenarle10/markamd)** 風格：
-
-- 雙欄 **寫作 | 即時 Markdown 預覽**
-- 模式切換：雙欄 / 只寫作 / 只預覽
-- 完整源碼副本：`vendor/markamd/`（MIT）
-- 適配層：`src/lib/markamd/`（無 Tauri，嵌入現有 SpecForge 流程）
-
-詳見 `THIRD_PARTY.md`。
-
-### 專案資料夾匯入
-
-專案列表 → **專案匯入**：
-
-1. 系統資料夾選擇器（`webkitdirectory`）
-2. 自動掃描 `.md` / `.txt`，對應軟體所需欄位（PRD、問題、目標／Non-Goals、指標、故事、Tasks、Proposal、計劃、README）
-3. 每個候選專案顯示**覆蓋率、內容評分、進度條**與檔案對應狀態
-4. 確認後寫入**獨立正文袋**（切換專案不互相覆蓋）
-5. 側邊欄「專案」清單可點選匯入／新建專案
-
-`vite.config.ts` 使用 `base: "./"`（file:// 相容）。
+---
 
 ## 文件
 
-- 整合分析：`plans/Pm-Spec__2026-08-05-integration-S-CodingFlow.md`
-- 上游 SpecForge：https://github.com/ShiGaChenTW/Pm-Spec-Final
-- 本整合 repo：https://github.com/ShiGaChenTW/PM-SPEC-SCVB
+| | |
+|---|---|
+| [`docs/BRIDGE.md`](docs/BRIDGE.md) | 12 個 action 的契約 |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | 安全模型 · 為什麼沒有 shell plugin · 已知弱點 |
+| [`docs/DATA.md`](docs/DATA.md) | 資料落在哪、進不進 git、事件長什麼樣 |
+| [`SCOPE.md`](SCOPE.md) | 開發範圍與工作線 |
+| [`SPEC-live-tracking.md`](SPEC-live-tracking.md) | 「哪一份是 agent 此刻正在寫的」判定規格 |
+| [`GUIDE-github-pr.md`](GUIDE-github-pr.md) | PR 機制說明（給 PM 與 AI 開發者） |
+
+---
+
+## 貢獻
+
+見 [`CONTRIBUTING.md`](CONTRIBUTING.md)。三件事先講：
+
+1. **安全界線的改動**（`src-tauri/src/paths.rs`、`exec.rs`）請先開 issue 討論
+2. `docs/BRIDGE.md` 是契約，改行為就改文件，不要只改實作
+3. 判定邏輯請寫成純函式並注入 `nowMs`——那是這個 codebase 唯一的硬性風格要求
+
+## 授權
+
+[MIT](LICENSE) © 2026 ShiGaChenTW
