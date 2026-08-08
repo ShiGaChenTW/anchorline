@@ -104,7 +104,7 @@ canonicalize(path) 仍位於某個「已註冊專案根目錄」之內   ← 擋
 | 取消 | `{ cancelled: true }`（**不是 reject**——取消是正常操作） |
 | 副作用 | **把 `folderPath` 加入已註冊根目錄集合**（`appendAllowed` 唯一的授權來源） |
 
-`ScannedFile`：`{ path, name, text }`，只收 `.md` / `.txt`，單檔上限 512 KB。
+`ScannedFile`：`{ path, name, size, text }`，只收 `.md` / `.txt`，單檔上限 512 KB。`size` 是位元組，`folder-import` 用它算覆蓋率。
 
 ### 4.2 `projectStats`
 

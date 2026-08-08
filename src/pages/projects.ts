@@ -1,3 +1,4 @@
+import { isNative, native } from "../lib/native";
 import { store } from "../data/store";
 import { APP_VARIANT } from "../data/seed";
 import { projectDisplayName, type Project, type ProjectStatus } from "../data/types";
@@ -1292,20 +1293,6 @@ if (!requireAuth()) {
     }
   }
 
-  /** SpecForge.app 注入 window.__SPECFORGE_NATIVE__ + webkit.messageHandlers.specforge */
-  function hasNativeFolderPicker(): boolean {
-    const w = window as Window & {
-      __SPECFORGE_NATIVE__?: boolean;
-      __specforgeHasNativeFolder?: boolean;
-      webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
-    };
-    return Boolean(
-      w.__SPECFORGE_NATIVE__ ||
-        w.__specforgeHasNativeFolder ||
-        w.webkit?.messageHandlers?.specforge,
-    );
-  }
-
   function openFolderPicker() {
     if (!canEditContent(store.get().currentUser)) {
       toast("無編輯權限，無法匯入");
@@ -1313,21 +1300,25 @@ if (!requireAuth()) {
     }
     importErr("");
 
-    const w = window as Window & {
-      __specforgeNativeFolderResult?: (p: NativePayload) => void;
-      webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
-    };
-
-    // 優先原生 NSOpenPanel（macOS App）
-    if (hasNativeFolderPicker() && w.webkit?.messageHandlers?.specforge) {
-      w.__specforgeNativeFolderResult = handleNativeFolderPayload;
-      try {
-        w.webkit.messageHandlers.specforge.postMessage({ action: "pickFolder" });
-        toast("請在系統對話框選擇資料夾…");
-        return;
-      } catch (e) {
-        console.warn("native pickFolder failed, fallback to input", e);
-      }
+    // 原生資料夾選擇器
+    if (isNative()) {
+      toast("請在系統對話框選擇資料夾…");
+      void native
+        .pickFolder()
+        .then((r) => {
+          if (r.cancelled) return;
+          handleNativeFolderPayload({
+            type: "folderPickResult",
+            folderName: r.folderName,
+            folderPath: r.folderPath,
+            files: r.files,
+          });
+        })
+        .catch((e) => {
+          console.warn("native pickFolder failed", e);
+          importErr("無法開啟系統對話框，請重啟 App");
+        });
+      return;
     }
 
     // 瀏覽器 fallback：不可使用 [hidden]（會擋 dialog），改用 visually-hidden
@@ -1349,13 +1340,6 @@ if (!requireAuth()) {
       }
     }, 1200);
   }
-
-  // 原生也可能從選單 ⌘⇧O 觸發，需監聽全域 callback / event
-  (window as Window & { __specforgeNativeFolderResult?: (p: NativePayload) => void }).__specforgeNativeFolderResult =
-    handleNativeFolderPayload;
-  window.addEventListener("specforge-native", ((e: CustomEvent<NativePayload>) => {
-    handleNativeFolderPayload(e.detail);
-  }) as EventListener);
 
   document.getElementById("btn-import")?.addEventListener("click", () => {
     scanResult = null;

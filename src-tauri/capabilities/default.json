@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "前端只拿得到資料夾選擇器與『用系統預設程式開檔』。所有磁碟讀寫、git、外部 CLI 一律走本專案自訂的 Rust command，參數在 Rust 端寫死 —— 見 docs/BRIDGE.md §3。",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "opener:allow-open-path"
+  ]
+}

@@ -13,30 +13,12 @@
  * 綁定不等於匯入：不評分、不覆蓋章節內容。手動寫的 PRD 是先有內容才有資料夾。
  */
 import { store } from "../data/store";
+import { isNative, native } from "./native";
 import { classifyPath } from "./folder-import";
 import { toast } from "./ui";
 
-type NativeWindow = Window & {
-  __SPECFORGE_NATIVE__?: boolean;
-  __specforgeHasNativeFolder?: boolean;
-  webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
-};
-
-type NativeFolderPayload = {
-  type?: string;
-  folderName?: string;
-  folderPath?: string;
-  files?: { path?: string }[];
-  message?: string;
-};
-
 export function isDesktopApp(): boolean {
-  const w = window as NativeWindow;
-  return Boolean(
-    w.__SPECFORGE_NATIVE__ ||
-      w.__specforgeHasNativeFolder ||
-      w.webkit?.messageHandlers?.specforge,
-  );
+  return isNative();
 }
 
 function bind(projectId: string, name: string, path: string, paths: string[]) {
@@ -52,38 +34,26 @@ function bind(projectId: string, name: string, path: string, paths: string[]) {
 }
 
 /**
- * 桌面版：叫出 NSOpenPanel（可新建資料夾）。
- * 聽 `specforge-native` 事件而不是覆寫 `__specforgeNativeFolderResult` ——
- * 那個全域 callback 由 projects.ts 佔用，而這個流程在編輯台也要能跑。
+ * 桌面版：叫出系統資料夾選擇器（可新建資料夾）。
+ *
+ * 舊版聽全域 `specforge-native` 事件，因為那個 callback 被 projects.ts 佔用了。
+ * Tauri 的 invoke 回 Promise，兩個流程各自等自己的，沒有共用狀態要搶。
  */
-function pickNative(projectId: string) {
-  const w = window as NativeWindow;
-
-  const onNative = (e: Event) => {
-    const payload = (e as CustomEvent<NativeFolderPayload>).detail;
-    if (payload?.type === "folderPickCancelled") {
-      window.removeEventListener("specforge-native", onNative);
-      toast("已取消，稍後可從編輯台的「專案檔案」再指定");
-      return;
-    }
-    if (payload?.type !== "projectFolderPickResult") return;
-    window.removeEventListener("specforge-native", onNative);
-    const paths = (payload.files ?? [])
-      .map((f) => f.path)
-      .filter((p): p is string => Boolean(p));
-    bind(projectId, payload.folderName || "專案資料夾", payload.folderPath || "", paths);
-  };
-  window.addEventListener("specforge-native", onNative);
-
+async function pickNative(projectId: string) {
+  toast("請在系統對話框選擇或新增資料夾…");
+  let r;
   try {
-    w.webkit!.messageHandlers!.specforge!.postMessage({ action: "pickProjectFolder" });
-    toast("請在系統對話框選擇或新增資料夾…");
+    r = await native.pickProjectFolder();
   } catch {
-    window.removeEventListener("specforge-native", onNative);
     toast("無法開啟系統對話框，請重啟 App");
+    return;
   }
+  if (r.cancelled) {
+    toast("已取消，稍後可從編輯台的「專案檔案」再指定");
+    return;
+  }
+  bind(projectId, r.folderName || "專案資料夾", r.folderPath, r.files.map((f) => f.path));
 }
-
 /** 瀏覽器版：只能選既有資料夾 */
 function pickBrowser(projectId: string) {
   const input = document.createElement("input");
@@ -109,7 +79,7 @@ function pickBrowser(projectId: string) {
 }
 
 export function pickProjectFolder(projectId: string) {
-  if (isDesktopApp()) pickNative(projectId);
+  if (isDesktopApp()) void pickNative(projectId);
   else pickBrowser(projectId);
 }
 

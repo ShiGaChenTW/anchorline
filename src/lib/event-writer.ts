@@ -19,15 +19,10 @@ import {
   type EventKind,
   type LogEvent,
 } from "./event-log";
-import { isDesktopApp } from "./project-folder";
-
-type Bridge = {
-  webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
-};
+import { isNative, native } from "./native";
 
 export function canWriteLog(): boolean {
-  const w = window as Window & Bridge;
-  return isDesktopApp() && Boolean(w.webkit?.messageHandlers?.specforge);
+  return isNative();
 }
 
 /** 不透明 id。與 plan 錨點同一套字元集，理由相同：不從內容推導。 */
@@ -86,17 +81,9 @@ export function logEvent(projectRoot: string, e: NewEvent): boolean {
   if (!canWriteLog() || !projectRoot) return false;
   const ev = buildEvent(e);
   const path = `${projectRoot.replace(/\/+$/, "")}/${shardPath(ev.ts)}`;
-  try {
-    const w = window as Window & Bridge;
-    w.webkit!.messageHandlers!.specforge!.postMessage({
-      action: "appendFile",
-      path,
-      line: serializeEvent(ev).trimEnd(),
-    });
-    return true;
-  } catch {
-    return false;
-  }
+  // 失敗不擋業務動作，也不等它完成 —— 稽核寫入不該讓核准變慢
+  void native.appendFile(path, serializeEvent(ev).trimEnd()).catch(() => {});
+  return true;
 }
 
 // ── Writer C：git 回填 ──────────────────────────────────────────
