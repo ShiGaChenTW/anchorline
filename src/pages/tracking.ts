@@ -9,7 +9,9 @@ import { sortByRecency, trackingTarget } from "../lib/tracking";
 import { canScanPlans, plansDirsOf, requestTrackingScan } from "../lib/tracking-bridge";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 import { byNewest, dedupe, parseLog, type LogEvent } from "../lib/event-log";
-import { hookInstallSnippet } from "../lib/event-writer";
+import { hookInstallSnippet, logEvent } from "../lib/event-writer";
+import { canEditFiles, readFile, writeFile } from "../lib/file-editor";
+import { guardOf, safeApply, toggleStep } from "../lib/plan-writer";
 import {
   buildResumeCard,
   exportCsv,
@@ -21,35 +23,8 @@ import {
 } from "../lib/log-views";
 import { buildReplay, replayMarkdown } from "../lib/replay";
 
-/**
- * Vite 編譯期嵌入本 repo 自己的 plans/*.md。
- *
- * 這是**降級路徑**：瀏覽器拿不到 mtime，所以拿不到追蹤目標，只能顯示靜態快照。
- * 桌面版走 tracking-bridge 讀使用者實際綁定的專案資料夾，那條路才是活的。
- */
-const planFiles = import.meta.glob("../../plans/*.md", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-}) as Record<string, string>;
-
-/**
- * 編譯期嵌入本 repo 自己的稽核軌跡 —— 與上面的 planFiles 同一套降級策略。
- *
- * 瀏覽器讀不到磁碟，所以看到的是建置當下的快照；桌面版走 bridge 讀
- * 使用者實際綁定專案的 `.specforge/log/`，那條路才是活的。
- * 兩條路都存在，介面才不會在瀏覽器裡變成一個永遠空白的區塊。
- */
-const logFiles = import.meta.glob("../../.specforge/log/*.jsonl", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-}) as Record<string, string>;
-
 /** 壞行由 parseLog 跳過，不會毀掉整份。 */
-let auditEvents: LogEvent[] = dedupe(
-  Object.values(logFiles).flatMap((t) => parseLog(t).events)
-);
+let auditEvents: LogEvent[] = [];
 
 /** 讓桌面版把讀到的 JSONL 交進來，覆蓋編譯期快照。 */
 export function loadAuditLog(text: string): number {
@@ -93,14 +68,14 @@ if (__authed) {
     return p?.customName || p?.title || "";
   }
 
-  /** 降級路徑：編譯期嵌入的靜態快照，沒有 mtime 就沒有追蹤目標 */
-  function loadStatic() {
-    plans = Object.entries(planFiles)
-      .map(([p, raw]) => {
-        const name = p.split("/").pop() ?? p;
-        return { id: name, name, path: name, mtimeMs: NaN, raw, meta: parsePlanMeta(raw, name) };
-      })
-      .sort((a, b) => b.name.localeCompare(a.name));
+  /**
+   * 讀不到任何東西時的狀態。
+   *
+   * 舊版會退回「本 repo 自己編譯進來的 plans」——那在別人的機器上是
+   * 一份完全不相干的清單，看起來像功能其實是 bug。誠實的空清單比較好。
+   */
+  function loadEmpty() {
+    plans = [];
     live = false;
     trackingPath = null;
     restoreIdx();
@@ -155,7 +130,7 @@ if (__authed) {
 
   async function loadPlans() {
     if (canScanPlans() && (await loadLive())) return;
-    loadStatic();
+    loadEmpty();
   }
 
   /**
@@ -318,13 +293,23 @@ if (__authed) {
           .map((s, n) => ({ s, n }))
           .sort((a, b) => order[a.s.state] - order[b.s.state] || a.n - b.n);
         steps.innerHTML = sorted
-          .map(
-            ({ s }) => `<div class="tk-step ${s.state}">
-              <span class="tk-step-mark" aria-hidden="true"></span>
+          .map(({ s }) => {
+            // 有錨點才能勾 —— 沒有 id 就沒有辦法在寫回時定位到那一行，
+            // 也接不上事件流。UI 直接反映這個限制，而不是勾了沒反應。
+            const can = Boolean(s.id) && s.state !== "skipped" && canEditFiles();
+            const mark = can
+              ? `<button type="button" class="tk-step-mark tk-step-toggle" data-step="${escapeHtml(s.id!)}" data-done="${s.state === "done" ? "1" : "0"}" aria-label="${s.state === "done" ? "取消勾選" : "標記完成"}"></button>`
+              : `<span class="tk-step-mark" aria-hidden="true"></span>`;
+            return `<div class="tk-step ${s.state}">
+              ${mark}
               <span class="tk-step-t">${escapeHtml(s.text)}</span>
-            </div>`,
-          )
+            </div>`;
+          })
           .join("");
+
+        steps.querySelectorAll<HTMLButtonElement>(".tk-step-toggle").forEach((btn) => {
+          btn.onclick = () => void onToggleStep(btn.dataset.step!, btn.dataset.done !== "1");
+        });
       }
     }
   }
@@ -499,6 +484,46 @@ if (__authed) {
     a.click();
     URL.revokeObjectURL(url);
     toast(`已匯出 ${name}`);
+  }
+
+  /**
+   * 勾／取消勾一個步驟。
+   *
+   * **每一次都重讀磁碟再比對**（`safeApply`）。agent 可能正在重寫同一份 plan，
+   * 而整檔覆寫吃掉它剛寫的東西是不會有錯誤訊息的 —— 那比功能沒做更糟。
+   */
+  async function onToggleStep(id: string, done: boolean) {
+    const p = plans[idx];
+    if (!p) return;
+    const guard = guardOf(p.path, p.raw);
+    const r = await safeApply(guard, (text) => toggleStep(text, id, done), {
+      read: readFile,
+      write: writeFile,
+    });
+    if (!r.ok) {
+      toast(r.reason);
+      await refresh(true); // 衝突時把畫面拉回磁碟現況，不要停在舊的
+      return;
+    }
+    // 寫成功才記事件。順序反過來的話，log 會有一筆沒發生的事
+    const st = store.get();
+    const proj = st.projects.find((x) => x.id === st.activeProjectId);
+    const root = proj?.importSummary?.rootPath;
+    if (root && done) {
+      const u = st.currentUser;
+      logEvent(root, {
+        project: proj!.id,
+        actor: {
+          kind: u.kind === "agent" ? "agent" : "human",
+          family: u.agentFamily ?? null,
+          name: u.name,
+        },
+        kind: "task.done",
+        subject: `sf:t=${id}`,
+        payload: { title: p.meta.steps.find((s) => s.id === id)?.text ?? "" },
+      });
+    }
+    await refresh(true);
   }
 
   function render(force = false) {

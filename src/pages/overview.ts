@@ -24,7 +24,8 @@ import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 import { buildFocusCard, othersLine, type FocusCard } from "../lib/focus-card";
 import { fetchStaleLabel, GH_REFRESH_MS, prRadarLine, type GhResult } from "../lib/gh-status";
-import { canQueryStatus, getGhStatusCached } from "../lib/status-bridge";
+import { canQueryStatus, getGhStatusCached, requestOpenspecStatus } from "../lib/status-bridge";
+import { openspecProgressPct } from "../lib/openspec-status";
 
 if (!requireAuth()) {
   /* redirected */
@@ -39,6 +40,12 @@ if (!requireAuth()) {
   let measuring = false;
   /** 跨 repo PR。全 App 共用一份（見 status-bridge 的快取），60 秒才重新打一次 */
   let ghResult: GhResult | null = null;
+  /**
+   * 焦點專案的 openspec 進度。**只查焦點那一個**——首屏只畫一張卡，
+   * 為了看不見的十個專案各跑一次 CLI 是純粹的浪費。
+   */
+  let openspecPct: number | null = null;
+  let openspecFor = "";
 
   /** 「其他資訊」摺疊狀態。每次回來都要重新收合比一開始就展開更煩。 */
   const MORE_KEY = "specforge:ov:more";
@@ -178,8 +185,8 @@ if (!requireAuth()) {
         name: projectDisplayName(row.p),
         nextStep: row.blocks ? `補齊 ${row.blocks} 項阻擋` : row.canSubmit ? "送出審閱" : "繼續填章節",
         planPct: Number.isFinite(row.p.pct) ? row.p.pct : null,
-        // openspec 進度目前只在專案儀表板量測；總覽先給 null，rollup 會讓 plan 佔滿
-        openspecPct: null,
+        // 只有焦點專案查得到；其餘給 null，rollup 會讓 plan 佔滿
+        openspecPct: row.p.id === openspecFor ? openspecPct : null,
         lastActiveIso,
         ahead: git?.ahead ?? -1,
         unanchored: 0,
@@ -423,8 +430,26 @@ if (!requireAuth()) {
     render();
   }
 
+  /**
+   * 焦點專案的 openspec 狀態。跟著 render 走而不是自己輪詢——
+   * 它只在「焦點換了」時才需要重查，而焦點是使用者行為驅動的。
+   */
+  async function refreshOpenspec() {
+    if (!canQueryStatus()) return;
+    const next = pickNext(buildRows());
+    const root = next?.row.p.importSummary?.rootPath;
+    if (!next || !root) return;
+    if (next.row.p.id === openspecFor) return; // 沒換焦點就不重查
+    const r = await requestOpenspecStatus(root);
+    openspecFor = next.row.p.id;
+    openspecPct = r.available ? openspecProgressPct(r.changes) : null;
+    render();
+  }
+
   render();
   store.subscribe(render);
+  store.subscribe(() => void refreshOpenspec());
+  void refreshOpenspec();
   void refreshGh();
   window.setInterval(() => void refreshGh(), GH_REFRESH_MS);
 }
