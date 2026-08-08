@@ -456,9 +456,10 @@ export function applyAdhdRail(nav: Element) {
   }
   nav.setAttribute("data-adhd-rail", "1");
 
-  // editor / tracking / review 都已經從固定導覽移走（改掛在專案卡片下方
-  // 與「工作區」那一行），這裡留 templates 當主路徑，其餘收進「其他功能」。
-  const primary = new Set(["nav-templates"]);
+  // 主流程的入口全部移出固定導覽了：專案動作掛在卡片下方，
+  // 跨專案的四個入口在「工作區」那一組。剩下的（管理中心、Agent 管理）
+  // 都是偶爾才進去一次的，一律收進「其他功能」。
+  const primary = new Set<string>();
   const secondary: HTMLElement[] = [];
 
   nav.querySelectorAll<HTMLElement>("a.nav-item, button.nav-item").forEach((el) => {
@@ -469,6 +470,10 @@ export function applyAdhdRail(nav: Element) {
     }
     // 專案卡片區不進 secondary
     if (el.closest("#rail-projects-block")) return;
+    // 「工作區」那一組（總覽／清單／審閱佇列／章節範本）也不進 —— 它本來就是
+    // 被挑出來放在最上面的主路徑，再被掃進「其他功能」等於白搬一次。
+    // 這一組沿用 .nav-item 的外觀，所以會被這個選擇器掃到。
+    if (el.closest(".rail-wsnav")) return;
     secondary.push(el);
   });
 

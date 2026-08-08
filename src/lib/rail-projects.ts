@@ -91,21 +91,40 @@ function ensureWorkspaceNav(nav: Element) {
     (el) => /工作區/.test(el.textContent || "") && !el.classList.contains("rail-proj-head"),
   );
   if (!workLabel) return;
+
+  const items: { href: string; label: string; icon: string; count?: "review" | "templates"; title: string }[] = [
+    { href: "overview.html", label: "專案總覽", icon: IC.dashboard, title: "所有專案的彙整儀表板" },
+    { href: "projects.html", label: "專案清單", icon: IC.projects, title: "可篩選、可搜尋的專案清單" },
+    { href: "review.html", label: "審閱佇列", icon: IC.review, count: "review", title: "待審與待簽核的規格" },
+    { href: "templates.html", label: "章節範本", icon: IC.templates, count: "templates", title: "可直接插入的段落骨架" },
+  ];
+
   let row = nav.querySelector(".rail-wsnav") as HTMLElement | null;
   if (!row) {
     row = document.createElement("div");
     row.className = "rail-wsnav";
-    row.innerHTML = `
-      <a class="rail-wsnav-item" href="overview.html" title="所有專案的彙整儀表板">專案總覽</a>
-      <a class="rail-wsnav-item" href="projects.html" title="可篩選、可搜尋的專案清單">專案清單</a>
-      <a class="rail-wsnav-item" href="review.html" title="待審與待簽核的規格">審閱佇列<span class="rail-review-count" id="rail-review-count">0</span></a>
-    `;
+    // 直接沿用 .nav-item —— 這一組跟主導覽是同一種東西（去某一頁），
+    // 自己另做一套外觀只會讓側欄出現兩種「可點的列」。
+    row.innerHTML = items
+      .map(
+        (it) =>
+          `<a class="nav-item" href="${it.href}" title="${escapeHtml(it.title)}">
+            <svg class="ic" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${it.icon}</svg>
+            ${escapeHtml(it.label)}
+            ${it.count ? `<span class="count" data-nav-count="${it.count}">0</span>` : ""}
+          </a>`,
+      )
+      .join("");
     workLabel.insertAdjacentElement("afterend", row);
   }
+
   // 目前所在的那一個標起來
   const here = location.pathname.split("/").pop() || "";
-  row.querySelectorAll<HTMLAnchorElement>(".rail-wsnav-item").forEach((a2) => {
-    a2.classList.toggle("on", a2.getAttribute("href") === here);
+  row.querySelectorAll<HTMLAnchorElement>(".nav-item").forEach((a2) => {
+    const on = a2.getAttribute("href") === here;
+    a2.classList.toggle("active", on);
+    if (on) a2.setAttribute("aria-current", "page");
+    else a2.removeAttribute("aria-current");
   });
 }
 
