@@ -115,7 +115,7 @@ export type Snapshot = {
   changed: number;
 };
 
-const KEY_PREFIX = "specforge:file-history:";
+const KEY_PREFIX = "anchorline:file-history:";
 /** 每個檔最多留幾份。留太多沒人看，還會把 localStorage 撐爆。 */
 export const MAX_SNAPSHOTS = 20;
 

@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+# 同一分支的舊 run 直接取消 —— 三平台 × 每次 push 很快就把額度燒完
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: 前端（typecheck · test · build）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      # 只跑 tests/，不跑 vendor/markamd（那是 vendored 的 Tauri 專案，
+      # 它的測試需要 Tauri runtime，在這裡跑必然紅）
+      - run: bun test ./tests/*.test.ts
+      - run: bun run build
+
+  native:
+    name: 原生殼（${{ matrix.os }}）
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tauri 在 Linux 需要 webkit2gtk 與 rsvg
+      - name: Linux 系統依賴
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+
+      - name: cargo fmt
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      - name: clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      # 契約測試：BRIDGE.md 的行為在三個平台都要成立。
+      # 併發 append 那條在 Windows 上特別值得跑 —— 檔案鎖語意跟 POSIX 不同。
+      - name: 契約測試
+        working-directory: src-tauri
+        run: cargo test

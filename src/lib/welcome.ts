@@ -15,9 +15,10 @@
  * - Esc／點背景就關，不強迫讀完。
  * - 沒裝 fastfetch 也照跳，只是下半留白 —— 問候與專案數不該被一個外部工具綁架。
  */
+import { isUnavailable, native } from "./native";
 import { store } from "../data/store";
 
-const SHOWN_KEY = "specforge:welcome-shown-date";
+const SHOWN_KEY = "anchorline:welcome-shown-date";
 /**
  * 「這次啟動已經跳過了」。
  * 用 sessionStorage 而不是 localStorage —— 這個 App 是多頁式的，換頁就是一次
@@ -25,7 +26,7 @@ const SHOWN_KEY = "specforge:welcome-shown-date";
  * sessionStorage 在同一個 WebView session 內跨頁保留、App 整個關掉才清空，
  * 正好就是「開啟當下跳一次，關掉再開才會再跳」的語意。
  */
-const SESSION_KEY = "specforge:welcome-seen-session";
+const SESSION_KEY = "anchorline:welcome-seen-session";
 const APP_VERSION = "1.1.0";
 
 /** fastfetch --format json 是一個 [{type, result}] 陣列 */
@@ -101,7 +102,7 @@ export function summarizeSystem(list: FastfetchEntry[]): { label: string; value:
   const ip = pick(list, "LocalIp") as unknown as { ipv4?: string }[] | null;
   push("區網 IP", Array.isArray(ip) ? ip[0]?.ipv4 : "");
 
-  // 不放 Shell：fastfetch 讀的是父行程，從 App 裡叫出來會顯示 SpecForge 自己 —— 誤導。
+  // 不放 Shell：fastfetch 讀的是父行程，從 App 裡叫出來會顯示 Anchorline 自己 —— 誤導。
   return out;
 }
 
@@ -246,45 +247,9 @@ export function renderWelcome(list: FastfetchEntry[] | null) {
 export function initWelcome() {
   if (seenThisLaunch() || mutedToday()) return;
 
-  const w = window as Window & {
-    webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
-  };
-  const bridge = w.webkit?.messageHandlers?.specforge;
-  if (!bridge) return; // 瀏覽器版沒有原生橋，安靜跳過
+  void (async () => {
+    const r = await native.fastfetch();
+    renderWelcome(isUnavailable(r) ? null : (JSON.parse(r.raw) as FastfetchEntry[]));
+  })().catch(() => renderWelcome(null));
 
-  let done = false;
-  const finish = (list: FastfetchEntry[] | null) => {
-    if (done) return;
-    done = true;
-    window.clearTimeout(timer);
-    window.removeEventListener("specforge-native", onNative);
-    renderWelcome(list);
-  };
-
-  // 抓不到就照跳，只是少了下半段 —— 不讓一個外部工具決定畫面出不出現
-  const timer = window.setTimeout(() => finish(null), 4000);
-
-  function onNative(e: Event) {
-    const p = (e as CustomEvent<{ type?: string; raw?: string }>).detail;
-    if (p?.type === "fastfetchError") {
-      finish(null);
-      return;
-    }
-    if (p?.type !== "fastfetch" || !p.raw) return;
-    try {
-      finish(JSON.parse(p.raw) as FastfetchEntry[]);
-    } catch {
-      finish(null);
-    }
-  }
-
-  window.addEventListener("specforge-native", onNative);
-  try {
-    bridge.postMessage({ action: "fastfetch" });
-  } catch {
-    finish(null);
-  }
 }
-
-// ponytail: 欄位挑選寫死在 summarizeSystem()，不做可設定。
-// fastfetch 給二十幾個模組，全列出來就是一面數字牆 —— 挑過才是這個畫面的價值。

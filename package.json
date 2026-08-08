@@ -1,27 +1,32 @@
 {
-  "name": "pm-spec-scvb",
+  "name": "anchorline",
   "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "bunx tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bunx tsc --noEmit",
     "track": "bun run src/cli/track-tui.ts",
     "track:once": "bun run src/cli/track-tui.ts --once",
     "app": "bash mac-app-build/build-dmg.sh --prod",
     "app:prod": "bash mac-app-build/build-dmg.sh --prod",
     "app:test": "bash mac-app-build/build-dmg.sh --test",
-    "app:all": "bash mac-app-build/build-dmg.sh --all"
+    "app:all": "bash mac-app-build/build-dmg.sh --all",
+    "signal": "sh scripts/anchorline-active.sh",
+    "backfill": "bun run src/cli/backfill-log.ts",
+    "track:frame": "bun run src/cli/track-tui.ts --frame"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^26.1.2",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2",
     "markdown-it": "^15.0.0",
     "markdown-it-mark": "^4.0.0",
     "markdown-it-task-lists": "^2.1.1"

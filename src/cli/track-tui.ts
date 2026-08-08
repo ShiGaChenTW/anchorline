@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * PM-SPEC+SCVB · 真·終端 TUI（計劃追蹤）
+ * Anchorline · 真·終端 TUI（計劃追蹤）
  *
  * 用法：
  *   bun run track              # 互動 TUI
@@ -9,11 +9,16 @@
  *
  * 鍵位：j/k 切 plan · J/K 或 PgDn/PgUp 捲步驟 · r 重新整理 · ? 說明 · q 離開
  */
-import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
+import {
+  mintMissingIds,
+  parsePlanMeta,
+  planProgressPct,
+  type PlanMeta,
+} from "../lib/plan-parser";
 import { sortByRecency, trackingTarget, type TrackingSignal } from "../lib/tracking";
 import {
   c,
@@ -33,7 +38,7 @@ const CLI_DIR = dirname(fileURLToPath(import.meta.url));
 /** spec §4 的跨進程介面。目前沒有寫入端，讀不到就是段 2 全責。 */
 const SIGNAL_PATH = join(
   process.env.XDG_CONFIG_HOME || join(homedir(), ".config"),
-  "specforge",
+  "anchorline",
   "active",
 );
 
@@ -53,7 +58,8 @@ function findPlansDir(cliDir?: string): string {
   const cwd = process.cwd();
   const candidates = [
     join(cwd, "plans"),
-    join(cwd, "PM-SPEC+SCVB", "plans"),
+    join(cwd, "anchorline", "plans"),
+    join(cwd, "PM-SPEC+SCVB", "plans"), // 過渡：改名前的資料夾名，之後可拔
     resolve(CLI_DIR, "../../plans"),
   ];
   for (const p of candidates) {
@@ -124,7 +130,7 @@ function render(state: UiState): string[] {
     `${pal.border}${hline(W, "═")}${c.reset}`,
   );
   push(
-    `${c.bold}${pal.title} PM-SPEC+SCVB · TRACK TUI ${c.reset}${pal.muted}  ${state.plansDir}${c.reset}`,
+    `${c.bold}${pal.title} Anchorline · TRACK TUI ${c.reset}${pal.muted}  ${state.plansDir}${c.reset}`,
   );
   push(`${pal.border}${hline(W, "─")}${c.reset}`);
 
@@ -134,6 +140,7 @@ function render(state: UiState): string[] {
     push(`  ${pal.text}J / K${pal.muted}     步驟清單下捲 / 上捲${c.reset}`);
     push(`  ${pal.text}r${pal.muted}         重新載入 plans/${c.reset}`);
     push(`  ${pal.text}t${pal.muted}         跳到追蹤中（•）的那一份${c.reset}`);
+    push(`  ${pal.text}i${pal.muted}         替沒有錨點的步驟鑄造 id（會改檔）${c.reset}`);
     push(`  ${pal.text}?${pal.muted}         開關說明${c.reset}`);
     push(`  ${pal.text}q / Esc${pal.muted}   離開${c.reset}`);
     push(`  ${pal.text}1-9${pal.muted}       跳到第 N 個 plan${c.reset}`);
@@ -148,7 +155,7 @@ function render(state: UiState): string[] {
   if (!state.plans.length) {
     push(`${pal.warn}  plans/ 沒有 .md 計劃檔${c.reset}`);
     push(`${pal.muted}  目錄：${state.plansDir}${c.reset}`);
-    push(`${pal.muted}  可在 SpecForge Web 或手動建立 plans/*.md（含 Plan Steps checkbox）${c.reset}`);
+    push(`${pal.muted}  可在 Anchorline Web 或手動建立 plans/*.md（含 Plan Steps checkbox）${c.reset}`);
     while (lines.length < H - 2) push("");
     push(`${pal.border}${hline(W, "─")}${c.reset}`);
     push(`${pal.muted}  q 離開 · r 重新整理${c.reset}`);
@@ -170,6 +177,13 @@ function render(state: UiState): string[] {
   push(
     ` ${pal.muted}下一步 ${c.reset}${pal.accent}${pad(cur.meta.next_step, Math.min(W - 12, 60))}${c.reset}`,
   );
+  // 錨點遺失警告。agent 重寫整份 plan 會把錨點抹掉，這些步驟接不上事件流。
+  // 只警告不自動修 —— 無聲重鑄會一路產生對不上舊事件的孤兒 id。
+  if (cur.meta.unanchored) {
+    push(
+      ` ${pal.warn}⚠ ${cur.meta.unanchored} 個步驟沒有錨點，接不上事件流${c.reset}${pal.muted} —— 按 i 鑄造${c.reset}`,
+    );
+  }
   push(`${pal.border}${hline(W, "─")}${c.reset}`);
 
   // Two-column-ish: plan list (left width) + steps
@@ -207,7 +221,13 @@ function render(state: UiState): string[] {
         : s.state === "done"
           ? `${pal.muted}${s.text}${c.reset}`
           : `${pal.text}${s.text}${c.reset}`;
-    stepLines.push(` ${icon} ${pad(txt, rightW - 4)}`);
+    // 錨點 id 佔固定 9 欄。沒有 id 的步驟留 · —— 一眼看得出哪些接不上事件流
+    const tag = s.id
+      ? `${pal.muted}${s.id}${c.reset}`
+      : s.state === "skipped"
+        ? `${pal.muted}········${c.reset}`
+        : `${pal.warn}無錨點  ${c.reset}`;
+    stepLines.push(` ${icon} ${tag} ${pad(txt, rightW - 13)}`);
   }
   if (!steps.length) {
     stepLines.push(` ${pal.muted}（此檔無 Plan Steps checkbox）${c.reset}`);
@@ -275,7 +295,7 @@ function clearDownSeq() {
 }
 
 function printOnce(plans: PlanEntry[], dir: string, tracking: string | null) {
-  console.log(`${c.bold}PM-SPEC+SCVB · track${c.reset}  ${pal.muted}${dir}${c.reset}`);
+  console.log(`${c.bold}Anchorline · track${c.reset}  ${pal.muted}${dir}${c.reset}`);
   console.log(hline(Math.min(80, termSize().cols)));
   if (!plans.length) {
     console.log("（無 plan 檔）");
@@ -379,6 +399,28 @@ async function interactive(plansDir: string) {
       draw(state);
       return;
     }
+    // 手動鑄造缺少的錨點。刻意不自動做 —— 無聲改使用者的檔案是最糟的行為，
+    // 而且 agent 重寫 plan 時錨點會整批消失，自動重鑄只會一路產生孤兒 id。
+    if (key === "i") {
+      const cur = state.plans[state.idx];
+      if (!cur) return;
+      if (!cur.meta.unanchored) {
+        state.message = "這份計劃的步驟都已經有錨點了";
+        draw(state);
+        return;
+      }
+      try {
+        const src = readFileSync(cur.path, "utf8");
+        const { text, minted } = mintMissingIds(src);
+        if (minted) writeFileSync(cur.path, text, "utf8");
+        refresh(state);
+        state.message = `已鑄造 ${minted} 個錨點 · ${cur.meta.title}`;
+      } catch (e) {
+        state.message = `鑄造失敗：${(e as Error).message}`;
+      }
+      draw(state);
+      return;
+    }
     // 跳到追蹤目標。判定是自動的，呈現仍然是手動的 —— 畫面不自己跳走
     if (key === "t") {
       const i = state.plans.findIndex((p) => p.path === state.tracking);
@@ -436,9 +478,37 @@ function once(plansDir: string) {
   printOnce(plans, plansDir, tracking);
 }
 
+/**
+ * 印出一張完整的互動畫面然後結束。
+ *
+ * `--once` 是給 pipe 用的摘要清單，看不到步驟與錨點 id；互動模式看得到但需要
+ * TTY。截圖、貼進 issue、CI 比對都卡在這中間 —— `--frame` 就是那個中間。
+ */
+function frame(plansDir: string) {
+  const state: UiState = {
+    plans: [],
+    idx: 0,
+    tracking: null,
+    stepScroll: 0,
+    showHelp: false,
+    plansDir,
+    message: "",
+  };
+  refresh(state);
+  // 追蹤中的那一份就是要看的那一份 —— 截圖不該還要人先按 t
+  const t = state.plans.findIndex((p) => p.path === state.tracking);
+  if (t >= 0) state.idx = t;
+  process.stdout.write(render(state).join("\n") + "\n");
+}
+
 function main() {
   const args = process.argv.slice(2);
   const oneShot = args.includes("--once") || args.includes("-1");
+  if (args.includes("--frame")) {
+    const df = args.findIndex((a) => a === "--dir" || a === "-d");
+    frame(findPlansDir(df >= 0 ? args[df + 1] : undefined));
+    return;
+  }
   const dirFlag = args.findIndex((a) => a === "--dir" || a === "-d");
   const dirArg = dirFlag >= 0 ? args[dirFlag + 1] : undefined;
   const plansDir = findPlansDir(dirArg);

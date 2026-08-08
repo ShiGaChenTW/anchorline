@@ -1,3 +1,4 @@
+import { isNative, native } from "../lib/native";
 import { store } from "../data/store";
 import { APP_VARIANT } from "../data/seed";
 import { projectDisplayName, type Project, type ProjectStatus } from "../data/types";
@@ -178,10 +179,10 @@ if (!requireAuth()) {
 
   /** 顯示方式：列表／卡片／資料夾。存 localStorage —— 換了頁回來不該重來。 */
   type ViewMode = "list" | "card" | "folder";
-  const VIEW_KEY = "specforge:project-view";
+  const VIEW_KEY = "anchorline:project-view";
   /** 資料夾模式裡，群組內部要用清單還是卡片 */
   type SubMode = "list" | "card";
-  const SUB_KEY = "specforge:folder-sub";
+  const SUB_KEY = "anchorline:folder-sub";
   let sub: SubMode = (() => {
     try {
       return localStorage.getItem(SUB_KEY) === "card" ? "card" : "list";
@@ -574,7 +575,7 @@ if (!requireAuth()) {
 
   // 一次性清空：先前錯誤拆分子目錄匯入的追蹤資料，方便重新匯入
   {
-    const MIGRATE_KEY = "specforge:clear-split-import-v1";
+    const MIGRATE_KEY = "anchorline:clear-split-import-v1";
     try {
       if (!localStorage.getItem(MIGRATE_KEY) && store.get().projects.length > 0) {
         const r = store.untrackAllProjects();
@@ -594,7 +595,7 @@ if (!requireAuth()) {
   let wizStep = 0;
   /** 3 個問題 + 1 個確認頁 */
   const WIZ_MAX = 3;
-  const DRAFT_KEY = "specforge:new-prd-draft:v1";
+  const DRAFT_KEY = "anchorline:new-prd-draft:v1";
   let beginnerPath = true;
 
   /** 三題的欄位與範例句。範例句是任務啟動的坡道，不是裝飾。 */
@@ -1266,8 +1267,8 @@ if (!requireAuth()) {
     // 綁定專案資料夾走另一條路（不掃描評分），交給 project-folder.ts 的 callback
     if (payload.type === "projectFolderPickResult") {
       (window as Window & {
-        __specforgeProjectFolderResult?: (p: NativePayload) => void;
-      }).__specforgeProjectFolderResult?.(payload);
+        __anchorlineProjectFolderResult?: (p: NativePayload) => void;
+      }).__anchorlineProjectFolderResult?.(payload);
       return;
     }
     if (payload.type === "folderPickCancelled") {
@@ -1292,20 +1293,6 @@ if (!requireAuth()) {
     }
   }
 
-  /** SpecForge.app 注入 window.__SPECFORGE_NATIVE__ + webkit.messageHandlers.specforge */
-  function hasNativeFolderPicker(): boolean {
-    const w = window as Window & {
-      __SPECFORGE_NATIVE__?: boolean;
-      __specforgeHasNativeFolder?: boolean;
-      webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
-    };
-    return Boolean(
-      w.__SPECFORGE_NATIVE__ ||
-        w.__specforgeHasNativeFolder ||
-        w.webkit?.messageHandlers?.specforge,
-    );
-  }
-
   function openFolderPicker() {
     if (!canEditContent(store.get().currentUser)) {
       toast("無編輯權限，無法匯入");
@@ -1313,27 +1300,31 @@ if (!requireAuth()) {
     }
     importErr("");
 
-    const w = window as Window & {
-      __specforgeNativeFolderResult?: (p: NativePayload) => void;
-      webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
-    };
-
-    // 優先原生 NSOpenPanel（macOS App）
-    if (hasNativeFolderPicker() && w.webkit?.messageHandlers?.specforge) {
-      w.__specforgeNativeFolderResult = handleNativeFolderPayload;
-      try {
-        w.webkit.messageHandlers.specforge.postMessage({ action: "pickFolder" });
-        toast("請在系統對話框選擇資料夾…");
-        return;
-      } catch (e) {
-        console.warn("native pickFolder failed, fallback to input", e);
-      }
+    // 原生資料夾選擇器
+    if (isNative()) {
+      toast("請在系統對話框選擇資料夾…");
+      void native
+        .pickFolder()
+        .then((r) => {
+          if (r.cancelled) return;
+          handleNativeFolderPayload({
+            type: "folderPickResult",
+            folderName: r.folderName,
+            folderPath: r.folderPath,
+            files: r.files,
+          });
+        })
+        .catch((e) => {
+          console.warn("native pickFolder failed", e);
+          importErr("無法開啟系統對話框，請重啟 App");
+        });
+      return;
     }
 
     // 瀏覽器 fallback：不可使用 [hidden]（會擋 dialog），改用 visually-hidden
     const input = document.getElementById("folder-import-input") as HTMLInputElement | null;
     if (!input) {
-      importErr("找不到檔案選擇器。若在 App 內，請重啟 SpecForge 以載入原生橋。");
+      importErr("找不到檔案選擇器。若在 App 內，請重啟 Anchorline 以載入原生橋。");
       toast("無法開啟選夾");
       return;
     }
@@ -1344,18 +1335,11 @@ if (!requireAuth()) {
     window.setTimeout(() => {
       if (!input.files?.length && !scanResult) {
         importErr(
-          "瀏覽器未開啟資料夾選擇器。請在 SpecForge App 使用（原生選夾），或改用 Chrome 開 dev server。",
+          "瀏覽器未開啟資料夾選擇器。請在 Anchorline App 使用（原生選夾），或改用 Chrome 開 dev server。",
         );
       }
     }, 1200);
   }
-
-  // 原生也可能從選單 ⌘⇧O 觸發，需監聽全域 callback / event
-  (window as Window & { __specforgeNativeFolderResult?: (p: NativePayload) => void }).__specforgeNativeFolderResult =
-    handleNativeFolderPayload;
-  window.addEventListener("specforge-native", ((e: CustomEvent<NativePayload>) => {
-    handleNativeFolderPayload(e.detail);
-  }) as EventListener);
 
   document.getElementById("btn-import")?.addEventListener("click", () => {
     scanResult = null;
@@ -1398,7 +1382,7 @@ if (!requireAuth()) {
     location.href = "editor.html";
   });
 
-  document.addEventListener("specforge:project-changed", () => {
+  document.addEventListener("anchorline:project-changed", () => {
     render();
     toast("已切換目前專案（內容獨立）");
   });

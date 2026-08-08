@@ -331,7 +331,7 @@ function bindAddMenu(block: HTMLElement) {
   bumpCounts();
 }
 
-const RAIL_LIST_H_KEY = "specforge:rail-projects-height";
+const RAIL_LIST_H_KEY = "anchorline:rail-projects-height";
 
 /**
  * 專案清單高度可拖曳。

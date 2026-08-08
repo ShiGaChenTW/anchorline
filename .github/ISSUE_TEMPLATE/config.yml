@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安全漏洞回報
+    url: https://github.com/ShiGaChenTW/PM-SPEC-SCVB/security/advisories/new
+    about: 可利用的漏洞請走這裡，不要開公開 issue

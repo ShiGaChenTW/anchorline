@@ -613,7 +613,7 @@ export const SEED_EMPLOYEES_DEMO: Employee[] = [
     name: "Scott",
     title: "Workspace 管理員",
     avatar: "S",
-    email: "scott@specforge.local",
+    email: "scott@anchorline.local",
     accessRole: "admin",
     kind: "human",
     agentFamily: null,

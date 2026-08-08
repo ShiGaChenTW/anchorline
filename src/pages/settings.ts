@@ -388,7 +388,7 @@ document.getElementById("set-pane")?.addEventListener("input", (e) => {
       b.setAttribute("aria-current", on ? "true" : "false");
     });
     try {
-      localStorage.setItem("specforge:settings-cat", key);
+      localStorage.setItem("anchorline:settings-cat", key);
     } catch {
       /* private mode */
     }
@@ -399,7 +399,7 @@ document.getElementById("set-pane")?.addEventListener("input", (e) => {
   });
   let initial = "general";
   try {
-    initial = localStorage.getItem("specforge:settings-cat") || "general";
+    initial = localStorage.getItem("anchorline:settings-cat") || "general";
   } catch {
     /* ignore */
   }

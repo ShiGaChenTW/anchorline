@@ -10,7 +10,7 @@
  * 關掉就回到原位 —— 中斷成本從「重新導航」降到「按 Esc」。
  */
 
-const SIZE_KEY = "specforge:settings-modal-size";
+const SIZE_KEY = "anchorline:settings-modal-size";
 
 function saveSize(w: number, h: number) {
   try {

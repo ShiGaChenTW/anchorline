@@ -15,7 +15,7 @@
 import type { Section } from "../data/types";
 import { toast } from "./ui";
 
-const RESUME_KEY = "specforge:resume:v1";
+const RESUME_KEY = "anchorline:resume:v1";
 /** 超過這個天數就不還原游標了，比較可能是新的一段工作 */
 const RESUME_MAX_AGE_DAYS = 7;
 /** 連續寫作提醒間隔（分鐘） */

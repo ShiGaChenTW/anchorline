@@ -3,23 +3,35 @@ import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { deriveFlowLayers } from "../lib/flow-layers";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
-import { parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
+import { ANCHOR_PREFIX, parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
 import { initTheme } from "../lib/theme";
 import { sortByRecency, trackingTarget } from "../lib/tracking";
 import { canScanPlans, plansDirsOf, requestTrackingScan } from "../lib/tracking-bridge";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+import { byNewest, dedupe, parseLog, type LogEvent } from "../lib/event-log";
+import { hookInstallSnippet, logEvent } from "../lib/event-writer";
+import { canEditFiles, readFile, writeFile } from "../lib/file-editor";
+import { guardOf, safeApply, toggleStep } from "../lib/plan-writer";
+import {
+  buildResumeCard,
+  exportCsv,
+  exportMarkdown,
+  filterForExport,
+  kindLabel,
+  todayLine,
+  todaySummary,
+} from "../lib/log-views";
+import { buildReplay, replayMarkdown } from "../lib/replay";
 
-/**
- * Vite 編譯期嵌入本 repo 自己的 plans/*.md。
- *
- * 這是**降級路徑**：瀏覽器拿不到 mtime，所以拿不到追蹤目標，只能顯示靜態快照。
- * 桌面版走 tracking-bridge 讀使用者實際綁定的專案資料夾，那條路才是活的。
- */
-const planFiles = import.meta.glob("../../plans/*.md", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-}) as Record<string, string>;
+/** 壞行由 parseLog 跳過，不會毀掉整份。 */
+let auditEvents: LogEvent[] = [];
+
+/** 讓桌面版把讀到的 JSONL 交進來，覆蓋編譯期快照。 */
+export function loadAuditLog(text: string): number {
+  const { events, skipped } = parseLog(text);
+  auditEvents = dedupe(events);
+  return skipped;
+}
 
 type PlanEntry = {
   id: string;
@@ -56,14 +68,14 @@ if (__authed) {
     return p?.customName || p?.title || "";
   }
 
-  /** 降級路徑：編譯期嵌入的靜態快照，沒有 mtime 就沒有追蹤目標 */
-  function loadStatic() {
-    plans = Object.entries(planFiles)
-      .map(([p, raw]) => {
-        const name = p.split("/").pop() ?? p;
-        return { id: name, name, path: name, mtimeMs: NaN, raw, meta: parsePlanMeta(raw, name) };
-      })
-      .sort((a, b) => b.name.localeCompare(a.name));
+  /**
+   * 讀不到任何東西時的狀態。
+   *
+   * 舊版會退回「本 repo 自己編譯進來的 plans」——那在別人的機器上是
+   * 一份完全不相干的清單，看起來像功能其實是 bug。誠實的空清單比較好。
+   */
+  function loadEmpty() {
+    plans = [];
     live = false;
     trackingPath = null;
     restoreIdx();
@@ -118,7 +130,7 @@ if (__authed) {
 
   async function loadPlans() {
     if (canScanPlans() && (await loadLive())) return;
-    loadStatic();
+    loadEmpty();
   }
 
   /**
@@ -281,13 +293,23 @@ if (__authed) {
           .map((s, n) => ({ s, n }))
           .sort((a, b) => order[a.s.state] - order[b.s.state] || a.n - b.n);
         steps.innerHTML = sorted
-          .map(
-            ({ s }) => `<div class="tk-step ${s.state}">
-              <span class="tk-step-mark" aria-hidden="true"></span>
+          .map(({ s }) => {
+            // 有錨點才能勾 —— 沒有 id 就沒有辦法在寫回時定位到那一行，
+            // 也接不上事件流。UI 直接反映這個限制，而不是勾了沒反應。
+            const can = Boolean(s.id) && s.state !== "skipped" && canEditFiles();
+            const mark = can
+              ? `<button type="button" class="tk-step-mark tk-step-toggle" data-step="${escapeHtml(s.id!)}" data-done="${s.state === "done" ? "1" : "0"}" aria-label="${s.state === "done" ? "取消勾選" : "標記完成"}"></button>`
+              : `<span class="tk-step-mark" aria-hidden="true"></span>`;
+            return `<div class="tk-step ${s.state}">
+              ${mark}
               <span class="tk-step-t">${escapeHtml(s.text)}</span>
-            </div>`,
-          )
+            </div>`;
+          })
           .join("");
+
+        steps.querySelectorAll<HTMLButtonElement>(".tk-step-toggle").forEach((btn) => {
+          btn.onclick = () => void onToggleStep(btn.dataset.step!, btn.dataset.done !== "1");
+        });
       }
     }
   }
@@ -373,6 +395,137 @@ if (__authed) {
       .join("")}</dl>`;
   }
 
+  /**
+   * 稽核軌跡的三層。**預設停在第一層。**
+   *
+   * 一條無限捲動的事件流對 ADHD 使用者是注意力黑洞：進得去出不來，看完沒有產出。
+   * 整理資料很爽，但那不是做事。所以時間軸要點兩下才到，而打開時看到的是
+   * 「回到工作」三行——context recovery，不是稽核。兩個價值主張分開。
+   */
+  function renderAudit() {
+    const el = document.getElementById("audit-panel");
+    if (!el) return;
+    const p = plans[idx];
+    if (!p) {
+      el.innerHTML = "";
+      return;
+    }
+
+    const now = Date.now();
+    const openTasks = p.meta.steps
+      .filter((s) => s.state === "pending")
+      .map((s) => ({ id: s.id, text: s.text }));
+    const card = buildResumeCard(auditEvents, openTasks, now);
+    const groups = todaySummary(auditEvents, now);
+
+    const empty = !auditEvents.length;
+    el.innerHTML = `<section class="tk-audit">
+      <div class="tk-hd">稽核軌跡</div>
+
+      <div class="tk-resume">
+        <p class="tk-resume-a">上次動 ${escapeHtml(card.lastActive)}</p>
+        <p class="tk-resume-b">${escapeHtml(card.lastDone)}</p>
+        <p class="tk-resume-c">${escapeHtml(card.nextOpen)}</p>
+      </div>
+
+      ${
+        empty
+          ? `<p class="tk-audit-empty">還沒有事件。裝上 Claude Code hook 之後，agent 每次編輯都會留下一筆。
+             <button type="button" class="btn btn-sm" id="btn-hook-snippet">複製安裝指令</button></p>`
+          : `<details class="tk-audit-more">
+              <summary>${escapeHtml(todayLine(groups))}</summary>
+              <details class="tk-audit-timeline">
+                <summary>完整時間軸（${auditEvents.length} 筆）</summary>
+                <ul class="tk-timeline">${byNewest(auditEvents)
+                  .slice(0, 200)
+                  .map(
+                    (e) =>
+                      `<li><span class="mono">${escapeHtml(e.ts.slice(0, 16).replace("T", " "))}</span>
+                       <b>${escapeHtml(kindLabel(e.kind))}</b>
+                       <span class="muted">${escapeHtml(e.subject)}</span></li>`
+                  )
+                  .join("")}</ul>
+                <p class="tk-audit-actions">
+                  <button type="button" class="btn btn-sm" id="btn-export-md">匯出 Markdown</button>
+                  <button type="button" class="btn btn-sm" id="btn-export-csv">匯出 CSV</button>
+                  <button type="button" class="btn btn-sm" id="btn-export-replay">治理鏈 replay</button>
+                </p>
+              </details>
+            </details>`
+      }
+    </section>`;
+
+    document.getElementById("btn-hook-snippet")?.addEventListener("click", () => {
+      // 只複製，不代寫 ~/.claude/settings.json —— 那是使用者的全域設定
+      void navigator.clipboard?.writeText(hookInstallSnippet());
+      toast("已複製。貼進 ~/.claude/settings.json 的 hooks 區段");
+    });
+    document.getElementById("btn-export-md")?.addEventListener("click", () => {
+      download(`稽核軌跡-${p.name}.md`, exportMarkdown(filterForExport(auditEvents, {}), `稽核軌跡 · ${p.meta.title}`));
+    });
+    document.getElementById("btn-export-csv")?.addEventListener("click", () => {
+      download(`稽核軌跡-${p.name}.csv`, exportCsv(filterForExport(auditEvents, {})));
+    });
+    // 治理鏈 replay：作品用。撰寫者族系從專案的 authorAgentFamily 來，
+    // 職務分離違規會被標出來 —— 一條沒有標示違規的治理鏈沒有說服力。
+    document.getElementById("btn-export-replay")?.addEventListener("click", () => {
+      const st = store.get();
+      const proj = st.projects.find((x) => x.id === st.activeProjectId);
+      const r = buildReplay(auditEvents, `prd:${proj?.id ?? ""}`, proj?.authorAgentFamily ?? null, Date.now());
+      download(`治理鏈-${p.name}.md`, replayMarkdown(r, `治理鏈 · ${proj ? proj.title : p.meta.title}`));
+    });
+  }
+
+  function download(name: string, text: string) {
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast(`已匯出 ${name}`);
+  }
+
+  /**
+   * 勾／取消勾一個步驟。
+   *
+   * **每一次都重讀磁碟再比對**（`safeApply`）。agent 可能正在重寫同一份 plan，
+   * 而整檔覆寫吃掉它剛寫的東西是不會有錯誤訊息的 —— 那比功能沒做更糟。
+   */
+  async function onToggleStep(id: string, done: boolean) {
+    const p = plans[idx];
+    if (!p) return;
+    const guard = guardOf(p.path, p.raw);
+    const r = await safeApply(guard, (text) => toggleStep(text, id, done), {
+      read: readFile,
+      write: writeFile,
+    });
+    if (!r.ok) {
+      toast(r.reason);
+      await refresh(true); // 衝突時把畫面拉回磁碟現況，不要停在舊的
+      return;
+    }
+    // 寫成功才記事件。順序反過來的話，log 會有一筆沒發生的事
+    const st = store.get();
+    const proj = st.projects.find((x) => x.id === st.activeProjectId);
+    const root = proj?.importSummary?.rootPath;
+    if (root && done) {
+      const u = st.currentUser;
+      logEvent(root, {
+        project: proj!.id,
+        actor: {
+          kind: u.kind === "agent" ? "agent" : "human",
+          family: u.agentFamily ?? null,
+          name: u.name,
+        },
+        kind: "task.done",
+        subject: `${ANCHOR_PREFIX}:t=${id}`,
+        payload: { title: p.meta.steps.find((s) => s.id === id)?.text ?? "" },
+      });
+    }
+    await refresh(true);
+  }
+
   function render(force = false) {
     const sig = signature();
     if (!force && sig === lastSig) return;
@@ -382,6 +535,7 @@ if (__authed) {
     renderMain();
     renderGates();
     renderLayers();
+    renderAudit();
   }
 
   function select(i: number) {
