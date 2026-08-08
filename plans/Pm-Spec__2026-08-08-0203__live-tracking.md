@@ -43,6 +43,36 @@
 - 桌面版 bridge 往返未實測 —— 需要 `bun run app` 打包，且要有至少一個綁了資料夾、
   底下有 `plans/` 的專案才會走 live 路徑。
 
+## 合併紀錄
+
+- 2026-08-08 — `feasibility-eval-live-tracking`（be617b8）以 `--no-ff` 併入 main（`76f7dd7`），
+  已 push。與主線**無檔案重疊**（merge-base 是 4e0f4d3，主線之後只動了 editor/dashboard/
+  projects/store 那一串），所以是乾淨合併，沒有手動解衝突。
+
+合併後在 main 上重跑的驗證：
+
+| 項目 | 結果 |
+|---|---|
+| `bun test tests/tracking.test.ts` | 15 pass / 0 fail |
+| `bunx tsc --noEmit` | 通過 |
+| `bun run build` | 通過 |
+| `swiftc -parse mac-app-build/main.swift` | 通過 |
+| `bun run track:once` | 追蹤圓點標在 live-tracking 這份計畫上（`進行中 75% 6/8 •`），正確 |
+| 正式版安裝 | 已重裝，二進位含 `trackingScan` |
+
+⚠️ `bun test`（全量）有 9 fail，全部來自 `vendor/markamd/`（缺 react / @tauri-apps
+等未安裝的相依）。**在合併前的 61140eb 上跑也是同樣的 9 fail**，與這次合併無關。
+
+## 阻塞（合併後仍未解）
+
+兩項都還開著，我沒有把它們當作已驗證：
+
+- **瀏覽器實機**：Chrome 擴充在我這端也是 `Browser extension is not connected`，
+  一樣做不了。降級路徑（`import.meta.glob` 靜態快照 + footer 明說）只有程式碼層面看過。
+- **桌面版 bridge 往返**：App 已重裝且二進位含 `trackingScan`，但視窗一直被其他
+  應用蓋住、`System Events` 的 frontmost 拉不上來，沒能實際看到畫面上的圓點。
+  需要人工開一次 App、進 Task Tracking 頁確認。
+
 ## 結束摘要
 
 （Step 7/8 完成後補上）
