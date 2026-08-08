@@ -135,9 +135,11 @@ describe("真實 fixture：本專案的實作 task list", () => {
   const text = readFileSync(path, "utf8");
   const meta = parsePlanMeta(text, path);
 
-  test("解析得出標題與狀態", () => {
+  test("解析得出標題，狀態落在封閉詞彙內", () => {
     expect(meta.title).toBe("開發專案工作台 — 實作 Task List");
-    expect(meta.status).toBe("進行中");
+    // 不寫死「進行中」—— 這份 fixture 是活的，工作推進時狀態就會變，
+    // 寫死等於每收掉一個階段就紅一次。真正該守的是「解得出來、而且在詞彙表裡」。
+    expect(["進行中", "已完成", "已暫停", "已放棄", "阻塞"]).toContain(meta.status);
   });
 
   test("所有活著的步驟都已有錨點", () => {
