@@ -7658,21 +7658,107 @@ p.gd-warn {
   color: var(--fg);
   font-weight: 600;
 }
-.fv-text {
-  flex: 1 1 auto;
-  min-height: 0;
-  width: 100%;
+/* 背板與 textarea 疊在一起。兩者的字體度量必須完全一致，
+   差一點點色塊就會跟文字錯開 —— 所以共用 .fv-layer 這組值。 */
+.fv-stack { position: relative; flex: 1 1 auto; min-height: 0; }
+.fv-layer,
+.fv-text,
+.fv-backdrop {
   padding: 14px 16px;
-  border: 0;
-  background: var(--bg);
-  color: var(--fg);
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.75;
-  resize: none;
+  letter-spacing: 0;
   tab-size: 2;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.fv-backdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  overflow: hidden;
+  color: transparent;
+  pointer-events: none;
+}
+/* 只有改過的行需要接滑鼠 —— 其餘讓事件穿透到 textarea */
+.fv-backdrop .fv-changed { pointer-events: auto; }
+.fv-line { display: inline; }
+.fv-changed {
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--warn) 22%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--warn) 38%, transparent);
+  cursor: help;
+}
+.fv-text {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  resize: none;
+  overflow: auto;
 }
 .fv-text:focus { outline: none; }
+.fv-stack { background: var(--bg); }
+
+/* 前後對比浮層 */
+.fv-tip {
+  position: fixed;
+  z-index: 600;
+  max-width: min(560px, 80vw);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel, var(--bg));
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+}
+.fv-tip-head { margin: 0 0 7px; font-size: 11px; color: var(--warn); font-weight: 600; }
+.fv-tip-row { display: flex; gap: 7px; margin: 0 0 5px; align-items: baseline; }
+.fv-tip-tag {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+.fv-tip-tag.old { background: color-mix(in oklab, var(--muted) 26%, transparent); color: var(--muted); }
+.fv-tip-tag.new { background: color-mix(in oklab, var(--warn) 26%, transparent); color: var(--fg-2); }
+.fv-tip-row code, .fv-tip-row em {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--fg-2);
+  word-break: break-word;
+}
+.fv-tip-who { margin: 6px 0 0; font-size: 10.5px; color: var(--muted); }
+
+/* 版本紀錄 */
+.fv-hist {
+  flex: 0 0 auto;
+  max-height: 30vh;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  background: var(--panel, var(--bg));
+}
+.fv-hist[hidden] { display: none; }
+.fv-hist-empty { margin: 0; padding: 12px 14px; font-size: 12px; color: var(--muted); }
+.fv-hist-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 1px; }
+.fv-hist-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+}
+.fv-hist-item:hover { background: var(--inset); }
+.fv-hist-meta { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.fv-hist-meta strong { font-size: 12.5px; color: var(--fg); }
+.fv-hist-meta span { font-size: 11px; color: var(--muted); }
+.fv-hist-meta time { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--meta); }
 .fv-note {
   flex: 0 0 auto;
   margin: 0;

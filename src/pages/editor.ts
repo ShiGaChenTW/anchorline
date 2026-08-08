@@ -34,6 +34,13 @@ import {
 } from "../lib/file-tree";
 import { absolutePathFor, groupOpenspecFiles, openspecFiles } from "../lib/openspec-tree";
 import { canEditFiles, readFile, shortPath, writeFile } from "../lib/file-editor";
+import {
+  changedLineCount,
+  loadSnapshots,
+  markChangedLines,
+  pushSnapshot,
+  relativeTime,
+} from "../lib/file-history";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { askForProjectFolder } from "../lib/project-folder";
 import { initFocusMode, renderProgress } from "../lib/focus-mode";
@@ -483,6 +490,100 @@ async function openFileInEditor(path: string) {
   }
 }
 
+/**
+ * 存檔前把改過的行標成橘色。
+ *
+ * textarea 沒辦法把部分文字上色，所以用「背板」：一個和 textarea 完全對齊、
+ * 字體度量一致的 div 疊在底下畫色塊，textarea 自己的文字保持不透明蓋在上面。
+ * 這是唯一不用換成 contenteditable（會壞掉 undo、輸入法、拼字）的做法。
+ */
+function renderHighlightBackdrop() {
+  if (!openFile) return;
+  const ta = document.getElementById("fv-text") as HTMLTextAreaElement | null;
+  const back = document.getElementById("fv-backdrop");
+  if (!ta || !back) return;
+
+  const marks = markChangedLines(openFile.original, ta.value);
+  const byIndex = new Map(marks.map((m) => [m.index, m]));
+  const lines = ta.value.split("\n");
+
+  back.innerHTML = lines
+    .map((ln, i) => {
+      const m = byIndex.get(i);
+      const text = escapeHtml(ln) || "&nbsp;";
+      if (!m) return `<span class="fv-line">${text}</span>`;
+      return `<span class="fv-line fv-changed" data-fv-line="${i}"
+        data-before="${escapeHtml(m.before ?? "")}"
+        data-kind="${m.kind}">${text}</span>`;
+    })
+    .join("\n");
+  back.scrollTop = ta.scrollTop;
+  back.scrollLeft = ta.scrollLeft;
+
+  const state = document.getElementById("fv-state");
+  if (state) {
+    const n = marks.length;
+    state.textContent = n ? `${n} 行未儲存` : "已同步";
+    state.className = `fv-state${n ? " is-dirty" : ""}`;
+  }
+}
+
+/** 滑過改動的行 → 顯示改之前 / 改之後與修改人 */
+function bindChangeTooltip(host: HTMLElement) {
+  let tip: HTMLElement | null = null;
+  const hide = () => {
+    tip?.remove();
+    tip = null;
+  };
+  host.addEventListener("mouseover", (e) => {
+    const line = (e.target as HTMLElement).closest(".fv-changed") as HTMLElement | null;
+    if (!line) return;
+    hide();
+    const kind = line.dataset.kind === "added" ? "新增" : "取代";
+    const before = line.dataset.before ?? "";
+    tip = document.createElement("div");
+    tip.className = "fv-tip";
+    tip.innerHTML = `
+      <p class="fv-tip-head">${kind} · 尚未儲存</p>
+      ${
+        before
+          ? `<p class="fv-tip-row"><span class="fv-tip-tag old">改前</span><code>${escapeHtml(before)}</code></p>`
+          : `<p class="fv-tip-row"><span class="fv-tip-tag old">改前</span><em>（原本沒有這一行）</em></p>`
+      }
+      <p class="fv-tip-row"><span class="fv-tip-tag new">改後</span><code>${escapeHtml(line.textContent ?? "")}</code></p>
+      <p class="fv-tip-who">${escapeHtml(store.get().currentUser?.name ?? "—")}</p>
+    `;
+    document.body.appendChild(tip);
+    const r = line.getBoundingClientRect();
+    tip.style.top = `${Math.round(r.bottom + 6)}px`;
+    tip.style.left = `${Math.round(Math.min(r.left, window.innerWidth - tip.offsetWidth - 12))}px`;
+  });
+  host.addEventListener("mouseout", (e) => {
+    if (!(e.target as HTMLElement).closest(".fv-changed")) return;
+    hide();
+  });
+  host.addEventListener("scroll", hide, true);
+}
+
+function snapshotListHtml(path: string): string {
+  const snaps = loadSnapshots(path);
+  if (!snaps.length) {
+    return `<p class="fv-hist-empty">還沒有快照。每次儲存前會自動留一份存檔前的內容。</p>`;
+  }
+  return `<ul class="fv-hist-list">${snaps
+    .map(
+      (sn, i) => `<li class="fv-hist-item">
+        <div class="fv-hist-meta">
+          <strong>${escapeHtml(relativeTime(sn.at))}</strong>
+          <span>${escapeHtml(sn.author)} · 改了 ${sn.changed} 行</span>
+          <time>${escapeHtml(sn.at.slice(0, 16).replace("T", " "))}</time>
+        </div>
+        <button type="button" class="btn btn-sm" data-fv-restore="${i}">還原這一版</button>
+      </li>`,
+    )
+    .join("")}</ul>`;
+}
+
 function renderFileView(): boolean {
   if (!openFile) return false;
   const label = document.getElementById("sec-label");
@@ -503,34 +604,71 @@ function renderFileView(): boolean {
       <div class="fv-bar">
         <span class="fv-path mono" title="${escapeHtml(openFile.path)}">${escapeHtml(shortPath(openFile.path))}</span>
         <span class="fv-state" id="fv-state"></span>
+        <button type="button" class="btn btn-sm" id="fv-hist">版本紀錄</button>
         <button type="button" class="btn btn-sm" id="fv-revert">還原</button>
         <button type="button" class="btn btn-sm btn-primary" id="fv-save">儲存</button>
         <button type="button" class="btn btn-sm btn-ghost" id="fv-close">回章節</button>
       </div>
-      <textarea id="fv-text" class="fv-text" spellcheck="false"
-                data-path="${escapeHtml(openFile.path)}"
-                aria-label="${escapeHtml(shortPath(openFile.path))}">${escapeHtml(openFile.original)}</textarea>
-      <p class="fv-note">這是磁碟上的真實檔案，不會自動存檔 —— 改完要按儲存。⌘S 也可以。</p>
+      <div class="fv-stack">
+        <div class="fv-backdrop" id="fv-backdrop" aria-hidden="true"></div>
+        <textarea id="fv-text" class="fv-text" spellcheck="false"
+                  data-path="${escapeHtml(openFile.path)}"
+                  aria-label="${escapeHtml(shortPath(openFile.path))}">${escapeHtml(openFile.original)}</textarea>
+      </div>
+      <div class="fv-hist" id="fv-hist-panel" hidden></div>
+      <p class="fv-note">改過但還沒存的行會標成橘色，滑過去看得到改前／改後與修改人。儲存前會自動留一份快照。</p>
     </div>
   `;
 
   const ta = document.getElementById("fv-text") as HTMLTextAreaElement;
-  const state = document.getElementById("fv-state") as HTMLElement;
-  const syncState = () => {
-    const dirty = ta.value !== openFile!.original;
-    state.textContent = dirty ? "未儲存" : "已同步";
-    state.className = `fv-state${dirty ? " is-dirty" : ""}`;
+  const backdrop = document.getElementById("fv-backdrop") as HTMLElement;
+  renderHighlightBackdrop();
+  bindChangeTooltip(backdrop);
+
+  ta.addEventListener("input", renderHighlightBackdrop);
+  // 背板要跟著捲，不然色塊會跟文字錯開
+  ta.addEventListener("scroll", () => {
+    backdrop.scrollTop = ta.scrollTop;
+    backdrop.scrollLeft = ta.scrollLeft;
+  });
+
+  const histPanel = document.getElementById("fv-hist-panel") as HTMLElement;
+  const refreshHist = () => {
+    histPanel.innerHTML = snapshotListHtml(openFile!.path);
+    histPanel.querySelectorAll<HTMLButtonElement>("[data-fv-restore]").forEach((b) => {
+      b.addEventListener("click", () => {
+        const snaps = loadSnapshots(openFile!.path);
+        const sn = snaps[Number(b.dataset.fvRestore)];
+        if (!sn) return;
+        if (!window.confirm(`要把編輯區還原成 ${relativeTime(sn.at)} 的內容嗎？（還原後仍需按儲存才會寫回磁碟）`))
+          return;
+        ta.value = sn.text;
+        renderHighlightBackdrop();
+        toast("已還原到編輯區 —— 確認後按儲存");
+      });
+    });
   };
-  syncState();
-  ta.addEventListener("input", syncState);
 
   const save = async () => {
     if (!openFile) return;
+    const changed = changedLineCount(openFile.original, ta.value);
+    if (!changed) {
+      toast("沒有變更");
+      return;
+    }
     try {
+      // 先留存檔前的內容當快照，再寫入 —— 順序反了就沒有東西可以還原
+      pushSnapshot(openFile.path, {
+        at: new Date().toISOString(),
+        author: store.get().currentUser?.name ?? "—",
+        text: openFile.original,
+        changed,
+      });
       await writeFile(openFile.path, ta.value);
       openFile.original = ta.value;
-      syncState();
-      toast("已儲存");
+      renderHighlightBackdrop();
+      if (!histPanel.hidden) refreshHist();
+      toast(`已儲存 · 改了 ${changed} 行`);
     } catch (e) {
       toast(e instanceof Error ? e.message : "儲存失敗");
     }
@@ -539,9 +677,13 @@ function renderFileView(): boolean {
   document.getElementById("fv-save")?.addEventListener("click", save);
   document.getElementById("fv-revert")?.addEventListener("click", () => {
     ta.value = openFile!.original;
-    syncState();
+    renderHighlightBackdrop();
   });
   document.getElementById("fv-close")?.addEventListener("click", () => closeFileView());
+  document.getElementById("fv-hist")?.addEventListener("click", () => {
+    histPanel.hidden = !histPanel.hidden;
+    if (!histPanel.hidden) refreshHist();
+  });
   ta.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
       e.preventDefault();
