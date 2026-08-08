@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { dedupe, parseLog, serializeEvent } from "../src/lib/event-log";
 import {
   buildEvent,
@@ -88,9 +91,42 @@ describe("Writer B —— hook", () => {
     expect(cmd).toContain("%Y-%m).jsonl");
   });
 
-  test("路徑相對化，不記絕對路徑", () => {
+  // 這裡刻意「真的跑一次」而不是比對字串。
+  // 上一版斷言 cmd 含有 ${CLAUDE_TOOL_FILE#$r/} —— 那個環境變數不存在，
+  // hook 從來沒有寫出過一筆有效事件，而這條測試整段時間都是綠的。
+  // 字串斷言守的是寫法，執行斷言守的是行為。
+  async function runHook(root: string, stdin: string): Promise<string> {
     const cmd = JSON.parse(hookInstallSnippet()).hooks.PostToolUse[0].hooks[0].command as string;
-    expect(cmd).toContain('${CLAUDE_TOOL_FILE#$r/}');
+    const p = Bun.spawn(["bash", "-c", cmd], {
+      env: { ...process.env, CLAUDE_PROJECT_DIR: root },
+      stdin: new TextEncoder().encode(stdin),
+    });
+    await p.exited;
+    const shard = join(root, ".anchorline/log", `${new Date().toISOString().slice(0, 7)}.jsonl`);
+    return existsSync(shard) ? readFileSync(shard, "utf8") : "";
+  }
+
+  test("真的執行：路徑相對化，而且 App 讀得回來", async () => {
+    const root = mkdtempSync(join(tmpdir(), "anc-hook-"));
+    mkdirSync(join(root, ".anchorline"), { recursive: true });
+    // 空白與中文路徑是真實情況（本 repo 的 worktree 目錄名就是中文）
+    const abs = join(root, "計 劃/a b.ts");
+    const out = await runHook(root, JSON.stringify({ tool_input: { file_path: abs } }));
+
+    const { events, skipped } = parseLog(out);
+    expect(skipped).toBe(0);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.subject).toBe("計 劃/a b.ts");
+    expect(events[0]!.actor?.kind).toBe("hook");
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("真的執行：沒有 .anchorline/ 就不寫，也不建目錄", async () => {
+    const root = mkdtempSync(join(tmpdir(), "anc-hook-off-"));
+    const out = await runHook(root, JSON.stringify({ tool_input: { file_path: join(root, "x.ts") } }));
+    expect(out).toBe("");
+    expect(existsSync(join(root, ".anchorline"))).toBe(false);
+    rmSync(root, { recursive: true, force: true });
   });
 
   test("活著的判準是「有沒有 hook 事件」，不是「設定檔寫了沒」", () => {

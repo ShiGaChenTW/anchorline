@@ -191,19 +191,45 @@ export const HOOK_MARKER = ".anchorline/log";
  * 不開視窗、不起長駐進程——前一代寫入端就是死在這一點上。
  */
 export function hookInstallSnippet(): string {
-  return [
-    '{',
-    '  "hooks": {',
-    '    "PostToolUse": [{',
-    '      "matcher": "Edit|Write",',
-    '      "hooks": [{',
-    '        "type": "command",',
-    '        "command": "r=\\"${CLAUDE_PROJECT_DIR:-$PWD}\\"; d=\\"$r/.anchorline/log\\"; mkdir -p \\"$d\\"; f=\\"${CLAUDE_TOOL_FILE#$r/}\\"; printf \'{\\"v\\":1,\\"event_id\\":\\"%s\\",\\"ts\\":\\"%s\\",\\"actor\\":{\\"kind\\":\\"hook\\",\\"family\\":\\"claude\\",\\"name\\":\\"Claude Code\\"},\\"kind\\":\\"file.edit\\",\\"subject\\":\\"%s\\"}\\\\n\' \\"$(uuidgen | tr -d - | head -c 14)\\" \\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\\" \\"$f\\" >> \\"$d/$(date -u +%Y-%m).jsonl\\""',
-    '      }]',
-    '    }]',
-    '  }',
-    '}',
-  ].join("\n");
+  // 檔案路徑來自 **stdin 的 JSON**，不是環境變數。
+  // 舊版這裡讀 $CLAUDE_TOOL_FILE —— 那個變數不存在，結果是每一筆事件的 subject
+  // 都是空字串，而且 hook 照樣 exit 0，沒有任何地方會報錯。
+  //
+  // 兩道 guard 都是「不做事」而不是「報錯」：
+  //   1. 專案沒有 .anchorline/ 就直接退出 —— 這是每個 repo 的開通開關，
+  //      否則一個全域 hook 會在你每一個專案裡長出目錄。
+  //   2. 取不到路徑就退出，寧可少一筆，不要寫一筆 subject 是空的髒資料。
+  //
+  // 用 jq 組 JSON 而不是 printf：路徑可能含空白、引號、中文，printf 不會替你跳脫。
+  const command = [
+    'r="${CLAUDE_PROJECT_DIR:-$PWD}"',
+    '[ -d "$r/.anchorline" ] || exit 0',
+    "f=$(jq -r '.tool_input.file_path // .tool_response.filePath // \"\"')",
+    '[ -n "$f" ] || exit 0',
+    'd="$r/.anchorline/log"',
+    'mkdir -p "$d"',
+    "jq -nc --arg id \"$(uuidgen | tr -d - | head -c 14)\" --arg proj \"$(basename \"$r\")\" " +
+      "--arg root \"$r/\" --arg f \"$f\" " +
+      "'{v:1,event_id:$id,ts:(now|todate),project:$proj," +
+      'actor:{kind:"hook",family:"claude",name:"Claude Code"},' +
+      "kind:\"file.edit\",subject:($f|ltrimstr($root))}' >> \"$d/$(date -u +%Y-%m).jsonl\"",
+  ].join("; ");
+
+  // 交給 JSON.stringify 跳脫，不要手寫反斜線 —— 手寫的那版就是這樣寫錯的。
+  return JSON.stringify(
+    {
+      hooks: {
+        PostToolUse: [
+          {
+            matcher: "Edit|Write",
+            hooks: [{ type: "command", command, timeout: 10 }],
+          },
+        ],
+      },
+    },
+    null,
+    2
+  );
 }
 
 /**
