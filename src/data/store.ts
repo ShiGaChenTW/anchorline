@@ -16,6 +16,7 @@ import {
   TEST_CASE_DOCS,
 } from "./seed";
 import { draftRelease, validateVersion, type Release, type ReleaseItem } from "../lib/release";
+import { logEvent } from "../lib/event-writer";
 import type {
   AgentFamily,
   AgentJob,
@@ -464,6 +465,44 @@ function persist() {
 function emit() {
   persist();
   listeners.forEach((fn) => fn());
+}
+
+
+/**
+ * Writer A —— App 內動作寫進稽核軌跡。
+ *
+ * **絕不擋業務動作。** 核准就是核准；log 寫不進去是 log 的問題。讓稽核軌跡
+ * 去否決簽核，使用者第一次遇到就會把整個功能關掉。所以這裡吞掉所有錯誤，
+ * 回傳值也不看。
+ *
+ * 專案沒綁資料夾（沒有 rootPath）就靜靜跳過 —— 事件沒有地方可以落地。
+ */
+function audit(
+  state: AppState,
+  projectId: string,
+  kind: Parameters<typeof logEvent>[1]["kind"],
+  subject: string,
+  payload?: Record<string, unknown>,
+): void {
+  try {
+    const p = state.projects.find((x) => x.id === projectId);
+    const root = p?.importSummary?.rootPath;
+    if (!root) return;
+    const u = state.currentUser;
+    logEvent(root, {
+      project: p!.id,
+      actor: {
+        kind: u.kind === "agent" ? "agent" : "human",
+        family: u.agentFamily ?? null,
+        name: u.name,
+      },
+      kind,
+      subject,
+      ...(payload ? { payload } : {}),
+    });
+  } catch {
+    /* 稽核失敗不影響業務動作 */
+  }
 }
 
 export const store = {
@@ -1177,6 +1216,10 @@ export const store = {
       ),
     };
     syncApprovalsFromActiveCase();
+    audit(state, project.id, allDone ? "review.approve" : "gate.pass", `prd:${project.id}`, {
+      stage: allDone ? "all" : "partial",
+      count: nextStages.filter((s) => s.state === "approved").length,
+    });
     emit();
     return { ok: true };
   },
@@ -1208,6 +1251,7 @@ export const store = {
       ),
     };
     syncApprovalsFromActiveCase();
+    audit(state, id, "review.submit", `prd:${id}`);
     emit();
   },
 
@@ -1345,6 +1389,9 @@ export const store = {
       ),
     };
     if (projectId === state.activeProjectId) syncApprovalsFromActiveCase();
+    audit(state, projectId, "review.withdraw", `prd:${projectId}`, {
+      reason: reason || "管理者抽單",
+    });
     emit();
     return { ok: true };
   },

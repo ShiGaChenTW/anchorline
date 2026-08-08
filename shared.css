@@ -7964,3 +7964,61 @@ p.gd-warn {
 .ov-more > summary::-webkit-details-marker { display: none; }
 .ov-more > summary:hover { color: var(--fg-2); }
 .ov-more[open] > summary { margin-bottom: 10px; }
+
+/* ── 稽核軌跡三層（P2-11/12/13）─────────────────────────────────
+   預設停在第一層。時間軸要點兩下才到 —— 無限捲動的事件流是注意力黑洞，
+   整理資料很爽但那不是做事。 */
+.tk-audit { margin-top: 14px; }
+
+/* ① 回到工作。三行，不多不少。ADHD 最痛的是回到被中斷的工作，
+   而回來時要的不是「這個月做了 312 件事」，是「我停在哪」。 */
+.tk-resume {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--fg) 4%, transparent);
+}
+.tk-resume p { margin: 0; line-height: 1.7; }
+.tk-resume-a { font-size: 12px; color: var(--muted); }
+.tk-resume-b { font-size: 13px; color: var(--fg-2); }
+.tk-resume-c { font-size: 13px; color: var(--fg); font-weight: 600; }
+
+.tk-audit-empty {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+/* ②③ 兩層摺疊 */
+.tk-audit-more > summary,
+.tk-audit-timeline > summary {
+  cursor: pointer;
+  padding: 8px 2px;
+  font-size: 12px;
+  color: var(--muted);
+  list-style: none;
+  user-select: none;
+}
+.tk-audit-more > summary::-webkit-details-marker,
+.tk-audit-timeline > summary::-webkit-details-marker { display: none; }
+.tk-audit-more > summary:hover,
+.tk-audit-timeline > summary:hover { color: var(--fg-2); }
+.tk-audit-timeline { margin-left: 10px; }
+
+.tk-timeline {
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  list-style: none;
+}
+.tk-timeline li {
+  padding: 4px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  border-bottom: 1px solid color-mix(in oklab, var(--fg) 6%, transparent);
+}
+.tk-timeline .mono { color: var(--muted); margin-right: 6px; }
+.tk-timeline .muted { color: var(--muted); }
+
+.tk-audit-actions { margin: 10px 0 0; display: flex; gap: 6px; }

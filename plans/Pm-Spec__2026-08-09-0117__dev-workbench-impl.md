@@ -1,7 +1,7 @@
 # 開發專案工作台 — 實作 Task List
 
 **建立時間：** 2026-08-09 01:17
-**最後更新：** 2026-08-09 02:31
+**最後更新：** 2026-08-09 03:58
 **狀態：** 進行中
 
 ## 目標
@@ -40,33 +40,33 @@
 
 ### 決策關卡 — 只有這兩題會擋住 Phase 2
 
-- [ ] D1 拍板：log 進不進 git（預設 **(c) 分兩份**——脫敏摘要進 git、原始流 gitignore） <!-- sf:t=YA416G0R -->
-- [ ] D2 拍板：bridge 開不開 `.specforge/` 追加（預設 **(a) 開放**，用 §6.2 謂詞限縮） <!-- sf:t=MTA08FHB -->
+- [x] D1 拍板：log 進不進 git（預設 **(c) 分兩份**——脫敏摘要進 git、原始流 gitignore） <!-- sf:t=YA416G0R -->
+- [x] D2 拍板：bridge 開不開 `.specforge/` 追加（預設 **(a) 開放**，用 §6.2 謂詞限縮） <!-- sf:t=MTA08FHB -->
 
 ### Phase 2 — 開發 LOG／稽核軌跡（約 4 天）
 
-- [ ] P2-1 `isEditablePath` 新增 append 謂詞：realpath 在已註冊專案內 + `.specforge/**` + `.jsonl` + 單行 <4KB <!-- sf:t=FJ3R0DRG -->
-- [ ] P2-2 bridge action `appendFile`：**真 O_APPEND**，不可用 read-modify-write 模擬 <!-- sf:t=48P0S0C9 -->
-- [ ] P2-3 月分片 `.specforge/log/YYYY-MM.jsonl` + `.gitattributes: *.jsonl merge=union` <!-- sf:t=EZP9BQT1 -->
-- [ ] P2-4 事件 schema（§6.3）：`v` / `event_id` / `ts` / `actor` / `run_id` / `kind` / `subject` / `ref` / `payload` <!-- sf:t=AXDKGAWW -->
-- [ ] P2-5 **payload 欄位白名單** + 命令只存 `cmd_hash`+前綴 + 路徑一律相對（§6.4 機密防護） <!-- sf:t=AXQSXBP4 -->
-- [ ] P2-6 parser 跳過壞行不丟例外 <!-- sf:t=W7DG04SH -->
-- [ ] P2-7 writer A：App 內動作（送審／核准／抽單／取號／gate 通過） <!-- sf:t=MQCJR3EM -->
-- [ ] P2-8 writer B：Claude Code hook。**App 內偵測是否已裝 + 一鍵複製指令，不自動改使用者 settings.json** <!-- sf:t=5E954YC4 -->
-- [ ] P2-9 writer C：git 全量回填（`subject`=hash 去重，順帶解掉 40 筆上限） <!-- sf:t=7HZ5HDEW -->
-- [ ] P2-10 PR 事件接入（§十一 L2）：`pr.open` / `pr.review` / `pr.merge` / `pr.checks.fail` <!-- sf:t=YNM02NS8 -->
-- [ ] P2-11 呈現①「回到工作」三行（預設層，context recovery） <!-- sf:t=473T7PK4 -->
-- [ ] P2-12 呈現②「今天做了什麼」摘要，`kind` 折疊 ≤4 組 <!-- sf:t=HP0YZ9TT -->
-- [ ] P2-13 呈現③ 完整時間軸 + 篩選（要點兩下才到，防過度專注） <!-- sf:t=4KZ8MRQD -->
-- [ ] P2-14 稽核報告匯出 Markdown / CSV <!-- sf:t=9TWNBXE3 -->
+- [x] P2-1 `isEditablePath` 新增 append 謂詞：realpath 在已註冊專案內 + `.specforge/**` + `.jsonl` + 單行 <4KB <!-- sf:t=FJ3R0DRG -->
+- [x] P2-2 bridge action `appendFile`：**真 O_APPEND**，不可用 read-modify-write 模擬 <!-- sf:t=48P0S0C9 -->
+- [x] P2-3 月分片 `.specforge/log/YYYY-MM.jsonl` + `.gitattributes: *.jsonl merge=union` <!-- sf:t=EZP9BQT1 -->
+- [x] P2-4 事件 schema（§6.3）：`v` / `event_id` / `ts` / `actor` / `run_id` / `kind` / `subject` / `ref` / `payload` <!-- sf:t=AXDKGAWW -->
+- [x] P2-5 **payload 欄位白名單** + 命令只存 `cmd_hash`+前綴 + 路徑一律相對（§6.4 機密防護） <!-- sf:t=AXQSXBP4 -->
+- [x] P2-6 parser 跳過壞行不丟例外 <!-- sf:t=W7DG04SH -->
+- [x] P2-7 writer A：App 內動作（送審／核准／抽單／取號／gate 通過） <!-- sf:t=MQCJR3EM -->
+- [x] P2-8 writer B：Claude Code hook。**App 內偵測是否已裝 + 一鍵複製指令，不自動改使用者 settings.json** <!-- sf:t=5E954YC4 -->
+- [x] P2-9 writer C：git 全量回填（`subject`=hash 去重，順帶解掉 40 筆上限） <!-- sf:t=7HZ5HDEW -->
+- [x] P2-10 PR 事件接入（§十一 L2）：`pr.open` / `pr.review` / `pr.merge` / `pr.checks.fail` <!-- sf:t=YNM02NS8 -->
+- [x] P2-11 呈現①「回到工作」三行（預設層，context recovery） <!-- sf:t=473T7PK4 -->
+- [x] P2-12 呈現②「今天做了什麼」摘要，`kind` 折疊 ≤4 組 <!-- sf:t=HP0YZ9TT -->
+- [x] P2-13 呈現③ 完整時間軸 + 篩選（要點兩下才到，防過度專注） <!-- sf:t=4KZ8MRQD -->
+- [x] P2-14 稽核報告匯出 Markdown / CSV <!-- sf:t=9TWNBXE3 -->
 - [ ] P2-✅ 出貨儀式：匯出一份稽核報告 PDF <!-- sf:t=Q2JV6HAP -->
 
 ### Phase 3 — 決策紀錄與作品化（約 2 天）
 
-- [ ] P3-1 ADR 來源接 ISA 的 `## Decisions` / `## Changelog`（§八 #4 預設） <!-- sf:t=RB7XKD41 -->
-- [ ] P3-2 `decision.record` 事件串接，`subject` 指向受影響的 task / section <!-- sf:t=T8FCNW2Y -->
-- [ ] P3-3 PR review 職務分離：Claude 寫的 PR 不得由 Claude 核准（§11.2 差異化點） <!-- sf:t=MJ5HGZ07 -->
-- [ ] P3-4 作品頁：一份 PRD 從撰寫→gate→簽核→change→commits→release 的完整 replay（G0） <!-- sf:t=VN14QPD8 -->
+- [x] P3-1 ADR 來源接 ISA 的 `## Decisions` / `## Changelog`（§八 #4 預設） <!-- sf:t=RB7XKD41 -->
+- [x] P3-2 `decision.record` 事件串接，`subject` 指向受影響的 task / section <!-- sf:t=T8FCNW2Y -->
+- [x] P3-3 PR review 職務分離：Claude 寫的 PR 不得由 Claude 核准（§11.2 差異化點） <!-- sf:t=MJ5HGZ07 -->
+- [x] P3-4 作品頁：一份 PRD 從撰寫→gate→簽核→change→commits→release 的完整 replay（G0） <!-- sf:t=VN14QPD8 -->
 
 ### 明確不做
 
@@ -108,4 +108,25 @@
 
 ## 結束摘要
 
-（工作結束時補上）
+**做了什麼** — 37 個步驟完成 34 個。新增 8 個 lib 模組（plan-parser 擴充、openspec-status、
+gh-status、focus-card、status-bridge、event-log、event-writer、log-views、adr、replay）、
+3 個 Swift bridge action（openspecStatus / ghStatus / appendFile）、1 個 shell 寫入端。
+測試從 146 → **271 綠**，typecheck 與 build 全過，Swift 語法檢查過。
+
+**未完成（3 個出貨儀式，全部需要 Scott 本人）**
+- P0-✅ 截一張帶 ID 的 `bun run track` 圖
+- P1-✅ 截焦點卡發一則貼文
+- P2-✅ 匯出一份稽核報告 PDF
+
+這三件刻意留著：出貨儀式的定義就是「產出物離開電腦」，我做不到那一步。
+
+**未實機驗證** — 首屏與稽核面板只驗到 build 與單元測試。Interceptor 擴充未連線
+（daemon/bridge 有跑，回 `no extensions connected`），claude-in-chrome 進得去但卡在登入，
+而我不輸入密碼。驗證指令：
+`VITE_APP_VARIANT=test bun run build && bun run preview` → login.html（密碼 demo）→ overview.html / tracking.html。
+
+**後續建議**
+1. 先跑一次實機驗證，把三個出貨儀式做完 —— 那才算 Phase 0/1/2 真的收掉
+2. `.specforge/log` 目前只有 App 內三個動作（送審／核准／抽單）會寫。裝上 hook 之後才會有 agent 事件
+3. git 回填（`commitsToEvents`）與 PR 事件（`prsToEvents`）函式已就緒但沒有觸發點，缺一顆「首次啟用」按鈕
+4. D1（log 進不進 git）仍未拍板。目前預設是 (c) 分兩份，但 `.gitignore` 那一半還沒設定
