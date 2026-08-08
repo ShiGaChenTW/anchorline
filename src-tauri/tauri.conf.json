@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PRD開發監控台",
+  "version": "1.1.0",
+  "identifier": "com.specforge.prd.workbench",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "bun run dev",
+    "beforeBuildCommand": "bun run build"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "title": "PRD開發監控台 — PRD 引導工作台",
+        "width": 1280,
+        "height": 880,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "url": "login.html"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app", "nsis", "deb", "appimage"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.png"
+    ],
+    "copyright": "MIT © 2026 ShiGaChenTW",
+    "shortDescription": "本機優先的開發專案工作台",
+    "longDescription": "PRD 撰寫 → 結構 gate → 簽核 → openspec change → commits → PR → release，一條治理鏈加一份落在磁碟上的稽核軌跡。"
+  }
+}
