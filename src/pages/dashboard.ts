@@ -155,15 +155,15 @@ if (!requireAuth()) {
     return `<section class="d-hero tone-${head.tone}">
       ${identHtml(p)}
 
+      <p class="d-eyebrow">版本控制</p>
       <div class="d-hero-head">
-        <p class="d-eyebrow">版本控制</p>
+        <p class="d-hero-figure">${escapeHtml(head.text)}</p>
         ${
           hasActionableIssue(diagnoseGit(g))
             ? `<button type="button" class="btn btn-sm d-fix-btn" id="btn-git-doctor">版控健檢 <span>${diagnoseGit(g).filter((i) => i.level !== "info").length}</span></button>`
             : ""
         }
       </div>
-      <p class="d-hero-figure">${escapeHtml(head.text)}</p>
       ${
         g
           ? `<p class="d-hero-sub">${escapeHtml(g.lastMessage || "（無 commit 訊息）")}</p>

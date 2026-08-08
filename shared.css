@@ -5924,7 +5924,10 @@ html.adhd-calm .review-focus-bar {
 /* 展開時箭頭朝下、收合時朝上 —— 箭頭指的是「按下去之後內容會往哪走」 */
 .ft-collapse span { transform: rotate(-90deg); display: block; }
 [data-od-id="outline-col"].ft-collapsed .file-tree-host { display: none; }
-[data-od-id="outline-col"].ft-collapsed .ft-collapse span { transform: rotate(90deg); }
+/* 只翻「專案檔案」自己那顆的箭頭。
+   原本沒有指定 #btn-file-tree-toggle，結果收合專案檔案時
+   連 OpenSpec 那顆的箭頭也一起被翻過去 —— 那顆明明還是展開的。 */
+[data-od-id="outline-col"].ft-collapsed #btn-file-tree-toggle span { transform: rotate(90deg); }
 @media (prefers-reduced-motion: reduce) { .ft-collapse { transition: none; } }
 
 .ft-empty {
@@ -7563,9 +7566,21 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
    版控健檢
    只給指令、不執行 —— 樣式上也要看起來像「可複製的說明」而非「執行鈕」。
    ═══════════════════════════════════════════════════════════════ */
-.d-hero-head { display: flex; align-items: center; gap: 10px; }
+/* 健檢鍵貼著頭條那一行 —— 問題本身就寫在頭條上（「52 個檔案還沒提交」），
+   解法按鈕放在同一行，眼睛不用再往右上角找一次。 */
+.d-hero-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  /* 原本 8px 的下緣間距在 .d-hero-figure 身上，包了一層之後要移上來，
+     不然頭條會黏住下面那行 commit 訊息 */
+  margin: 0 0 8px;
+}
+.d-hero-head > .d-hero-figure { margin: 0; }
 .d-fix-btn {
-  margin-left: auto;
+  flex: 0 0 auto;
+  align-self: center;
   display: inline-flex;
   align-items: center;
   gap: 6px;
