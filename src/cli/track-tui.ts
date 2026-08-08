@@ -10,9 +10,11 @@
  * 鍵位：j/k 切 plan · J/K 或 PgDn/PgUp 捲步驟 · r 重新整理 · ? 說明 · q 離開
  */
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
+import { sortByRecency, trackingTarget, type TrackingSignal } from "../lib/tracking";
 import {
   c,
   enterAlt,
@@ -24,9 +26,27 @@ import {
   termSize,
 } from "./ansi";
 
-type PlanEntry = { path: string; name: string; meta: PlanMeta; mtime: number };
+type PlanEntry = { path: string; name: string; meta: PlanMeta; mtimeMs: number };
 
 const CLI_DIR = dirname(fileURLToPath(import.meta.url));
+
+/** spec §4 的跨進程介面。目前沒有寫入端，讀不到就是段 2 全責。 */
+const SIGNAL_PATH = join(
+  process.env.XDG_CONFIG_HOME || join(homedir(), ".config"),
+  "specforge",
+  "active",
+);
+
+function readSignal(): TrackingSignal | null {
+  try {
+    return {
+      raw: readFileSync(SIGNAL_PATH, "utf8"),
+      mtimeMs: statSync(SIGNAL_PATH).mtimeMs,
+    };
+  } catch {
+    return null; // 檔不存在／權限／讀壞 —— 全部不是錯誤，是「退回段 2」
+  }
+}
 
 function findPlansDir(cliDir?: string): string {
   if (cliDir) return resolve(cliDir);
@@ -44,16 +64,19 @@ function findPlansDir(cliDir?: string): string {
 
 function loadPlans(dir: string): PlanEntry[] {
   if (!existsSync(dir)) return [];
-  return readdirSync(dir)
+  const entries = readdirSync(dir)
     .filter((f) => f.endsWith(".md"))
     .map((f) => {
       const path = join(dir, f);
-      const raw = readFileSync(path, "utf8");
-      const meta = parsePlanMeta(raw, f);
-      const mtime = statSync(path).mtimeMs;
-      return { path, name: f, meta, mtime };
-    })
-    .sort((a, b) => b.mtime - a.mtime);
+      try {
+        const raw = readFileSync(path, "utf8");
+        return { path, name: f, meta: parsePlanMeta(raw, f), mtimeMs: statSync(path).mtimeMs };
+      } catch {
+        // readdir 與 read 之間被刪掉。NaN 讓 sortByRecency 濾掉它，不影響其他檔。
+        return { path, name: f, meta: parsePlanMeta("", f), mtimeMs: NaN };
+      }
+    });
+  return sortByRecency(entries);
 }
 
 function bar(pct: number, width: number): string {
@@ -71,12 +94,22 @@ function statusColor(status: string): string {
 
 type UiState = {
   plans: PlanEntry[];
+  /** 使用者選的（按鍵才變）。與 tracking 是兩個獨立的「當前」，見 spec §2 */
   idx: number;
+  /** 系統判定的（隨檔案活動變）。永遠不寫進 idx —— 那會把使用者的畫面搶走 */
+  tracking: string | null;
   stepScroll: number;
   showHelp: boolean;
   plansDir: string;
   message: string;
 };
+
+/** 每次重繪重算，不快取。純函式 + 幾個 stat，比一次終端重繪便宜得多。 */
+function refresh(state: UiState) {
+  state.plans = loadPlans(state.plansDir);
+  state.tracking = trackingTarget({ files: state.plans, signal: readSignal() }, Date.now());
+  state.idx = Math.min(state.idx, Math.max(0, state.plans.length - 1));
+}
 
 function render(state: UiState): string[] {
   const { cols, rows } = termSize();
@@ -100,6 +133,7 @@ function render(state: UiState): string[] {
     push(`  ${pal.text}j / k${pal.muted}     下一個 / 上一個 plan${c.reset}`);
     push(`  ${pal.text}J / K${pal.muted}     步驟清單下捲 / 上捲${c.reset}`);
     push(`  ${pal.text}r${pal.muted}         重新載入 plans/${c.reset}`);
+    push(`  ${pal.text}t${pal.muted}         跳到追蹤中（•）的那一份${c.reset}`);
     push(`  ${pal.text}?${pal.muted}         開關說明${c.reset}`);
     push(`  ${pal.text}q / Esc${pal.muted}   離開${c.reset}`);
     push(`  ${pal.text}1-9${pal.muted}       跳到第 N 個 plan${c.reset}`);
@@ -147,8 +181,10 @@ function render(state: UiState): string[] {
   for (let i = 0; i < state.plans.length; i++) {
     const p = state.plans[i]!;
     const mark = i === state.idx ? `${pal.accent}▶${c.reset}` : " ";
+    // 追蹤圓點與選取箭頭刻意分屬兩欄 —— 同一列可以同時是「我在看的」和「agent 在寫的」
+    const dot = p.path === state.tracking ? `${pal.muted}•${c.reset}` : " ";
     const pp = planProgressPct(p.meta);
-    const label = `${mark} ${pad(p.meta.title, leftW - 10)} ${pal.muted}${String(pp).padStart(3)}%${c.reset}`;
+    const label = `${mark} ${pad(p.meta.title, leftW - 12)} ${pal.muted}${String(pp).padStart(3)}%${c.reset} ${dot}`;
     listLines.push(i === state.idx ? `${c.inverse}${pad(stripForInverse(label), leftW)}${c.reset}` : pad(label, leftW));
   }
 
@@ -198,8 +234,13 @@ function render(state: UiState): string[] {
 
   push(`${pal.border}${hline(W, "─")}${c.reset}`);
   const msg = state.message ? ` · ${state.message}` : "";
+  const tracked = state.plans.find((p) => p.path === state.tracking);
+  // 空狀態不暴露判定細節（訊號過期？退回段 2？）—— 內部機制對使用者無意義
+  const live = tracked
+    ? `${pal.muted}追蹤中 ${c.reset}${pal.accent}•${c.reset} ${pal.text}${tracked.name}${c.reset}`
+    : `${pal.muted}等待 agent 開始執行…${c.reset}`;
   push(
-    `${pal.muted} j/k plan · J/K 捲動 · r 重整 · ? 說明 · q 離開 · ${state.idx + 1}/${state.plans.length}${msg}${c.reset}`,
+    `${pal.muted} j/k plan · J/K 捲動 · ? 說明 · q 離開 · ${state.idx + 1}/${state.plans.length}${msg}${c.reset}  ${live}`,
   );
 
   return lines.slice(0, H);
@@ -210,21 +251,30 @@ function stripForInverse(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
+/**
+ * 畫面去重是必要的：週期刷新每秒觸發，無變化時重畫會讓終端閃爍且吃 CPU。
+ * 比對上一幀輸出字串，相同就跳過。
+ */
+let lastFrame = "";
+
 function draw(state: UiState) {
   const lines = render(state);
   const { rows } = termSize();
-  moveHome();
   // pad to full screen to avoid ghost lines
   const out = [...lines];
   while (out.length < rows) out.push("");
-  process.stdout.write(out.slice(0, rows).join("\n") + clearDownSeq());
+  const frame = out.slice(0, rows).join("\n");
+  if (frame === lastFrame) return;
+  lastFrame = frame;
+  moveHome();
+  process.stdout.write(frame + clearDownSeq());
 }
 
 function clearDownSeq() {
   return "\x1b[J";
 }
 
-function printOnce(plans: PlanEntry[], dir: string) {
+function printOnce(plans: PlanEntry[], dir: string, tracking: string | null) {
   console.log(`${c.bold}PM-SPEC+SCVB · track${c.reset}  ${pal.muted}${dir}${c.reset}`);
   console.log(hline(Math.min(80, termSize().cols)));
   if (!plans.length) {
@@ -233,8 +283,9 @@ function printOnce(plans: PlanEntry[], dir: string) {
   }
   for (const p of plans) {
     const pct = planProgressPct(p.meta);
+    const dot = p.path === tracking ? ` ${pal.accent}•${c.reset}` : "";
     console.log(
-      `${statusColor(p.meta.status)}${pad(p.meta.status, 8)}${c.reset} ${bar(pct, 12)} ${String(pct).padStart(3)}%  ${c.bold}${p.meta.title}${c.reset}`,
+      `${statusColor(p.meta.status)}${pad(p.meta.status, 8)}${c.reset} ${bar(pct, 12)} ${String(pct).padStart(3)}%  ${c.bold}${p.meta.title}${c.reset}${dot}`,
     );
     console.log(
       `  ${pal.muted}${p.meta.done_steps}/${p.meta.total_steps}${c.reset}  next: ${pal.accent}${p.meta.next_step}${c.reset}`,
@@ -246,24 +297,34 @@ function printOnce(plans: PlanEntry[], dir: string) {
 
 async function interactive(plansDir: string) {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    const plans = loadPlans(plansDir);
-    printOnce(plans, plansDir);
+    once(plansDir);
     return;
   }
 
   const state: UiState = {
-    plans: loadPlans(plansDir),
+    plans: [],
     idx: 0,
+    tracking: null,
     stepScroll: 0,
     showHelp: false,
     plansDir,
     message: "",
   };
+  refresh(state);
 
   const onResize = () => draw(state);
   process.stdout.on("resize", onResize);
 
+  // ponytail: 只做週期輪詢，不掛 fs watcher。mtime 重比較本來就得每秒做一次，
+  // 加 watch() 只省下 ≤1s 的延遲，卻多一組 debounce 與清理路徑要顧。
+  const timer = setInterval(() => {
+    if (state.showHelp) return;
+    refresh(state);
+    draw(state);
+  }, 1000);
+
   const cleanup = () => {
+    clearInterval(timer);
     process.stdin.setRawMode?.(false);
     process.stdin.pause();
     process.stdout.off("resize", onResize);
@@ -312,10 +373,22 @@ async function interactive(plansDir: string) {
       return;
     }
     if (key === "r") {
-      state.plans = loadPlans(plansDir);
-      state.idx = Math.min(state.idx, Math.max(0, state.plans.length - 1));
+      refresh(state);
       state.stepScroll = 0;
       state.message = `已重整 ${state.plans.length} 檔 · ${new Date().toLocaleTimeString("zh-TW")}`;
+      draw(state);
+      return;
+    }
+    // 跳到追蹤目標。判定是自動的，呈現仍然是手動的 —— 畫面不自己跳走
+    if (key === "t") {
+      const i = state.plans.findIndex((p) => p.path === state.tracking);
+      if (i >= 0) {
+        state.idx = i;
+        state.stepScroll = 0;
+        state.message = "";
+      } else {
+        state.message = "等待 agent 開始執行…";
+      }
       draw(state);
       return;
     }
@@ -357,15 +430,21 @@ async function interactive(plansDir: string) {
   process.stdin.on("data", onData);
 }
 
+function once(plansDir: string) {
+  const plans = loadPlans(plansDir);
+  const tracking = trackingTarget({ files: plans, signal: readSignal() }, Date.now());
+  printOnce(plans, plansDir, tracking);
+}
+
 function main() {
   const args = process.argv.slice(2);
-  const once = args.includes("--once") || args.includes("-1");
+  const oneShot = args.includes("--once") || args.includes("-1");
   const dirFlag = args.findIndex((a) => a === "--dir" || a === "-d");
   const dirArg = dirFlag >= 0 ? args[dirFlag + 1] : undefined;
   const plansDir = findPlansDir(dirArg);
 
-  if (once || !process.stdout.isTTY) {
-    printOnce(loadPlans(plansDir), plansDir);
+  if (oneShot || !process.stdout.isTTY) {
+    once(plansDir);
     return;
   }
 
