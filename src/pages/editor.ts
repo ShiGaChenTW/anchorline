@@ -333,21 +333,39 @@ function renderFileTree() {
   });
 }
 
+/** allPaths 存的是含資料夾名的相對路徑；接回 rootPath 才是真正的檔案位置 */
+function absolutePathFor(rootPath: string, rel: string): string {
+  const base = rootPath.replace(/\/$/, "");
+  const folder = base.split("/").pop() ?? "";
+  const trimmed = folder && rel.startsWith(`${folder}/`) ? rel.slice(folder.length + 1) : rel;
+  return `${base}/${trimmed}`;
+}
+
+/** artifact 依 schema 順序排，不是字母序 —— proposal 先於 tasks 是有意義的 */
+const OS_ARTIFACT_ORDER = ["proposal.md", "design.md", "tasks.md", ".openspec.yaml"];
+function artifactRank(name: string): number {
+  const i = OS_ARTIFACT_ORDER.indexOf(name);
+  return i >= 0 ? i : OS_ARTIFACT_ORDER.length;
+}
+
 /**
  * OpenSpec：偵測專案資料夾底下有沒有 `openspec/`，有就列出裡面的檔案。
  *
- * 讀的是匯入掃描留下的相對路徑（importSummary.allPaths）——
- * App 只存路徑不存內文，所以這裡回答的是「有沒有、有哪些」，不是內容。
- * 沒有這個資料夾就直說，不要用 PRD 章節假裝成 OpenSpec 結構。
+ * **依 change 分群**，不是依 `openspec/` 的第一層。OpenSpec 的工作單位是
+ * 一個 change 資料夾（proposal + design + tasks + delta specs），
+ * 把三個 change 全部塞進一個叫 `changes` 的群組只會看到三份 tasks.md
+ * 和八份 spec.md，分不出誰是誰。
+ *
+ * 讀的是匯入掃描留下的相對路徑 —— App 只存路徑不存內文，所以這裡回答的是
+ * 「有沒有、有哪些」，不是內容。點檔名交給系統預設應用程式開。
  */
 function renderOpenSpec() {
   const el = document.getElementById("openspec-list");
   if (!el) return;
   const p = activeProject();
+  const root = p?.importSummary?.rootPath ?? "";
   const all = p?.importSummary?.allPaths ?? [];
-  const files = all
-    .filter((x) => /(^|\/)openspec\//i.test(x))
-    .sort((a, b) => a.localeCompare(b));
+  const files = all.filter((x) => /(^|\/)openspec\//i.test(x));
 
   const countEl = document.getElementById("os-count");
   if (countEl) countEl.textContent = files.length ? `${files.length} 檔` : "無";
@@ -365,37 +383,73 @@ function renderOpenSpec() {
     return;
   }
 
-  // 依 openspec/ 底下的第一層分群（changes / specs / …），只有一層就不分群
-  const groups = new Map<string, string[]>();
+  // 分群：changes/<id> 一群、specs/<domain> 一群、其餘歸 openspec 根目錄
+  type Row = { rel: string; name: string; sub: string };
+  const groups = new Map<string, { label: string; kind: "change" | "spec" | "root"; rows: Row[] }>();
   for (const f of files) {
     const rest = f.replace(/^.*?openspec\//i, "");
     const parts = rest.split("/");
-    const key = parts.length > 1 ? parts[0] : "";
-    const arr = groups.get(key) ?? [];
-    arr.push(f);
-    groups.set(key, arr);
+    let key: string;
+    let label: string;
+    let kind: "change" | "spec" | "root";
+    if (parts[0] === "changes" && parts.length > 2) {
+      key = `c:${parts[1]}`;
+      label = parts[1];
+      kind = "change";
+    } else if (parts[0] === "specs" && parts.length > 1) {
+      key = `s:${parts[1]}`;
+      label = `specs/${parts[1]}`;
+      kind = "spec";
+    } else {
+      key = "root";
+      label = "openspec/";
+      kind = "root";
+    }
+    const g = groups.get(key) ?? { label, kind, rows: [] };
+    const name = parts[parts.length - 1];
+    // change 底下的 delta spec 要標出是哪個 domain，不然三個 spec.md 一模一樣
+    const sub =
+      kind === "change" && parts[2] === "specs" && parts.length > 3 ? `specs/${parts[3]}` : "";
+    g.rows.push({ rel: f, name, sub });
+    groups.set(key, g);
   }
 
-  // 沒有子資料夾的（openspec/project.md 之類）排最前面 ——
-  // 夾在兩個有標題的群組中間會看不出它屬於誰
-  el.innerHTML = [...groups.entries()]
-    .sort((a, b) => (a[0] === "" ? -1 : b[0] === "" ? 1 : a[0].localeCompare(b[0])))
-    .map(
-      ([key, list]) => `${key ? `<p class="os-group">openspec/${escapeHtml(key)}</p>` : ""}
-        ${list
-          .map((f) => {
-            const name = f.split("/").pop() ?? f;
-            return `<div class="os-row os-file-row" title="${escapeHtml(f)}">
-              <span class="os-dot done"></span>
-              <span class="os-body">
-                <span class="os-head">${escapeHtml(name)}</span>
-                <span class="os-file">${escapeHtml(f)}</span>
-              </span>
-            </div>`;
-          })
-          .join("")}`,
-    )
+  const order = { root: 0, change: 1, spec: 2 };
+  el.innerHTML = [...groups.values()]
+    .sort((a, b) => order[a.kind] - order[b.kind] || a.label.localeCompare(b.label))
+    .map((g) => {
+      const rows = g.rows
+        .sort((a, b) => artifactRank(a.name) - artifactRank(b.name) || a.rel.localeCompare(b.rel))
+        .map(
+          (r) => `<button type="button" class="os-row os-file-row"
+              data-os-path="${escapeHtml(absolutePathFor(root, r.rel))}"
+              title="開啟 ${escapeHtml(r.rel)}">
+            <span class="os-dot done"></span>
+            <span class="os-body">
+              <span class="os-head">${escapeHtml(r.name)}</span>
+              <span class="os-file">${escapeHtml(r.sub || g.label)}</span>
+            </span>
+          </button>`,
+        )
+        .join("");
+      return `<p class="os-group os-group--${g.kind}">${escapeHtml(g.label)}<span>${g.rows.length}</span></p>${rows}`;
+    })
     .join("");
+
+  el.querySelectorAll<HTMLButtonElement>("[data-os-path]").forEach((btn) => {
+    btn.onclick = () => {
+      const path = btn.dataset.osPath ?? "";
+      const w = window as Window & {
+        webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
+      };
+      const bridge = w.webkit?.messageHandlers?.specforge;
+      if (!bridge) {
+        toast("開檔需要桌面版 App");
+        return;
+      }
+      bridge.postMessage({ action: "openPath", path });
+    };
+  });
 }
 
 function renderOutline() {
