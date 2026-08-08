@@ -1,7 +1,7 @@
 # 開發專案工作台 — 實作 Task List
 
 **建立時間：** 2026-08-09 01:17
-**最後更新：** 2026-08-09 01:52
+**最後更新：** 2026-08-09 02:31
 **狀態：** 進行中
 
 ## 目標
@@ -27,15 +27,15 @@
 
 ### Phase 1 — 進度追蹤（約 2.5 天，全唯讀，零決策依賴）
 
-- [ ] P1-1 bridge action `openspecStatus`：`openspec list --json` + 逐 change `status --json`；缺執行檔回 `openspecMissing` <!-- sf:t=4HEKFWGR -->
-- [ ] P1-2 `tests/openspec-status.test.ts`：JSON 形狀 snapshot（上游改格式要紅燈） <!-- sf:t=QYFZKM1J -->
-- [ ] P1-3 **單專案焦點卡**：只顯示 `trackingTarget()` 指到的那個，其餘摺疊成一行 <!-- sf:t=4N2XGDNN -->
-- [ ] P1-4 焦點卡四欄封頂：下一步 / 進度 / **上次動多久前** / 待推 commit 數（時間盲對策） <!-- sf:t=BY63GS05 -->
-- [ ] P1-5 rollup 演算法寫死一處：`0.5×plan + 0.5×openspec`，缺一方則另一方佔滿，兩者皆無顯示「無進度來源」 <!-- sf:t=X1EJZN63 -->
-- [ ] P1-6 刷新：1s 週期 + 畫面去重，**不引入 FSEvents** <!-- sf:t=XMD0A6D6 -->
-- [ ] P1-7 bridge action `ghStatus` + 跨 repo PR 雷達（焦點卡**下方**一行，不擠進卡內）（§十一 L1） <!-- sf:t=AQ33YKY1 -->
-- [ ] P1-8 GitHub 分層刷新：60s 週期 + stale 標示 + 多專案共用一次查詢（Search API 30 req/min） <!-- sf:t=GPMDADJS -->
-- [ ] P1-9 補回 live tracking 段 1 寫入端（Claude Code hook，§5.1） <!-- sf:t=2RBVG8J6 -->
+- [x] P1-1 bridge action `openspecStatus`：`openspec list --json` + 逐 change `status --json`；缺執行檔回 `openspecMissing` <!-- sf:t=4HEKFWGR -->
+- [x] P1-2 `tests/openspec-status.test.ts`：JSON 形狀 snapshot（上游改格式要紅燈） <!-- sf:t=QYFZKM1J -->
+- [x] P1-3 **單專案焦點卡**：只顯示 `trackingTarget()` 指到的那個，其餘摺疊成一行 <!-- sf:t=4N2XGDNN -->
+- [x] P1-4 焦點卡四欄封頂：下一步 / 進度 / **上次動多久前** / 待推 commit 數（時間盲對策） <!-- sf:t=BY63GS05 -->
+- [x] P1-5 rollup 演算法寫死一處：`0.5×plan + 0.5×openspec`，缺一方則另一方佔滿，兩者皆無顯示「無進度來源」 <!-- sf:t=X1EJZN63 -->
+- [x] P1-6 刷新：1s 週期 + 畫面去重，**不引入 FSEvents** <!-- sf:t=XMD0A6D6 -->
+- [x] P1-7 bridge action `ghStatus` + 跨 repo PR 雷達（焦點卡**下方**一行，不擠進卡內）（§十一 L1） <!-- sf:t=AQ33YKY1 -->
+- [x] P1-8 GitHub 分層刷新：60s 週期 + stale 標示 + 多專案共用一次查詢（Search API 30 req/min） <!-- sf:t=GPMDADJS -->
+- [x] P1-9 補回 live tracking 段 1 寫入端（Claude Code hook，§5.1） <!-- sf:t=2RBVG8J6 -->
 - [ ] P1-✅ 出貨儀式：截焦點卡發一則貼文（G1） <!-- sf:t=34BYQEQF -->
 
 ### 決策關卡 — 只有這兩題會擋住 Phase 2
@@ -86,10 +86,15 @@
 - 01:17 — 跨專案總覽表改單焦點卡；理由：原設計 5×5=25 個同時可見資訊點，違反本專案 `focus-mode.ts` 的 4 迴圈上限
 - 01:17 — PR 只讀不寫；理由：`git-doctor.ts` 已為 git 寫入立過界線，同一套邏輯必須套用
 - 01:17 — 每 Phase 補「出貨儀式」；理由：C1 的解藥不是停損條件，是明確的結束——產出物離開電腦才算完成
+- 02:05 — 焦點卡四欄改掉 overview 原本的「專案總數/審閱中/阻擋合計/已綁資料夾」；理由：那四個是聚合計數且零時間資訊，正是 focus-mode.ts 已修好卻留在首屏的問題
+- 02:20 — GitHub 查詢不進 render()，改由 60s interval + status-bridge 快取；理由：gh search 實測 1.9s 且 Search API 限 30 req/min
+- 02:31 — 首屏視覺驗證改由 Scott 執行；理由：Interceptor 擴充未連線，且驗證需登入而我不輸入密碼
 
 ## 阻塞 / 待決議
 
-- **D1 / D2 未拍板**：兩者都只擋 Phase 2，Phase 0 與 Phase 1 可即刻動工。預設值已在報告 §八 給出，不反對即視為採納。
+- **D1 / D2 未拍板**：兩者都只擋 Phase 2，Phase 0 與 Phase 1 已完成。預設值已在報告 §八 給出，不反對即視為採納。
+- **首屏視覺未實機驗證**：Interceptor 擴充未連線（daemon/bridge 有跑，`no extensions connected`），而 claude-in-chrome 進得去但卡在登入——我不輸入密碼。邏輯層 197 個測試全綠、typecheck 與 build 皆過，缺的只有肉眼那一關。
+  驗證指令：`VITE_APP_VARIANT=test bun run build && bun run preview` → `login.html`（示範帳號，密碼 demo）→ `overview.html`。
 
 ## 停損條件
 

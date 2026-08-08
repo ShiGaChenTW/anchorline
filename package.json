@@ -5,15 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "bunx tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bunx tsc --noEmit",
     "track": "bun run src/cli/track-tui.ts",
     "track:once": "bun run src/cli/track-tui.ts --once",
     "app": "bash mac-app-build/build-dmg.sh --prod",
     "app:prod": "bash mac-app-build/build-dmg.sh --prod",
     "app:test": "bash mac-app-build/build-dmg.sh --test",
-    "app:all": "bash mac-app-build/build-dmg.sh --all"
+    "app:all": "bash mac-app-build/build-dmg.sh --all",
+    "signal": "sh scripts/specforge-active.sh"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",

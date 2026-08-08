@@ -22,6 +22,9 @@ import {
 import { syncRailContext } from "../lib/rail-projects";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+import { buildFocusCard, othersLine, type FocusCard } from "../lib/focus-card";
+import { fetchStaleLabel, GH_REFRESH_MS, prRadarLine, type GhResult } from "../lib/gh-status";
+import { canQueryStatus, getGhStatusCached } from "../lib/status-bridge";
 
 if (!requireAuth()) {
   /* redirected */
@@ -34,6 +37,18 @@ if (!requireAuth()) {
   /** 量測結果只留記憶體：磁碟隨時在變 */
   const statsCache = new Map<string, ProjectStats>();
   let measuring = false;
+  /** 跨 repo PR。全 App 共用一份（見 status-bridge 的快取），60 秒才重新打一次 */
+  let ghResult: GhResult | null = null;
+
+  /** 「其他資訊」摺疊狀態。每次回來都要重新收合比一開始就展開更煩。 */
+  const MORE_KEY = "specforge:ov:more";
+  function moreOpen(): boolean {
+    try {
+      return localStorage.getItem(MORE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
 
   function visibleProjects(): Project[] {
     const st = store.get();
@@ -111,7 +126,6 @@ if (!requireAuth()) {
   function hero(rows: Row[]): string {
     const next = pickNext(rows);
     const totalBlocks = rows.reduce((a, r) => a + r.blocks, 0);
-    const reviewing = rows.filter((r) => r.p.status === "review").length;
 
     if (!next) {
       return `<section class="d-hero">
@@ -121,21 +135,74 @@ if (!requireAuth()) {
       </section>`;
     }
 
+    const card = focusCardOf(next.row);
+
     return `<section class="d-hero tone-${totalBlocks ? "warn" : "ok"}">
       <p class="d-eyebrow">現在做這一個</p>
       <p class="d-hero-figure">${escapeHtml(projectDisplayName(next.row.p))}</p>
       <p class="d-hero-sub">${escapeHtml(next.why)}</p>
-      <p class="d-hero-meta">其餘 ${rows.length - 1} 個專案稍後再看。這裡一次只指一個。</p>
-      <dl class="d-facts">
-        <div><dt>專案總數</dt><dd>${rows.length}</dd></div>
-        <div><dt>審閱中</dt><dd>${reviewing}</dd></div>
-        <div><dt>阻擋項合計</dt><dd>${totalBlocks}</dd></div>
-        <div><dt>已綁資料夾</dt><dd>${rows.filter((r) => r.bound).length} / ${rows.length}</dd></div>
-      </dl>
+      <p class="d-hero-meta">${escapeHtml(othersLine(rows.length - 1) || "只有這一個專案。")}這裡一次只指一個。</p>
+      <dl class="d-facts">${card.fields
+        .map((f) => `<div><dt>${escapeHtml(f.label)}</dt><dd>${escapeHtml(f.value)}</dd></div>`)
+        .join("")}</dl>
+      ${
+        card.unanchored
+          ? `<p class="ov-warn">⚠ ${card.unanchored} 個步驟沒有錨點，接不上事件流 —— 在終端跑 <code>bun run track</code> 按 i 補鑄。</p>`
+          : ""
+      }
       <p class="ov-hero-cta">
         <a class="btn btn-primary btn-sm" href="dashboard.html" data-go="${escapeHtml(next.row.p.id)}">打開這個專案</a>
       </p>
     </section>`;
+  }
+
+  /**
+   * 焦點卡的四個欄位。**恰好四個，順序固定**，由 `focus-card.ts` 的
+   * `FOCUS_FIELD_CAP` 與其測試執法。
+   *
+   * 原本這裡是「專案總數 / 審閱中 / 阻擋項合計 / 已綁資料夾」—— 四個聚合計數，
+   * 而且**零時間資訊**。`focus-mode.ts` 開頭就寫著「時間盲是 ADHD 的核心缺損，
+   * 原介面零時間資訊」；那個已經在編輯台修好的問題，原封不動留在首屏。
+   * 第三欄「上次動」就是為了補這一刀。
+   */
+  function focusCardOf(row: Row): FocusCard {
+    const git = row.stats?.git;
+    // 最後活動 = plan 檔與最後一次 commit 取較新者。兩個都可能不存在。
+    const candidates = [row.p.lastFileAt, git?.lastAt].filter(Boolean) as string[];
+    const lastActiveIso =
+      candidates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null;
+
+    return buildFocusCard(
+      {
+        projectId: row.p.id,
+        name: projectDisplayName(row.p),
+        nextStep: row.blocks ? `補齊 ${row.blocks} 項阻擋` : row.canSubmit ? "送出審閱" : "繼續填章節",
+        planPct: Number.isFinite(row.p.pct) ? row.p.pct : null,
+        // openspec 進度目前只在專案儀表板量測；總覽先給 null，rollup 會讓 plan 佔滿
+        openspecPct: null,
+        lastActiveIso,
+        ahead: git?.ahead ?? -1,
+        unanchored: 0,
+        isTracking: false,
+      },
+      Date.now()
+    );
+  }
+
+  /**
+   * PR 雷達 —— 焦點卡**下方**獨立一行，不擠進卡片。
+   *
+   * 卡片欄位封頂 4 個，這是第 5 個資訊。硬塞進去就破了自己剛立的規則，
+   * 而且 PR 是跨 repo 的，本來就不屬於「這一個專案」的卡片。
+   */
+  function prRadar(): string {
+    if (!ghResult) return "";
+    const now = Date.now();
+    const line = prRadarLine(ghResult, now);
+    const stale = fetchStaleLabel(ghResult, now);
+    return `<p class="ov-pr-radar">${escapeHtml(line)}${
+      stale ? ` <span class="muted">· ${escapeHtml(stale)}</span>` : ""
+    }</p>`;
   }
 
   /** 每個專案一列：狀態、進度、阻擋數。整列可點。 */
@@ -274,8 +341,23 @@ if (!requireAuth()) {
 
     const root = document.getElementById("ov-root");
     if (!root) return;
-    root.innerHTML = `<div class="d-top ov-top">${hero(rows)}${cardProjects(rows)}</div>
-      <div class="d-grid">${cardStatus(rows)}${cardStack(rows)}${cardUnbound(rows)}</div>`;
+    // 其餘卡片收進 <details>：預設只看得到焦點卡 + PR 雷達。
+    // 展開狀態存 localStorage —— 每次回來都要重新收合，比一開始就展開更煩。
+    root.innerHTML = `<div class="d-top ov-top">${hero(rows)}</div>
+      ${prRadar()}
+      <details class="ov-more"${moreOpen() ? " open" : ""}>
+        <summary>${escapeHtml(othersLine(Math.max(0, rows.length - 1)) || "其他資訊 ▸")}</summary>
+        <div class="d-top">${cardProjects(rows)}</div>
+        <div class="d-grid">${cardStatus(rows)}${cardStack(rows)}${cardUnbound(rows)}</div>
+      </details>`;
+
+    root.querySelector<HTMLDetailsElement>(".ov-more")?.addEventListener("toggle", (e) => {
+      try {
+        localStorage.setItem(MORE_KEY, (e.target as HTMLDetailsElement).open ? "1" : "0");
+      } catch {
+        /* 隱私模式寫不了 —— 摺疊狀態不值得為它報錯 */
+      }
+    });
 
     // 任何 data-go 都是「切到那個專案並打開它的儀表板」
     root.querySelectorAll<HTMLElement>("[data-go]").forEach((el) => {
@@ -324,6 +406,23 @@ if (!requireAuth()) {
 
   document.getElementById("btn-measure-all")?.addEventListener("click", () => void measureAll());
 
+  /**
+   * PR 雷達的刷新。**刻意不進 render()**：render 會被 store 訂閱觸發很多次，
+   * 而 `gh search prs` 實測 1.9 秒且走 Search API（30 req/min）。
+   * 60 秒一次由 status-bridge 的快取把關，這裡只負責把結果推回畫面。
+   */
+  async function refreshGh() {
+    if (!canQueryStatus()) return;
+    try {
+      ghResult = await getGhStatusCached();
+    } catch {
+      ghResult = null; // 逾時就不畫那一行，不要跳錯誤打斷使用者
+    }
+    render();
+  }
+
   render();
   store.subscribe(render);
+  void refreshGh();
+  window.setInterval(() => void refreshGh(), GH_REFRESH_MS);
 }

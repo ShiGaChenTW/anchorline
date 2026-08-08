@@ -168,12 +168,80 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
             }
             NSWorkspace.shared.open(url)
             postToJS(["type": "openPath", "path": url.path])
+        case "openspecStatus":
+            // 唯讀。子指令全部寫死，只有工作目錄來自 JS —— 與 git() 同一套注入防護。
+            // 找不到 openspec 就回 openspecMissing，比照 fastfetch 的處理：安靜降級，
+            // 不是錯誤。沒裝 CLI 的人不該看到紅字。
+            guard let dict = message.body as? [String: Any],
+                  let path = dict["folderPath"] as? String, !path.isEmpty
+            else {
+                postToJS(["type": "openspecMissing", "message": "缺少 folderPath"])
+                return
+            }
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let dir = URL(fileURLWithPath: path)
+                guard let listRaw = Self.runTool("openspec", ["list", "--json"], in: dir) else {
+                    DispatchQueue.main.async {
+                        self?.postToJS([
+                            "type": "openspecMissing",
+                            "message": "找不到 openspec，或這不是 openspec 專案。可用 bun add -g openspec 安裝。",
+                        ])
+                    }
+                    return
+                }
+                // 逐 change 問狀態。`status` 沒有 --change 會回錯誤物件，所以名字要先從
+                // list 拿。名字只從 CLI 自己的輸出來，不經過 JS。
+                let names = Self.openspecChangeNames(listRaw)
+                var statuses: [String] = []
+                for n in names {
+                    if let raw = Self.runTool("openspec", ["status", "--change", n, "--json"], in: dir) {
+                        statuses.append(raw)
+                    }
+                }
+                DispatchQueue.main.async {
+                    self?.postToJS([
+                        "type": "openspecStatus",
+                        "folderPath": dir.path,
+                        "list": listRaw,
+                        "statuses": statuses,
+                    ])
+                }
+            }
+        case "ghStatus":
+            // 唯讀，而且刻意**只有** search。這裡永遠不會出現 pr review / merge / comment ——
+            // 那些跟 git push 是同一類不可逆的對外動作，界線見 src/lib/git-doctor.ts 開頭。
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let home = FileManager.default.homeDirectoryForCurrentUser
+                let raw = Self.runTool(
+                    "gh",
+                    [
+                        "search", "prs", "--author=@me", "--state=open", "--limit", "30",
+                        "--json", "repository,number,title,updatedAt",
+                    ],
+                    in: home
+                )
+                DispatchQueue.main.async {
+                    guard let raw else {
+                        self?.postToJS([
+                            "type": "ghMissing",
+                            "message": "找不到 gh，或尚未登入。可用 brew install gh && gh auth login。",
+                        ])
+                        return
+                    }
+                    self?.postToJS([
+                        "type": "ghStatus",
+                        "raw": raw,
+                        "fetchedAt": ISO8601DateFormatter().string(from: Date()),
+                    ])
+                }
+            }
         case "ping":
             postToJS([
                 "type": "pong",
                 "native": true,
                 "capabilities": [
                     "pickFolder", "pickProjectFolder", "createDirectories", "trackingScan",
+                    "openspecStatus", "ghStatus",
                 ],
             ])
         default:
@@ -278,6 +346,20 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
             && editableExtensions.contains(url.pathExtension.lowercased())
             && FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
             && !isDir.boolValue
+    }
+
+    /**
+     * 從 `openspec list --json` 取出 change 名稱。
+     *
+     * 只在原生端做這一件最小解析 —— 因為下一輪 `status --change <name>` 需要它。
+     * 其餘所有 JSON 判讀都留在 TS（`src/lib/openspec-status.ts`），不要在兩邊各寫一套。
+     */
+    static func openspecChangeNames(_ listRaw: String) -> [String] {
+        guard let data = listRaw.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let changes = obj["changes"] as? [[String: Any]]
+        else { return [] }
+        return changes.compactMap { $0["name"] as? String }.filter { !$0.isEmpty }
     }
 
     static func runTool(_ tool: String, _ args: [String], in dir: URL) -> String? {

@@ -7916,3 +7916,51 @@ p.gd-warn {
   background: color-mix(in oklab, var(--warn) 28%, transparent);
   color: var(--fg-2);
 }
+
+/* ── 首屏焦點卡的三個附件（P1-3 / P1-7）─────────────────────────
+   焦點卡本體沿用 .d-hero / .d-facts，這裡只加它旁邊的三樣東西。 */
+
+/* 錨點遺失警告。不是紅色 —— 這不是壞掉，是「有東西還沒接上」。 */
+.ov-warn {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--fg-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ov-warn code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--fg) 8%, transparent);
+}
+
+/* PR 雷達：焦點卡「下方」獨立一行。刻意不進卡片 —— 卡片欄位封頂 4 個，
+   這是第 5 個資訊，而且 PR 是跨 repo 的，不屬於任何單一專案。 */
+.ov-pr-radar {
+  margin: 10px 2px 0;
+  font-size: 13px;
+  color: var(--fg-2);
+}
+.ov-pr-radar .muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 其他資訊摺疊。預設收起 —— 工作記憶約 4 個開放迴圈，
+   把 13 個專案跟三張統計卡同框展開就是把已經修好的問題搬回首屏。 */
+.ov-more {
+  margin-top: 18px;
+}
+.ov-more > summary {
+  cursor: pointer;
+  padding: 8px 2px;
+  color: var(--muted);
+  font-size: 13px;
+  list-style: none;
+  user-select: none;
+}
+.ov-more > summary::-webkit-details-marker { display: none; }
+.ov-more > summary:hover { color: var(--fg-2); }
+.ov-more[open] > summary { margin-bottom: 10px; }
