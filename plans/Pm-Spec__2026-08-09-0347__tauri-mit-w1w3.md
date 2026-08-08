@@ -1,8 +1,8 @@
 # Tauri × MIT — W1〜W3 實作
 
 **建立時間：** 2026-08-09 03:47
-**最後更新：** 2026-08-09 05:30
-**狀態：** 進行中
+**最後更新：** 2026-08-09 05:40
+**狀態：** 已完成（三個出貨儀式需 Scott）
 
 ## 目標
 
@@ -77,4 +77,46 @@
 
 ## 結束摘要
 
-（工作結束時補上）
+**19 步完成 16 步。** 三個未完成全是出貨儀式，且全都需要 Scott 或 CI：
+非 mac 環境截圖（本機沒有）、錄操作影片、repo 轉公開。
+
+### 做了什麼
+
+| | 前 | 後 |
+|---|---|---|
+| 原生殼 | 1157 行 Swift | Rust，12 command + 3 個新增（setCliPath / probeClis / ping） |
+| release 二進位 | 1.3 MB（WKWebView） | **3.4 MB**（Tauri，含 Rust runtime） |
+| 前端測試 | 271 | **301** |
+| Rust 測試 | 0 | **15**（9 單元 + 6 契約） |
+| 平台 | macOS only | 三平台 CI（macOS 本機驗證，Win/Linux 靠 CI） |
+| 授權 | 無 | MIT |
+
+新增文件：`docs/BRIDGE.md`（256 行契約）、`docs/SECURITY.md`、`docs/DATA.md`、
+`CONTRIBUTING.md`、`LICENSE`、README 重寫、2 個 workflow、3 個 issue 範本。
+
+新增模組：`src/lib/native.ts`（bridge 唯一入口）、`plan-writer.ts`（併發保護）、
+`agent-handoff.ts`（只產生指令）。
+
+### 三個值得記下來的判斷
+
+1. **不引入 tauri-plugin-shell。** allowlist 管得住「跑哪支程式」，管不住參數，
+   而 git/gh/openspec 的破壞力幾乎全在參數裡。改成 Rust 端把參數寫死。
+2. **併發保護用內容雜湊不用 mtime。** mtime 答錯了問題——它變了不代表內容變了，
+   內容變了它也可能沒變。
+3. **先凍結契約再移植是對的。** 移植中 TypeScript 在編譯期抓到契約漏了
+   `ScannedFile.size`，三處同步補上。沒有那份文件這個欄位會在執行時才炸。
+
+### 未完成／已知缺口
+
+- **W2-6 只做一半**：`editor/review/projects` 還有三個 `import.meta.glob`，
+  但它們只算一個 `hasPlanSteps` 布林值，降級後果是流程條少一格
+- **Tauri 視窗未實機目視**：進程、視窗標題、無 crash 都驗過，但兩次
+  screencapture 都拍到 Scott 其他視窗，隱私風險大於驗證價值，改用契約測試
+- **Windows / Linux 未實機**：CI 設定好了但沒跑過（repo 尚未公開）
+- **W4 散佈未做**：未簽章，macOS Gatekeeper 與 Windows SmartScreen 都會擋
+
+### 後續建議
+
+1. 把 repo 推上去讓 CI 跑一次——三平台 build 是唯一還沒被驗證的假設
+2. 三個出貨儀式做完，W1〜W3 才算真的收掉
+3. W4 簽章（$99/年）——MIT 開源實質上已經回答了「會有別人用」
