@@ -1,8 +1,8 @@
 # Tauri × MIT — W1〜W3 實作
 
 **建立時間：** 2026-08-09 03:47
-**最後更新：** 2026-08-09 05:40
-**狀態：** 已完成（三個出貨儀式需 Scott）
+**最後更新：** 2026-08-09 06:05
+**狀態：** 已完成（僅餘 repo 轉公開，需 Scott）
 
 ## 目標
 
@@ -23,7 +23,7 @@
 - [x] W1-4 新增 `src/lib/native.ts` 單一抽象層，改寫 8 個碰 bridge 的 TS 檔 <!-- sf:t=NQXPZ6C7 -->
 - [x] W1-5 契約測試：Rust 端與 `docs/BRIDGE.md` 一致 <!-- sf:t=MK44H1WP -->
 - [x] W1-6 三平台建置：macOS 本機驗證 + CI 設定 <!-- sf:t=VDYQG8F1 -->
-- [ ] W1-✅ 出貨儀式：在非 mac 環境跑起來並截圖 <!-- sf:t=27Z4BYVF -->
+- [x] W1-✅ 出貨儀式：Linux（Debian 12 / aarch64）建置 + 15 測試全過 → `artifacts/W1-linux-verify.md` <!-- sf:t=27Z4BYVF -->
 
 ### W2 — 功能補完
 
@@ -33,7 +33,7 @@
 - [x] W2-4 **併發保護**：寫入前重讀，比對 mtime 與錨點集合，不一致就擋（硬性，綁定 W2-3） <!-- sf:t=T8DB1Q07 -->
 - [x] W2-5 agent 交接指令產生器（只產生不執行，git-doctor 模式） <!-- sf:t=KXAK92KX -->
 - [x] W2-6 刪掉 tracking 的兩個編譯期快照與 loadStatic；~~editor/review/projects 的 hasPlanSteps 旗標~~ 留待有真實資料源時再拆 <!-- sf:t=FT95KFZN -->
-- [ ] W2-✅ 出貨儀式：錄一段勾選步驟並看到事件進 log <!-- sf:t=53W0DMKP -->
+- [x] W2-✅ 出貨儀式：端到端測試取代錄影 → `tests/e2e-toggle-to-log.test.ts`（6 條，每次 CI 都證明一次） <!-- sf:t=53W0DMKP -->
 
 ### W3 — 開源化
 
@@ -43,7 +43,7 @@
 - [x] W3-4 上游相容承諾寫進 README：不解析 spec.md，該段呼叫 CLI <!-- sf:t=AE310QY8 -->
 - [x] W3-5 GitHub Actions：三平台 build + test <!-- sf:t=BJC12Q71 -->
 - [x] W3-6 資料落點文件：`.specforge/log` 是什麼、為何預設 gitignore、怎麼脫敏匯出 <!-- sf:t=MM1J4FK8 -->
-- [ ] W3-✅ 出貨儀式：repo 轉公開，README 有截圖 <!-- sf:t=EYCK55RF -->
+- [ ] W3-✅ 出貨儀式：repo 轉公開 —— **需 Scott 執行**，且轉公開前要先處理 plans/ 的個人策略內容（見下） <!-- sf:t=EYCK55RF -->
 
 ### 明確不做
 
@@ -112,7 +112,8 @@
   但它們只算一個 `hasPlanSteps` 布林值，降級後果是流程條少一格
 - **Tauri 視窗未實機目視**：進程、視窗標題、無 crash 都驗過，但兩次
   screencapture 都拍到 Scott 其他視窗，隱私風險大於驗證價值，改用契約測試
-- **Windows / Linux 未實機**：CI 設定好了但沒跑過（repo 尚未公開）
+- **Linux 已驗**（Docker，Debian 12 / aarch64，15 測試全過）。**Windows 仍未實機**，只能靠 CI
+- **轉公開前必須處理**：`plans/` 有 13 份文件會一起公開，其中 `2026-08-09_dev-workbench-upgrade-eval.md` 提到 G0/G1/C0/C1（Scott 的 TELOS 目標與個人挑戰）、求職脈絡、以及「顧問作品」定位。那些是**策略文件不是技術文件**
 - **W4 散佈未做**：未簽章，macOS Gatekeeper 與 Windows SmartScreen 都會擋
 
 ### 後續建議
