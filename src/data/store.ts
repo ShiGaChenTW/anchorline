@@ -227,6 +227,29 @@ function seedState(): AppState {
   };
 }
 
+/**
+ * 範本合併：內建的以程式碼為準，使用者自訂的保留。
+ *
+ * 直接 `parsed.templates ?? base.templates` 會讓**已經用過這個 App 的人
+ * 永遠看不到新增的內建範本** —— 他們的 localStorage 裡存著舊的那一份。
+ * 同一個坑 `migrateProject` 漏掉 tags 時已經踩過一次。
+ *
+ * 內建範本的 uses 一律從 0 起算：舊的種子數字（128 / 96 / 140…）是編出來的，
+ * 拿它當統計顯示等於騙人，與其想辦法保留不如丟掉重數。
+ */
+function mergeTemplates(stored: Template[] | undefined, seed: Template[]): Template[] {
+  if (!Array.isArray(stored) || !stored.length) return seed;
+  const seedIds = new Set(seed.map((t) => t.id));
+  const custom = stored.filter((t) => !seedIds.has(t.id));
+  const usesById = new Map(stored.map((t) => [t.id, t.uses] as const));
+  const builtin = seed.map((t) => {
+    const prev = usesById.get(t.id);
+    // 舊資料裡的內建範本次數是假的；只有這一版之後累加出來的才留
+    return prev !== undefined && t.uses > 0 ? { ...t, uses: prev } : t;
+  });
+  return [...builtin, ...custom];
+}
+
 function migrateProject(raw: Record<string, unknown>, employees: Employee[]): Project {
   const owner = String(raw.owner ?? "未知");
   const match = employees.find((e) => e.name === owner);
@@ -381,7 +404,7 @@ function load(): AppState {
       workflowStages,
       cases,
       activeProjectId,
-      templates: parsed.templates ?? base.templates,
+      templates: mergeTemplates(parsed.templates, base.templates),
       employees,
       currentUser,
       session,
@@ -887,6 +910,19 @@ export const store = {
    * 呼叫端本來就拿得到完整清單，兩支 API 只會多出「誰負責去重」的問題。
    * 去重與正規化（去頭尾空白、丟掉空字串、忽略大小寫重複）統一在這裡做。
    */
+  /**
+   * 範本使用次數 +1。
+   * 種子資料原本寫死 128 / 96 / 140 這些數字當作「使用次數」顯示 ——
+   * 那是編的。全部歸零並改成真的在套用時累加，畫面上的數字才有意義。
+   */
+  bumpTemplateUse(id: string) {
+    state = {
+      ...state,
+      templates: state.templates.map((t) => (t.id === id ? { ...t, uses: t.uses + 1 } : t)),
+    };
+    emit();
+  },
+
   setProjectTags(id: string, tags: string[]) {
     const seen = new Set<string>();
     const clean: string[] = [];

@@ -158,7 +158,14 @@ export type Section = {
   score: number;
 };
 
-export type TemplateCat = "core" | "security" | "growth" | "platform";
+export type TemplateCat =
+  | "core"
+  | "security"
+  | "growth"
+  | "platform"
+  | "openspec"
+  | "delivery"
+  | "research";
 
 export type Template = {
   id: string;
