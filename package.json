@@ -14,7 +14,9 @@
     "app:prod": "bash mac-app-build/build-dmg.sh --prod",
     "app:test": "bash mac-app-build/build-dmg.sh --test",
     "app:all": "bash mac-app-build/build-dmg.sh --all",
-    "signal": "sh scripts/specforge-active.sh"
+    "signal": "sh scripts/specforge-active.sh",
+    "backfill": "bun run src/cli/backfill-log.ts",
+    "track:frame": "bun run src/cli/track-tui.ts --frame"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",

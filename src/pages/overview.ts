@@ -343,7 +343,9 @@ if (!requireAuth()) {
     if (!root) return;
     // 其餘卡片收進 <details>：預設只看得到焦點卡 + PR 雷達。
     // 展開狀態存 localStorage —— 每次回來都要重新收合，比一開始就展開更煩。
-    root.innerHTML = `<div class="d-top ov-top">${hero(rows)}</div>
+    // 不用 .d-top —— 那是兩欄 grid（hero + 專案清單），第二個孩子搬進 details
+    // 之後 hero 會被 align-items:stretch 拉成一整列的高度，中間開一個大洞。
+    root.innerHTML = `<div class="ov-focus">${hero(rows)}</div>
       ${prRadar()}
       <details class="ov-more"${moreOpen() ? " open" : ""}>
         <summary>${escapeHtml(othersLine(Math.max(0, rows.length - 1)) || "其他資訊 ▸")}</summary>

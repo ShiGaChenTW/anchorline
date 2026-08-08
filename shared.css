@@ -8022,3 +8022,10 @@ p.gd-warn {
 .tk-timeline .muted { color: var(--muted); }
 
 .tk-audit-actions { margin: 10px 0 0; display: flex; gap: 6px; }
+
+/* 焦點卡單獨一張，不進 .d-top 的兩欄 grid —— 那個 grid 的第二欄是專案清單，
+   清單搬進 details 之後 hero 會被 stretch 拉成整列高，中間開一個大洞。 */
+.ov-focus { margin-bottom: 4px; }
+/* .d-hero 預設吃 --d-card-h（300–520px）—— 那是為了跟旁邊的卡片等高。
+   單獨一張時沒有東西要對齊，固定高度只會在文字下面開一個洞。 */
+.ov-focus .d-hero { height: auto; margin-bottom: 0; }

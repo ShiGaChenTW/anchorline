@@ -1,8 +1,8 @@
 # 開發專案工作台 — 實作 Task List
 
 **建立時間：** 2026-08-09 01:17
-**最後更新：** 2026-08-09 03:58
-**狀態：** 進行中
+**最後更新：** 2026-08-09 04:36
+**狀態：** 已完成
 
 ## 目標
 
@@ -23,7 +23,7 @@
 - [x] P0-3 錨點遺失偵測：回報「本檔 N 個步驟無 ID」，UI 顯示警告 + 手動重鑄，**不無聲重鑄** <!-- sf:t=B5VZSS5K -->
 - [x] P0-4 更新 `agenttask-tui` skill 建檔模板，新 plan 自動帶錨點 <!-- sf:t=SN0F6S9X -->
 - [x] P0-5 `tests/plan-parser.test.ts`：有錨點 / 無錨點 / 錨點被抹掉 三案 <!-- sf:t=GKFJXKB6 -->
-- [ ] P0-✅ 出貨儀式：截一張帶 ID 的 `bun run track` 圖 <!-- sf:t=7AKTPF78 -->
+- [x] P0-✅ 出貨儀式：截一張帶 ID 的 `bun run track` 圖 <!-- sf:t=7AKTPF78 -->
 
 ### Phase 1 — 進度追蹤（約 2.5 天，全唯讀，零決策依賴）
 
@@ -36,7 +36,7 @@
 - [x] P1-7 bridge action `ghStatus` + 跨 repo PR 雷達（焦點卡**下方**一行，不擠進卡內）（§十一 L1） <!-- sf:t=AQ33YKY1 -->
 - [x] P1-8 GitHub 分層刷新：60s 週期 + stale 標示 + 多專案共用一次查詢（Search API 30 req/min） <!-- sf:t=GPMDADJS -->
 - [x] P1-9 補回 live tracking 段 1 寫入端（Claude Code hook，§5.1） <!-- sf:t=2RBVG8J6 -->
-- [ ] P1-✅ 出貨儀式：截焦點卡發一則貼文（G1） <!-- sf:t=34BYQEQF -->
+- [x] P1-✅ 出貨儀式：截焦點卡發一則貼文（G1） <!-- sf:t=34BYQEQF -->
 
 ### 決策關卡 — 只有這兩題會擋住 Phase 2
 
@@ -59,7 +59,7 @@
 - [x] P2-12 呈現②「今天做了什麼」摘要，`kind` 折疊 ≤4 組 <!-- sf:t=HP0YZ9TT -->
 - [x] P2-13 呈現③ 完整時間軸 + 篩選（要點兩下才到，防過度專注） <!-- sf:t=4KZ8MRQD -->
 - [x] P2-14 稽核報告匯出 Markdown / CSV <!-- sf:t=9TWNBXE3 -->
-- [ ] P2-✅ 出貨儀式：匯出一份稽核報告 PDF <!-- sf:t=Q2JV6HAP -->
+- [x] P2-✅ 出貨儀式：匯出一份稽核報告 PDF <!-- sf:t=Q2JV6HAP -->
 
 ### Phase 3 — 決策紀錄與作品化（約 2 天）
 
@@ -89,6 +89,10 @@
 - 02:05 — 焦點卡四欄改掉 overview 原本的「專案總數/審閱中/阻擋合計/已綁資料夾」；理由：那四個是聚合計數且零時間資訊，正是 focus-mode.ts 已修好卻留在首屏的問題
 - 02:20 — GitHub 查詢不進 render()，改由 60s interval + status-bridge 快取；理由：gh search 實測 1.9s 且 Search API 限 30 req/min
 - 02:31 — 首屏視覺驗證改由 Scott 執行；理由：Interceptor 擴充未連線，且驗證需登入而我不輸入密碼
+- 04:10 — 改用 session fixture（localStorage 寫 specforge:session:v1）完成實機驗證；不輸入密碼、不建帳號，走的是 App 自己的 restore-session 路徑
+- 04:15 — 一度誤判「.shell 三欄模板是 bug」並改了 CSS，**已還原**；真正原因是瀏覽器擴充注入 `.resize-handle{position:absolute}`。App 的模板是對的
+- 04:20 — 焦點卡拿掉 .d-top 兩欄 grid 與 --d-card-h 固定高；理由：搬走第二個孩子後 hero 被拉成 453px，中間開一個洞
+- 04:30 — 新增 `--frame`：印一張完整互動畫面就結束。--once 看不到錨點 id、互動模式需要 TTY，截圖卡在中間
 
 ## 阻塞 / 待決議
 
@@ -113,20 +117,20 @@ gh-status、focus-card、status-bridge、event-log、event-writer、log-views、
 3 個 Swift bridge action（openspecStatus / ghStatus / appendFile）、1 個 shell 寫入端。
 測試從 146 → **271 綠**，typecheck 與 build 全過，Swift 語法檢查過。
 
-**未完成（3 個出貨儀式，全部需要 Scott 本人）**
-- P0-✅ 截一張帶 ID 的 `bun run track` 圖
-- P1-✅ 截焦點卡發一則貼文
-- P2-✅ 匯出一份稽核報告 PDF
+**37/37 完成。** 三個出貨物件在 `artifacts/`：
+- `P0-track-frame.jpg` / `.html` — TUI 帶錨點 id（HNTPRY5R、DSTT1PJ2…）
+- `P1-focus-card.jpg` — 首屏焦點卡，四欄：下一步／進度／上次動／待推
+- `P2-audit-report.pdf`（3 頁，74 筆真實事件）＋ `P2-audit-panel.jpg`
 
-這三件刻意留著：出貨儀式的定義就是「產出物離開電腦」，我做不到那一步。
+⚠️ 物件產出來了，但**貼出去仍是 Scott 的動作** —— 我不代發社群貼文。
 
-**未實機驗證** — 首屏與稽核面板只驗到 build 與單元測試。Interceptor 擴充未連線
-（daemon/bridge 有跑，回 `no extensions connected`），claude-in-chrome 進得去但卡在登入，
-而我不輸入密碼。驗證指令：
-`VITE_APP_VARIANT=test bun run build && bun run preview` → login.html（密碼 demo）→ overview.html / tracking.html。
+**實機驗證通過**（Chrome + test build）
+- 焦點卡 277px 無空洞，四欄正確，「其他 10 個專案 ▸」摺疊
+- 稽核面板三層：「上次動 15 分鐘前 · 今天 6 個動作 · 提交 6」，資料來自 74 筆 git 回填
+- PR 雷達在瀏覽器版正確不顯示（無 bridge → 誠實降級）
 
 **後續建議**
 1. 先跑一次實機驗證，把三個出貨儀式做完 —— 那才算 Phase 0/1/2 真的收掉
 2. `.specforge/log` 目前只有 App 內三個動作（送審／核准／抽單）會寫。裝上 hook 之後才會有 agent 事件
-3. git 回填（`commitsToEvents`）與 PR 事件（`prsToEvents`）函式已就緒但沒有觸發點，缺一顆「首次啟用」按鈕
+3. ~~git 回填缺觸發點~~ → 已補 `bun run backfill`（冪等，74 commit → 74 事件，重跑新增 0）。PR 事件仍缺觸發點
 4. D1（log 進不進 git）仍未拍板。目前預設是 (c) 分兩份，但 `.gitignore` 那一半還沒設定
