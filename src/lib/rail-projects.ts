@@ -77,26 +77,36 @@ function bumpCounts() {
  * 字級與圖示比主導覽小一號 —— 它是卡片的附屬動作，不該跟導覽搶重量。
  */
 /**
- * 審閱佇列掛在「工作區」那一行。
+ * 工作區的三個入口：專案總覽、專案清單、審閱佇列。
  *
- * 它是跨專案的收件匣，不屬於任何一張卡片，但也不該和專案動作混在同一區 ——
- * 放在區塊標題右側，和「總覽／清單」同一層。
+ * 三者都是「看全部」的視圖，不屬於任何一張專案卡片，所以放在專案清單**之前**
+ * 自成一列 —— 之前它們散在兩個地方（總覽／清單擠在「專案 N」那行的中間，
+ * 審閱佇列在區塊標題右上角），同一類東西分三處，每次都要重新找。
  *
  * 每次 render 都呼叫（自帶存在性守衛）：initRailNav 會整段重建 nav.innerHTML，
- * 只在建立 projects block 那一次掛的話，之後任何一次重建都會把它抹掉。
+ * 只掛一次的話任何一次重建都會把它抹掉。
  */
-function ensureReviewChip(nav: Element) {
+function ensureWorkspaceNav(nav: Element) {
   const workLabel = Array.from(nav.querySelectorAll(".nav-label")).find(
     (el) => /工作區/.test(el.textContent || "") && !el.classList.contains("rail-proj-head"),
   );
-  if (!workLabel || workLabel.querySelector(".rail-review-chip")) return;
-  workLabel.classList.add("rail-work-head");
-  const a = document.createElement("a");
-  a.className = "rail-review-chip";
-  a.href = "review.html";
-  a.title = "審閱佇列：待審與待簽核的規格";
-  a.innerHTML = `審閱佇列<span class="rail-review-count" id="rail-review-count">0</span>`;
-  workLabel.appendChild(a);
+  if (!workLabel) return;
+  let row = nav.querySelector(".rail-wsnav") as HTMLElement | null;
+  if (!row) {
+    row = document.createElement("div");
+    row.className = "rail-wsnav";
+    row.innerHTML = `
+      <a class="rail-wsnav-item" href="overview.html" title="所有專案的彙整儀表板">專案總覽</a>
+      <a class="rail-wsnav-item" href="projects.html" title="可篩選、可搜尋的專案清單">專案清單</a>
+      <a class="rail-wsnav-item" href="review.html" title="待審與待簽核的規格">審閱佇列<span class="rail-review-count" id="rail-review-count">0</span></a>
+    `;
+    workLabel.insertAdjacentElement("afterend", row);
+  }
+  // 目前所在的那一個標起來
+  const here = location.pathname.split("/").pop() || "";
+  row.querySelectorAll<HTMLAnchorElement>(".rail-wsnav-item").forEach((a2) => {
+    a2.classList.toggle("on", a2.getAttribute("href") === here);
+  });
 }
 
 function projActionsHtml(): string {
@@ -212,7 +222,7 @@ function bindAddMenu(block: HTMLElement) {
   });
 }
 
-  ensureReviewChip(nav);
+  ensureWorkspaceNav(nav);
 
   const projects = store.visibleProjects();
   const activeId = store.get().activeProjectId;
@@ -233,8 +243,6 @@ function bindAddMenu(block: HTMLElement) {
   block.innerHTML = `
     <div class="nav-label rail-proj-head">
       <span>專案 <span class="rail-proj-count">${projects.length}</span></span>
-      <a class="rail-overview" href="overview.html" title="所有專案的總覽儀表板">總覽</a>
-      <a class="rail-list" href="projects.html" title="專案清單：篩選、搜尋、切換檢視">清單</a>
       <button type="button" class="rail-proj-add" id="rail-proj-add" title="新增" aria-label="新增" aria-haspopup="true" aria-expanded="false">+</button>
     </div>
     <div class="rail-projects" role="list" aria-label="專案清單" id="rail-projects-list">
