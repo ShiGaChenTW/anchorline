@@ -5871,9 +5871,11 @@ html.adhd-calm .review-focus-bar {
   max-height: 46vh;
   overflow: auto;
 }
-/* OpenSpec 收起來的時候沒人要那塊空間，還給章節，不然空白只是換個位置留著。
-   :has 不支援也只是多一塊底部空白，不會壞版。 */
-[data-od-id="outline-col"]:has(#openspec-list[hidden]) #outline { flex: 1 1 auto; }
+/* OpenSpec 收起來時，把它和「專案檔案」兩條標題列推到欄位最下方。
+   用 margin-top: auto 吸掉剩餘空間，而不是叫 #outline 去長高 ——
+   #outline 有 max-height 安全閥，長不滿就會在標題列下方留一塊空白。
+   :has 不支援的環境只是維持原位，不會壞版。 */
+[data-od-id="outline-col"]:has(#openspec-list[hidden]) .os-bar { margin-top: auto; }
 .file-tree-host {
   flex: 0 0 auto;
   min-height: 0;
