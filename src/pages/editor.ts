@@ -473,7 +473,10 @@ async function openFileInEditor(path: string) {
   try {
     const text = await readFile(path);
     openFile = { path, original: text };
+    // 換檔要重建，不能被上面的「同一個檔就跳過」擋掉
+    document.getElementById("fv-text")?.remove();
     render();
+    (document.getElementById("fv-text") as HTMLTextAreaElement | null)?.focus();
   } catch (e) {
     toast(e instanceof Error ? e.message : "讀取失敗");
     render();
@@ -487,6 +490,14 @@ function renderFileView(): boolean {
 
   const body = document.getElementById("editor-body");
   if (!body) return true;
+
+  // 已經開著同一個檔就什麼都不做。
+  // render() 會被 store 的每一次 emit 觸發（自動存檔、追蹤刷新、側欄重繪…），
+  // 無條件重建 textarea 等於每次都把使用者正在打的字換回磁碟原文 ——
+  // 打一個字就消失，看起來就是「不能編輯」。
+  const existing = document.getElementById("fv-text") as HTMLTextAreaElement | null;
+  if (existing && existing.dataset.path === openFile.path) return true;
+
   body.innerHTML = `
     <div class="fv">
       <div class="fv-bar">
@@ -497,6 +508,7 @@ function renderFileView(): boolean {
         <button type="button" class="btn btn-sm btn-ghost" id="fv-close">回章節</button>
       </div>
       <textarea id="fv-text" class="fv-text" spellcheck="false"
+                data-path="${escapeHtml(openFile.path)}"
                 aria-label="${escapeHtml(shortPath(openFile.path))}">${escapeHtml(openFile.original)}</textarea>
       <p class="fv-note">這是磁碟上的真實檔案，不會自動存檔 —— 改完要按儲存。⌘S 也可以。</p>
     </div>
@@ -519,7 +531,6 @@ function renderFileView(): boolean {
       openFile.original = ta.value;
       syncState();
       toast("已儲存");
-      renderFileTree();
     } catch (e) {
       toast(e instanceof Error ? e.message : "儲存失敗");
     }
