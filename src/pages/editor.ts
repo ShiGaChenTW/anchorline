@@ -33,6 +33,7 @@ import {
   sourceFileForSection,
 } from "../lib/file-tree";
 import { absolutePathFor, groupOpenspecFiles, openspecFiles } from "../lib/openspec-tree";
+import { canEditFiles, readFile, shortPath, writeFile } from "../lib/file-editor";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { askForProjectFolder } from "../lib/project-folder";
 import { initFocusMode, renderProgress } from "../lib/focus-mode";
@@ -388,15 +389,7 @@ function renderOpenSpec() {
 
   el.querySelectorAll<HTMLButtonElement>("[data-os-path]").forEach((btn) => {
     btn.onclick = () => {
-      const w = window as Window & {
-        webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
-      };
-      const bridge = w.webkit?.messageHandlers?.specforge;
-      if (!bridge) {
-        toast("開檔需要桌面版 App");
-        return;
-      }
-      bridge.postMessage({ action: "openPath", path: btn.dataset.osPath ?? "" });
+      void openFileInEditor(btn.dataset.osPath ?? "");
     };
   });
 }
@@ -439,7 +432,116 @@ function renderOutline() {
   renderOpenSpec();
 }
 
+/**
+ * OpenSpec 檔案在編輯欄裡就地開啟。
+ *
+ * 為什麼不叫外部程式：點一個 proposal.md 是為了「看一眼順手改一句」，
+ * 跳出去開別的編輯器等於離開現在的情境，回來還要重新找位置。
+ *
+ * 不自動存檔 —— 這是使用者專案裡的真實檔案，不是 App 自己的資料。
+ * PRD 章節可以邊打邊存是因為那是 App 的東西，這裡不是。
+ */
+let openFile: { path: string; original: string } | null = null;
+
+function fileIsDirty(): boolean {
+  if (!openFile) return false;
+  const ta = document.getElementById("fv-text") as HTMLTextAreaElement | null;
+  return Boolean(ta && ta.value !== openFile.original);
+}
+
+/** 有未存變更時攔一次。回 true 代表可以繼續。 */
+function confirmLeaveFile(): boolean {
+  if (!fileIsDirty()) return true;
+  return window.confirm(`「${shortPath(openFile!.path)}」有還沒存的變更，要放棄嗎？`);
+}
+
+function closeFileView(force = false) {
+  if (!force && !confirmLeaveFile()) return false;
+  openFile = null;
+  render();
+  return true;
+}
+
+async function openFileInEditor(path: string) {
+  if (!canEditFiles()) {
+    toast("在編輯欄開檔需要桌面版 App");
+    return;
+  }
+  if (!confirmLeaveFile()) return;
+  const label = document.getElementById("sec-label");
+  if (label) label.textContent = "讀取中…";
+  try {
+    const text = await readFile(path);
+    openFile = { path, original: text };
+    render();
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "讀取失敗");
+    render();
+  }
+}
+
+function renderFileView(): boolean {
+  if (!openFile) return false;
+  const label = document.getElementById("sec-label");
+  if (label) label.textContent = shortPath(openFile.path);
+
+  const body = document.getElementById("editor-body");
+  if (!body) return true;
+  body.innerHTML = `
+    <div class="fv">
+      <div class="fv-bar">
+        <span class="fv-path mono" title="${escapeHtml(openFile.path)}">${escapeHtml(shortPath(openFile.path))}</span>
+        <span class="fv-state" id="fv-state"></span>
+        <button type="button" class="btn btn-sm" id="fv-revert">還原</button>
+        <button type="button" class="btn btn-sm btn-primary" id="fv-save">儲存</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="fv-close">回章節</button>
+      </div>
+      <textarea id="fv-text" class="fv-text" spellcheck="false"
+                aria-label="${escapeHtml(shortPath(openFile.path))}">${escapeHtml(openFile.original)}</textarea>
+      <p class="fv-note">這是磁碟上的真實檔案，不會自動存檔 —— 改完要按儲存。⌘S 也可以。</p>
+    </div>
+  `;
+
+  const ta = document.getElementById("fv-text") as HTMLTextAreaElement;
+  const state = document.getElementById("fv-state") as HTMLElement;
+  const syncState = () => {
+    const dirty = ta.value !== openFile!.original;
+    state.textContent = dirty ? "未儲存" : "已同步";
+    state.className = `fv-state${dirty ? " is-dirty" : ""}`;
+  };
+  syncState();
+  ta.addEventListener("input", syncState);
+
+  const save = async () => {
+    if (!openFile) return;
+    try {
+      await writeFile(openFile.path, ta.value);
+      openFile.original = ta.value;
+      syncState();
+      toast("已儲存");
+      renderFileTree();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "儲存失敗");
+    }
+  };
+
+  document.getElementById("fv-save")?.addEventListener("click", save);
+  document.getElementById("fv-revert")?.addEventListener("click", () => {
+    ta.value = openFile!.original;
+    syncState();
+  });
+  document.getElementById("fv-close")?.addEventListener("click", () => closeFileView());
+  ta.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      void save();
+    }
+  });
+  return true;
+}
+
 function renderEditor() {
+  if (renderFileView()) return;
   const list = sections();
   const s = list[idx];
   if (!s) return;

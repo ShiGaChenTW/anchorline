@@ -101,6 +101,53 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
                 let payload = Self.scanPlans(dirs)
                 DispatchQueue.main.async { self?.postToJS(payload) }
             }
+        case "readFile", "writeFile":
+            // 在 App 內閱讀／修改 openspec 檔。界線跟 openPath 同一套：
+            // 家目錄底下、副檔名白名單、檔案必須已經存在（不建立新檔）。
+            // writeFile 是這個 App 唯一會寫磁碟的地方 —— 使用者明確要求
+            // 「要能修改」，但也僅止於覆寫他自己點開的那一個既有檔。
+            guard let dict = message.body as? [String: Any],
+                  let path = dict["path"] as? String, !path.isEmpty
+            else {
+                postToJS(["type": "fileError", "message": "缺少 path"])
+                return
+            }
+            let fileURL = URL(fileURLWithPath: path).standardizedFileURL
+            guard Self.isEditablePath(fileURL) else {
+                postToJS([
+                    "type": "fileError",
+                    "message": "不能存取這個路徑：必須是家目錄底下既有的文件檔",
+                    "path": path,
+                ])
+                return
+            }
+            if action == "readFile" {
+                do {
+                    let text = try String(contentsOf: fileURL, encoding: .utf8)
+                    postToJS(["type": "fileRead", "path": fileURL.path, "text": text])
+                } catch {
+                    postToJS([
+                        "type": "fileError",
+                        "message": "讀不到檔案：\(error.localizedDescription)",
+                        "path": fileURL.path,
+                    ])
+                }
+            } else {
+                guard let text = dict["text"] as? String else {
+                    postToJS(["type": "fileError", "message": "缺少 text", "path": fileURL.path])
+                    return
+                }
+                do {
+                    try text.write(to: fileURL, atomically: true, encoding: .utf8)
+                    postToJS(["type": "fileWritten", "path": fileURL.path])
+                } catch {
+                    postToJS([
+                        "type": "fileError",
+                        "message": "寫不進去：\(error.localizedDescription)",
+                        "path": fileURL.path,
+                    ])
+                }
+            }
         case "openPath":
             // 在預設應用程式裡開一個檔。限制在家目錄底下、且是文件類副檔名 ——
             // WebView 端可以送任意字串進來，不設界線等於把 open(1) 開放給頁面。
@@ -110,15 +157,8 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
                 postToJS(["type": "openPathError", "message": "缺少 path"])
                 return
             }
-            let home = FileManager.default.homeDirectoryForCurrentUser.path
-            let allowedExt = ["md", "markdown", "yaml", "yml", "json", "txt", "toml"]
             let url = URL(fileURLWithPath: path).standardizedFileURL
-            var isDir: ObjCBool = false
-            guard url.path.hasPrefix(home),
-                  allowedExt.contains(url.pathExtension.lowercased()),
-                  FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
-                  !isDir.boolValue
-            else {
+            guard Self.isEditablePath(url) else {
                 postToJS([
                     "type": "openPathError",
                     "message": "不開這個路徑：必須是家目錄底下的文件檔",
@@ -222,6 +262,24 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
      * 跑一個外部 CLI。走 /usr/bin/env 並補上 Homebrew 路徑 ——
      * GUI app 繼承的 PATH 通常沒有 /opt/homebrew/bin，直接 env onefetch 會找不到。
      */
+    /**
+     * 可讀寫的路徑界線。WebView 端能送任意字串進來，這是唯一的守門處。
+     *
+     * 三個條件同時成立才放行：家目錄底下、副檔名在白名單、是既有的普通檔。
+     * 「必須已經存在」擋掉用寫入建立任意新檔；`standardizedFileURL` 會把
+     * `..` 解掉，所以 hasPrefix 不會被 `~/../../etc/passwd` 這種路徑繞過。
+     */
+    static let editableExtensions = ["md", "markdown", "yaml", "yml", "json", "txt", "toml"]
+
+    static func isEditablePath(_ url: URL) -> Bool {
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        var isDir: ObjCBool = false
+        return url.path.hasPrefix(home + "/")
+            && editableExtensions.contains(url.pathExtension.lowercased())
+            && FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+            && !isDir.boolValue
+    }
+
     static func runTool(_ tool: String, _ args: [String], in dir: URL) -> String? {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
