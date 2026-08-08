@@ -18,4 +18,4 @@ vendor/markamd/src-tauri/target/
 .worktrees/
 
 # 稽核軌跡的完整原始流留在本機（D1 預設 (c)：脫敏摘要才進 git）
-.specforge/log/
+.anchorline/log/

@@ -54,7 +54,7 @@ run(&bin, &["search", "prs", "--author=@me", "--state=open", ...], None)
 
 ```
 canonicalize(path) 仍在某個「已註冊專案根目錄」內   ← 擋 symlink 逃逸
-∧ 相對路徑第一段 = .specforge
+∧ 相對路徑第一段 = .anchorline
 ∧ 副檔名 = jsonl
 ∧ 單行 < 4KB
 ```
@@ -93,7 +93,7 @@ canonicalize(path) 仍在某個「已註冊專案根目錄」內   ← 擋 symli
 
 ## 4. 稽核軌跡與你的機密
 
-事件流寫在 `<專案>/.specforge/log/YYYY-MM.jsonl`，**預設不進 git**（`.gitignore`）。
+事件流寫在 `<專案>/.anchorline/log/YYYY-MM.jsonl`，**預設不進 git**（`.gitignore`）。
 
 原因：append-only 的檔案洩漏了**刪不掉**，只能 rewrite history。而 agent 的
 tool call 參數裡很可能有 API key、token、私有路徑。
@@ -117,7 +117,7 @@ tool call 參數裡很可能有 API key、token、私有路徑。
 |---|---|
 | **產物未簽章** | macOS 會被 Gatekeeper 擋、Windows 會被 SmartScreen 擋。簽章與 notarization 是 `SCOPE.md` 的 W4，**尚未做** |
 | **CLI 探測會走 PATH** | 若你的 PATH 上有惡意的同名 `git`／`gh`，App 會用到它。這與你在終端打指令的風險相同，但值得知道 |
-| **`.specforge/log` 是明文** | 沒有加密。它在你自己的磁碟上，威脅模型假設本機是可信的 |
+| **`.anchorline/log` 是明文** | 沒有加密。它在你自己的磁碟上，威脅模型假設本機是可信的 |
 | **沒有沙盒** | App 需要跑 `git` 才有功能，所以未啟用 macOS App Sandbox |
 
 ---

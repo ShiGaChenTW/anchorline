@@ -5,15 +5,15 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>zh_TW</string>
 	<key>CFBundleExecutable</key>
-	<string>SpecForge</string>
+	<string>Anchorline</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.specforge.prd.workbench</string>
+	<string>dev.anchorline.app</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>SpecForge</string>
+	<string>Anchorline</string>
 	<key>CFBundleDisplayName</key>
-	<string>SpecForge</string>
+	<string>Anchorline</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleIconFile</key>

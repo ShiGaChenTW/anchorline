@@ -99,7 +99,7 @@ pub fn editable(p: &Path) -> bool {
 /// 稽核軌跡追加的界線。**比 [`editable`] 緊，因為它會建新檔。**
 ///
 /// 四個條件同時成立：解析後仍在已註冊根目錄內（擋 symlink 逃逸）、
-/// 相對路徑在 `.specforge/` 底下、副檔名是 `jsonl`、而且呼叫端只能 append。
+/// 相對路徑在 `.anchorline/` 底下、副檔名是 `jsonl`、而且呼叫端只能 append。
 /// 最後一條由 command 分流保證 —— 這個函式看不到動作是什麼。
 pub fn append_allowed(p: &Path, roots: &RegisteredRoots) -> bool {
     let target = canonical(p);
@@ -114,8 +114,8 @@ pub fn append_allowed(p: &Path, roots: &RegisteredRoots) -> bool {
     if !roots.contains_ancestor_of(&target) {
         return false;
     }
-    // 相對路徑必須落在 .specforge/ 底下。用 components 比對而不是字串 contains，
-    // 否則 `~/x/not-.specforge-really/a.jsonl` 這種名字會過。
+    // 相對路徑必須落在 .anchorline/ 底下。用 components 比對而不是字串 contains，
+    // 否則 `~/x/not-.anchorline-really/a.jsonl` 這種名字會過。
     let Ok(set) = roots.0.lock() else {
         return false;
     };
@@ -124,7 +124,7 @@ pub fn append_allowed(p: &Path, roots: &RegisteredRoots) -> bool {
             .strip_prefix(root)
             .ok()
             .and_then(|rel| rel.components().next())
-            .map(|first| first.as_os_str() == ".specforge")
+            .map(|first| first.as_os_str() == ".anchorline")
             .unwrap_or(false)
     })
 }
@@ -177,31 +177,31 @@ mod tests {
     fn append_rejects_without_registered_root() {
         let roots = RegisteredRoots::default();
         assert!(!append_allowed(
-            Path::new("/tmp/whatever/.specforge/log/2026-08.jsonl"),
+            Path::new("/tmp/whatever/.anchorline/log/2026-08.jsonl"),
             &roots
         ));
     }
 
     #[test]
-    fn append_requires_specforge_dir_and_jsonl() {
+    fn append_requires_anchorline_dir_and_jsonl() {
         let tmp = std::env::temp_dir().join("sf-paths-test");
-        let _ = std::fs::create_dir_all(tmp.join(".specforge/log"));
+        let _ = std::fs::create_dir_all(tmp.join(".anchorline/log"));
         let roots = RegisteredRoots::default();
         roots.register(&tmp);
 
-        assert!(append_allowed(&tmp.join(".specforge/log/a.jsonl"), &roots));
+        assert!(append_allowed(&tmp.join(".anchorline/log/a.jsonl"), &roots));
         // 副檔名不對
-        assert!(!append_allowed(&tmp.join(".specforge/log/a.md"), &roots));
-        // 不在 .specforge/ 底下
+        assert!(!append_allowed(&tmp.join(".anchorline/log/a.md"), &roots));
+        // 不在 .anchorline/ 底下
         assert!(!append_allowed(&tmp.join("other/a.jsonl"), &roots));
         // 名字很像但不是那個目錄
         assert!(!append_allowed(
-            &tmp.join(".specforge-really/a.jsonl"),
+            &tmp.join(".anchorline-really/a.jsonl"),
             &roots
         ));
         // 逃出根目錄
         assert!(!append_allowed(
-            &tmp.join("../escape/.specforge/a.jsonl"),
+            &tmp.join("../escape/.anchorline/a.jsonl"),
             &roots
         ));
     }

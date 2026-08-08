@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "PRD開發監控台",
+  "productName": "Anchorline",
   "version": "1.1.0",
-  "identifier": "com.specforge.prd.workbench",
+  "identifier": "dev.anchorline.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -13,7 +13,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
-        "title": "PRD開發監控台 — PRD 引導工作台",
+        "title": "Anchorline — 開發專案工作台",
         "width": 1280,
         "height": 880,
         "minWidth": 900,

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Live tracking 段 1 的寫入端（SPEC-live-tracking.md §4 / §9）。
 #
-# 用法：specforge-active.sh [路徑]
+# 用法：anchorline-active.sh [路徑]
 #   路徑省略時用 $CLAUDE_PROJECT_DIR，再退到 $PWD。
 #
 # 契約只有三條，刻意窄到任何能跑一行 shell 的東西都接得上：
@@ -17,7 +17,7 @@
 set -eu
 
 target="${1:-${CLAUDE_PROJECT_DIR:-$PWD}}"
-dir="${XDG_CONFIG_HOME:-$HOME/.config}/specforge"
+dir="${XDG_CONFIG_HOME:-$HOME/.config}/anchorline"
 
 mkdir -p "$dir"
 tmp="$dir/.active.tmp.$$"

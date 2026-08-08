@@ -23,7 +23,7 @@
 | # | 決策 | 來源 | 影響 |
 |---|---|---|---|
 | D1 | log 分兩份：脫敏摘要進 git、原始流 `.gitignore` | 報告 §八 #1 | 已實作 |
-| D2 | bridge 開放 `.specforge/**.jsonl` append | 報告 §八 #2 | 已實作（Swift），**需 Rust 重做** |
+| D2 | bridge 開放 `.anchorline/**.jsonl` append | 報告 §八 #2 | 已實作（Swift），**需 Rust 重做** |
 | D3 | 不採用 Backlog.md | 報告 §八 #3 | 連帶讓 D6 成立 |
 | D4 | ADR 讀 ISA 的 `Decisions` / `Changelog` | 報告 §八 #4 | 已實作 |
 | **D5** | **放棄瀏覽器版** | 本輪 | 刪 19 個 guard、4 檔的編譯期快照 |
@@ -63,7 +63,7 @@ TS 端要改的只有 **8 檔**：`tracking-bridge` `status-bridge` `event-write
 三個要特別小心的：
 
 - **`appendFile`** — 必須是真 O_APPEND（`OpenOptions::append(true)`），不可 read-modify-write
-- **`appendAllowed` 謂詞** — `canonicalize()` 後仍在已註冊根目錄內、限 `.specforge/**`、限 `.jsonl`
+- **`appendAllowed` 謂詞** — `canonicalize()` 後仍在已註冊根目錄內、限 `.anchorline/**`、限 `.jsonl`
 - **git／CLI 子指令白名單** — Tauri shell plugin 要宣告 allowlist，**這是 MIT 專案必須寫進文件的安全介面**
 
 ### 取消
@@ -116,7 +116,7 @@ TS 端要改的只有 **8 檔**：`tracking-bridge` `status-bridge` `event-write
 | W3-3 | `CONTRIBUTING.md` + issue 範本 |
 | W3-4 | **與上游的相容承諾寫進 README**：「不解析 `spec.md`，該段一律呼叫 OpenSpec CLI」 |
 | W3-5 | GitHub Actions：三平台 build + test |
-| W3-6 | 資料落點文件：`.specforge/log` 是什麼、為什麼預設 gitignore、怎麼脫敏匯出 |
+| W3-6 | 資料落點文件：`.anchorline/log` 是什麼、為什麼預設 gitignore、怎麼脫敏匯出 |
 
 > W3-2 不是形式。這個 App 讀得到使用者所有專案資料夾、會寫檔、會跑 CLI——**MIT 專案不把這三件事講清楚，第一個看原始碼的人就會開 issue**。
 

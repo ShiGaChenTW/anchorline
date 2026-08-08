@@ -7,7 +7,7 @@
 //! - `ahead = -1` 的語意有沒有被正規化掉
 //! - 掃描的上限與去重
 
-use specforge_lib::testing::{append_line, scan_plans};
+use anchorline_lib::testing::{append_line, scan_plans};
 use std::fs;
 use std::path::PathBuf;
 
@@ -25,7 +25,7 @@ fn tmp(name: &str) -> PathBuf {
 #[test]
 fn append_is_real_o_append_under_concurrency() {
     let dir = tmp("append-concurrent");
-    let log = dir.join(".specforge/log/2026-08.jsonl");
+    let log = dir.join(".anchorline/log/2026-08.jsonl");
 
     let threads: Vec<_> = (0..8)
         .map(|t| {
@@ -54,10 +54,10 @@ fn append_is_real_o_append_under_concurrency() {
 #[test]
 fn append_creates_dir_and_gitattributes_once() {
     let dir = tmp("append-attrs");
-    let log = dir.join(".specforge/log/2026-08.jsonl");
+    let log = dir.join(".anchorline/log/2026-08.jsonl");
     append_line(&log, "{}").unwrap();
 
-    let attrs = dir.join(".specforge/.gitattributes");
+    let attrs = dir.join(".anchorline/.gitattributes");
     assert!(attrs.exists(), "缺 .gitattributes");
     assert_eq!(fs::read_to_string(&attrs).unwrap(), "*.jsonl merge=union\n");
 
@@ -74,7 +74,7 @@ fn append_creates_dir_and_gitattributes_once() {
 #[test]
 fn append_flattens_newlines_so_one_event_is_one_line() {
     let dir = tmp("append-flat");
-    let log = dir.join(".specforge/log/x.jsonl");
+    let log = dir.join(".anchorline/log/x.jsonl");
     append_line(&log, "{\"a\":\"line1\nline2\"}").unwrap();
     assert_eq!(fs::read_to_string(&log).unwrap().lines().count(), 1);
 }

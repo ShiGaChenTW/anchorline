@@ -21,7 +21,7 @@ WebView 看不到磁碟、跑不了 git、拿不到 mtime。這三件事是這�
 ### 舊（WKWebView，即將退場）
 
 ```js
-window.webkit.messageHandlers.specforge.postMessage({ action, ...params })
+window.webkit.messageHandlers.anchorline.postMessage({ action, ...params })
 window.addEventListener("specforge-native", (e) => { e.detail.type === "..." })
 ```
 
@@ -72,7 +72,7 @@ const res = await invoke<TrackingScan>("tracking_scan", { plansDirs });
 
 ```
 canonicalize(path) 仍位於某個「已註冊專案根目錄」之內   ← 擋 symlink 逃逸
-∧ 相對路徑符合 .specforge/**
+∧ 相對路徑符合 .anchorline/**
 ∧ 副檔名 = jsonl
 ∧ 只 append，永不覆寫、永不刪除
 ∧ 單行 < 4KB（保住 append 的原子性）
@@ -157,8 +157,8 @@ canonicalize(path) 仍位於某個「已註冊專案根目錄」之內   ← 擋
 - **真 O_APPEND**（Rust：`OpenOptions::new().append(true).create(true)`）。**不可 read-modify-write** — 三類 writer 會併發，讀整檔再寫回會直接吃掉別人剛寫的事件
 - `line` 內的換行一律替換成空白，結尾補一個 `\n`
 - 超過 4 KB 截斷
-- 自動建立 `.specforge/log/` 目錄
-- 缺 `.specforge/.gitattributes` 時種下 `*.jsonl merge=union`（**只在缺檔時，不覆寫**）
+- 自動建立 `.anchorline/log/` 目錄
+- 缺 `.anchorline/.gitattributes` 時種下 `*.jsonl merge=union`（**只在缺檔時，不覆寫**）
 
 ### 4.6 `openPath`
 

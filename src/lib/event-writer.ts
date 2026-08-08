@@ -182,7 +182,7 @@ export function prsToEvents(prs: PrLike[], project: string): LogEvent[] {
 // ── Writer B：hook 偵測與安裝指令 ────────────────────────────────
 
 /** hook 寫入端要落在哪。與 `event-log.ts` 的 LOG_DIR 對齊。 */
-export const HOOK_MARKER = ".specforge/log";
+export const HOOK_MARKER = ".anchorline/log";
 
 /**
  * 給使用者複製的一行。**App 不會自己寫進 settings.json。**
@@ -198,7 +198,7 @@ export function hookInstallSnippet(): string {
     '      "matcher": "Edit|Write",',
     '      "hooks": [{',
     '        "type": "command",',
-    '        "command": "r=\\"${CLAUDE_PROJECT_DIR:-$PWD}\\"; d=\\"$r/.specforge/log\\"; mkdir -p \\"$d\\"; f=\\"${CLAUDE_TOOL_FILE#$r/}\\"; printf \'{\\"v\\":1,\\"event_id\\":\\"%s\\",\\"ts\\":\\"%s\\",\\"actor\\":{\\"kind\\":\\"hook\\",\\"family\\":\\"claude\\",\\"name\\":\\"Claude Code\\"},\\"kind\\":\\"file.edit\\",\\"subject\\":\\"%s\\"}\\\\n\' \\"$(uuidgen | tr -d - | head -c 14)\\" \\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\\" \\"$f\\" >> \\"$d/$(date -u +%Y-%m).jsonl\\""',
+    '        "command": "r=\\"${CLAUDE_PROJECT_DIR:-$PWD}\\"; d=\\"$r/.anchorline/log\\"; mkdir -p \\"$d\\"; f=\\"${CLAUDE_TOOL_FILE#$r/}\\"; printf \'{\\"v\\":1,\\"event_id\\":\\"%s\\",\\"ts\\":\\"%s\\",\\"actor\\":{\\"kind\\":\\"hook\\",\\"family\\":\\"claude\\",\\"name\\":\\"Claude Code\\"},\\"kind\\":\\"file.edit\\",\\"subject\\":\\"%s\\"}\\\\n\' \\"$(uuidgen | tr -d - | head -c 14)\\" \\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\\" \\"$f\\" >> \\"$d/$(date -u +%Y-%m).jsonl\\""',
     '      }]',
     '    }]',
     '  }',
