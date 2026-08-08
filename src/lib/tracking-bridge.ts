@@ -4,7 +4,7 @@
  * 瀏覽器看不到磁碟，而整個判定只靠 mtime —— 所以 web 端的 tracking 能不能成立，
  * 完全取決於這條橋。形狀照抄 `project-stats.ts` 的 requestProjectStats。
  */
-import { isDesktopApp } from "./project-folder";
+import { isNative, native } from "./native";
 import type { TrackingSignal } from "./tracking";
 
 export type ScannedPlan = {
@@ -20,43 +20,14 @@ export type TrackingScan = {
   signal: TrackingSignal | null;
 };
 
-type Bridge = {
-  webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
-};
-
 export function canScanPlans(): boolean {
-  const w = window as Window & Bridge;
-  return isDesktopApp() && Boolean(w.webkit?.messageHandlers?.specforge);
+  return isNative();
 }
 
-/** 向原生橋要一次掃描。逾時就 reject —— 別讓每秒一次的輪詢堆滿未完成的 promise。 */
-export function requestTrackingScan(plansDirs: string[], timeoutMs = 10000): Promise<TrackingScan> {
-  return new Promise((resolve, reject) => {
-    const w = window as Window & Bridge;
-    if (!canScanPlans()) {
-      reject(new Error("需要桌面版 App：瀏覽器拿不到檔案 mtime"));
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      window.removeEventListener("specforge-native", onNative);
-      reject(new Error("掃描逾時"));
-    }, timeoutMs);
-
-    function onNative(e: Event) {
-      const p = (e as CustomEvent<Record<string, unknown>>).detail;
-      if (p?.type !== "trackingScan") return;
-      window.clearTimeout(timer);
-      window.removeEventListener("specforge-native", onNative);
-      resolve({
-        files: (p.files as ScannedPlan[]) ?? [],
-        signal: (p.signal as TrackingSignal | undefined) ?? null,
-      });
-    }
-
-    window.addEventListener("specforge-native", onNative);
-    w.webkit!.messageHandlers!.specforge!.postMessage({ action: "trackingScan", plansDirs });
-  });
+/** 向原生橋要一次掃描。逾時由 Tauri 的 IPC 自己處理，這裡不再自訂計時器。 */
+export async function requestTrackingScan(plansDirs: string[]): Promise<TrackingScan> {
+  const r = await native.trackingScan(plansDirs);
+  return { files: r.files as ScannedPlan[], signal: r.signal ?? null };
 }
 
 type ProjectLike = { id?: string; importSummary?: { rootPath: string } };

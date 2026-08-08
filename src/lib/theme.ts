@@ -1,6 +1,10 @@
+// 這個 import 有副作用：一次性把 anchorline:* 的 key 搬到 anchorline:*。
+// 放在 theme.ts 是因為 14 個 page 全都匯入它 —— 這是唯一的共同入口。
+import "./storage-migrate";
+
 import type { ThemeId } from "../data/types";
 
-const KEY = "specforge:theme";
+const KEY = "anchorline:theme";
 
 const THEMES: Record<ThemeId, { label: string; scheme: "dark" | "light"; bg: string }> = {
   kami: { label: "LIGHT", scheme: "light", bg: "#f5f4ed" },

@@ -1,5 +1,5 @@
 (function () {
-  var KEY = "specforge:theme";
+  var KEY = "anchorline:theme";
   var THEMES = {
     kami: { label: "kami · 紙", scheme: "light", bg: "#f5f4ed" },
     github: { label: "GitHub · Dark", scheme: "dark", bg: "#0d1117" }
@@ -61,5 +61,5 @@
     apply(btn.getAttribute("data-theme-value"));
   });
 
-  window.SpecForgeTheme = { apply: apply, current: current, themes: THEMES };
+  window.AnchorlineTheme = { apply: apply, current: current, themes: THEMES };
 })();

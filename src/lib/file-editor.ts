@@ -1,3 +1,5 @@
+
+import { isNative, native } from "./native";
 /**
  * 在編輯欄裡開一個磁碟上的檔（目前用於 OpenSpec 區塊）。
  *
@@ -18,85 +20,17 @@ export type FileDoc = {
   original: string;
 };
 
-type Bridge = { postMessage: (m: unknown) => void };
-
-function bridge(): Bridge | null {
-  const w = window as Window & {
-    webkit?: { messageHandlers?: { specforge?: Bridge } };
-  };
-  return w.webkit?.messageHandlers?.specforge ?? null;
-}
-
 export function canEditFiles(): boolean {
-  return Boolean(bridge());
+  return isNative();
 }
 
-/** 向原生橋要檔案內容。逾時就 reject，不要讓畫面永遠轉圈。 */
-export function readFile(path: string, timeoutMs = 8000): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const b = bridge();
-    if (!b) {
-      reject(new Error("需要桌面版 App：瀏覽器讀不到磁碟"));
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      cleanup();
-      reject(new Error("讀取逾時"));
-    }, timeoutMs);
-
-    function onNative(e: Event) {
-      const p = (e as CustomEvent<{ type?: string; path?: string; text?: string; message?: string }>)
-        .detail;
-      if (p?.type === "fileError") {
-        cleanup();
-        reject(new Error(p.message ?? "讀取失敗"));
-        return;
-      }
-      if (p?.type !== "fileRead" || p.path !== path) return;
-      cleanup();
-      resolve(p.text ?? "");
-    }
-    function cleanup() {
-      window.clearTimeout(timer);
-      window.removeEventListener("specforge-native", onNative);
-    }
-
-    window.addEventListener("specforge-native", onNative);
-    b.postMessage({ action: "readFile", path });
-  });
+export async function readFile(path: string): Promise<string> {
+  const r = await native.readFile(path);
+  return r.text;
 }
 
-export function writeFile(path: string, text: string, timeoutMs = 8000): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const b = bridge();
-    if (!b) {
-      reject(new Error("需要桌面版 App：瀏覽器寫不了磁碟"));
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      cleanup();
-      reject(new Error("寫入逾時"));
-    }, timeoutMs);
-
-    function onNative(e: Event) {
-      const p = (e as CustomEvent<{ type?: string; path?: string; message?: string }>).detail;
-      if (p?.type === "fileError") {
-        cleanup();
-        reject(new Error(p.message ?? "寫入失敗"));
-        return;
-      }
-      if (p?.type !== "fileWritten" || p.path !== path) return;
-      cleanup();
-      resolve();
-    }
-    function cleanup() {
-      window.clearTimeout(timer);
-      window.removeEventListener("specforge-native", onNative);
-    }
-
-    window.addEventListener("specforge-native", onNative);
-    b.postMessage({ action: "writeFile", path, text });
-  });
+export async function writeFile(path: string, text: string): Promise<void> {
+  await native.writeFile(path, text);
 }
 
 /** 顯示用的短路徑：`openspec/` 之後那一段就夠認人，前面全是重複的 */

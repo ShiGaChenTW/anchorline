@@ -191,7 +191,7 @@ export async function generateAIDraft(
     .map((f) => `### ${f.key}\n${(currentValues[f.key] || "").trim() || "（空）"}`)
     .join("\n\n");
 
-  const system = `You are a PRD co-author for SpecForge / 產品規格。
+  const system = `You are a PRD co-author for Anchorline / 產品規格。
 Write in ${langHint(settings)}. Style: ${personaHint(settings)}.
 Return ONLY a JSON object whose keys are exactly the field keys listed.
 Values are markdown-friendly plain text for each field.

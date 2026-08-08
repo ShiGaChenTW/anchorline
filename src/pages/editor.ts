@@ -211,9 +211,9 @@ function initCollapsible(btnId: string, bodyId: string, storageKey: string, labe
   });
 }
 
-const FT_COLLAPSE_KEY = "specforge:file-tree-collapsed";
+const FT_COLLAPSE_KEY = "anchorline:file-tree-collapsed";
 
-const FT_HEIGHT_KEY = "specforge:file-tree-height";
+const FT_HEIGHT_KEY = "anchorline:file-tree-height";
 
 /**
  * 檔案樹高度拖曳。
@@ -842,7 +842,7 @@ function renderEditor() {
           <dd class="mono">${
             srcFile
               ? escapeHtml(srcFile)
-              : `<span class="sec-origin-none">無（本節只存在 SpecForge 內）</span>`
+              : `<span class="sec-origin-none">無（本節只存在 Anchorline 內）</span>`
           }</dd>
         </div>
         <div class="sec-origin-row">
@@ -1452,7 +1452,7 @@ document.getElementById("editor-body")?.addEventListener(
 // ⌥F 快捷鍵與狀態還原；同步執行，不能靠 rAF（分頁在背景時 rAF 不觸發）
 initFileTreeCollapse();
 initFileTreeResize();
-initCollapsible("btn-openspec-toggle", "openspec-list", "specforge:openspec-collapsed", "OpenSpec 章節");
+initCollapsible("btn-openspec-toggle", "openspec-list", "anchorline:openspec-collapsed", "OpenSpec 章節");
 initFocusMode();
 initHyperfocusGuard();
 render();

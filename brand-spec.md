@@ -1,6 +1,6 @@
-# Brand — SpecForge PRD Workbench
+# Brand — Anchorline
 
-Four switchable design systems. Preference: `localStorage` key `specforge:theme`.
+Four switchable design systems. Preference: `localStorage` key `anchorline:theme`.
 
 | id | 氣質 | canvas | accent |
 |----|------|--------|--------|

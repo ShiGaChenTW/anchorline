@@ -5,14 +5,51 @@ import WebKit
  * JS ↔ 原生橋：資料夾選擇（NSOpenPanel）+ 掃描 .md/.txt。
  * WKWebView 的 <input webkitdirectory> 在 file:// 下經常無反應，必須走原生。
  */
-final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
+final class AnchorlineBridge: NSObject, WKScriptMessageHandler {
     weak var webView: WKWebView?
+
+    /**
+     * 這個 session 裡使用者透過 NSOpenPanel 明確授權過的專案根目錄。
+     *
+     * appendFile 的守門靠它 —— **不接受 JS 傳任意路徑當根目錄**。JS 只能說
+     * 「寫到這個路徑」，能不能寫由這份清單決定，而清單只有使用者親手選過的資料夾
+     * 才進得來。這是 pickProjectFolder 之外唯一的加入途徑。
+     */
+    private var registeredRoots = Set<String>()
+
+    func registerRoot(_ url: URL) {
+        registeredRoots.insert(url.standardizedFileURL.path)
+    }
+
+    /**
+     * append 的路徑謂詞。**與 isEditablePath 是兩條不同的規則，刻意不共用。**
+     *
+     * isEditablePath 管的是「改一個使用者點開的既有檔」；這裡管的是
+     * 「在專案裡建立並持續追加一份稽核軌跡」。後者會建新檔，所以守門必須更緊：
+     *
+     *   1. resolvingSymlinksInPath 之後仍落在某個「已授權根目錄」內（擋 symlink 逃逸）
+     *   2. 相對路徑必須是 .anchorline/ 底下
+     *   3. 副檔名只允許 jsonl
+     *   4. 只 append，永不覆寫、永不刪除（由呼叫端的 action 分流保證）
+     */
+    func appendAllowed(_ url: URL) -> Bool {
+        let resolved = url.resolvingSymlinksInPath().standardizedFileURL
+        guard resolved.pathExtension.lowercased() == "jsonl" else { return false }
+        for root in registeredRoots {
+            let rootResolved = URL(fileURLWithPath: root).resolvingSymlinksInPath()
+                .standardizedFileURL.path
+            guard resolved.path.hasPrefix(rootResolved + "/") else { continue }
+            let rel = String(resolved.path.dropFirst(rootResolved.count + 1))
+            if rel.hasPrefix(".anchorline/") { return true }
+        }
+        return false
+    }
 
     func userContentController(
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
-        guard message.name == "specforge" else { return }
+        guard message.name == "anchorline" else { return }
 
         var action = ""
         if let dict = message.body as? [String: Any] {
@@ -168,16 +205,140 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
             }
             NSWorkspace.shared.open(url)
             postToJS(["type": "openPath", "path": url.path])
+        case "appendFile":
+            // 稽核軌跡的寫入端。**真 O_APPEND**，不是 read-modify-write ——
+            // 三類 writer（App 內動作 / Claude Code hook / git 回填）會併發，
+            // 讀整檔再寫回會直接吃掉別人剛寫的事件。
+            //
+            // 與 writeFile 分成兩個 action 也是刻意的：這個永遠不覆寫、不刪除，
+            // 而且守門走 appendAllowed 而不是 isEditablePath（規則更緊，見上）。
+            guard let dict = message.body as? [String: Any],
+                  let path = dict["path"] as? String, !path.isEmpty,
+                  let line = dict["line"] as? String
+            else {
+                postToJS(["type": "fileError", "message": "缺少 path 或 line"])
+                return
+            }
+            let logURL = URL(fileURLWithPath: path).standardizedFileURL
+            guard appendAllowed(logURL) else {
+                postToJS([
+                    "type": "fileError",
+                    "message": "不能追加到這個路徑：必須是已授權專案內的 .anchorline/*.jsonl",
+                    "path": path,
+                ])
+                return
+            }
+            // 單行、單筆、有結尾換行。上限 4KB 保住 append 的原子性。
+            var payloadLine = line.replacingOccurrences(of: "\n", with: " ")
+            if payloadLine.utf8.count > 4096 { payloadLine = String(payloadLine.prefix(2000)) }
+            payloadLine += "\n"
+            guard let data = payloadLine.data(using: .utf8) else {
+                postToJS(["type": "fileError", "message": "編碼失敗", "path": logURL.path])
+                return
+            }
+            do {
+                let fm = FileManager.default
+                let dir = logURL.deletingLastPathComponent()
+                try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+                // *.jsonl merge=union：append-only 檔在分支合併時 100% 衝突在檔尾，
+                // 而事件自帶時間戳可重排，union 是一行解法。只在缺檔時種下，不覆寫。
+                let attrs = dir.deletingLastPathComponent().appendingPathComponent(".gitattributes")
+                if !fm.fileExists(atPath: attrs.path) {
+                    try? "*.jsonl merge=union\n".write(to: attrs, atomically: true, encoding: .utf8)
+                }
+                if !fm.fileExists(atPath: logURL.path) {
+                    fm.createFile(atPath: logURL.path, contents: nil)
+                }
+                let handle = try FileHandle(forWritingTo: logURL)
+                defer { try? handle.close() }
+                try handle.seekToEnd()
+                try handle.write(contentsOf: data)
+                postToJS(["type": "fileAppended", "path": logURL.path])
+            } catch {
+                postToJS([
+                    "type": "fileError",
+                    "message": "追加失敗：\(error.localizedDescription)",
+                    "path": logURL.path,
+                ])
+            }
+        case "openspecStatus":
+            // 唯讀。子指令全部寫死，只有工作目錄來自 JS —— 與 git() 同一套注入防護。
+            // 找不到 openspec 就回 openspecMissing，比照 fastfetch 的處理：安靜降級，
+            // 不是錯誤。沒裝 CLI 的人不該看到紅字。
+            guard let dict = message.body as? [String: Any],
+                  let path = dict["folderPath"] as? String, !path.isEmpty
+            else {
+                postToJS(["type": "openspecMissing", "message": "缺少 folderPath"])
+                return
+            }
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let dir = URL(fileURLWithPath: path)
+                guard let listRaw = Self.runTool("openspec", ["list", "--json"], in: dir) else {
+                    DispatchQueue.main.async {
+                        self?.postToJS([
+                            "type": "openspecMissing",
+                            "message": "找不到 openspec，或這不是 openspec 專案。可用 bun add -g openspec 安裝。",
+                        ])
+                    }
+                    return
+                }
+                // 逐 change 問狀態。`status` 沒有 --change 會回錯誤物件，所以名字要先從
+                // list 拿。名字只從 CLI 自己的輸出來，不經過 JS。
+                let names = Self.openspecChangeNames(listRaw)
+                var statuses: [String] = []
+                for n in names {
+                    if let raw = Self.runTool("openspec", ["status", "--change", n, "--json"], in: dir) {
+                        statuses.append(raw)
+                    }
+                }
+                DispatchQueue.main.async {
+                    self?.postToJS([
+                        "type": "openspecStatus",
+                        "folderPath": dir.path,
+                        "list": listRaw,
+                        "statuses": statuses,
+                    ])
+                }
+            }
+        case "ghStatus":
+            // 唯讀，而且刻意**只有** search。這裡永遠不會出現 pr review / merge / comment ——
+            // 那些跟 git push 是同一類不可逆的對外動作，界線見 src/lib/git-doctor.ts 開頭。
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let home = FileManager.default.homeDirectoryForCurrentUser
+                let raw = Self.runTool(
+                    "gh",
+                    [
+                        "search", "prs", "--author=@me", "--state=open", "--limit", "30",
+                        "--json", "repository,number,title,updatedAt",
+                    ],
+                    in: home
+                )
+                DispatchQueue.main.async {
+                    guard let raw else {
+                        self?.postToJS([
+                            "type": "ghMissing",
+                            "message": "找不到 gh，或尚未登入。可用 brew install gh && gh auth login。",
+                        ])
+                        return
+                    }
+                    self?.postToJS([
+                        "type": "ghStatus",
+                        "raw": raw,
+                        "fetchedAt": ISO8601DateFormatter().string(from: Date()),
+                    ])
+                }
+            }
         case "ping":
             postToJS([
                 "type": "pong",
                 "native": true,
                 "capabilities": [
                     "pickFolder", "pickProjectFolder", "createDirectories", "trackingScan",
+                    "openspecStatus", "ghStatus", "appendFile",
                 ],
             ])
         default:
-            NSLog("SpecForge bridge unknown action: \(action)")
+            NSLog("Anchorline bridge unknown action: \(action)")
         }
     }
 
@@ -216,6 +377,9 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
                 defer {
                     if accessed { url.stopAccessingSecurityScopedResource() }
                 }
+
+                // 使用者親手選過 = 授權。這是 registeredRoots 唯一的加入途徑。
+                DispatchQueue.main.async { self.registerRoot(url) }
 
                 let files = Self.scanDirectory(url)
                 let payload: [String: Any] = [
@@ -278,6 +442,20 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
             && editableExtensions.contains(url.pathExtension.lowercased())
             && FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
             && !isDir.boolValue
+    }
+
+    /**
+     * 從 `openspec list --json` 取出 change 名稱。
+     *
+     * 只在原生端做這一件最小解析 —— 因為下一輪 `status --change <name>` 需要它。
+     * 其餘所有 JSON 判讀都留在 TS（`src/lib/openspec-status.ts`），不要在兩邊各寫一套。
+     */
+    static func openspecChangeNames(_ listRaw: String) -> [String] {
+        guard let data = listRaw.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let changes = obj["changes"] as? [[String: Any]]
+        else { return [] }
+        return changes.compactMap { $0["name"] as? String }.filter { !$0.isEmpty }
     }
 
     static func runTool(_ tool: String, _ args: [String], in dir: URL) -> String? {
@@ -534,7 +712,7 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
         let base = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"]
             ?? FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent(".config").path
-        let url = URL(fileURLWithPath: base).appendingPathComponent("specforge/active")
+        let url = URL(fileURLWithPath: base).appendingPathComponent("anchorline/active")
         guard let raw = try? String(contentsOf: url, encoding: .utf8),
               let mdate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
                   .contentModificationDate
@@ -623,25 +801,25 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
               let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
               let json = String(data: data, encoding: .utf8)
         else {
-            NSLog("SpecForge bridge: failed to serialize payload")
+            NSLog("Anchorline bridge: failed to serialize payload")
             return
         }
         let script = """
         (function(){
           try {
             var payload = \(json);
-            if (typeof window.__specforgeNativeFolderResult === 'function') {
-              window.__specforgeNativeFolderResult(payload);
+            if (typeof window.__anchorlineNativeFolderResult === 'function') {
+              window.__anchorlineNativeFolderResult(payload);
             }
-            window.dispatchEvent(new CustomEvent('specforge-native', { detail: payload }));
+            window.dispatchEvent(new CustomEvent('anchorline-native', { detail: payload }));
           } catch (e) {
-            console.error('specforge native callback', e);
+            console.error('anchorline native callback', e);
           }
         })();
         """
         webView?.evaluateJavaScript(script, completionHandler: { _, error in
             if let error = error {
-                NSLog("SpecForge bridge JS error: \(error.localizedDescription)")
+                NSLog("Anchorline bridge JS error: \(error.localizedDescription)")
             }
         })
     }
@@ -651,7 +829,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     var window: NSWindow!
     var webView: WKWebView!
     /// 必須強引用，否則 message handler 會被釋放
-    private let bridge = SpecForgeBridge()
+    private let bridge = AnchorlineBridge()
 
     private var appDisplayName: String {
         (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
@@ -782,11 +960,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
         config.defaultWebpagePreferences.allowsContentJavaScript = true
 
-        config.userContentController.add(bridge, name: "specforge")
+        config.userContentController.add(bridge, name: "anchorline")
         let boot = WKUserScript(
             source: """
-            window.__SPECFORGE_NATIVE__ = true;
-            window.__specforgeHasNativeFolder = true;
+            window.__ANCHORLINE_NATIVE__ = true;
+            window.__anchorlineHasNativeFolder = true;
             """,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
@@ -855,7 +1033,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     // 走 LaunchServices 註冊 scheme 常常靜默失敗。
     private static var handoffURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".specforge/handoff.json")
+            .appendingPathComponent(".anchorline/handoff.json")
     }
 
     func consumeHandoffIfAny() {
@@ -870,12 +1048,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
         let folderURL = URL(fileURLWithPath: folderPath)
         guard FileManager.default.fileExists(atPath: folderURL.path) else {
-            NSLog("SpecForge handoff: folder not found \(folderPath)")
+            NSLog("Anchorline handoff: folder not found \(folderPath)")
             return
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let files = SpecForgeBridge.scanDirectoryPublic(folderURL)
+            let files = AnchorlineBridge.scanDirectoryPublic(folderURL)
             let payload: [String: Any] = [
                 "type": "agentHandoff",
                 "folderName": folderURL.lastPathComponent,
@@ -898,11 +1076,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        NSLog("SpecForge load failed: \(error.localizedDescription)")
+        NSLog("Anchorline load failed: \(error.localizedDescription)")
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        NSLog("SpecForge navigation failed: \(error.localizedDescription)")
+        NSLog("Anchorline navigation failed: \(error.localizedDescription)")
     }
 
     // MARK: - JS dialogs（預設 WKWebView 不實作 → prompt/alert/confirm 全無效）

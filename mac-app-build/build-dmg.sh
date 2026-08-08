@@ -1,7 +1,7 @@
 #!/bin/bash
-# SpecForge macOS App 打包
-#   bash mac-app-build/build-dmg.sh           # 正式版 SpecForge
-#   bash mac-app-build/build-dmg.sh --test    # 測試版 SpecForge Test
+# Anchorline macOS App 打包
+#   bash mac-app-build/build-dmg.sh           # 正式版 Anchorline
+#   bash mac-app-build/build-dmg.sh --test    # 測試版 Anchorline Test
 #   bash mac-app-build/build-dmg.sh --all     # 兩者都打
 set -euo pipefail
 
@@ -27,15 +27,15 @@ if [[ "$VARIANT" == "test" ]]; then
   # 測試版：App 顯示名稱含「測試」（Dock / 選單列 / Finder 一眼分得出來）
   APP_DISPLAY_NAME="PRD開發監控台 測試"
   APP_BUNDLE_DIR_NAME="PRD開發監控台 測試"
-  APP_EXEC="SpecForgeTest"
-  BUNDLE_ID="com.specforge.prd.workbench.test"
+  APP_EXEC="AnchorlineTest"
+  BUNDLE_ID="dev.anchorline.app.test"
   DMG_FILE="$PROJECT_DIR/PRD開發監控台-測試-${VERSION}-macOS.dmg"
 else
   # 正式版
   APP_DISPLAY_NAME="PRD開發監控台"
   APP_BUNDLE_DIR_NAME="PRD開發監控台"
-  APP_EXEC="SpecForge"
-  BUNDLE_ID="com.specforge.prd.workbench"
+  APP_EXEC="Anchorline"
+  BUNDLE_ID="dev.anchorline.app"
   DMG_FILE="$PROJECT_DIR/PRD開發監控台-${VERSION}-macOS.dmg"
 fi
 
@@ -43,7 +43,7 @@ APP_BUNDLE="$PROJECT_DIR/${APP_BUNDLE_DIR_NAME}.app"
 STAGING_NAME="$APP_BUNDLE_DIR_NAME"
 
 echo "════════════════════════════════════════"
-echo "  SpecForge macOS · ${VARIANT} · v${VERSION}"
+echo "  Anchorline macOS · ${VARIANT} · v${VERSION}"
 echo "  App: ${APP_DISPLAY_NAME}.app"
 echo "════════════════════════════════════════"
 

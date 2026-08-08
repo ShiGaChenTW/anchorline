@@ -3,7 +3,7 @@
  *
  *   這個資料夾裡有什麼？        → 樹狀結構
  *   哪些是 PRD 的來源？          → `來源` 徽章 + 對應章節編號
- *   哪些是 SpecForge 產出的？    → `產出` 徽章
+ *   哪些是 Anchorline 產出的？    → `產出` 徽章
  *
  * ADHD 的定位成本很高：看不到「檔案 ↔ 章節」的對應，就等於每次都要重新想
  * 「我現在到底在改什麼」。這個樹把那條線畫出來。
@@ -41,7 +41,7 @@ const SLOT_TO_SECTION: Record<string, string> = {
   prd: "summary",
 };
 
-/** SpecForge 匯出的 OpenSpec 產出物 */
+/** Anchorline 匯出的 OpenSpec 產出物 */
 const ARTIFACT_RE = /(^|\/)(PRD|tasks|proposal)\.md$|openspec-.*\.(md)$/i;
 
 function roleFor(

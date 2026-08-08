@@ -1,3 +1,5 @@
+
+import { isNative, native } from "./native";
 /**
  * 專案統計 —— 向原生橋要 git / 技術線 / 容量，並把原始數字翻成人看得懂的一句話。
  *
@@ -151,48 +153,13 @@ export function gitHeadline(g: GitStats | undefined): { text: string; tone: "ok"
 
 /** 桌面版才有磁碟與 git */
 export function isDesktop(): boolean {
-  const w = window as Window & {
-    __SPECFORGE_NATIVE__?: boolean;
-    webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
-  };
-  return Boolean(w.__SPECFORGE_NATIVE__ || w.webkit?.messageHandlers?.specforge);
+  return isNative();
 }
 
+
 /** 向原生橋要一次統計。逾時就 reject，不要讓畫面永遠轉圈。 */
-export function requestProjectStats(folderPath: string, timeoutMs = 15000): Promise<ProjectStats> {
-  return new Promise((resolve, reject) => {
-    const w = window as Window & {
-      webkit?: { messageHandlers?: { specforge?: { postMessage: (m: unknown) => void } } };
-    };
-    if (!isDesktop() || !w.webkit?.messageHandlers?.specforge) {
-      reject(new Error("需要桌面版 App：瀏覽器看不到磁碟，也跑不了 git"));
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      window.removeEventListener("specforge-native", onNative);
-      reject(new Error("統計逾時。資料夾很大時可能超過 15 秒"));
-    }, timeoutMs);
-
-    function onNative(e: Event) {
-      const p = (e as CustomEvent<Record<string, unknown>>).detail;
-      if (p?.type === "projectStatsError") {
-        cleanupAll();
-        reject(new Error(String(p.message ?? "統計失敗")));
-        return;
-      }
-      if (p?.type !== "projectStats") return;
-      cleanupAll();
-      resolve({ ...(p as unknown as ProjectStats), measuredAt: new Date().toISOString() });
-    }
-    function cleanupAll() {
-      window.clearTimeout(timer);
-      window.removeEventListener("specforge-native", onNative);
-    }
-
-    window.addEventListener("specforge-native", onNative);
-    w.webkit.messageHandlers.specforge.postMessage({ action: "projectStats", folderPath });
-  });
+export function requestProjectStats(folderPath: string): Promise<ProjectStats> {
+  return native.projectStats(folderPath) as Promise<ProjectStats>;
 }
 
 // ponytail: 框架判定用 regex 掃 manifest 純文字，不解析 JSON/TOML。

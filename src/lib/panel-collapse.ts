@@ -6,9 +6,9 @@
  */
 
 const KEYS = {
-  rail: "specforge:collapse:rail",
-  outline: "specforge:collapse:outline",
-  coach: "specforge:collapse:coach",
+  rail: "anchorline:collapse:rail",
+  outline: "anchorline:collapse:outline",
+  coach: "anchorline:collapse:coach",
 } as const;
 
 function readCollapsed(key: string): boolean {
@@ -171,7 +171,7 @@ function initWbColCollapse(
     }
 
     // re-apply grid via resize module if present
-    window.dispatchEvent(new CustomEvent("specforge:panel-collapse", { detail: { key, collapsed } }));
+    window.dispatchEvent(new CustomEvent("anchorline:panel-collapse", { detail: { key, collapsed } }));
     writeCollapsed(KEYS[key], collapsed);
   };
 
@@ -191,10 +191,10 @@ function reflowWorkbench() {
   // 讀取目前寬度變數或預設
   const outlineW = outlineCollapsed
     ? 0
-    : Math.max(160, parseInt(localStorage.getItem("specforge:layout:outline-w") || "240", 10) || 240);
+    : Math.max(160, parseInt(localStorage.getItem("anchorline:layout:outline-w") || "240", 10) || 240);
   const coachW = !coachVisible
     ? 0
-    : Math.max(200, parseInt(localStorage.getItem("specforge:layout:coach-w") || "300", 10) || 300);
+    : Math.max(200, parseInt(localStorage.getItem("anchorline:layout:coach-w") || "300", 10) || 300);
 
   const parts: string[] = [];
   if (!outlineCollapsed) {
@@ -230,7 +230,7 @@ export function initPanelCollapse() {
     "coach-collapsed",
   );
 
-  window.addEventListener("specforge:panel-collapse", () => reflowWorkbench());
+  window.addEventListener("anchorline:panel-collapse", () => reflowWorkbench());
   reflowWorkbench();
   window.addEventListener("resize", () => reflowWorkbench());
 }

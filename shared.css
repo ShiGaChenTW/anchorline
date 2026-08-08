@@ -7916,3 +7916,130 @@ p.gd-warn {
   background: color-mix(in oklab, var(--warn) 28%, transparent);
   color: var(--fg-2);
 }
+
+/* ── 首屏焦點卡的三個附件（P1-3 / P1-7）─────────────────────────
+   焦點卡本體沿用 .d-hero / .d-facts，這裡只加它旁邊的三樣東西。 */
+
+/* 錨點遺失警告。不是紅色 —— 這不是壞掉，是「有東西還沒接上」。 */
+.ov-warn {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--fg-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ov-warn code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--fg) 8%, transparent);
+}
+
+/* PR 雷達：焦點卡「下方」獨立一行。刻意不進卡片 —— 卡片欄位封頂 4 個，
+   這是第 5 個資訊，而且 PR 是跨 repo 的，不屬於任何單一專案。 */
+.ov-pr-radar {
+  margin: 10px 2px 0;
+  font-size: 13px;
+  color: var(--fg-2);
+}
+.ov-pr-radar .muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 其他資訊摺疊。預設收起 —— 工作記憶約 4 個開放迴圈，
+   把 13 個專案跟三張統計卡同框展開就是把已經修好的問題搬回首屏。 */
+.ov-more {
+  margin-top: 18px;
+}
+.ov-more > summary {
+  cursor: pointer;
+  padding: 8px 2px;
+  color: var(--muted);
+  font-size: 13px;
+  list-style: none;
+  user-select: none;
+}
+.ov-more > summary::-webkit-details-marker { display: none; }
+.ov-more > summary:hover { color: var(--fg-2); }
+.ov-more[open] > summary { margin-bottom: 10px; }
+
+/* ── 稽核軌跡三層（P2-11/12/13）─────────────────────────────────
+   預設停在第一層。時間軸要點兩下才到 —— 無限捲動的事件流是注意力黑洞，
+   整理資料很爽但那不是做事。 */
+.tk-audit { margin-top: 14px; }
+
+/* ① 回到工作。三行，不多不少。ADHD 最痛的是回到被中斷的工作，
+   而回來時要的不是「這個月做了 312 件事」，是「我停在哪」。 */
+.tk-resume {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--fg) 4%, transparent);
+}
+.tk-resume p { margin: 0; line-height: 1.7; }
+.tk-resume-a { font-size: 12px; color: var(--muted); }
+.tk-resume-b { font-size: 13px; color: var(--fg-2); }
+.tk-resume-c { font-size: 13px; color: var(--fg); font-weight: 600; }
+
+.tk-audit-empty {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+/* ②③ 兩層摺疊 */
+.tk-audit-more > summary,
+.tk-audit-timeline > summary {
+  cursor: pointer;
+  padding: 8px 2px;
+  font-size: 12px;
+  color: var(--muted);
+  list-style: none;
+  user-select: none;
+}
+.tk-audit-more > summary::-webkit-details-marker,
+.tk-audit-timeline > summary::-webkit-details-marker { display: none; }
+.tk-audit-more > summary:hover,
+.tk-audit-timeline > summary:hover { color: var(--fg-2); }
+.tk-audit-timeline { margin-left: 10px; }
+
+.tk-timeline {
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  list-style: none;
+}
+.tk-timeline li {
+  padding: 4px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  border-bottom: 1px solid color-mix(in oklab, var(--fg) 6%, transparent);
+}
+.tk-timeline .mono { color: var(--muted); margin-right: 6px; }
+.tk-timeline .muted { color: var(--muted); }
+
+.tk-audit-actions { margin: 10px 0 0; display: flex; gap: 6px; }
+
+/* 焦點卡單獨一張，不進 .d-top 的兩欄 grid —— 那個 grid 的第二欄是專案清單，
+   清單搬進 details 之後 hero 會被 stretch 拉成整列高，中間開一個大洞。 */
+.ov-focus { margin-bottom: 4px; }
+/* .d-hero 預設吃 --d-card-h（300–520px）—— 那是為了跟旁邊的卡片等高。
+   單獨一張時沒有東西要對齊，固定高度只會在文字下面開一個洞。 */
+.ov-focus .d-hero { height: auto; margin-bottom: 0; }
+
+/* 可勾選的步驟圓點（W2-3）。只有帶錨點的步驟才是按鈕 —— 沒有 id 就無法
+   在寫回時定位到那一行，UI 直接反映這個限制，而不是勾了沒反應。 */
+.tk-step-toggle {
+  padding: 0;
+  border: 1.5px solid var(--accent);
+  background: none;
+  cursor: pointer;
+  transition: background 140ms ease, transform 140ms ease;
+}
+.tk-step-toggle:hover { background: color-mix(in oklab, var(--accent) 30%, transparent); }
+.tk-step-toggle:active { transform: scale(0.88); }
+.tk-step-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tk-step.done .tk-step-toggle { border-color: var(--success); background: var(--success); }

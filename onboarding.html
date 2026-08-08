@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>首次使用引導 · SpecForge</title>
+<title>首次使用引導 · Anchorline</title>
 <link rel="stylesheet" href="shared.css" />
-<script>(function(){try{var t=localStorage.getItem("specforge:theme");if(t==="warp")t="github";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
+<script>(function(){try{var t=localStorage.getItem("anchorline:theme")||localStorage.getItem("specforge:theme");if(t==="warp")t="github";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
 </head>
 <body class="onboard-body">
   <div class="login-drag-safe" aria-hidden="true"></div>
@@ -19,7 +19,7 @@
         <div class="login-brand" style="margin-bottom:0">
           <div class="rail-logo" aria-hidden="true">PR</div>
           <div>
-            <h1>SpecForge 首次設定</h1>
+            <h1>Anchorline 首次設定</h1>
             <p>正式版 · 無示範資料 · 三步開始協作</p>
           </div>
         </div>
@@ -97,7 +97,7 @@
       <!-- Step 2: Agent -->
       <section class="onboard-pane" data-pane="2" hidden aria-labelledby="ob-t2">
         <h2 id="ob-t2">Agent 如何互動</h2>
-        <p class="onboard-lead">SpecForge 把 Agent 當「可登入的角色」：有編輯／核准權限、可被指派簽核，也可在 Agent 管理頁調整 prompt 與進場作業。</p>
+        <p class="onboard-lead">Anchorline 把 Agent 當「可登入的角色」：有編輯／核准權限、可被指派簽核，也可在 Agent 管理頁調整 prompt 與進場作業。</p>
         <ul class="onboard-list">
           <li><strong>人員 vs Agent</strong>：人員負責真實決策；Agent 可撰寫或簽核，但同一 Agent 族系不可既寫又核。</li>
           <li><strong>進場作業</strong>：在「Agent 管理」選 Agent → 指定專案與任務（編輯／覆核／核准）→ 佇列執行。</li>
