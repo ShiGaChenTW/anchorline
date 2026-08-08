@@ -9,7 +9,7 @@ export type PlanStep = {
   text: string;
   state: StepState;
   /**
-   * 穩定身分。來自 `<!-- sf:t=XXXXXXXX -->` 錨點。
+   * 穩定身分。來自 `<!-- anc:t=XXXXXXXX -->` 錨點。
    *
    * **絕對不能從 text 推導。** 用行文字 hash 當 id 的話，改一個錯字就換一個
    * 任務，所有掛在它身上的事件（commit、簽核、PR）當場變孤兒。id 必須是
@@ -40,11 +40,19 @@ export type PlanMeta = {
 const CHECKBOX_RE = /^- \[([ vVxX])\]\s*(.*)$/;
 const STRIKE_BULLET_RE = /^- ~~(.+?)~~/;
 
+/** 新鑄錨點用的前綴。改名 SpecForge → Anchorline 後從 `sf` 換成 `anc`。 */
+export const ANCHOR_PREFIX = "anc";
+
 /**
  * 任務錨點。字元集是 Crockford base32（去掉 I / L / O / U，避免手抄時看錯）。
  * 長度放寬到 4–32，讓手寫的短 id 與機器鑄的 8 碼都能過。
+ *
+ * ponytail: 雙讀 `anc:` 與舊的 `sf:`（SpecForge 時代寫進 plans/*.md 的錨點）。
+ * 錨點是 join key，讀不到等於既有事件全變孤兒，而且不會有錯誤訊息。
+ * 下一個 minor 版本可以拔掉 `sf`，前提是先確認磁碟上沒有殘留：
+ *   rg -c 'sf:t=' plans/*.md
  */
-const ANCHOR_RE = /<!--\s*sf:t=([0-9A-HJKMNP-TV-Z]{4,32})\s*-->/;
+export const ANCHOR_RE = /<!--\s*(?:anc|sf):t=([0-9A-HJKMNP-TV-Z]{4,32})\s*-->/;
 
 const ID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const ID_LEN = 8;
@@ -116,7 +124,7 @@ export function mintMissingIds(
     while (used.has(id)) id = mintId(rand);
     used.add(id);
     minted++;
-    return `${raw.replace(/\s+$/, "")} <!-- sf:t=${id} -->`;
+    return `${raw.replace(/\s+$/, "")} <!-- ${ANCHOR_PREFIX}:t=${id} -->`;
   });
 
   return { text: out.join("\n"), minted };

@@ -3,7 +3,7 @@ import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { deriveFlowLayers } from "../lib/flow-layers";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
-import { parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
+import { ANCHOR_PREFIX, parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
 import { initTheme } from "../lib/theme";
 import { sortByRecency, trackingTarget } from "../lib/tracking";
 import { canScanPlans, plansDirsOf, requestTrackingScan } from "../lib/tracking-bridge";
@@ -519,7 +519,7 @@ if (__authed) {
           name: u.name,
         },
         kind: "task.done",
-        subject: `sf:t=${id}`,
+        subject: `${ANCHOR_PREFIX}:t=${id}`,
         payload: { title: p.meta.steps.find((s) => s.id === id)?.text ?? "" },
       });
     }
