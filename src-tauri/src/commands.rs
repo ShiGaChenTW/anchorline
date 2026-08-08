@@ -45,10 +45,10 @@ pub struct FolderPick {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlanStat {
-    path: String,
-    name: String,
-    mtime_ms: f64,
-    text: String,
+    pub path: String,
+    pub name: String,
+    pub mtime_ms: f64,
+    pub text: String,
 }
 
 #[derive(Serialize)]
@@ -61,8 +61,8 @@ pub struct TrackingSignal {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackingScan {
-    files: Vec<PlanStat>,
-    signal: Option<TrackingSignal>,
+    pub files: Vec<PlanStat>,
+    pub signal: Option<TrackingSignal>,
 }
 
 /// CLI 不在／不是這種專案。**Ok 回傳，不是 Err。**
@@ -75,7 +75,10 @@ pub struct Unavailable {
 
 impl Unavailable {
     fn new(m: impl Into<String>) -> Self {
-        Self { unavailable: true, message: m.into() }
+        Self {
+            unavailable: true,
+            message: m.into(),
+        }
     }
 }
 
@@ -106,7 +109,11 @@ fn scan_documents(root: &Path) -> Vec<ScannedFile> {
                 }
                 continue;
             }
-            let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+            let ext = p
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
             if ext != "md" && ext != "txt" {
                 continue;
             }
@@ -141,7 +148,10 @@ fn pick(app: &tauri::AppHandle, roots: &RegisteredRoots) -> FolderPick {
     roots.register(&folder);
     FolderPick {
         cancelled: false,
-        folder_name: folder.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
+        folder_name: folder
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default(),
         folder_path: folder.to_string_lossy().to_string(),
         files: scan_documents(&folder),
     }
@@ -191,8 +201,15 @@ pub struct ProjectStats {
 }
 
 const MANIFESTS: &[&str] = &[
-    "package.json", "Cargo.toml", "pyproject.toml", "requirements.txt",
-    "Gemfile", "go.mod", "pubspec.yaml", "pom.xml", "build.gradle",
+    "package.json",
+    "Cargo.toml",
+    "pyproject.toml",
+    "requirements.txt",
+    "Gemfile",
+    "go.mod",
+    "pubspec.yaml",
+    "pom.xml",
+    "build.gradle",
 ];
 
 fn collect_git(root: &Path, o: &CliOverrides) -> Option<GitStats> {
@@ -203,7 +220,11 @@ fn collect_git(root: &Path, o: &CliOverrides) -> Option<GitStats> {
     let dirty_count = dirty.lines().filter(|l| !l.trim().is_empty()).count();
 
     // @{u} 不存在時整個指令失敗 —— 那不是錯誤，是「沒接遠端」
-    let (ahead, behind) = match exec::git(root, &["rev-list", "--left-right", "--count", "@{u}...HEAD"], o) {
+    let (ahead, behind) = match exec::git(
+        root,
+        &["rev-list", "--left-right", "--count", "@{u}...HEAD"],
+        o,
+    ) {
         Some(s) => {
             let mut it = s.split_whitespace();
             let b = it.next().and_then(|x| x.parse().ok()).unwrap_or(0);
@@ -250,7 +271,10 @@ pub fn project_stats(folder_path: String, overrides: State<CliOverrides>) -> R<P
         return Err("缺少 folderPath".into());
     }
     let root = PathBuf::from(&folder_path);
-    let mut s = ProjectStats { folder_path: folder_path.clone(), ..Default::default() };
+    let mut s = ProjectStats {
+        folder_path: folder_path.clone(),
+        ..Default::default()
+    };
 
     let skip = ["node_modules", ".git", "dist", "build", ".next", "target"];
     let mut stack = vec![root.clone()];
@@ -268,7 +292,11 @@ pub fn project_stats(folder_path: String, overrides: State<CliOverrides>) -> R<P
             let len = e.metadata().map(|m| m.len()).unwrap_or(0);
             s.total_bytes += len;
             s.file_count += 1;
-            let ext = p.extension().and_then(|x| x.to_str()).unwrap_or("").to_ascii_lowercase();
+            let ext = p
+                .extension()
+                .and_then(|x| x.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
             if !ext.is_empty() {
                 *s.ext_bytes.entry(ext.clone()).or_insert(0) += len;
                 *s.ext_count.entry(ext).or_insert(0) += 1;
@@ -276,7 +304,8 @@ pub fn project_stats(folder_path: String, overrides: State<CliOverrides>) -> R<P
             if dir == root && MANIFESTS.contains(&name.as_str()) {
                 s.manifests.push(name.clone());
                 if let Ok(text) = fs::read_to_string(&p) {
-                    s.manifest_bodies.push(serde_json::json!({ "name": name, "text": text }));
+                    s.manifest_bodies
+                        .push(serde_json::json!({ "name": name, "text": text }));
                 }
             }
         }
@@ -291,12 +320,8 @@ pub fn project_stats(folder_path: String, overrides: State<CliOverrides>) -> R<P
 fn signal_path() -> PathBuf {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("APPDATA").map(PathBuf::from)
-        })
-        .or_else(|| {
-            std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config"))
-        })
+        .or_else(|| std::env::var_os("APPDATA").map(PathBuf::from))
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
         .unwrap_or_default();
     base.join("specforge").join("active")
 }
@@ -310,17 +335,23 @@ fn mtime_ms(p: &Path) -> Option<f64> {
 
 #[tauri::command]
 pub fn tracking_scan(plans_dirs: Vec<String>) -> R<TrackingScan> {
+    Ok(scan_plans(&plans_dirs))
+}
+
+pub fn scan_plans(plans_dirs: &[String]) -> TrackingScan {
     let mut files = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
-    'outer: for d in &plans_dirs {
+    'outer: for d in plans_dirs {
         let Ok(rd) = fs::read_dir(d) else { continue };
         for e in rd.flatten() {
             if files.len() >= MAX_PLAN_FILES {
                 break 'outer;
             }
             let p = e.path();
-            if p.extension().and_then(|x| x.to_str()).map(|x| x.to_ascii_lowercase())
+            if p.extension()
+                .and_then(|x| x.to_str())
+                .map(|x| x.to_ascii_lowercase())
                 != Some("md".into())
             {
                 continue;
@@ -334,10 +365,15 @@ pub fn tracking_scan(plans_dirs: Vec<String>) -> R<TrackingScan> {
             if !meta.is_file() || meta.len() == 0 || meta.len() > MAX_TEXT_BYTES {
                 continue;
             }
-            let (Some(ms), Ok(text)) = (mtime_ms(&p), fs::read_to_string(&p)) else { continue };
+            let (Some(ms), Ok(text)) = (mtime_ms(&p), fs::read_to_string(&p)) else {
+                continue;
+            };
             files.push(PlanStat {
                 path: p.to_string_lossy().to_string(),
-                name: p.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
+                name: p
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default(),
                 mtime_ms: ms,
                 text,
             });
@@ -351,7 +387,7 @@ pub fn tracking_scan(plans_dirs: Vec<String>) -> R<TrackingScan> {
         _ => None,
     };
 
-    Ok(TrackingScan { files, signal })
+    TrackingScan { files, signal }
 }
 
 // ── 檔案讀寫 ─────────────────────────────────────────────────────────
@@ -366,7 +402,7 @@ pub struct FileRead {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FilePath {
-    path: String,
+    pub path: String,
 }
 
 #[tauri::command]
@@ -376,7 +412,10 @@ pub fn read_file(path: String) -> R<FileRead> {
         return Err("不能存取這個路徑：必須是家目錄底下既有的文件檔".into());
     }
     let text = fs::read_to_string(&p).map_err(|e| format!("讀不到檔案：{e}"))?;
-    Ok(FileRead { path: p.to_string_lossy().to_string(), text })
+    Ok(FileRead {
+        path: p.to_string_lossy().to_string(),
+        text,
+    })
 }
 
 #[tauri::command]
@@ -386,7 +425,9 @@ pub fn write_file(path: String, text: String) -> R<FilePath> {
         return Err("不能寫入這個路徑：必須是家目錄底下既有的文件檔".into());
     }
     fs::write(&p, text).map_err(|e| format!("寫不進去：{e}"))?;
-    Ok(FilePath { path: p.to_string_lossy().to_string() })
+    Ok(FilePath {
+        path: p.to_string_lossy().to_string(),
+    })
 }
 
 /// 稽核軌跡的寫入端。**真 O_APPEND**，不是 read-modify-write。
@@ -399,6 +440,12 @@ pub fn append_file(path: String, line: String, roots: State<RegisteredRoots>) ->
     if !paths::append_allowed(&p, &roots) {
         return Err("不能追加到這個路徑：必須是已授權專案內的 .specforge/*.jsonl".into());
     }
+    append_line(&p, &line)
+}
+
+/// append 的核心。抽出來是為了能測 —— command 拿不到 State 就跑不了單元測試，
+/// 而 BRIDGE.md §6 明文要求必須有一條併發案例。
+pub fn append_line(p: &Path, line: &str) -> R<FilePath> {
     if let Some(dir) = p.parent() {
         fs::create_dir_all(dir).map_err(|e| format!("建不了目錄：{e}"))?;
         // *.jsonl merge=union：append-only 檔在分支合併時 100% 衝突在檔尾，
@@ -413,11 +460,13 @@ pub fn append_file(path: String, line: String, roots: State<RegisteredRoots>) ->
     let mut f = fs::OpenOptions::new()
         .append(true)
         .create(true)
-        .open(&p)
+        .open(p)
         .map_err(|e| format!("開不了檔：{e}"))?;
-    f.write_all(paths::normalize_line(&line).as_bytes())
+    f.write_all(paths::normalize_line(line).as_bytes())
         .map_err(|e| format!("追加失敗：{e}"))?;
-    Ok(FilePath { path: p.to_string_lossy().to_string() })
+    Ok(FilePath {
+        path: p.to_string_lossy().to_string(),
+    })
 }
 
 #[tauri::command]
@@ -430,7 +479,9 @@ pub fn open_path(app: tauri::AppHandle, path: String) -> R<FilePath> {
     app.opener()
         .open_path(p.to_string_lossy().to_string(), None::<&str>)
         .map_err(|e| format!("開不起來：{e}"))?;
-    Ok(FilePath { path: p.to_string_lossy().to_string() })
+    Ok(FilePath {
+        path: p.to_string_lossy().to_string(),
+    })
 }
 
 // ── openspec / gh ────────────────────────────────────────────────────
@@ -471,7 +522,11 @@ pub fn openspec_status(
         .filter_map(|n| exec::openspec_status(&dir, n, &overrides))
         .collect();
 
-    Ok(Maybe::Ok(OpenspecStatus { folder_path, list, statuses }))
+    Ok(Maybe::Ok(OpenspecStatus {
+        folder_path,
+        list,
+        statuses,
+    }))
 }
 
 #[derive(Serialize)]
@@ -485,7 +540,10 @@ pub struct GhStatus {
 #[tauri::command]
 pub fn gh_status(overrides: State<CliOverrides>) -> R<Maybe<GhStatus>> {
     match exec::gh_search_prs(&overrides) {
-        CliResult::Ok(raw) => Ok(Maybe::Ok(GhStatus { raw, fetched_at: now_iso() })),
+        CliResult::Ok(raw) => Ok(Maybe::Ok(GhStatus {
+            raw,
+            fetched_at: now_iso(),
+        })),
         CliResult::Missing(m) => Ok(Maybe::Missing(Unavailable::new(m))),
     }
 }
@@ -594,10 +652,20 @@ pub fn ping() -> R<Pong> {
     Ok(Pong {
         native: true,
         capabilities: [
-            "pickFolder", "pickProjectFolder", "projectStats", "trackingScan",
-            "readFile", "writeFile", "appendFile", "openPath",
-            "openspecStatus", "ghStatus", "onefetch", "fastfetch",
-            "setCliPath", "probeClis",
+            "pickFolder",
+            "pickProjectFolder",
+            "projectStats",
+            "trackingScan",
+            "readFile",
+            "writeFile",
+            "appendFile",
+            "openPath",
+            "openspecStatus",
+            "ghStatus",
+            "onefetch",
+            "fastfetch",
+            "setCliPath",
+            "probeClis",
         ]
         .iter()
         .map(|s| s.to_string())
