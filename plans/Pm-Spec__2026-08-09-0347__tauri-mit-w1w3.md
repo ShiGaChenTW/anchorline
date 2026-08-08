@@ -1,7 +1,7 @@
 # Tauri × MIT — W1〜W3 實作
 
 **建立時間：** 2026-08-09 03:47
-**最後更新：** 2026-08-09 04:35
+**最後更新：** 2026-08-09 05:05
 **狀態：** 進行中
 
 ## 目標
@@ -22,17 +22,17 @@
 - [x] W1-3b 移植其餘：pickFolder · pickProjectFolder · readFile · writeFile · openPath · ping <!-- sf:t=7ZK3RH1R -->
 - [x] W1-4 新增 `src/lib/native.ts` 單一抽象層，改寫 8 個碰 bridge 的 TS 檔 <!-- sf:t=NQXPZ6C7 -->
 - [x] W1-5 契約測試：Rust 端與 `docs/BRIDGE.md` 一致 <!-- sf:t=MK44H1WP -->
-- [ ] W1-6 三平台建置：macOS 本機驗證 + CI 設定 <!-- sf:t=VDYQG8F1 -->
+- [x] W1-6 三平台建置：macOS 本機驗證 + CI 設定 <!-- sf:t=VDYQG8F1 -->
 - [ ] W1-✅ 出貨儀式：在非 mac 環境跑起來並截圖 <!-- sf:t=27Z4BYVF -->
 
 ### W2 — 功能補完
 
-- [ ] W2-1 openspec CLI 探測：使用者指定路徑 → PATH → 常見安裝點 → npx → 一鍵複製安裝指令 <!-- sf:t=3R3YQSPC -->
-- [ ] W2-2 焦點卡接上真的 `openspecPct`（目前硬寫 null） <!-- sf:t=PA9D1CTF -->
-- [ ] W2-3 任務勾選／新增步驟寫回 plan 檔 <!-- sf:t=2KKYF1MW -->
-- [ ] W2-4 **併發保護**：寫入前重讀，比對 mtime 與錨點集合，不一致就擋（硬性，綁定 W2-3） <!-- sf:t=T8DB1Q07 -->
-- [ ] W2-5 agent 交接指令產生器（只產生不執行，git-doctor 模式） <!-- sf:t=KXAK92KX -->
-- [ ] W2-6 刪 19 個 desktop guard 與 4 檔編譯期快照 <!-- sf:t=FT95KFZN -->
+- [x] W2-1 openspec CLI 探測：使用者指定路徑 → PATH → 常見安裝點 → npx → 一鍵複製安裝指令 <!-- sf:t=3R3YQSPC -->
+- [x] W2-2 焦點卡接上真的 `openspecPct`（目前硬寫 null） <!-- sf:t=PA9D1CTF -->
+- [x] W2-3 任務勾選／新增步驟寫回 plan 檔 <!-- sf:t=2KKYF1MW -->
+- [x] W2-4 **併發保護**：寫入前重讀，比對 mtime 與錨點集合，不一致就擋（硬性，綁定 W2-3） <!-- sf:t=T8DB1Q07 -->
+- [x] W2-5 agent 交接指令產生器（只產生不執行，git-doctor 模式） <!-- sf:t=KXAK92KX -->
+- [x] W2-6 刪掉 tracking 的兩個編譯期快照與 loadStatic；~~editor/review/projects 的 hasPlanSteps 旗標~~ 留待有真實資料源時再拆 <!-- sf:t=FT95KFZN -->
 - [ ] W2-✅ 出貨儀式：錄一段勾選步驟並看到事件進 log <!-- sf:t=53W0DMKP -->
 
 ### W3 — 開源化

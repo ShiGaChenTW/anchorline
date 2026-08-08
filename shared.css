@@ -8029,3 +8029,17 @@ p.gd-warn {
 /* .d-hero 預設吃 --d-card-h（300–520px）—— 那是為了跟旁邊的卡片等高。
    單獨一張時沒有東西要對齊，固定高度只會在文字下面開一個洞。 */
 .ov-focus .d-hero { height: auto; margin-bottom: 0; }
+
+/* 可勾選的步驟圓點（W2-3）。只有帶錨點的步驟才是按鈕 —— 沒有 id 就無法
+   在寫回時定位到那一行，UI 直接反映這個限制，而不是勾了沒反應。 */
+.tk-step-toggle {
+  padding: 0;
+  border: 1.5px solid var(--accent);
+  background: none;
+  cursor: pointer;
+  transition: background 140ms ease, transform 140ms ease;
+}
+.tk-step-toggle:hover { background: color-mix(in oklab, var(--accent) 30%, transparent); }
+.tk-step-toggle:active { transform: scale(0.88); }
+.tk-step-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tk-step.done .tk-step-toggle { border-color: var(--success); background: var(--success); }
