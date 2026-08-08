@@ -530,6 +530,8 @@ function renderHighlightBackdrop() {
   back.scrollTop = ta.scrollTop;
   back.scrollLeft = ta.scrollLeft;
 
+  renderDiffPane();
+
   const state = document.getElementById("fv-state");
   if (state) {
     const n = marks.length;
@@ -546,18 +548,27 @@ function segsHtml(segs: readonly Seg[]): string {
 }
 
 /**
- * 「顯示刪除」唯讀檢視。
+ * 對比欄：完整的字級 diff，含被刪掉的字（紅字 + 刪除線）。
  *
- * 被刪掉的字不在 textarea 裡，畫進編輯層會讓游標位置跟畫面對不上 ——
- * 所以完整的刪除線版本獨立成一個唯讀檢視。要改就切回編輯。
+ * 為什麼獨立一欄而不是畫在編輯層上：被刪掉的字**不在 textarea 裡**，
+ * 畫進編輯層會讓畫面字數多於實際內容，游標位置就跟畫面對不上 ——
+ * 你點某個位置，游標會跑到別的地方。所以編輯層只畫「沒動 + 新增」
+ * （兩者串起來等於現在的文字），刪除的部分交給這一欄，兩邊捲動同步。
+ *
+ * 有改動時自動出現，沒改動時自動收起 —— 不必記得去按哪顆按鈕。
  */
-function renderDeletedView() {
+function renderDiffPane() {
   if (!openFile) return;
   const host = document.getElementById("fv-review");
   const ta = document.getElementById("fv-text") as HTMLTextAreaElement | null;
-  if (!host || !ta) return;
+  const wrap = document.getElementById("fv-diff-wrap");
+  if (!host || !ta || !wrap) return;
 
   const marks = markChangedLines(openFile.original, ta.value);
+  const hidden = wrap.dataset.forceHidden === "1";
+  wrap.hidden = hidden || marks.length === 0;
+  if (wrap.hidden) return;
+
   const byIndex = new Map(marks.map((m) => [m.index, m]));
   const lines = ta.value.split("\n");
 
@@ -572,6 +583,7 @@ function renderDeletedView() {
       return `<span class="fv-line fv-changed">${inner || "&nbsp;"}</span>`;
     })
     .join("\n");
+  host.scrollTop = ta.scrollTop;
 }
 
 /** 滑過改動的行 → 顯示改之前 / 改之後與修改人 */
@@ -667,7 +679,6 @@ function renderFileView(): boolean {
       <div class="fv-bar">
         <span class="fv-path mono" title="${escapeHtml(openFile.path)}">${escapeHtml(shortPath(openFile.path))}</span>
         <span class="fv-state" id="fv-state"></span>
-        <button type="button" class="btn btn-sm" id="fv-del" aria-pressed="false">顯示刪除</button>
         <button type="button" class="btn btn-sm" id="fv-hist">版本紀錄</button>
         <button type="button" class="btn btn-sm" id="fv-revert">還原</button>
         <button type="button" class="btn btn-sm btn-primary" id="fv-save">儲存</button>
@@ -675,10 +686,16 @@ function renderFileView(): boolean {
       </div>
       <div class="fv-stack">
         <div class="fv-backdrop" id="fv-backdrop" aria-hidden="true"></div>
-        <div class="fv-review" id="fv-review" hidden aria-label="含刪除內容的唯讀對比"></div>
         <textarea id="fv-text" class="fv-text" spellcheck="false"
                   data-path="${escapeHtml(openFile.path)}"
                   aria-label="${escapeHtml(shortPath(openFile.path))}">${escapeHtml(openFile.original)}</textarea>
+      </div>
+      <div class="fv-diff-wrap" id="fv-diff-wrap" hidden>
+        <p class="fv-diff-head">
+          對比 · <span class="fv-add">新增</span> / <span class="fv-del">刪除</span>
+          <button type="button" class="btn btn-sm btn-ghost" id="fv-diff-hide">收起</button>
+        </p>
+        <div class="fv-review" id="fv-review" aria-label="含刪除內容的字級對比"></div>
       </div>
       <div class="fv-hist" id="fv-hist-panel" hidden></div>
       <p class="fv-note">改過但還沒存的行會標成橘色，滑過去看得到改前／改後與修改人。儲存前會自動留一份快照。</p>
@@ -745,17 +762,15 @@ function renderFileView(): boolean {
     renderHighlightBackdrop();
   });
   document.getElementById("fv-close")?.addEventListener("click", () => closeFileView());
+  const diffWrap = document.getElementById("fv-diff-wrap") as HTMLElement;
   const review = document.getElementById("fv-review") as HTMLElement;
-  const delBtn = document.getElementById("fv-del") as HTMLButtonElement;
-  delBtn?.addEventListener("click", () => {
-    const on = review.hidden;
-    review.hidden = !on;
-    backdrop.hidden = on;
-    ta.readOnly = on;
-    delBtn.setAttribute("aria-pressed", String(on));
-    delBtn.classList.toggle("on", on);
-    delBtn.textContent = on ? "回編輯" : "顯示刪除";
-    if (on) renderDeletedView();
+  document.getElementById("fv-diff-hide")?.addEventListener("click", () => {
+    diffWrap.dataset.forceHidden = "1";
+    diffWrap.hidden = true;
+  });
+  // 兩欄捲動同步，不然行對不上就失去對比的意義
+  ta.addEventListener("scroll", () => {
+    review.scrollTop = ta.scrollTop;
   });
 
   document.getElementById("fv-hist")?.addEventListener("click", () => {

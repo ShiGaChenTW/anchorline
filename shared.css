@@ -7709,17 +7709,37 @@ p.gd-warn {
   opacity: 0.85;
 }
 
-/* 「顯示刪除」唯讀檢視：跟背板同一組字體度量，但可以畫不在 textarea 裡的字 */
+/* 對比欄：畫得出不在 textarea 裡的字（刪除的部分），所以獨立一欄。
+   有改動時自動出現，和編輯欄捲動同步。 */
+.fv-diff-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  max-height: 34vh;
+  border-top: 2px solid color-mix(in oklab, var(--warn) 40%, var(--border));
+  background: var(--panel, var(--bg));
+}
+.fv-diff-wrap[hidden] { display: none; }
+.fv-diff-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.fv-diff-head .fv-add, .fv-diff-head .fv-del { font-size: 11.5px; }
+.fv-diff-head button { margin-left: auto; }
 .fv-review {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
+  flex: 1 1 auto;
+  min-height: 0;
   margin: 0;
   overflow: auto;
   background: var(--bg);
   color: var(--fg);
 }
-.fv-review[hidden] { display: none; }
 .fv-backdrop[hidden] { display: none; }
 .fv-text {
   position: relative;
