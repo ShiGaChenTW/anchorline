@@ -7673,21 +7673,28 @@ p.gd-warn {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* 看得見的文字是背板畫的，textarea 只負責游標與輸入。
+   反過來（textarea 顯示文字、背板畫底色）就沒辦法讓「某一行的字」變藍 ——
+   textarea 的 color 是整塊的，不能分行。 */
 .fv-backdrop {
   position: absolute;
   inset: 0;
+  z-index: 2;
   margin: 0;
   overflow: hidden;
-  color: transparent;
+  color: var(--fg);
   pointer-events: none;
 }
-/* 只有改過的行需要接滑鼠 —— 其餘讓事件穿透到 textarea */
+/* 只有改過的行需要接滑鼠（要跳前後對比）；其餘讓事件穿透到 textarea */
 .fv-backdrop .fv-changed { pointer-events: auto; }
 .fv-line { display: inline; }
+/* 橘底 + 藍字 = 這一行改過但還沒存 */
 .fv-changed {
   border-radius: 3px;
-  background: color-mix(in oklab, var(--warn) 22%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--warn) 38%, transparent);
+  background: color-mix(in oklab, var(--warn) 26%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--warn) 42%, transparent);
+  color: var(--accent);
+  font-weight: 500;
   cursor: help;
 }
 .fv-text {
@@ -7698,10 +7705,14 @@ p.gd-warn {
   margin: 0;
   border: 0;
   background: transparent;
-  color: var(--fg);
+  /* 字透明、游標不透明：文字交給背板畫，游標與選取仍由 textarea 負責 */
+  color: transparent;
+  caret-color: var(--fg);
   resize: none;
   overflow: auto;
 }
+/* 選取色塊在 textarea 上（z-index 1），背板文字蓋在上面仍讀得到 */
+.fv-text::selection { background: color-mix(in oklab, var(--accent) 34%, transparent); }
 .fv-text:focus { outline: none; }
 .fv-stack { background: var(--bg); }
 
