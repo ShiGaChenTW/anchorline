@@ -64,7 +64,9 @@ export const RAIL_ITEMS: RailItem[] = [
   { page: "tracking", href: "tracking.html", label: "Task Tracking", odId: "nav-tracking", icon: IC.tracking, hidden: true },
   { page: "dashboard", href: "dashboard.html", label: "專案儀表板", odId: "nav-dashboard", icon: IC.dashboard, hidden: true },
   { page: "overview", href: "overview.html", label: "總覽", odId: "nav-overview", icon: IC.dashboard, hidden: true },
-  { page: "templates", href: "templates.html", label: "章節範本", odId: "nav-templates", icon: IC.templates, count: true },
+  // 章節範本移到「工作區」那一組（rail-projects.ts 的 ensureWorkspaceNav）——
+  // 它跟總覽／清單／審閱佇列一樣是跨專案的東西
+  { page: "templates", href: "templates.html", label: "章節範本", odId: "nav-templates", icon: IC.templates, count: true, hidden: true },
   // 審閱佇列改掛在「工作區」區塊標題右側（rail-projects.ts）
   { page: "review", href: "review.html", label: "審閱佇列", odId: "nav-review", icon: IC.review, count: true, hidden: true },
   { page: "admin", href: "admin.html", label: "管理中心", odId: "nav-admin", icon: IC.admin },
@@ -174,19 +176,19 @@ export function refreshNavCounts() {
   const st = store.get();
   const projects = st.projects.filter((p) => (st.showSamples ? true : !p.isSample));
   const pending = projects.filter((p) => p.status === "review").length;
+  // querySelectorAll：同一個 page 的計數現在可能同時出現在主導覽與
+  // 「工作區」那一組，只更新第一個會讓另一個永遠停在 0
   const set = (page: string, n: number) => {
-    const el = document.querySelector(`[data-nav-count="${page}"]`);
-    if (el) el.textContent = String(n);
+    document.querySelectorAll(`[data-nav-count="${page}"]`).forEach((el) => {
+      el.textContent = String(n);
+      el.classList.toggle("is-zero", n === 0);
+    });
   };
   set("projects", projects.length);
   set("templates", st.templates.length);
   set("review", pending);
-  // 審閱佇列已搬到「工作區」那一行，計數要一起更新
-  const chip = document.getElementById("rail-review-count");
-  if (chip) {
-    chip.textContent = String(pending);
-    chip.classList.toggle("is-zero", pending === 0);
-  }
+  // 「工作區」那一組用的是同一個 data-nav-count 機制，set() 已經涵蓋 ——
+  // 之前另外掛一個 id 的做法退休了，兩套計數只會有一套先過期
 }
 
 /** 從 pathname 推斷目前頁 */
