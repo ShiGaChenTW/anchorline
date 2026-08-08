@@ -140,7 +140,7 @@ function syncProjectChrome() {
       : "回總覽選一個專案";
   }
 
-  document.title = `${name} · 編輯 · PRD開發監控台`;
+  document.title = `${name} · 編輯 · Anchorline`;
 }
 
 function syncUser() {

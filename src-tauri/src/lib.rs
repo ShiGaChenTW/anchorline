@@ -1,4 +1,4 @@
-//! PRD開發監控台 —— Tauri 殼。
+//! Anchorline —— Tauri 殼。
 //!
 //! 這個 crate 只做一件事：把 `docs/BRIDGE.md` 列舉的十二個 action 實作出來，
 //! 並且**只實作那十二個**。前端拿不到 shell、拿不到任意檔案讀寫、拿不到任意
