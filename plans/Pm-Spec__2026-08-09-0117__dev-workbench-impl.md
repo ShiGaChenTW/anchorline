@@ -1,7 +1,7 @@
 # 開發專案工作台 — 實作 Task List
 
 **建立時間：** 2026-08-09 01:17
-**最後更新：** 2026-08-09 01:17
+**最後更新：** 2026-08-09 01:52
 **狀態：** 進行中
 
 ## 目標
@@ -18,11 +18,11 @@
 
 ### Phase 0 — 補上 join key（約 1 天，零決策依賴）
 
-- [ ] P0-1 `plan-parser.ts` 解析 `<!-- sf:t=ID -->` 錨點，輸出 `Task.id`（報告 §Phase 0） <!-- sf:t=HNTPRY5R -->
-- [ ] P0-2 lazy 鑄造：無錨點的步驟在第一次讀取時補 ID，**不做一次性回填腳本** <!-- sf:t=DSTT1PJ2 -->
-- [ ] P0-3 錨點遺失偵測：回報「本檔 N 個步驟無 ID」，UI 顯示警告 + 手動重鑄，**不無聲重鑄** <!-- sf:t=B5VZSS5K -->
-- [ ] P0-4 更新 `agenttask-tui` skill 建檔模板，新 plan 自動帶錨點 <!-- sf:t=SN0F6S9X -->
-- [ ] P0-5 `tests/plan-parser.test.ts`：有錨點 / 無錨點 / 錨點被抹掉 三案 <!-- sf:t=GKFJXKB6 -->
+- [x] P0-1 `plan-parser.ts` 解析 `<!-- sf:t=ID -->` 錨點，輸出 `Task.id`（報告 §Phase 0） <!-- sf:t=HNTPRY5R -->
+- [x] P0-2 lazy 鑄造：無錨點的步驟在第一次讀取時補 ID，**不做一次性回填腳本** <!-- sf:t=DSTT1PJ2 -->
+- [x] P0-3 錨點遺失偵測：回報「本檔 N 個步驟無 ID」，UI 顯示警告 + 手動重鑄，**不無聲重鑄** <!-- sf:t=B5VZSS5K -->
+- [x] P0-4 更新 `agenttask-tui` skill 建檔模板，新 plan 自動帶錨點 <!-- sf:t=SN0F6S9X -->
+- [x] P0-5 `tests/plan-parser.test.ts`：有錨點 / 無錨點 / 錨點被抹掉 三案 <!-- sf:t=GKFJXKB6 -->
 - [ ] P0-✅ 出貨儀式：截一張帶 ID 的 `bun run track` 圖 <!-- sf:t=7AKTPF78 -->
 
 ### Phase 1 — 進度追蹤（約 2.5 天，全唯讀，零決策依賴）
