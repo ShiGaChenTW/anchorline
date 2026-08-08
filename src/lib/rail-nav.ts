@@ -31,7 +31,7 @@ type RailItem = {
   hidden?: boolean;
 };
 
-const IC = {
+export const IC = {
   projects:
     '<path d="M1.75 2.5a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75z"/><path d="M7.25 8a.75.75 0 0 1 .75-.75h5.5a.75.75 0 0 1 0 1.5h-5.5A.75.75 0 0 1 7.25 8zm0 3a.75.75 0 0 1 .75-.75h5.5a.75.75 0 0 1 0 1.5h-5.5a.75.75 0 0 1-.75-.75zM4 7.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm0 3a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0z"/>',
   editor:
@@ -57,12 +57,16 @@ const IC = {
 export const RAIL_ITEMS: RailItem[] = [
   // 專案列表不進側欄 —— 側欄上方已經是專案清單本身，再放一個入口是重複
   { page: "projects", href: "projects.html", label: "專案列表", odId: "nav-projects", icon: IC.projects, count: true, hidden: true },
-  { page: "editor", href: "editor.html", label: "編輯工作台", odId: "nav-editor", icon: IC.editor },
-  { page: "tracking", href: "tracking.html", label: "Task Tracking", odId: "nav-tracking", icon: IC.tracking },
+  // 編輯工作台／Task Tracking 都是「對某個專案」做的事，改成掛在
+  // 選中的專案卡片底下（rail-projects.ts 的 projActionsHtml）。
+  // 留在固定導覽區會讓人得自己把「我選的是哪個專案」跟按鈕接起來。
+  { page: "editor", href: "editor.html", label: "編輯工作台", odId: "nav-editor", icon: IC.editor, hidden: true },
+  { page: "tracking", href: "tracking.html", label: "Task Tracking", odId: "nav-tracking", icon: IC.tracking, hidden: true },
   { page: "dashboard", href: "dashboard.html", label: "專案儀表板", odId: "nav-dashboard", icon: IC.dashboard, hidden: true },
   { page: "overview", href: "overview.html", label: "總覽", odId: "nav-overview", icon: IC.dashboard, hidden: true },
   { page: "templates", href: "templates.html", label: "章節範本", odId: "nav-templates", icon: IC.templates, count: true },
-  { page: "review", href: "review.html", label: "審閱佇列", odId: "nav-review", icon: IC.review, count: true },
+  // 審閱佇列改掛在「工作區」區塊標題右側（rail-projects.ts）
+  { page: "review", href: "review.html", label: "審閱佇列", odId: "nav-review", icon: IC.review, count: true, hidden: true },
   { page: "admin", href: "admin.html", label: "管理中心", odId: "nav-admin", icon: IC.admin },
   { page: "agents", href: "agents.html", label: "Agent 管理", odId: "nav-agents", icon: IC.agents },
   // 偏好設定不進側欄清單 —— 入口改成品牌列右側的齒輪圖示
@@ -177,6 +181,12 @@ export function refreshNavCounts() {
   set("projects", projects.length);
   set("templates", st.templates.length);
   set("review", pending);
+  // 審閱佇列已搬到「工作區」那一行，計數要一起更新
+  const chip = document.getElementById("rail-review-count");
+  if (chip) {
+    chip.textContent = String(pending);
+    chip.classList.toggle("is-zero", pending === 0);
+  }
 }
 
 /** 從 pathname 推斷目前頁 */
