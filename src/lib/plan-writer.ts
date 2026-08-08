@@ -17,7 +17,7 @@
  *
  * 純函式 + 一個需要注入 reader/writer 的協調函式。
  */
-import { anchorOf, mintId, type PlanStep } from "./plan-parser";
+import { ANCHOR_PREFIX, ANCHOR_RE, anchorOf, mintId, type PlanStep } from "./plan-parser";
 
 /** 讀取當下的憑證。寫回去之前拿它跟磁碟上的現況比對。 */
 export type PlanGuard = {
@@ -41,7 +41,9 @@ export function hashText(s: string): string {
 }
 
 export function anchorsOf(text: string): string[] {
-  return [...text.matchAll(/<!--\s*sf:t=([0-9A-HJKMNP-TV-Z]{4,32})\s*-->/g)].map((m) => m[1]!);
+  // ponytail: 共用 plan-parser 的 ANCHOR_RE，不再自己抄一份。
+  // 兩份正規表示式在改前綴時只改到一份 = 靜默失效的 join key。
+  return [...text.matchAll(new RegExp(ANCHOR_RE.source, "g"))].map((m) => m[1]!);
 }
 
 export function guardOf(path: string, text: string): PlanGuard {
@@ -130,7 +132,7 @@ export function appendStep(
   let id = mintId(rand);
   while (used.has(id)) id = mintId(rand);
 
-  lines.splice(at, 0, `- [ ] ${label.trim()} <!-- sf:t=${id} -->`);
+  lines.splice(at, 0, `- [ ] ${label.trim()} <!-- ${ANCHOR_PREFIX}:t=${id} -->`);
   return { text: lines.join("\n"), id };
 }
 
@@ -172,5 +174,5 @@ export async function safeApply(
 
 /** 給呼叫端組事件用：勾選一個步驟該產生什麼 subject。 */
 export function subjectOfStep(step: Pick<PlanStep, "id">): string | null {
-  return step.id ? `sf:t=${step.id}` : null;
+  return step.id ? `${ANCHOR_PREFIX}:t=${step.id}` : null;
 }

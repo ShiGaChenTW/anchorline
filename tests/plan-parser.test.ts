@@ -85,6 +85,22 @@ describe("錨點解析", () => {
   });
 });
 
+describe("錨點前綴（SpecForge → Anchorline 改名）", () => {
+  test("新鑄的用 anc:，不是舊的 sf:", () => {
+    const { text } = mintMissingIds("## Plan Steps\n- [ ] 新步驟\n", seeded(1));
+    expect(text).toContain("<!-- anc:t=");
+    expect(text).not.toContain("sf:t=");
+  });
+
+  test("舊的 sf: 錨點仍讀得到 —— 讀不到等於既有事件全變孤兒", () => {
+    expect(anchorOf("- [ ] x <!-- sf:t=HNTPRY5R -->")).toBe("HNTPRY5R");
+    expect(anchorOf("- [ ] x <!-- anc:t=HNTPRY5R -->")).toBe("HNTPRY5R");
+    // 混用也要算數：改名期間同一份 plan 兩種前綴並存是常態
+    const mixed = "## Plan Steps\n- [ ] A <!-- sf:t=HNTPRY5R -->\n- [ ] B <!-- anc:t=DSTT1PJ2 -->\n";
+    expect(parsePlanMeta(mixed).unanchored).toBe(0);
+  });
+});
+
 describe("lazy 鑄造", () => {
   test("補上缺的錨點，已有的不動", () => {
     const src = `## Plan Steps\n- [ ] A <!-- sf:t=HNTPRY5R -->\n- [ ] B\n`;
