@@ -5860,7 +5860,13 @@ html.adhd-calm .review-focus-bar {
    章節在上是因為它是主線 —— 你來這一欄是為了寫某一節，檔案樹是佐證。
    兩層都要能各自捲動。 */
 [data-od-id="outline-col"] { display: flex; flex-direction: column; min-height: 0; }
-#outline { flex: 1 1 auto; min-height: 0; overflow: auto; }
+/* 章節固定七項，用自然高度就好。剩下的空間留給 OpenSpec ——
+   原本 #outline 吃掉全部空間，把 OpenSpec 壓到欄位最底下，
+   中間留一大塊什麼都沒有的空白。 */
+#outline { flex: 0 1 auto; min-height: 0; overflow: auto; }
+/* OpenSpec 收起來的時候沒人要那塊空間，還給章節，不然空白只是換個位置留著。
+   :has 不支援也只是多一塊底部空白，不會壞版。 */
+[data-od-id="outline-col"]:has(#openspec-list[hidden]) #outline { flex: 1 1 auto; }
 .file-tree-host {
   flex: 0 0 auto;
   min-height: 0;
@@ -7465,8 +7471,9 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
 .os-bar .mono { font-size: 11px; color: var(--muted); }
 
 .os-list {
-  flex: 0 0 auto;
-  max-height: 22vh;
+  /* 展開時填滿章節與專案檔案之間的空間，而不是固定一小塊 */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 4px 6px 8px;
   display: flex;
