@@ -1,5 +1,10 @@
 /* Default tokens ≈ GitHub Dark；kami / github 以 data-theme 覆寫 */
 :root {
+  /* App 圖示（mac-app-build/resources/AppIcon.svg）。
+     內嵌成 data URI：桌面版是 file:// 載入，絕對路徑會指到檔案系統根目錄，
+     相對路徑又得每一頁自己算層級。1.7KB，內嵌最省事也最不會壞。 */
+  --app-icon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20512%20512%22%20role%3D%22img%22%20aria-label%3D%22Layers%20A%20%E2%80%94%20Kami%20navy%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22la-bg%22%20x1%3D%220.15%22%20y1%3D%220%22%20x2%3D%220.85%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23142a48%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%231b365d%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Cg%20id%3D%22icon%22%3E%3Crect%20width%3D%22512%22%20height%3D%22512%22%20rx%3D%2296%22%20fill%3D%22url(%23la-bg)%22%2F%3E%3Crect%20x%3D%22118%22%20y%3D%22128%22%20width%3D%22276%22%20height%3D%2272%22%20rx%3D%2220%22%20fill%3D%22%232d5a8a%22%20opacity%3D%220.5%22%2F%3E%3Crect%20x%3D%22118%22%20y%3D%22196%22%20width%3D%22276%22%20height%3D%2272%22%20rx%3D%2220%22%20fill%3D%22%233d6f9e%22%2F%3E%3Crect%20x%3D%22118%22%20y%3D%22264%22%20width%3D%22276%22%20height%3D%22120%22%20rx%3D%2224%22%20fill%3D%22%23faf9f5%22%2F%3E%3Crect%20x%3D%22148%22%20y%3D%22148%22%20width%3D%2248%22%20height%3D%2232%22%20rx%3D%2210%22%20fill%3D%22%23faf9f5%22%20opacity%3D%220.8%22%2F%3E%3Crect%20x%3D%22148%22%20y%3D%22216%22%20width%3D%2248%22%20height%3D%2232%22%20rx%3D%2210%22%20fill%3D%22%23faf9f5%22%20opacity%3D%220.9%22%2F%3E%3Crect%20x%3D%22148%22%20y%3D%22292%22%20width%3D%2248%22%20height%3D%2232%22%20rx%3D%2210%22%20fill%3D%22%231b365d%22%2F%3E%3Crect%20x%3D%22216%22%20y%3D%22300%22%20width%3D%22140%22%20height%3D%2216%22%20rx%3D%228%22%20fill%3D%22%231b365d%22%20opacity%3D%220.88%22%2F%3E%3Crect%20x%3D%22216%22%20y%3D%22332%22%20width%3D%22108%22%20height%3D%2216%22%20rx%3D%228%22%20fill%3D%22%231b365d%22%20opacity%3D%220.38%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+
   --bg: #161412;
   --surface: #201e1b;
   --surface-warm: var(--surface);
@@ -612,10 +617,7 @@ body.is-resizing .main {
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20512%20512%22%20role%3D%22img%22%20aria-label%3D%22Layers%20A%20%E2%80%94%20Kami%20navy%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22la-bg%22%20x1%3D%220.15%22%20y1%3D%220%22%20x2%3D%220.85%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23142a48%22%2F%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%231b365d%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Cg%20id%3D%22icon%22%3E%3Crect%20width%3D%22512%22%20height%3D%22512%22%20rx%3D%2296%22%20fill%3D%22url(%23la-bg)%22%2F%3E%3Crect%20x%3D%22118%22%20y%3D%22128%22%20width%3D%22276%22%20height%3D%2272%22%20rx%3D%2220%22%20fill%3D%22%232d5a8a%22%20opacity%3D%220.5%22%2F%3E%3Crect%20x%3D%22118%22%20y%3D%22196%22%20width%3D%22276%22%20height%3D%2272%22%20rx%3D%2220%22%20fill%3D%22%233d6f9e%22%2F%3E%3Crect%20x%3D%22118%22%20y%3D%22264%22%20width%3D%22276%22%20height%3D%22120%22%20rx%3D%2224%22%20fill%3D%22%23faf9f5%22%2F%3E%3Crect%20x%3D%22148%22%20y%3D%22148%22%20width%3D%2248%22%20height%3D%2232%22%20rx%3D%2210%22%20fill%3D%22%23faf9f5%22%20opacity%3D%220.8%22%2F%3E%3Crect%20x%3D%22148%22%20y%3D%22216%22%20width%3D%2248%22%20height%3D%2232%22%20rx%3D%2210%22%20fill%3D%22%23faf9f5%22%20opacity%3D%220.9%22%2F%3E%3Crect%20x%3D%22148%22%20y%3D%22292%22%20width%3D%2248%22%20height%3D%2232%22%20rx%3D%2210%22%20fill%3D%22%231b365d%22%2F%3E%3Crect%20x%3D%22216%22%20y%3D%22300%22%20width%3D%22140%22%20height%3D%2216%22%20rx%3D%228%22%20fill%3D%22%231b365d%22%20opacity%3D%220.88%22%2F%3E%3Crect%20x%3D%22216%22%20y%3D%22332%22%20width%3D%22108%22%20height%3D%2216%22%20rx%3D%228%22%20fill%3D%22%231b365d%22%20opacity%3D%220.38%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+  background: var(--app-icon) center / cover no-repeat;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -6326,16 +6328,12 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .welcome-head { display: flex; align-items: center; gap: 13px; }
 .welcome-mark {
   flex: 0 0 auto;
-  display: grid;
-  place-items: center;
   width: 42px;
   height: 42px;
   border-radius: 11px;
-  background: color-mix(in oklab, var(--accent) 22%, transparent);
-  color: var(--accent);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  background: var(--app-icon) center / cover no-repeat;
+  overflow: hidden;
+  text-indent: -999px;
 }
 .welcome-hello { flex: 1 1 auto; min-width: 0; }
 .welcome-hello h3 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
