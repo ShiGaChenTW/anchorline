@@ -642,7 +642,17 @@ cd <project> && claude -p "依 openspec 寫 design.md（change: add-dark-mode）
 
 ### 12.3 自建 openspec parser — **部分翻案，但界線要畫死**
 
-**改變判斷的新事實**：`openspec status` 只在桌面版跑得起來（`canQueryStatus()` 要 bridge）。**瀏覽器版對 openspec 完全瞎眼**，而治理鏈 replay（P3-4）如果要當公開作品頁，它跑在瀏覽器裡。
+**改變判斷的新事實**：`openspec status` 只在桌面版跑得起來——`canQueryStatus()` 檢查 `window.webkit.messageHandlers.specforge`，那個物件只有原生殼會注入。**瀏覽器版對 openspec 完全瞎眼。**
+
+而公開作品頁必然跑在瀏覽器裡：別人打開你的作品是點一個網址，不是下載一個未簽章的 macOS App。
+
+> ⚠️ **這裡要區分兩件事，我第一版寫得太滿。**
+>
+> **現在就成立的影響**：不是 replay，是**焦點卡**。`overview.ts` 的 `openspecPct` 目前硬寫 `null`，rollup 永遠只拿得到 plan 那一半；桌面版有 bridge 卻也還沒接上，那是留著的洞。
+>
+> **還沒發生的**：`replay.ts` 的 `CHAIN_STAGES` 目前是 撰寫→結構檢查→簽核→實作→PR審查→發布，**六段裡沒有 openspec**，而且事件流已用 `import.meta.glob` 編譯期嵌入 bundle，所以 replay 在瀏覽器裡本來就跑得起來、有資料。
+>
+> 所以這一項的真正判準是：**作品頁要不要展示 change 那一段？** 只展示 `PRD → 簽核 → commit → PR → release` 就不需要 parser，這項退回「不做」。要展示 `proposal / design / specs / tasks` 的推進，才需要——因為那段資料在瀏覽器裡只能自己讀。而那一段恰好是 SDD 的核心，也是這份作品最有話講的地方。
 
 **關鍵區分是我上一版沒講清楚的**：
 
@@ -664,7 +674,7 @@ cd <project> && claude -p "依 openspec 寫 design.md（change: add-dark-mode）
 |---|---|---|---|---|
 | 任務 CRUD | ❌ 不做 | ⚠️ **縮小後做** | 勾選／新增步驟寫回檔案 **+ 併發保護** | 1 天 |
 | Agent 編排 | ❌ 不做 | ❌ **維持不做** | 改為產生交接指令 | 0.3 天 |
-| 自建 openspec parser | ❌ 不做 | ⚠️ **縮小後做** | 只解目錄結構與 tasks checkbox，≤80 行 | 0.5 天 |
+| 自建 openspec parser | ❌ 不做 | ⚠️ **有條件做** | 前提：作品頁要展示 change 那一段。只解目錄結構與 tasks checkbox，≤80 行 | 0.5 天 |
 
 **合計約 1.8 天。** 要塞進來就得從 Phase 2 挪——建議延後「稽核報告 CSV 匯出」與「PR 事件接入」，那兩項現在沒有消費者。
 
