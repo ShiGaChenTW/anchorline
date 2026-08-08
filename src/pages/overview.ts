@@ -48,7 +48,7 @@ if (!requireAuth()) {
   let openspecFor = "";
 
   /** 「其他資訊」摺疊狀態。每次回來都要重新收合比一開始就展開更煩。 */
-  const MORE_KEY = "specforge:ov:more";
+  const MORE_KEY = "anchorline:ov:more";
   function moreOpen(): boolean {
     try {
       return localStorage.getItem(MORE_KEY) === "1";

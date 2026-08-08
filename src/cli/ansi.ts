@@ -1,4 +1,4 @@
-/** Minimal ANSI helpers for SpecForge track TUI (no blessed dependency). */
+/** Minimal ANSI helpers for Anchorline track TUI (no blessed dependency). */
 
 export const ESC = "\x1b";
 

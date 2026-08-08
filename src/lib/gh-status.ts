@@ -161,14 +161,14 @@ export function reviewHandoffMarkdown(input: {
       ? "\n> ⚠️ 撰寫者與審查者同族系，依職務分離規則此核准無效。"
       : "";
   return [
-    `**SpecForge 簽核結果** — ${verdict}`,
+    `**Anchorline 簽核結果** — ${verdict}`,
     "",
     `- 審查者：${who}`,
     `- 撰寫者族系：${input.authorFamily ?? "human"}`,
     ...(input.note ? [`- 附註：${input.note}`] : []),
     sep,
     "",
-    `<sub>由 SpecForge 產生，貼上者自負責任。本工具不代為執行 \`gh pr review\`。</sub>`,
+    `<sub>由 Anchorline 產生，貼上者自負責任。本工具不代為執行 \`gh pr review\`。</sub>`,
   ]
     .filter((l) => l !== "")
     .join("\n");

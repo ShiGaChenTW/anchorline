@@ -47,9 +47,9 @@ import {
 import { nowIso } from "../lib/time-format";
 
 /** v6：正式版無示範內容 + 首次引導；依變體分 key 避免互污染 */
-const KEY = `specforge:state:v6:${APP_VARIANT}`;
-const LEGACY_KEY = `specforge:state:v5:${APP_VARIANT}`;
-const SESSION_KEY = "specforge:session:v1";
+const KEY = `anchorline:state:v6:${APP_VARIANT}`;
+const LEGACY_KEY = `anchorline:state:v5:${APP_VARIANT}`;
+const SESSION_KEY = "anchorline:session:v1";
 
 /**
  * 將 SEED 章節結構合併進已存 sections（補新欄位／檢查項，不覆蓋使用者 status/score）

@@ -14,7 +14,7 @@ const NOW = new Date("2026-08-09T10:00:00Z").getTime();
 
 const base: FocusInput = {
   projectId: "p1",
-  name: "PM-SPEC+SCVB",
+  name: "Anchorline",
   nextStep: "P1-3 單專案焦點卡",
   planPct: 40,
   openspecPct: 60,

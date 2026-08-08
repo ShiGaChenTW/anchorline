@@ -121,7 +121,7 @@ export const BEGINNER_EXAMPLES = {
   metrics: "強制 2FA 覆蓋率 | ≥ 80% 企業租戶 | 90 天內\n復原流程成功率 | ≥ 95% | 支援工單抽樣",
 };
 
-const BEGINNER_KEY = "specforge:beginner-mode";
+const BEGINNER_KEY = "anchorline:beginner-mode";
 
 export function setBeginnerMode(on: boolean) {
   try {

@@ -33,7 +33,7 @@ describe("event id", () => {
 });
 
 describe("Writer C —— git 回填", () => {
-  const events = commitsToEvents(COMMITS, "p", "https://github.com/ShiGaChenTW/PM-SPEC-SCVB.git");
+  const events = commitsToEvents(COMMITS, "p", "https://github.com/ShiGaChenTW/anchorline.git");
 
   test("event_id = commit hash，所以重跑幾次都只有一筆", () => {
     const twice = [...events, ...commitsToEvents(COMMITS, "p")];

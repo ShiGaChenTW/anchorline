@@ -124,8 +124,14 @@ describe("端到端：勾選 → 磁碟 → 事件 → 回到工作", () => {
     const guard = guardOf(planPath, seen);
 
     // 模擬 agent 在使用者讀到畫面之後、按下去之前加了一步
-    writeFileSync(planPath, appendStep(seen, "agent 剛加的第三步")!.text);
+    const appended = appendStep(seen, "agent 剛加的第三步")!;
+    writeFileSync(planPath, appended.text);
     const afterAgent = readFileSync(planPath, "utf8");
+
+    // 改名後新鑄的錨點必須是 anc:，但同一份檔案裡舊的 sf: 錨點要原封不動。
+    // 這是整份 fixture 用 sf: 的理由 —— 它是舊錨點的相容性證據，不是漏改。
+    expect(appended.text).toContain(`<!-- anc:t=${appended.id} -->`);
+    expect(appended.text).toContain("<!-- sf:t=HNTPRY5R -->");
 
     const r = await safeApply(guard, (t) => toggleStep(t, "DSTT1PJ2", true), io);
     expect(r.ok).toBe(false);

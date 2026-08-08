@@ -88,7 +88,7 @@ App 只在 `.anchorline/.gitattributes` 不存在時種下它，**不覆寫你�
   "actor": { "kind": "agent", "family": "claude", "name": "Claude" },
   "run_id": "01K2Q9…",                   // 一次 agent session（選填）
   "kind": "task.done",
-  "subject": "sf:t=HNTPRY5R",            // join key：task id / section id / commit hash
+  "subject": "anc:t=HNTPRY5R",            // join key：task id / section id / commit hash
   "ref": "https://github.com/o/r/commit/abc123",   // 選填
   "payload": { "title": "補上穩定錨點" }  // 走欄位白名單
 }
@@ -121,5 +121,5 @@ App 只在 `.anchorline/.gitattributes` 不存在時種下它，**不覆寫你�
 
 ## App 自己的設定
 
-介面偏好、專案清單、PRD 內文存在 WebView 的 `localStorage`，key 前綴 `specforge:`。
+介面偏好、專案清單、PRD 內文存在 WebView 的 `localStorage`，key 前綴 `anchorline:`。
 那是 App 的資料，不是你的專案資料——刪掉只會回到初始狀態，不會動到磁碟上的檔案。

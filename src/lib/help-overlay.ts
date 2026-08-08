@@ -93,7 +93,7 @@ export function ensureHelpOverlay(extra?: HelpSection[]) {
       </div>
       <footer>
         <button type="button" class="btn btn-sm btn-ghost" data-help-tour>重看首次導覽</button>
-        <span class="mono help-foot-note">按 ? 或 Esc 關閉 · PM-SPEC+SCVB</span>
+        <span class="mono help-foot-note">按 ? 或 Esc 關閉 · Anchorline</span>
       </footer>
     </div>`;
 

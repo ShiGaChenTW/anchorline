@@ -4,9 +4,9 @@
  * 2) 編輯台兩側：章節大綱 / 寫作教練
  */
 
-const RAIL_KEY = "specforge:layout:rail-w";
-const OUTLINE_KEY = "specforge:layout:outline-w";
-const COACH_KEY = "specforge:layout:coach-w";
+const RAIL_KEY = "anchorline:layout:rail-w";
+const OUTLINE_KEY = "anchorline:layout:outline-w";
+const COACH_KEY = "anchorline:layout:coach-w";
 
 const RAIL_MIN = 180;
 const RAIL_MAX = 420;
