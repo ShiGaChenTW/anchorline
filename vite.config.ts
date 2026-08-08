@@ -46,6 +46,7 @@ export default defineConfig({
         admin: resolve(root, "admin.html"),
         agents: resolve(root, "agents.html"),
         tracking: resolve(root, "tracking.html"),
+        releases: resolve(root, "releases.html"),
       },
     },
   },

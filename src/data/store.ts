@@ -15,6 +15,7 @@ import {
   SEED_WORKFLOW_PROD,
   TEST_CASE_DOCS,
 } from "./seed";
+import { draftRelease, validateVersion, type Release, type ReleaseItem } from "../lib/release";
 import type {
   AgentFamily,
   AgentJob,
@@ -223,6 +224,7 @@ function seedState(): AppState {
     settings: structuredClone(DEFAULT_SETTINGS),
     showSamples: isTest,
     agentJobs: [],
+    releases: [],
     onboardingComplete: isTest,
   };
 }
@@ -423,6 +425,7 @@ function load(): AppState {
       },
       showSamples: APP_VARIANT === "prod" ? false : parsed.showSamples !== false,
       agentJobs: Array.isArray(parsed.agentJobs) ? (parsed.agentJobs as AgentJob[]) : [],
+      releases: Array.isArray(parsed.releases) ? (parsed.releases as Release[]) : [],
       onboardingComplete,
     };
   } catch {
@@ -1548,6 +1551,99 @@ export const store = {
     const e = state.employees.find((x) => x.id === id);
     if (!e || e.kind !== "agent") return { ok: false, reason: "不是 Agent" };
     return this.updateEmployee(id, patch);
+  },
+
+  // ── 版本取號 ─────────────────────────────────────────────────
+  // 版號一律由使用者填。這裡沒有任何 +1 或預設值的邏輯，是刻意的：
+  // 版號是對外承諾，那個決定必須是人做的。
+
+  releasesOf(projectId?: string): Release[] {
+    const pid = projectId ?? state.activeProjectId;
+    return state.releases
+      .filter((r) => r.projectId === pid)
+      .slice()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+
+  createRelease(projectId?: string): Release {
+    const pid = projectId ?? state.activeProjectId;
+    const r = draftRelease(pid, `rel-${Date.now()}`, nowIso());
+    state = { ...state, releases: [r, ...state.releases] };
+    emit();
+    return r;
+  },
+
+  /** 版號改動要先過驗證，呼叫端拿到 ok:false 就不要寫進去 */
+  updateRelease(id: string, patch: Partial<Release>): { ok: boolean; reason?: string } {
+    const cur = state.releases.find((r) => r.id === id);
+    if (!cur) return { ok: false, reason: "找不到這一版" };
+    if (patch.version !== undefined) {
+      const v = validateVersion(patch.version, cur.projectId, state.releases, id);
+      if (!v.ok) return v;
+    }
+    state = {
+      ...state,
+      releases: state.releases.map((r) =>
+        r.id === id ? { ...r, ...patch, updatedAt: nowIso() } : r,
+      ),
+    };
+    emit();
+    return { ok: true };
+  },
+
+  deleteRelease(id: string) {
+    state = { ...state, releases: state.releases.filter((r) => r.id !== id) };
+    emit();
+  },
+
+  addReleaseItem(id: string, item: Omit<ReleaseItem, "id">) {
+    const withId: ReleaseItem = { ...item, id: `ri-${Date.now()}-${Math.round(performance.now())}` };
+    state = {
+      ...state,
+      releases: state.releases.map((r) =>
+        r.id === id ? { ...r, items: [...r.items, withId], updatedAt: nowIso() } : r,
+      ),
+    };
+    emit();
+  },
+
+  updateReleaseItem(id: string, itemId: string, patch: Partial<ReleaseItem>) {
+    state = {
+      ...state,
+      releases: state.releases.map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              items: r.items.map((i) => (i.id === itemId ? { ...i, ...patch } : i)),
+              updatedAt: nowIso(),
+            }
+          : r,
+      ),
+    };
+    emit();
+  },
+
+  removeReleaseItem(id: string, itemId: string) {
+    state = {
+      ...state,
+      releases: state.releases.map((r) =>
+        r.id === id
+          ? { ...r, items: r.items.filter((i) => i.id !== itemId), updatedAt: nowIso() }
+          : r,
+      ),
+    };
+    emit();
+  },
+
+  markReleaseHanded(id: string) {
+    const iso = nowIso();
+    state = {
+      ...state,
+      releases: state.releases.map((r) =>
+        r.id === id ? { ...r, status: "handed", handedAt: iso, updatedAt: iso } : r,
+      ),
+    };
+    emit();
   },
 
   /**

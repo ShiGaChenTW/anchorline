@@ -1,3 +1,5 @@
+import type { Release } from "../lib/release";
+
 /** 僅保留 kami（紙）與 github（暗） */
 export type ThemeId = "kami" | "github";
 
@@ -297,6 +299,8 @@ export type AppState = {
   showSamples: boolean;
   /** Agent 進場作業佇列 */
   agentJobs: AgentJob[];
+  /** 使用者自行取號的版本（含內容編列）。型別在 lib/release.ts */
+  releases: Release[];
   /**
    * 首次使用引導是否完成（正式版）。
    * 測試版預設 true（略過引導、保留示範資料）。

@@ -7919,3 +7919,13 @@ p.gd-warn {
 .rail-proj-action:hover { background: var(--inset); color: var(--fg); }
 .rail-proj-action .ic { width: 13px; height: 13px; flex-shrink: 0; color: var(--muted); }
 .rail-proj-action:hover .ic { color: var(--accent); }
+
+/* 版本取號入口。跟版控健檢一樣貼在卡片標題列右邊。 */
+.d-take-btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+  text-decoration: none;
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+  color: var(--accent);
+}
+.d-take-btn:hover { background: color-mix(in oklab, var(--accent) 14%, transparent); }

@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>版本取號 · PRD 引導工作台</title>
+<link rel="stylesheet" href="shared.css" />
+<style>
+  .rl-wrap { padding: 20px 24px 40px; overflow: auto; }
+  .rl-lead { max-width: 62em; margin: 0 0 20px; font-size: 13px; line-height: 1.7; color: var(--muted); }
+  .rl-lead strong { color: var(--fg); }
+  .rl-grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 980px) { .rl-grid { grid-template-columns: 1fr; } }
+
+  .rl-card { border: 1px solid var(--border); border-radius: 12px; background: var(--panel, var(--bg)); }
+  .rl-card > h2 {
+    margin: 0; padding: 14px 16px; border-bottom: 1px solid var(--border);
+    font-size: 13.5px; font-weight: 650; color: var(--accent);
+  }
+  .rl-card > .b { padding: 14px 16px; }
+
+  .rl-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+  .rl-item {
+    display: block; width: 100%; text-align: left; padding: 9px 11px;
+    border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; cursor: pointer;
+  }
+  .rl-item:hover { background: var(--inset); }
+  .rl-item.on { background: color-mix(in oklab, var(--accent) 14%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
+  .rl-item-v { display: flex; align-items: baseline; gap: 8px; }
+  .rl-item-v strong { font-size: 13.5px; color: var(--fg); }
+  .rl-item-v em { font-style: normal; font-size: 11px; color: var(--muted); }
+  .rl-item-m { margin-top: 3px; font-size: 11px; color: var(--muted); }
+  .rl-empty { padding: 14px 16px; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+
+  .rl-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+  .rl-field label { font-size: 12.5px; font-weight: 600; color: var(--fg); }
+  .rl-field .hint { font-size: 11px; line-height: 1.5; color: var(--muted); }
+  .rl-field input[type="text"], .rl-field textarea {
+    box-sizing: border-box; width: 100%; padding: 9px 12px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--bg); color: var(--fg); font: inherit; font-size: 13px;
+  }
+  .rl-field input.bad { border-color: var(--danger, #f85149); }
+  .rl-field .err { font-size: 11.5px; color: var(--danger, #f85149); }
+  #rl-version { font-family: var(--mono); font-size: 15px; letter-spacing: 0.01em; }
+
+  .rl-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+  .rl-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 7px; }
+  .rl-row:hover { background: var(--inset); }
+  .rl-row.is-done .rl-row-text { color: var(--muted); }
+  .rl-state {
+    flex: 0 0 auto; padding: 1px 8px; border-radius: 5px; border: 1px solid var(--border);
+    background: none; font: inherit; font-size: 10.5px; color: var(--muted); cursor: pointer;
+  }
+  .rl-row.is-done .rl-state { border-color: color-mix(in oklab, var(--success) 50%, var(--border)); color: var(--success); }
+  .rl-row-text { flex: 1 1 auto; min-width: 0; font-size: 13px; color: var(--fg); }
+  .rl-row-src { flex: 0 0 auto; font-family: var(--mono); font-size: 10px; color: var(--meta); }
+  .rl-row-del { flex: 0 0 auto; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 13px; }
+  .rl-row-del:hover { color: var(--danger, #f85149); }
+
+  .rl-add { display: flex; gap: 8px; margin-top: 10px; }
+  .rl-add input { flex: 1 1 auto; }
+  .rl-cands { display: grid; gap: 6px; margin-top: 8px; }
+  .rl-cand {
+    display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+    border: 1px dashed var(--border); border-radius: 7px; background: none;
+    color: var(--fg-2); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+  }
+  .rl-cand:hover { border-style: solid; border-color: var(--accent); color: var(--fg); }
+  .rl-cand .tag { flex: 0 0 auto; padding: 0 6px; border-radius: 4px; background: var(--inset); font-size: 10px; color: var(--muted); }
+  .rl-sub { margin: 16px 0 6px; font-size: 12px; font-weight: 600; color: var(--fg-2); }
+
+  .rl-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 16px; border-top: 1px solid var(--border); }
+  .rl-foot .sp { flex: 1 1 auto; }
+  .rl-prog { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .rl-handed { font-size: 11.5px; color: var(--success); }
+</style>
+
+<script>(function(){try{var t=localStorage.getItem("specforge:theme");if(t==="warp")t="github";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
+</head>
+<body>
+<body>
+<div class="app">
+  <div class="shell">
+    <aside class="rail">
+      <div class="rail-brand">
+        <div class="rail-logo">PR</div>
+        <div class="rail-brand-text">
+          <strong>PRD開發監控台</strong>
+          <span>prd.local</span>
+        </div>
+      </div>
+      <div class="rail-theme-row">
+        <div class="theme-switch rail-theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
+          <button type="button" data-theme-value="kami" aria-pressed="false">LIGHT</button>
+          <button type="button" data-theme-value="github" aria-pressed="true">DARK</button>
+        </div>
+      </div>
+      <nav class="rail-nav">
+        <div class="nav-label">工作區</div>
+        <a class="nav-item" href="editor.html">編輯工作台</a>
+        <a class="nav-item" href="templates.html">章節範本</a>
+        <a class="nav-item" href="review.html">審閱佇列</a>
+        <a class="nav-item active" href="tracking.html">計劃追蹤</a>
+        <a class="nav-item" href="admin.html">管理中心</a>
+        <a class="nav-item" href="agents.html">Agent 管理</a>
+        <a class="nav-item" href="settings.html">偏好設定</a>
+      </nav>
+      <div class="rail-foot rail-foot--user" aria-label="目前使用者">
+        <div class="rail-user">
+          <div class="avatar" data-user-avatar aria-hidden="true">S</div>
+          <div class="rail-user-body">
+            <div class="rail-user-top">
+              <div class="rail-foot-meta" data-user-meta>
+                <div class="rail-foot-name">—</div>
+                <div class="rail-foot-title">—</div>
+              </div>
+              <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout title="登出">登出</button>
+            </div>
+            <div class="rail-user-role-row">
+              <span class="role-badge role-tone-editor" data-user-role-badge>—</span>
+              <span class="rail-user-kind" data-user-kind>人員</span>
+            </div>
+            <div class="rail-user-perms" data-user-perms role="list" aria-label="權限摘要">
+              <span class="perm-chip" role="listitem">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="toolbar" data-od-id="toolbar">
+        <div>
+          <h1>版本取號</h1>
+          <div class="sub">版號由你決定，系統不會自動指定。編列這一版要收哪些功能，再一鍵交辦下去。</div>
+        </div>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-primary" id="rl-new">＋ 取一個新版號</button>
+        <a class="btn" href="dashboard.html">回儀表板</a>
+      </div>
+
+      <div class="content rl-wrap">
+        <p class="rl-lead" id="rl-lead"></p>
+        <div class="rl-grid">
+          <section class="rl-card">
+            <h2>版號清單</h2>
+            <div id="rl-list"></div>
+          </section>
+          <section class="rl-card" id="rl-detail"></section>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script type="module" src="/src/pages/releases.ts"></script>
+</body>
+</html>
