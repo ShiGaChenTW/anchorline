@@ -36,7 +36,7 @@ function bind(projectId: string, name: string, path: string, paths: string[]) {
 /**
  * 桌面版：叫出系統資料夾選擇器（可新建資料夾）。
  *
- * 舊版聽全域 `specforge-native` 事件，因為那個 callback 被 projects.ts 佔用了。
+ * 舊版聽全域 `anchorline-native` 事件，因為那個 callback 被 projects.ts 佔用了。
  * Tauri 的 invoke 回 Promise，兩個流程各自等自己的，沒有共用狀態要搶。
  */
 async function pickNative(projectId: string) {

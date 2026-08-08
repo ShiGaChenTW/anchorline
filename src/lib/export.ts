@@ -108,7 +108,7 @@ export function exportJsonFile(state: AppState) {
     exporter: { id: state.currentUser.id, name: state.currentUser.name, role: state.currentUser.accessRole },
     state,
   };
-  downloadText(`specforge-backup-${stamp()}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+  downloadText(`anchorline-backup-${stamp()}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
 }
 
 export function exportHtmlFile(state: AppState, project?: Project | null) {

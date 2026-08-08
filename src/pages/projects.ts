@@ -1267,8 +1267,8 @@ if (!requireAuth()) {
     // 綁定專案資料夾走另一條路（不掃描評分），交給 project-folder.ts 的 callback
     if (payload.type === "projectFolderPickResult") {
       (window as Window & {
-        __specforgeProjectFolderResult?: (p: NativePayload) => void;
-      }).__specforgeProjectFolderResult?.(payload);
+        __anchorlineProjectFolderResult?: (p: NativePayload) => void;
+      }).__anchorlineProjectFolderResult?.(payload);
       return;
     }
     if (payload.type === "folderPickCancelled") {

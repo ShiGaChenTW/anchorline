@@ -3,7 +3,7 @@
  *
  * ## 為什麼要有這一層
  *
- * 舊的 WKWebView 橋是 `postMessage` + 全域 `specforge-native` 事件，每個呼叫端
+ * 舊的 WKWebView 橋是 `postMessage` + 全域 `anchorline-native` 事件，每個呼叫端
  * 都要自己 addEventListener、自己比對 `type`、自己設逾時。八個檔案寫了八次
  * 同一段樣板，而且那個模式有個**已知缺陷**：請求與回應沒有關聯 id，
  * 同一個 action 併發兩次會拿錯結果。
