@@ -59,9 +59,24 @@ export function requestTrackingScan(plansDirs: string[], timeoutMs = 10000): Pro
   });
 }
 
-/** 各專案綁定資料夾底下的 `plans/`。沒綁資料夾的專案自然不在裡面。 */
-export function plansDirsOf(projects: { importSummary?: { rootPath: string } }[]): string[] {
-  const dirs = projects
+type ProjectLike = { id?: string; importSummary?: { rootPath: string } };
+
+/**
+ * 要掃描的 `plans/` 目錄。
+ *
+ * **限定在當前選取的專案**，不是全部專案。Task Tracking 讀出來的清單直接就是
+ * 使用者眼前的工作範圍 —— 混進別的專案的 plan，等於要人在自己的清單裡先做一次
+ * 過濾，而工作區側欄早就已經表達過「我現在在看哪個專案」了。
+ *
+ * 沒有 `activeProjectId`（或它指向一個不存在／沒綁資料夾的專案）時回傳空陣列，
+ * **不退回「全部專案」**。空清單是誠實的「這個專案沒有東西可追蹤」；退回全部
+ * 則是把 bug 重新包裝成功能，而且退回的那一刻使用者不會知道範圍變了。
+ */
+export function plansDirsOf(projects: ProjectLike[], activeProjectId?: string | null): string[] {
+  const scoped = activeProjectId
+    ? projects.filter((p) => p.id === activeProjectId)
+    : [];
+  const dirs = scoped
     .map((p) => (p.importSummary?.rootPath ?? "").replace(/\/+$/, ""))
     .filter(Boolean)
     .map((root) => `${root}/plans`);

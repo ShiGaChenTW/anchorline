@@ -48,6 +48,14 @@ if (__authed) {
   let live = false;
   let lastSig = "";
 
+  /** 當前選取專案的名稱，給空狀態文案用。找不到就回空字串。 */
+  function activeProjectName(): string {
+    const st = store.get();
+    const p = st.projects.find((x) => x.id === st.activeProjectId);
+    // 與側欄同一套規則：自訂名優先，否則用 title（匯入時通常是資料夾名）。
+    return p?.customName || p?.title || "";
+  }
+
   /** 降級路徑：編譯期嵌入的靜態快照，沒有 mtime 就沒有追蹤目標 */
   function loadStatic() {
     plans = Object.entries(planFiles)
@@ -61,10 +69,20 @@ if (__authed) {
     restoreIdx();
   }
 
-  /** 活路徑：原生橋回報各專案 plans/ 的真實 mtime */
+  /** 活路徑：原生橋回報「當前選取專案」plans/ 的真實 mtime */
   async function loadLive(): Promise<boolean> {
-    const dirs = plansDirsOf(store.get().projects);
-    if (!dirs.length) return false;
+    const st = store.get();
+    const dirs = plansDirsOf(st.projects, st.activeProjectId);
+    // 選取的專案沒綁資料夾 —— 清單就該是空的，不是退回全部專案。
+    // 回 false 會讓呼叫端落到靜態快照，那是「本 repo 自己的 plans」，
+    // 一樣不屬於當前專案，所以這裡自己把清單清乾淨並直接收工。
+    if (!dirs.length) {
+      plans = [];
+      live = false;
+      trackingPath = null;
+      restoreIdx();
+      return true;
+    }
     let scan;
     try {
       scan = await requestTrackingScan(dirs);
@@ -120,7 +138,11 @@ if (__authed) {
     const el = document.getElementById("plan-list");
     if (!el) return;
     if (!plans.length) {
-      el.innerHTML = `<div style="padding:16px;color:var(--muted)">plans/ 尚無計劃檔</div>`;
+      // 說出範圍，否則空清單看起來像壞掉。清單是照當前專案過濾的，
+      // 使用者要能一眼看出「是這個專案沒有」而不是「功能沒反應」。
+      const name = activeProjectName();
+      const scope = name ? `「${name}」` : "當前專案";
+      el.innerHTML = `<div style="padding:16px;color:var(--muted)">${scope} 的 plans/ 尚無計劃檔</div>`;
       return;
     }
     el.innerHTML = plans
