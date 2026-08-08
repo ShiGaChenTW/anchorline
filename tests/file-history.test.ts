@@ -116,3 +116,82 @@ describe("relativeTime", () => {
     expect(relativeTime("not-a-date", now)).toBe("—");
   });
 });
+
+import { inlineDiff, tokenize, visibleSegs } from "../src/lib/file-history";
+
+const txt = (segs: { text: string; kind: string }[], kind: string) =>
+  segs.filter((s) => s.kind === kind).map((s) => s.text).join("");
+
+describe("tokenize", () => {
+  test("英數連成一個字，不會被拆成字母", () => {
+    expect(tokenize("SHALL persist")).toEqual(["SHALL", " ", "persist"]);
+  });
+  test("CJK 一字一個 token", () => {
+    expect(tokenize("系統應")).toEqual(["系", "統", "應"]);
+  });
+  test("空字串回空陣列", () => {
+    expect(tokenize("")).toEqual([]);
+  });
+});
+
+describe("inlineDiff", () => {
+  test("完全相同時只有 same", () => {
+    const segs = inlineDiff("abc def", "abc def");
+    expect(segs.every((s) => s.kind === "same")).toBe(true);
+  });
+
+  test("SHALL → MUST：只有那個字被標成刪除與新增", () => {
+    const segs = inlineDiff("The system SHALL persist", "The system MUST persist");
+    expect(txt(segs, "del")).toBe("SHALL");
+    expect(txt(segs, "add")).toBe("MUST");
+    expect(txt(segs, "same")).toBe("The system  persist");
+  });
+
+  test("純新增沒有 del", () => {
+    const segs = inlineDiff("abc", "abc def");
+    expect(txt(segs, "del")).toBe("");
+    expect(txt(segs, "add")).toBe(" def");
+  });
+
+  test("純刪除沒有 add", () => {
+    const segs = inlineDiff("abc def", "abc");
+    expect(txt(segs, "add")).toBe("");
+    expect(txt(segs, "del")).toBe(" def");
+  });
+
+  test("相鄰同類會合併，不會碎成一堆片段", () => {
+    const segs = inlineDiff("a", "a bbb ccc");
+    expect(segs.filter((s) => s.kind === "add")).toHaveLength(1);
+  });
+
+  test("中文改字也標得出來", () => {
+    const segs = inlineDiff("系統應該保存", "系統必須保存");
+    expect(txt(segs, "del")).toBe("應該");
+    expect(txt(segs, "add")).toBe("必須");
+  });
+
+  test("整行從空的開始 —— 全部是 add", () => {
+    const segs = inlineDiff("", "new line");
+    expect(txt(segs, "same")).toBe("");
+    expect(txt(segs, "add")).toBe("new line");
+  });
+});
+
+describe("visibleSegs", () => {
+  test("same + add 串起來剛好等於改之後的文字 —— 這是不錯位的前提", () => {
+    const before = "The system SHALL persist user data";
+    const after = "The system MUST persist all user data";
+    const rebuilt = visibleSegs(inlineDiff(before, after)).map((s) => s.text).join("");
+    expect(rebuilt).toBe(after);
+  });
+
+  test("中文情境也要能還原", () => {
+    const before = "系統應該保存資料";
+    const after = "系統必須永久保存資料";
+    expect(visibleSegs(inlineDiff(before, after)).map((s) => s.text).join("")).toBe(after);
+  });
+
+  test("純刪除時還原出的就是剩下的文字", () => {
+    expect(visibleSegs(inlineDiff("abc def", "abc")).map((s) => s.text).join("")).toBe("abc");
+  });
+});

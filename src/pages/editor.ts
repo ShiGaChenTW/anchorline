@@ -36,10 +36,13 @@ import { absolutePathFor, groupOpenspecFiles, openspecFiles } from "../lib/opens
 import { canEditFiles, readFile, shortPath, writeFile } from "../lib/file-editor";
 import {
   changedLineCount,
+  inlineDiff,
   loadSnapshots,
   markChangedLines,
   pushSnapshot,
   relativeTime,
+  visibleSegs,
+  type Seg,
 } from "../lib/file-history";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { askForProjectFolder } from "../lib/project-folder";
@@ -507,14 +510,21 @@ function renderHighlightBackdrop() {
   const byIndex = new Map(marks.map((m) => [m.index, m]));
   const lines = ta.value.split("\n");
 
+  // 只畫 same + add：兩者串起來剛好等於 textarea 現在的文字，才不會錯位。
+  // 被刪掉的字不在 textarea 裡，硬畫進來游標位置就會跟畫面對不上 ——
+  // 所以刪除線那一份放在「顯示刪除」的唯讀檢視與滑過的浮層裡。
   back.innerHTML = lines
     .map((ln, i) => {
       const m = byIndex.get(i);
-      const text = escapeHtml(ln) || "&nbsp;";
-      if (!m) return `<span class="fv-line">${text}</span>`;
+      if (!m) return `<span class="fv-line">${escapeHtml(ln) || "&nbsp;"}</span>`;
+      const segs =
+        m.kind === "modified" ? visibleSegs(inlineDiff(m.before ?? "", ln)) : [{ text: ln, kind: "add" as const }];
+      const inner =
+        segs.map((sg) => `<span class="fv-${sg.kind}">${escapeHtml(sg.text)}</span>`).join("") ||
+        "&nbsp;";
       return `<span class="fv-line fv-changed" data-fv-line="${i}"
         data-before="${escapeHtml(m.before ?? "")}"
-        data-kind="${m.kind}">${text}</span>`;
+        data-kind="${m.kind}">${inner}</span>`;
     })
     .join("\n");
   back.scrollTop = ta.scrollTop;
@@ -526,6 +536,42 @@ function renderHighlightBackdrop() {
     state.textContent = n ? `${n} 行未儲存` : "已同步";
     state.className = `fv-state${n ? " is-dirty" : ""}`;
   }
+}
+
+/** 片段 → HTML。新增藍字、刪除紅字加刪除線。 */
+function segsHtml(segs: readonly Seg[]): string {
+  return segs
+    .map((sg) => `<span class="fv-${sg.kind}">${escapeHtml(sg.text)}</span>`)
+    .join("");
+}
+
+/**
+ * 「顯示刪除」唯讀檢視。
+ *
+ * 被刪掉的字不在 textarea 裡，畫進編輯層會讓游標位置跟畫面對不上 ——
+ * 所以完整的刪除線版本獨立成一個唯讀檢視。要改就切回編輯。
+ */
+function renderDeletedView() {
+  if (!openFile) return;
+  const host = document.getElementById("fv-review");
+  const ta = document.getElementById("fv-text") as HTMLTextAreaElement | null;
+  if (!host || !ta) return;
+
+  const marks = markChangedLines(openFile.original, ta.value);
+  const byIndex = new Map(marks.map((m) => [m.index, m]));
+  const lines = ta.value.split("\n");
+
+  host.innerHTML = lines
+    .map((ln, i) => {
+      const m = byIndex.get(i);
+      if (!m) return `<span class="fv-line">${escapeHtml(ln) || "&nbsp;"}</span>`;
+      const inner =
+        m.kind === "modified"
+          ? segsHtml(inlineDiff(m.before ?? "", ln))
+          : `<span class="fv-add">${escapeHtml(ln) || "&nbsp;"}</span>`;
+      return `<span class="fv-line fv-changed">${inner || "&nbsp;"}</span>`;
+    })
+    .join("\n");
 }
 
 /** 滑過改動的行 → 顯示改之前 / 改之後與修改人 */
@@ -547,10 +593,11 @@ function bindChangeTooltip(host: HTMLElement) {
       <p class="fv-tip-head">${kind} · 尚未儲存</p>
       ${
         before
-          ? `<p class="fv-tip-row"><span class="fv-tip-tag old">改前</span><code>${escapeHtml(before)}</code></p>`
-          : `<p class="fv-tip-row"><span class="fv-tip-tag old">改前</span><em>（原本沒有這一行）</em></p>`
+          ? `<p class="fv-tip-row"><span class="fv-tip-tag old">對比</span><code>${segsHtml(
+              inlineDiff(before, line.textContent ?? ""),
+            )}</code></p>`
+          : `<p class="fv-tip-row"><span class="fv-tip-tag old">對比</span><em>（原本沒有這一行，整行都是新增）</em></p>`
       }
-      <p class="fv-tip-row"><span class="fv-tip-tag new">改後</span><code>${escapeHtml(line.textContent ?? "")}</code></p>
       <p class="fv-tip-who">${escapeHtml(store.get().currentUser?.name ?? "—")}</p>
     `;
     document.body.appendChild(tip);
@@ -620,6 +667,7 @@ function renderFileView(): boolean {
       <div class="fv-bar">
         <span class="fv-path mono" title="${escapeHtml(openFile.path)}">${escapeHtml(shortPath(openFile.path))}</span>
         <span class="fv-state" id="fv-state"></span>
+        <button type="button" class="btn btn-sm" id="fv-del" aria-pressed="false">顯示刪除</button>
         <button type="button" class="btn btn-sm" id="fv-hist">版本紀錄</button>
         <button type="button" class="btn btn-sm" id="fv-revert">還原</button>
         <button type="button" class="btn btn-sm btn-primary" id="fv-save">儲存</button>
@@ -627,6 +675,7 @@ function renderFileView(): boolean {
       </div>
       <div class="fv-stack">
         <div class="fv-backdrop" id="fv-backdrop" aria-hidden="true"></div>
+        <div class="fv-review" id="fv-review" hidden aria-label="含刪除內容的唯讀對比"></div>
         <textarea id="fv-text" class="fv-text" spellcheck="false"
                   data-path="${escapeHtml(openFile.path)}"
                   aria-label="${escapeHtml(shortPath(openFile.path))}">${escapeHtml(openFile.original)}</textarea>
@@ -696,6 +745,19 @@ function renderFileView(): boolean {
     renderHighlightBackdrop();
   });
   document.getElementById("fv-close")?.addEventListener("click", () => closeFileView());
+  const review = document.getElementById("fv-review") as HTMLElement;
+  const delBtn = document.getElementById("fv-del") as HTMLButtonElement;
+  delBtn?.addEventListener("click", () => {
+    const on = review.hidden;
+    review.hidden = !on;
+    backdrop.hidden = on;
+    ta.readOnly = on;
+    delBtn.setAttribute("aria-pressed", String(on));
+    delBtn.classList.toggle("on", on);
+    delBtn.textContent = on ? "回編輯" : "顯示刪除";
+    if (on) renderDeletedView();
+  });
+
   document.getElementById("fv-hist")?.addEventListener("click", () => {
     histPanel.hidden = !histPanel.hidden;
     if (!histPanel.hidden) refreshHist();

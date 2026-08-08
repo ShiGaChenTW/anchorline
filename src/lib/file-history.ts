@@ -165,3 +165,67 @@ export function relativeTime(iso: string, now = new Date()): string {
   if (hr < 24) return `${hr} 小時前`;
   return `${Math.round(hr / 24)} 天前`;
 }
+
+// ── 行內字級 diff ────────────────────────────────────────────────
+
+export type SegKind = "same" | "add" | "del";
+export type Seg = { text: string; kind: SegKind };
+
+/**
+ * 切成 diff 的單位：連續的英數視為一個字，CJK 與符號各自一個。
+ * 純字元 diff 會把 "SHALL" → "MUST" 拆成一堆單字母碎片，看不出改了什麼詞。
+ */
+export function tokenize(s: string): string[] {
+  return s.match(/[A-Za-z0-9_]+|\s+|[\s\S]/g) ?? [];
+}
+
+/**
+ * 行內字級 diff。回傳依「改之後」順序排的片段，被刪掉的片段插在原本的位置。
+ *
+ * 呼叫端在編輯畫面只能畫 same + add —— 那兩者串起來剛好等於現在的文字，
+ * 疊在 textarea 上才不會錯位。del 只能在唯讀的檢視模式或浮層裡顯示。
+ */
+export function inlineDiff(before: string, after: string): Seg[] {
+  const a = tokenize(before);
+  const b = tokenize(after);
+  const n = a.length;
+  const m = b.length;
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+
+  const out: Seg[] = [];
+  const push = (text: string, kind: SegKind) => {
+    if (!text) return;
+    const last = out[out.length - 1];
+    if (last && last.kind === kind) last.text += text;
+    else out.push({ text, kind });
+  };
+
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      push(a[i], "same");
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      push(a[i], "del");
+      i++;
+    } else {
+      push(b[j], "add");
+      j++;
+    }
+  }
+  while (i < n) push(a[i++], "del");
+  while (j < m) push(b[j++], "add");
+  return out;
+}
+
+/** 編輯畫面用：只留 same + add，串起來等於現在的文字 */
+export function visibleSegs(segs: readonly Seg[]): Seg[] {
+  return segs.filter((s) => s.kind !== "del");
+}
