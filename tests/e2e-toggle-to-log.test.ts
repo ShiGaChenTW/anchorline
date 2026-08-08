@@ -47,7 +47,7 @@ const io = {
 /** 正式流程走 bridge 的 appendFile（真 O_APPEND）；這裡用 fs 追加 */
 function appendEvent(ev: LogEvent) {
   const p = join(root, shardPath(ev.ts));
-  mkdirSync(join(root, ".specforge", "log"), { recursive: true });
+  mkdirSync(join(root, ".anchorline", "log"), { recursive: true });
   const prev = (() => {
     try {
       return readFileSync(p, "utf8");
@@ -91,7 +91,7 @@ describe("端到端：勾選 → 磁碟 → 事件 → 回到工作", () => {
       )
     );
 
-    const text = readFileSync(join(root, ".specforge/log/2026-08.jsonl"), "utf8");
+    const text = readFileSync(join(root, ".anchorline/log/2026-08.jsonl"), "utf8");
     const { events, skipped } = parseLog(text);
     expect(skipped).toBe(0);
     expect(events).toHaveLength(1);
@@ -99,7 +99,7 @@ describe("端到端：勾選 → 磁碟 → 事件 → 回到工作", () => {
   });
 
   test("③「回到工作」讀得到：最後做完什麼、下一個是什麼", () => {
-    const { events } = parseLog(readFileSync(join(root, ".specforge/log/2026-08.jsonl"), "utf8"));
+    const { events } = parseLog(readFileSync(join(root, ".anchorline/log/2026-08.jsonl"), "utf8"));
     const open = parsePlanMeta(readFileSync(planPath, "utf8")).steps.filter(
       (s) => s.state === "pending"
     );
@@ -112,7 +112,7 @@ describe("端到端：勾選 → 磁碟 → 事件 → 回到工作", () => {
   });
 
   test("④ 稽核報告匯得出來，而且看得到是誰做的", () => {
-    const { events } = parseLog(readFileSync(join(root, ".specforge/log/2026-08.jsonl"), "utf8"));
+    const { events } = parseLog(readFileSync(join(root, ".anchorline/log/2026-08.jsonl"), "utf8"));
     const md = exportMarkdown(events, "端到端");
     expect(md).toContain("Scott（人員）");
     expect(md).toContain("完成步驟");

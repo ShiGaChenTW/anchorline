@@ -4,10 +4,10 @@
 
 ---
 
-## `<專案>/.specforge/`
+## `<專案>/.anchorline/`
 
 ```
-.specforge/
+.anchorline/
 ├── .gitattributes        # *.jsonl merge=union（只在缺檔時種下，不覆寫）
 └── log/
     ├── 2026-08.jsonl     # 稽核軌跡，append-only，按月分片
@@ -50,7 +50,7 @@ append-only 的檔在分支合併時 **100% 衝突在檔尾**。事件自帶時�
 *.jsonl merge=union
 ```
 
-App 只在 `.specforge/.gitattributes` 不存在時種下它，**不覆寫你改過的設定**。
+App 只在 `.anchorline/.gitattributes` 不存在時種下它，**不覆寫你改過的設定**。
 
 ---
 
@@ -59,7 +59,7 @@ App 只在 `.specforge/.gitattributes` 不存在時種下它，**不覆寫你改
 **預設不進。** 根目錄的 `.gitignore` 有：
 
 ```
-.specforge/log/
+.anchorline/log/
 ```
 
 原因見 [`SECURITY.md`](SECURITY.md) §4：append-only 的機密洩漏刪不掉。

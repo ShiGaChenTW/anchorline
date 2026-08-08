@@ -62,7 +62,7 @@ const fresh = commitsToEvents(commits, project, remote);
 const logDir = join(root, LOG_DIR);
 mkdirSync(logDir, { recursive: true });
 
-const attrs = join(root, ".specforge", ".gitattributes");
+const attrs = join(root, ".anchorline", ".gitattributes");
 if (!existsSync(attrs)) writeFileSync(attrs, "*.jsonl merge=union\n");
 
 const byShard = new Map<string, typeof fresh>();

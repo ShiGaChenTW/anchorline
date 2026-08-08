@@ -5,7 +5,7 @@ import WebKit
  * JS ↔ 原生橋：資料夾選擇（NSOpenPanel）+ 掃描 .md/.txt。
  * WKWebView 的 <input webkitdirectory> 在 file:// 下經常無反應，必須走原生。
  */
-final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
+final class AnchorlineBridge: NSObject, WKScriptMessageHandler {
     weak var webView: WKWebView?
 
     /**
@@ -28,7 +28,7 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
      * 「在專案裡建立並持續追加一份稽核軌跡」。後者會建新檔，所以守門必須更緊：
      *
      *   1. resolvingSymlinksInPath 之後仍落在某個「已授權根目錄」內（擋 symlink 逃逸）
-     *   2. 相對路徑必須是 .specforge/ 底下
+     *   2. 相對路徑必須是 .anchorline/ 底下
      *   3. 副檔名只允許 jsonl
      *   4. 只 append，永不覆寫、永不刪除（由呼叫端的 action 分流保證）
      */
@@ -40,7 +40,7 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
                 .standardizedFileURL.path
             guard resolved.path.hasPrefix(rootResolved + "/") else { continue }
             let rel = String(resolved.path.dropFirst(rootResolved.count + 1))
-            if rel.hasPrefix(".specforge/") { return true }
+            if rel.hasPrefix(".anchorline/") { return true }
         }
         return false
     }
@@ -223,7 +223,7 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
             guard appendAllowed(logURL) else {
                 postToJS([
                     "type": "fileError",
-                    "message": "不能追加到這個路徑：必須是已授權專案內的 .specforge/*.jsonl",
+                    "message": "不能追加到這個路徑：必須是已授權專案內的 .anchorline/*.jsonl",
                     "path": path,
                 ])
                 return
@@ -338,7 +338,7 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
                 ],
             ])
         default:
-            NSLog("SpecForge bridge unknown action: \(action)")
+            NSLog("Anchorline bridge unknown action: \(action)")
         }
     }
 
@@ -801,7 +801,7 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
               let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
               let json = String(data: data, encoding: .utf8)
         else {
-            NSLog("SpecForge bridge: failed to serialize payload")
+            NSLog("Anchorline bridge: failed to serialize payload")
             return
         }
         let script = """
@@ -819,7 +819,7 @@ final class SpecForgeBridge: NSObject, WKScriptMessageHandler {
         """
         webView?.evaluateJavaScript(script, completionHandler: { _, error in
             if let error = error {
-                NSLog("SpecForge bridge JS error: \(error.localizedDescription)")
+                NSLog("Anchorline bridge JS error: \(error.localizedDescription)")
             }
         })
     }
@@ -829,7 +829,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     var window: NSWindow!
     var webView: WKWebView!
     /// 必須強引用，否則 message handler 會被釋放
-    private let bridge = SpecForgeBridge()
+    private let bridge = AnchorlineBridge()
 
     private var appDisplayName: String {
         (Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
@@ -963,7 +963,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         config.userContentController.add(bridge, name: "specforge")
         let boot = WKUserScript(
             source: """
-            window.__SPECFORGE_NATIVE__ = true;
+            window.__ANCHORLINE_NATIVE__ = true;
             window.__specforgeHasNativeFolder = true;
             """,
             injectionTime: .atDocumentStart,
@@ -1033,7 +1033,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     // 走 LaunchServices 註冊 scheme 常常靜默失敗。
     private static var handoffURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".specforge/handoff.json")
+            .appendingPathComponent(".anchorline/handoff.json")
     }
 
     func consumeHandoffIfAny() {
@@ -1048,12 +1048,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
 
         let folderURL = URL(fileURLWithPath: folderPath)
         guard FileManager.default.fileExists(atPath: folderURL.path) else {
-            NSLog("SpecForge handoff: folder not found \(folderPath)")
+            NSLog("Anchorline handoff: folder not found \(folderPath)")
             return
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let files = SpecForgeBridge.scanDirectoryPublic(folderURL)
+            let files = AnchorlineBridge.scanDirectoryPublic(folderURL)
             let payload: [String: Any] = [
                 "type": "agentHandoff",
                 "folderName": folderURL.lastPathComponent,
@@ -1076,11 +1076,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        NSLog("SpecForge load failed: \(error.localizedDescription)")
+        NSLog("Anchorline load failed: \(error.localizedDescription)")
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        NSLog("SpecForge navigation failed: \(error.localizedDescription)")
+        NSLog("Anchorline navigation failed: \(error.localizedDescription)")
     }
 
     // MARK: - JS dialogs（預設 WKWebView 不實作 → prompt/alert/confirm 全無效）

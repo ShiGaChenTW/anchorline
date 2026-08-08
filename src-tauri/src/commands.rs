@@ -323,7 +323,7 @@ fn signal_path() -> PathBuf {
         .or_else(|| std::env::var_os("APPDATA").map(PathBuf::from))
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
         .unwrap_or_default();
-    base.join("specforge").join("active")
+    base.join("anchorline").join("active")
 }
 
 fn mtime_ms(p: &Path) -> Option<f64> {
@@ -438,7 +438,7 @@ pub fn write_file(path: String, text: String) -> R<FilePath> {
 pub fn append_file(path: String, line: String, roots: State<RegisteredRoots>) -> R<FilePath> {
     let p = PathBuf::from(&path);
     if !paths::append_allowed(&p, &roots) {
-        return Err("不能追加到這個路徑：必須是已授權專案內的 .specforge/*.jsonl".into());
+        return Err("不能追加到這個路徑：必須是已授權專案內的 .anchorline/*.jsonl".into());
     }
     append_line(&p, &line)
 }

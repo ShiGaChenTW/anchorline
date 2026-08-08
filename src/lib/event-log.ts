@@ -149,7 +149,7 @@ export function shardFor(iso: string): string {
 }
 
 /** 事件流在專案內的位置。 */
-export const LOG_DIR = ".specforge/log";
+export const LOG_DIR = ".anchorline/log";
 export function shardPath(iso: string): string {
   return `${LOG_DIR}/${shardFor(iso)}`;
 }

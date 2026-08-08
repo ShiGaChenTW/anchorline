@@ -158,6 +158,6 @@ export function replayMarkdown(r: Replay, title: string): string {
     ...rows,
     ...violationBlock,
     "",
-    `<sub>由 SpecForge 從 .specforge/log 產生。subject 前綴：${r.subjectPrefix}</sub>`,
+    `<sub>由 Anchorline 從 .anchorline/log 產生。subject 前綴：${r.subjectPrefix}</sub>`,
   ].join("\n");
 }

@@ -93,7 +93,7 @@ describe("單行原子性", () => {
 describe("月分片", () => {
   test("依事件自己的時間分片 —— 回填舊 commit 要落在正確月份", () => {
     expect(shardFor("2026-03-15T10:00:00Z")).toBe("2026-03.jsonl");
-    expect(shardPath("2026-12-01T00:00:00Z")).toBe(".specforge/log/2026-12.jsonl");
+    expect(shardPath("2026-12-01T00:00:00Z")).toBe(".anchorline/log/2026-12.jsonl");
   });
 
   test("壞時間不炸，退到當月", () => {
