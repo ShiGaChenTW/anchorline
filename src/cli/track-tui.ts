@@ -477,9 +477,37 @@ function once(plansDir: string) {
   printOnce(plans, plansDir, tracking);
 }
 
+/**
+ * 印出一張完整的互動畫面然後結束。
+ *
+ * `--once` 是給 pipe 用的摘要清單，看不到步驟與錨點 id；互動模式看得到但需要
+ * TTY。截圖、貼進 issue、CI 比對都卡在這中間 —— `--frame` 就是那個中間。
+ */
+function frame(plansDir: string) {
+  const state: UiState = {
+    plans: [],
+    idx: 0,
+    tracking: null,
+    stepScroll: 0,
+    showHelp: false,
+    plansDir,
+    message: "",
+  };
+  refresh(state);
+  // 追蹤中的那一份就是要看的那一份 —— 截圖不該還要人先按 t
+  const t = state.plans.findIndex((p) => p.path === state.tracking);
+  if (t >= 0) state.idx = t;
+  process.stdout.write(render(state).join("\n") + "\n");
+}
+
 function main() {
   const args = process.argv.slice(2);
   const oneShot = args.includes("--once") || args.includes("-1");
+  if (args.includes("--frame")) {
+    const df = args.findIndex((a) => a === "--dir" || a === "-d");
+    frame(findPlansDir(df >= 0 ? args[df + 1] : undefined));
+    return;
+  }
   const dirFlag = args.findIndex((a) => a === "--dir" || a === "-d");
   const dirArg = dirFlag >= 0 ? args[dirFlag + 1] : undefined;
   const plansDir = findPlansDir(dirArg);

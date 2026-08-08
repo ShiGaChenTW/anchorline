@@ -8,7 +8,7 @@ import { initTheme } from "../lib/theme";
 import { sortByRecency, trackingTarget } from "../lib/tracking";
 import { canScanPlans, plansDirsOf, requestTrackingScan } from "../lib/tracking-bridge";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
-import { byNewest, parseLog, type LogEvent } from "../lib/event-log";
+import { byNewest, dedupe, parseLog, type LogEvent } from "../lib/event-log";
 import { hookInstallSnippet } from "../lib/event-writer";
 import {
   buildResumeCard,
@@ -34,15 +34,27 @@ const planFiles = import.meta.glob("../../plans/*.md", {
 }) as Record<string, string>;
 
 /**
- * 稽核軌跡的事件。桌面版由 bridge 讀 .specforge/log/*.jsonl 灌進來；
- * 瀏覽器版永遠是空的 —— 那是誠實的降級，不是 bug。
+ * 編譯期嵌入本 repo 自己的稽核軌跡 —— 與上面的 planFiles 同一套降級策略。
+ *
+ * 瀏覽器讀不到磁碟，所以看到的是建置當下的快照；桌面版走 bridge 讀
+ * 使用者實際綁定專案的 `.specforge/log/`，那條路才是活的。
+ * 兩條路都存在，介面才不會在瀏覽器裡變成一個永遠空白的區塊。
  */
-let auditEvents: LogEvent[] = [];
+const logFiles = import.meta.glob("../../.specforge/log/*.jsonl", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
 
-/** 讓桌面版把讀到的 JSONL 交進來。壞行由 parseLog 跳過，不會毀掉整份。 */
+/** 壞行由 parseLog 跳過，不會毀掉整份。 */
+let auditEvents: LogEvent[] = dedupe(
+  Object.values(logFiles).flatMap((t) => parseLog(t).events)
+);
+
+/** 讓桌面版把讀到的 JSONL 交進來，覆蓋編譯期快照。 */
 export function loadAuditLog(text: string): number {
   const { events, skipped } = parseLog(text);
-  auditEvents = events;
+  auditEvents = dedupe(events);
   return skipped;
 }
 
