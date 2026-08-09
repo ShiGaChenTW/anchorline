@@ -44,6 +44,7 @@ pub fn run() {
             commands::read_file,
             commands::write_file,
             commands::write_domain_pack,
+            commands::is_root_registered,
             commands::append_file,
             commands::open_path,
             commands::openspec_status,

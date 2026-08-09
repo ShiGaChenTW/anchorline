@@ -129,6 +129,8 @@ export const native = {
 
   readFile: (path: string) => call<{ path: string; text: string }>("read_file", { path }),
   writeFile: (path: string, text: string) => call<{ path: string }>("write_file", { path, text }),
+  /** 這個資料夾在 Rust 端有授權嗎（前端的 localStorage 可能與它不同步） */
+  isRootRegistered: (dir: string) => call<boolean>("is_root_registered", { dir }),
   /** 領域包專用：唯一能建新檔的寫入路徑，檔名在 Rust 端驗證 */
   writeDomainPack: (dir: string, name: string, text: string) =>
     call<{ path: string }>("write_domain_pack", { dir, name, text }),

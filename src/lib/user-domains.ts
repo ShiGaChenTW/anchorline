@@ -189,8 +189,10 @@ export async function addUserPack(
   const dir = cache?.dir ?? "";
 
   if (dir && isNative()) {
+    const auth = await ensureAuthorized(dir);
+    if (!auth.ok) return { ok: false, reason: auth.reason };
     try {
-      await native.writeDomainPack(dir, file, raw);
+      await native.writeDomainPack(auth.dir, file, raw);
       await refreshUserDomains();
       return { ok: true, persisted: "disk" };
     } catch (e) {
@@ -208,6 +210,47 @@ export async function addUserPack(
 }
 
 /**
+ * 確保這個資料夾在 Rust 端有授權，沒有就請使用者用系統選擇器再指一次。
+ *
+ * 為什麼會沒有：前端把「選過哪個資料夾」記在 localStorage，真正的授權在 Rust。
+ * App 更新（這份授權在此版之前根本沒落地）、換機器、授權檔被刪，兩邊就會不同步。
+ * 使用者看到的是「設定頁顯示資料夾好好的，按下去卻說沒授權」——那訊息完全
+ * 指不到「你要再選一次」。
+ *
+ * **不從 localStorage 自動補授權**：那等於「前端說他選過就算數」，
+ * 而整個路徑守門的前提正是「前端傳來的路徑只能被檢查，不能被信任」。
+ * 多按一次資料夾選擇器，換的是那份授權是真的。
+ */
+async function ensureAuthorized(dir: string): Promise<{ ok: true; dir: string } | { ok: false; reason: string }> {
+  if (!dir) {
+    const pick = await native.pickFolder();
+    if (pick.cancelled) return { ok: false, reason: "已取消" };
+    return { ok: true, dir: pick.folderPath };
+  }
+  try {
+    if (await native.isRootRegistered(dir)) return { ok: true, dir };
+  } catch {
+    // 查不到就當作沒授權，走下面的重選
+  }
+  const pick = await native.pickFolder();
+  if (pick.cancelled) {
+    return { ok: false, reason: "需要重新選一次領域包資料夾才能寫入（App 更新後第一次會遇到）" };
+  }
+  return { ok: true, dir: pick.folderPath };
+}
+
+/** 這個資料夾目前有沒有授權。給設定頁提前顯示狀態用。 */
+export async function isDirAuthorized(): Promise<boolean> {
+  const dir = userDomainsDir();
+  if (!dir || !isNative()) return false;
+  try {
+    return await native.isRootRegistered(dir);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 把一份領域包存到磁碟。桌面版寫進領域包資料夾；沒有資料夾就先請使用者選一個。
  *
  * 為什麼不用瀏覽器的 blob 下載：WKWebView 沒有下載管理員，`<a download>`
@@ -219,14 +262,10 @@ export async function saveUserPackToDisk(
   raw: string,
 ): Promise<{ ok: true; path: string } | { ok: false; reason: string }> {
   if (!isNative()) return { ok: false, reason: "需要桌面版" };
-  let dir = userDomainsDir();
-  if (!dir) {
-    const pick = await native.pickFolder();
-    if (pick.cancelled) return { ok: false, reason: "已取消" };
-    dir = pick.folderPath;
-  }
+  const auth = await ensureAuthorized(userDomainsDir());
+  if (!auth.ok) return auth;
   try {
-    const r = await native.writeDomainPack(dir, filename, raw);
+    const r = await native.writeDomainPack(auth.dir, filename, raw);
     return { ok: true, path: r.path };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
