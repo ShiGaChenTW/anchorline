@@ -8059,3 +8059,55 @@ p.gd-warn {
   flex: 0 0 auto;
 }
 .rail-context-status[hidden], .rail-context-meta[hidden] { display: none; }
+
+/* ── 領域包：章節清單上方的領域選擇與孤兒提示 ────────────────── */
+.domain-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 8px;
+}
+.domain-bar-label {
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.domain-bar select {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--fg);
+}
+.domain-bar select:disabled { opacity: .55; cursor: not-allowed; }
+/* 孤兒提示用中性色不用紅：內容沒有掉，紅色會讓人以為出事了 */
+.domain-orphans {
+  margin: 0 12px 8px;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: var(--surface);
+  border-left: 2px solid var(--border);
+  border-radius: 0 4px 4px 0;
+}
+
+/* 領域包清單（偏好設定） */
+.domain-pack-list { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.domain-pack-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.domain-pack-row code { color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.domain-pack-row .tag { margin-left: auto; }
+.domain-pack-row--err { border-color: var(--danger); color: var(--danger); }

@@ -1,0 +1,6 @@
+[test]
+# 只跑 tests/。`vendor/markamd/` 是 vendored 子專案，帶自己的 package.json 與
+# 18 個測試檔，需要 react / plantuml-encoder 等根目錄沒裝的相依——
+# 在根目錄跑 `bun test` 會固定紅 9 個，久了就沒有人看測試結果了。
+# 要跑它的測試：cd vendor/markamd && bun install && bun test
+root = "tests"

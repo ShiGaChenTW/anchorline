@@ -324,7 +324,7 @@ if (__authed) {
   function renderGates() {
     const el = document.getElementById("gate-panel");
     if (!el) return;
-    const report = evaluatePrdGates(store.get());
+    const report = evaluatePrdGates(store.get(), store.activeGateSpec());
     const foot = document.getElementById("tui-footer");
     if (foot) {
       const tracked = plans.find((p) => p.path === trackingPath);
@@ -370,7 +370,7 @@ if (__authed) {
     const el = document.getElementById("layer-panel");
     if (!el) return;
     const hasPlan = plans.some((p) => p.meta.total_steps > 0);
-    const layers = deriveFlowLayers(store.get(), { hasPlanSteps: hasPlan });
+    const layers = deriveFlowLayers(store.get(), { hasPlanSteps: hasPlan, gateSpec: store.activeGateSpec() });
     el.innerHTML = `<div class="tk-layers">${layers
       .map(
         (l) =>

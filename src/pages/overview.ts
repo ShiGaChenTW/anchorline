@@ -69,7 +69,12 @@ if (!requireAuth()) {
   function gateOf(p: Project) {
     const st = store.get();
     const docs = st.projectSectionValues?.[p.id] ?? (p.id === st.activeProjectId ? st.sectionValues : {});
-    return evaluatePrdGates({ ...st, sectionValues: docs } as AppState);
+    // sections 也要換成該專案自己的——「多個章節仍空白」那條規則讀 sections[].status，
+    // 拿 active 專案的章節去算別的專案，領域不同時數量就對不上
+    return evaluatePrdGates(
+      { ...st, sectionValues: docs, sections: store.sectionsFor(p.id) } as AppState,
+      store.gateSpecFor(p.id),
+    );
   }
 
   type Row = {

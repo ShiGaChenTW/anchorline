@@ -4,6 +4,8 @@
  */
 import { store } from "../data/store";
 import type { AISettings, Section } from "../data/types";
+import { type GateSpec, runSectionCoach } from "./gate-rules";
+import { BASE_GATE_SPEC } from "./prd-gates";
 import {
   AiError,
   chatCompletion,
@@ -24,6 +26,26 @@ export type AICritique = {
   suggestedPatch?: Record<string, string>;
 };
 
+/**
+ * 偏好設定的 linter 開關對應到哪些規則 id。
+ *
+ * 只影響教練，**不影響 gate**——能不能送審是治理鏈的事，
+ * 不該讓使用者在偏好設定裡關掉。
+ */
+const LINTER_RULES: Record<string, string[]> = {
+  requireNonGoals: ["non-goals-min", "non-goals-ok"],
+  requireMetrics: ["metrics-missing", "metrics-vague", "metrics-ok"],
+  requireStoriesAC: ["stories-ac"],
+};
+
+function suppressed(findingId: string, settings: AISettings): boolean {
+  for (const [toggle, ids] of Object.entries(LINTER_RULES)) {
+    if (settings.enableLinters[toggle as keyof AISettings["enableLinters"]]) continue;
+    if (ids.includes(findingId)) return true;
+  }
+  return false;
+}
+
 const VAGUE_TERMS = ["優化", "儘快", "盡快", "大幅", "適當", "良好", "提升體驗", "更好", "儘可能"];
 
 function langHint(settings: AISettings): string {
@@ -43,11 +65,28 @@ function personaHint(settings: AISettings): string {
   }
 }
 
+/**
+ * 領域包的法遵知識疊在每一段 system prompt 最前面。
+ *
+ * 這是 prd-agent 真正的價值所在（它自己的 §1.2 就這麼寫）——KYC 分類、AML STR、
+ * 個資法 §27、金管會函令、聯徵通報。不接這一段，領域包就只是多了幾個空欄位。
+ *
+ * 疊在「最前面」而不是附在後面：模型對 system prompt 開頭的服從度較高，而
+ * 領域法遵是不可讓步的那一類要求。
+ */
+function withDomain(system: string): string {
+  const d = store.get().projects.find((p) => p.id === store.get().activeProjectId)?.domain;
+  if (!d) return system;
+  const prompt = store.activeDomainPrompt().trim();
+  return prompt ? `${prompt}\n\n---\n\n${system}` : system;
+}
+
 /** 本機規則檢查（不需 API Key；誠實標示 localOnly） */
 export function critiqueSectionLocal(
   section: Section,
   values: Record<string, string>,
   settings: AISettings,
+  spec: GateSpec = BASE_GATE_SPEC,
 ): AICritique {
   const text = Object.values(values).join("\n");
   const warnings: string[] = [];
@@ -63,36 +102,21 @@ export function critiqueSectionLocal(
     }
   }
 
-  if (section.id === "summary") {
-    if ((values.what || "").length > 10) strengths.push("交付物描述明確。");
-    if (!values.why || values.why.length < 20) {
-      warnings.push("「為何現在」時機論述較薄弱。");
-      suggestions.push("補上外部壓力、期限或可驗證的業務時機。");
+  // 章節規則全部來自領域包（gate + hints），教練不再認得任何章節 id。
+  // 新增一個領域包的章節，這裡自動就有東西可講。
+  const findings = runSectionCoach(
+    { sectionValues: { [section.id]: values }, sectionStatuses: [] },
+    spec,
+    section.id,
+  ).filter((f) => !suppressed(f.id, settings));
+
+  for (const f of findings) {
+    if (f.level === "pass") {
+      strengths.push(`${f.label}。`);
+      continue;
     }
-    const tech = (values.tech || "").trim();
-    if (!tech || tech.length < 12) {
-      warnings.push("尚未撰寫「技術線選型」。");
-      suggestions.push("用 2–5 條列出主技術路徑，並至少寫一項「刻意不選」與原因。");
-    } else if (!/不選|不做|暫不|排除|non-?goal|out of scope|不採用/i.test(tech)) {
-      warnings.push("技術線選型缺少「刻意不選」。");
-      suggestions.push("加一行：• 刻意不選：……（原因）");
-    } else {
-      strengths.push("技術線選型含主路徑與不選邊界。");
-    }
-  } else if (section.id === "goals") {
-    if (settings.enableLinters.requireNonGoals && (!values.nongoals || values.nongoals.length < 15)) {
-      warnings.push("缺少足夠的非目標（Non-goals）。");
-      suggestions.push("至少 3 條「刻意不做」並可對應範圍邊界。");
-    }
-  } else if (section.id === "metrics") {
-    if (settings.enableLinters.requireMetrics && !/\d+%|\d+天|\d+週|歸零|≥|<=|</.test(text)) {
-      warnings.push("成功指標缺少具體數字目標。");
-      suggestions.push("加上可量測數字與量測方式。");
-    }
-  } else if (section.id === "stories") {
-    if (!text.includes("作為") || !text.includes("以便")) {
-      warnings.push("使用者故事未完全採用「作為／我想要／以便」結構。");
-    }
+    warnings.push(`${f.label}。`);
+    if (f.detail) suggestions.push(f.detail);
   }
 
   const filled = Object.values(values).join("").trim().length;
@@ -123,8 +147,9 @@ export async function critiqueSectionWithAI(
   section: Section,
   values: Record<string, string>,
   settings: AISettings,
+  spec: GateSpec = BASE_GATE_SPEC,
 ): Promise<AICritique> {
-  const local = critiqueSectionLocal(section, values, settings);
+  const local = critiqueSectionLocal(section, values, settings, spec);
   if (!isAiConfigured()) return local;
 
   try {
@@ -136,7 +161,7 @@ Reply ONLY with JSON:
 {"score":0-100,"grade":"S|A|B|C","summary":"...","strengths":["..."],"warnings":["..."],"suggestions":["..."]}
 No markdown fences. Be specific to the given content; never invent unrelated product demos.`;
     const user = `Section: ${section.n} ${section.title}\nGuide: ${section.guide}\n\nContent:\n${fields}`;
-    const raw = await chatCompletion(system, user);
+    const raw = await chatCompletion(withDomain(system), user);
     const obj = extractJsonObject(raw);
     if (!obj) {
       return {
@@ -212,7 +237,7 @@ ${current}
 ${prompt ? `User instruction:\n${prompt}\n` : "User instruction: improve and fill empty fields based on existing context.\n"}
 Return JSON with keys: ${section.fields.map((f) => f.key).join(", ")}`;
 
-  const raw = await chatCompletion(system, user);
+  const raw = await chatCompletion(withDomain(system), user);
   const obj = extractJsonObject(raw);
   if (!obj) {
     // 若模型只回一段文字且只有單一主欄位，塞進第一個 textarea
@@ -253,7 +278,7 @@ export async function polishTextWithAI(
   const system = `You polish PRD prose. Language: ${langHint(settings)}.
 ${modeHint}
 Return ONLY the polished text, no preamble.`;
-  return await chatCompletion(system, text);
+  return await chatCompletion(withDomain(system), text);
 }
 
 /** Agent 進場：依 role/prompt 產出結果文字（真實模型） */
@@ -287,7 +312,7 @@ ${opts.contextSnippet.slice(0, 6000) || "（無內文）"}
 
 Deliver a concise operational result for this agent job.`;
 
-  return await chatCompletion(system, user);
+  return await chatCompletion(withDomain(system), user);
 }
 
 export { getAiReadiness, isAiConfigured, AiError };

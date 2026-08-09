@@ -92,7 +92,7 @@ export function renderStatusBar(): void {
   const stInfo = (p && STATUS_MAP[p.status]) || STATUS_MAP.draft;
   const user = st.currentUser;
   const role = ROLE_LABEL[user.accessRole] ?? user.accessRole;
-  const gate = evaluatePrdGates(st);
+  const gate = evaluatePrdGates(st, store.activeGateSpec());
   const gateText = st.locked
     ? "已鎖定"
     : gate.canSubmit

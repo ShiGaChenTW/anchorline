@@ -36,6 +36,11 @@ import type {
   WorkflowStageDef,
 } from "./types";
 import { emptySectionValues } from "../lib/export";
+import { applyMeta, metaFromSections, orphanSectionIds, pickDomain } from "../lib/section-meta";
+import { DEFAULT_DOMAIN, domainPacks, reloadUserPacks } from "./domains";
+import { resolveDomain } from "../lib/domain-pack";
+import { BASE_GATE_SPEC } from "../lib/prd-gates";
+import type { GateSpec } from "../lib/gate-rules";
 import type { ProjectCandidate } from "../lib/folder-import";
 import { mapCandidateToSectionValues } from "../lib/folder-import";
 import {
@@ -52,64 +57,47 @@ const LEGACY_KEY = `anchorline:state:v5:${APP_VARIANT}`;
 const SESSION_KEY = "anchorline:session:v1";
 
 /**
- * 將 SEED 章節結構合併進已存 sections（補新欄位／檢查項，不覆蓋使用者 status/score）
- * 例如「三行摘要」新增「技術線選型」後，舊 localStorage 也能看到該欄。
+ * 章節骨架＝專案領域包解析的結果，每次載入重新算，不從 localStorage 讀。
+ *
+ * 舊版把整份 sections（含 guide / tips / fields 定義）存進 localStorage，再用
+ * `mergeSectionsWithSeed` 把種子的新欄位補回去——那是「持久化了不該持久化的東西」
+ * 之後被迫長出的補丁。骨架是程式碼（現在是領域包）的產物，重算永遠正確；
+ * 真正需要留著的只有使用者手動產生的 status / score / checks，那些進
+ * `projectSectionMeta`。
  */
-function mergeSectionsWithSeed(existing: Section[]): Section[] {
-  const seedById = new Map(SEED_SECTIONS.map((s) => [s.id, s]));
-  const seen = new Set<string>();
-  const merged = existing.map((sec) => {
-    seen.add(sec.id);
-    const seed = seedById.get(sec.id);
-    if (!seed) return sec;
-    const fieldKeys = new Set(sec.fields.map((f) => f.key));
-    const fields = [...sec.fields];
-    for (const f of seed.fields) {
-      if (!fieldKeys.has(f.key)) {
-        fields.push({ ...f, value: "" });
-      } else {
-        // 同步 label/hint/rows（不改 value 定義在 section 的預設）
-        const i = fields.findIndex((x) => x.key === f.key);
-        if (i >= 0) {
-          fields[i] = {
-            ...fields[i]!,
-            label: f.label,
-            hint: f.hint,
-            type: f.type,
-            rows: f.rows,
-          };
-        }
-      }
-    }
-    const checkIds = new Set(sec.checks.map((c) => c.id));
-    const checks = [...sec.checks];
-    for (const c of seed.checks) {
-      if (!checkIds.has(c.id)) checks.push({ ...c, pass: false });
-    }
-    return {
-      ...sec,
-      title: seed.title || sec.title,
-      desc: seed.desc || sec.desc,
-      guide: seed.guide || sec.guide,
-      tips: seed.tips?.length ? seed.tips : sec.tips,
-      example: seed.example || sec.example,
-      fields,
-      checks,
-    };
-  });
-  // 種子有、舊狀態沒有的章節（極少見）— 附加空白
-  for (const seed of SEED_SECTIONS) {
-    if (!seen.has(seed.id)) {
-      merged.push({
-        ...structuredClone(seed),
-        fields: seed.fields.map((f) => ({ ...f, value: "" })),
-        checks: seed.checks.map((c) => ({ ...c, pass: false })),
-        status: "empty",
-        score: 0,
-      });
-    }
+function domainOf(p: Project | undefined): string {
+  return pickDomain(p?.domain, Object.keys(domainPacks()), DEFAULT_DOMAIN);
+}
+
+function domainSections(domain: string): Section[] {
+  try {
+    return resolveDomain(domain, domainPacks(), {
+      sections: SEED_SECTIONS,
+      gates: BASE_GATE_SPEC,
+    }).sections;
+  } catch {
+    // 領域包寫壞不該讓整個 App 開不起來——退回通用 7 章，使用者至少還能工作
+    return SEED_SECTIONS;
   }
-  return merged;
+}
+
+function domainGates(domain: string): GateSpec {
+  try {
+    return resolveDomain(domain, domainPacks(), {
+      sections: SEED_SECTIONS,
+      gates: BASE_GATE_SPEC,
+    }).gateSpec;
+  } catch {
+    return BASE_GATE_SPEC;
+  }
+}
+
+/** 解析某專案當下該看到的 sections（骨架 + 該專案的標記） */
+function sectionsForProject(
+  p: Project | undefined,
+  metaBag: AppState["projectSectionMeta"],
+): Section[] {
+  return applyMeta(domainSections(domainOf(p)), p ? metaBag[p.id] : undefined);
 }
 
 /** 從 section.fields.value 帶入種子正文 */
@@ -204,6 +192,7 @@ function seedState(): AppState {
     sections,
     sectionValues,
     projectSectionValues,
+    projectSectionMeta: {},
     sampleSectionValues: null,
     comments: isTest ? structuredClone(SEED_COMMENTS) : [],
     approvals: isTest ? approvalsFromCase(cases.p1) : structuredClone(SEED_APPROVALS).map((a) => ({
@@ -283,6 +272,10 @@ function migrateProject(raw: Record<string, unknown>, employees: Employee[]): Pr
     isImported: Boolean(raw.isImported),
     sourceFolder: raw.sourceFolder ? String(raw.sourceFolder) : undefined,
     importSummary: raw.importSummary as ProjectImportSummary | undefined,
+    // 漏列這一行的代價：換過的領域每次重新載入就悄悄變回 generic，
+    // 章節與 gate 一起退回通用版，而使用者寫的內容還在——看起來像資料掉了。
+    // 上面那行註解（tags）就是同一個坑，這是第二次。
+    domain: raw.domain ? String(raw.domain) : undefined,
   };
 }
 
@@ -388,15 +381,33 @@ function load(): AppState {
       [activeProjectId]: activeDocs,
     };
 
-    const sections = mergeSectionsWithSeed(
-      (parsed.sections as Section[] | undefined) ?? base.sections,
+    // 遷移：沒有 domain 的專案一律 generic。通用不是「特例」，是一個叫 generic
+    // 的領域包——少了這一步，程式裡就會長出「有 domain」跟「沒有 domain」兩條路徑。
+    const withDomain = projects.map((p) => (p.domain ? p : { ...p, domain: DEFAULT_DOMAIN }));
+
+    let projectSectionMeta =
+      (parsed.projectSectionMeta as AppState["projectSectionMeta"] | undefined) ?? {};
+    // 舊狀態的 status / score / checks 都在全域 sections 上，而那份**就是**當時
+    // active 專案的標記。每次載入都重取（不是只在 bag 空的時候），否則上一輪
+    // 沒切過專案就關掉 App，那些勾選會不見。
+    if (activeProjectId && Array.isArray(parsed.sections)) {
+      projectSectionMeta = {
+        ...projectSectionMeta,
+        [activeProjectId]: metaFromSections(parsed.sections as Section[]),
+      };
+    }
+
+    const sections = sectionsForProject(
+      withDomain.find((p) => p.id === activeProjectId),
+      projectSectionMeta,
     );
 
     return {
       ...base,
       ...parsed,
-      projects: APP_VARIANT === "prod" ? projects.filter((p) => !p.isSample) : projects,
+      projects: APP_VARIANT === "prod" ? withDomain.filter((p) => !p.isSample) : withDomain,
       sections,
+      projectSectionMeta,
       sectionValues: activeDocs,
       projectSectionValues,
       sampleSectionValues: parsed.sampleSectionValues ?? null,
@@ -724,7 +735,9 @@ export const store = {
 
   addProject(p: Project) {
     const bag = snapshotActiveDocs(state);
-    if (!bag[p.id]) bag[p.id] = blankDocsForSections(state.sections);
+    // 空白正文袋要照**新專案自己的領域**算，不是照當下開著的那個專案。
+    // 拿錯來源時症狀很輕（缺 key 會 `?? {}`），所以會一路錯下去不被發現。
+    if (!bag[p.id]) bag[p.id] = blankDocsForSections(sectionsForProject(p, state.projectSectionMeta));
     state = {
       ...state,
       projects: [p, ...state.projects],
@@ -740,6 +753,7 @@ export const store = {
   importProjectCandidates(
     candidates: ProjectCandidate[],
     folderName: string,
+    domain: string = DEFAULT_DOMAIN,
   ): { ok: boolean; projectIds: string[]; reason?: string } {
     const user = state.currentUser;
     if (!user || user.id === "__setup__" || user.active === false) {
@@ -760,8 +774,8 @@ export const store = {
     for (const c of selected) {
       const id = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
       const docs = mapCandidateToSectionValues(c);
-      // 合併完整 section keys
-      const full = blankDocsForSections(state.sections);
+      // 空白 key 依**匯入時選的領域**算，不是當下開著的專案
+      const full = blankDocsForSections(domainSections(pickDomain(domain, Object.keys(domainPacks()), DEFAULT_DOMAIN)));
       for (const [sid, fields] of Object.entries(docs)) {
         full[sid] = { ...(full[sid] ?? {}), ...fields };
       }
@@ -808,6 +822,7 @@ export const store = {
         isImported: true,
         sourceFolder: folder,
         importSummary: summary,
+        domain: pickDomain(domain, Object.keys(domainPacks()), DEFAULT_DOMAIN),
       };
       newProjects.push(p);
       ids.push(id);
@@ -1025,6 +1040,86 @@ export const store = {
     return { ok: true };
   },
 
+  /** 目前專案領域的 gate 規則（通用 + 領域）。呼叫端傳給 `evaluatePrdGates`。 */
+  activeGateSpec(): GateSpec {
+    return domainGates(domainOf(state.projects.find((p) => p.id === state.activeProjectId)));
+  },
+
+  /** 指定專案的 gate 規則。跨專案總覽要用這個，不能共用 active 的那份。 */
+  gateSpecFor(projectId: string): GateSpec {
+    return domainGates(domainOf(state.projects.find((p) => p.id === projectId)));
+  },
+
+  /**
+   * 指定專案的章節。跨專案總覽算「幾章空白」時要用這個——
+   * 不同領域章節數不同，拿 active 那份去算別的專案一定錯。
+   */
+  sectionsFor(projectId: string): Section[] {
+    return sectionsForProject(
+      state.projects.find((p) => p.id === projectId),
+      state.projectSectionMeta,
+    );
+  },
+
+  /**
+   * 自訂領域包被重新掃描後叫這支：重讀註冊表並依新的領域重算目前章節。
+   * 不動任何正文——包被移除時，原本屬於它的章節內容變成孤兒，不刪。
+   */
+  refreshDomainPacks() {
+    reloadUserPacks();
+    state = {
+      ...state,
+      sections: sectionsForProject(
+        state.projects.find((p) => p.id === state.activeProjectId),
+        state.projectSectionMeta,
+      ),
+    };
+    emit();
+  },
+
+  /** 目前專案的領域 prompt（base + 領域），供 AI 助教與草稿生成疊在最前面 */
+  activeDomainPrompt(): string {
+    const name = domainOf(state.projects.find((p) => p.id === state.activeProjectId));
+    try {
+      return resolveDomain(name, domainPacks(), { sections: SEED_SECTIONS, gates: BASE_GATE_SPEC }).prompt;
+    } catch {
+      return "";
+    }
+  },
+
+  /**
+   * 換領域。章節骨架跟著換，但**不刪任何正文**——不屬於新領域的章節內容
+   * 留在 `projectSectionValues` 裡變成孤兒。「寫到一半發現選錯領域」比
+   * 「鎖死不給改」常見得多，而靜默刪掉使用者寫過的字是不可原諒的那種錯。
+   */
+  setProjectDomain(projectId: string, domain: string): { ok: boolean; reason?: string } {
+    if (!domainPacks()[domain]) return { ok: false, reason: `找不到領域「${domain}」` };
+    const projects = state.projects.map((p) => (p.id === projectId ? { ...p, domain } : p));
+    const metaBag =
+      projectId === state.activeProjectId
+        ? { ...state.projectSectionMeta, [projectId]: metaFromSections(state.sections) }
+        : state.projectSectionMeta;
+    state = {
+      ...state,
+      projects,
+      projectSectionMeta: metaBag,
+      sections:
+        projectId === state.activeProjectId
+          ? sectionsForProject(
+              projects.find((p) => p.id === projectId),
+              metaBag,
+            )
+          : state.sections,
+    };
+    emit();
+    return { ok: true };
+  },
+
+  /** 目前專案有正文、但不屬於目前領域的章節 id（UI 用來提示孤兒內容） */
+  orphanSectionIds(): string[] {
+    return orphanSectionIds(state.sections, state.sectionValues);
+  },
+
   updateSection(sectionId: string, patch: Partial<Section>) {
     state = {
       ...state,
@@ -1123,18 +1218,28 @@ export const store = {
       return;
     }
 
-    // 1) 快照目前專案正文
+    // 1) 快照目前專案的正文與章節標記
     const bag = snapshotActiveDocs(state);
-    // 2) 載入目標專案正文（無則空白）
-    const nextDocs =
-      bag[id] ?? blankDocsForSections(state.sections);
+    const metaBag = {
+      ...state.projectSectionMeta,
+      ...(state.activeProjectId ? { [state.activeProjectId]: metaFromSections(state.sections) } : {}),
+    };
+    // 2) 依目標專案的領域重算章節骨架，再疊回它自己的標記
+    const nextSections = sectionsForProject(
+      state.projects.find((p) => p.id === id),
+      metaBag,
+    );
+    // 3) 載入目標專案正文（無則依新骨架給空白）
+    const nextDocs = bag[id] ?? blankDocsForSections(nextSections);
     bag[id] = nextDocs;
 
     state = {
       ...state,
       activeProjectId: id,
+      sections: nextSections,
       sectionValues: structuredClone(nextDocs),
       projectSectionValues: bag,
+      projectSectionMeta: metaBag,
     };
     if (!state.cases[id]) {
       state = {

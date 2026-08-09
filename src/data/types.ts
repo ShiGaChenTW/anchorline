@@ -85,6 +85,12 @@ export type Project = {
   tags?: string[];
   /** 匯入評分與對應摘要 */
   importSummary?: ProjectImportSummary;
+  /**
+   * 領域包名稱（`src/data/domains/*.md` 的 name）。未設 = `generic`。
+   * 可以改：改了之後不屬於新領域的章節內容會變成孤兒，但**不刪**——
+   * 「寫到一半發現選錯領域」比「鎖死不給改」常見得多。
+   */
+  domain?: string;
 };
 
 /** 側欄／列表顯示名稱：自訂名 → 標題 → 資料夾名 */
@@ -158,6 +164,13 @@ export type Section = {
   fields: FieldDef[];
   checks: CheckDef[];
   score: number;
+};
+
+/** 章節上「使用者產生」的那一部分。骨架來自領域包，這裡只留人動過的痕跡。 */
+export type SectionMeta = {
+  status: Section["status"];
+  score: number;
+  checks: CheckDef[];
 };
 
 export type TemplateCat =
@@ -276,6 +289,15 @@ export type AppState = {
    * key = projectId
    */
   projectSectionValues: Record<string, Record<string, Record<string, string>>>;
+  /**
+   * 每專案的章節狀態（status / score / checks 勾選）。
+   *
+   * 章節「骨架」由專案的領域包決定、每次載入重新解析；**只有這些使用者手動
+   * 產生的標記需要留著**。分開存的另一個作用是修掉一個舊漏洞：以前 sections
+   * 是全域單例，A 專案的「已完成」標記會出現在 B 專案上。
+   * key = projectId → sectionId
+   */
+  projectSectionMeta: Record<string, Record<string, SectionMeta>>;
   /** 隱藏範例時暫存的正文，以便一鍵還原 */
   sampleSectionValues: Record<string, Record<string, string>> | null;
   comments: Comment[];

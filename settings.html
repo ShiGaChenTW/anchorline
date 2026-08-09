@@ -468,6 +468,19 @@
             </div>
           </div>
 
+          <!-- Section 3.5: Domain Packs -->
+          <div class="settings-section" data-cat="quality">
+            <h2>🏷️ 領域包（產業章節與法遵檢查）</h2>
+            <p class="sub">領域決定 PRD 有哪些章節、以及哪些結構檢查會擋簽核。內建 5 個；也可以指一個資料夾，裡面每個 <code>.md</code> 就是一個領域。同名會覆寫內建的那份。</p>
+            <div class="actions-row">
+              <button type="button" class="btn btn-primary" id="btn-pick-domains">選擇領域包資料夾…</button>
+              <button type="button" class="btn" id="btn-refresh-domains">重新讀取</button>
+              <button type="button" class="btn btn-ghost" id="btn-clear-domains">清除自訂</button>
+            </div>
+            <p class="sub" id="domain-pack-status" style="margin-top:8px">—</p>
+            <div class="domain-pack-list" id="domain-pack-list"></div>
+          </div>
+
           <!-- Section 4: Data Management -->
           <div class="settings-section" data-cat="data">
             <h2>💾 工作區資料控制與備份</h2>
