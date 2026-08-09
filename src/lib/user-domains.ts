@@ -251,21 +251,25 @@ export async function isDirAuthorized(): Promise<boolean> {
 }
 
 /**
- * 把一份領域包存到磁碟。桌面版寫進領域包資料夾；沒有資料夾就先請使用者選一個。
+ * 把一份領域包存到磁碟。**每次都問存到哪裡。**
  *
- * 為什麼不用瀏覽器的 blob 下載：WKWebView 沒有下載管理員，`<a download>`
- * 點下去完全沒有反應——不是報錯，是靜默無事。桌面 App 裡「下載」這個動作
- * 本來就該是「存到某個資料夾」。
+ * 原本會沿用「領域包資料夾」，一路不問。但這兩顆是「下載」語意的按鈕——
+ * 使用者按下去想的是「我要拿一份檔案」，不是「往那個特定資料夾丟」。
+ * 範本可能要放到別的專案、產出可能想先擱在桌面看一眼。預設沿用等於替他決定。
+ *
+ * 用資料夾選擇器而不是「另存新檔」對話框，是因為授權模型：使用者親手選過的
+ * 資料夾才是已註冊根目錄，而檔名由 Rust 驗證（見 `paths::domain_pack_writable`）。
+ * 「另存新檔」回傳的是一條完整路徑，那條路徑對 Rust 來說和前端隨便編一條沒有分別。
  */
 export async function saveUserPackToDisk(
   filename: string,
   raw: string,
 ): Promise<{ ok: true; path: string } | { ok: false; reason: string }> {
   if (!isNative()) return { ok: false, reason: "需要桌面版" };
-  const auth = await ensureAuthorized(userDomainsDir());
-  if (!auth.ok) return auth;
+  const pick = await native.pickFolder();
+  if (pick.cancelled) return { ok: false, reason: "已取消" };
   try {
-    const r = await native.writeDomainPack(auth.dir, filename, raw);
+    const r = await native.writeDomainPack(pick.folderPath, filename, raw);
     return { ok: true, path: r.path };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
