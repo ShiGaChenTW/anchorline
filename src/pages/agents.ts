@@ -6,6 +6,7 @@ import { initHelpOverlay } from "../lib/help-overlay";
 import { canManageUsers } from "../lib/permissions";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+import { attachDiffSummary } from "../lib/diff-summary";
 
 const __authed = requireAuth();
 if (__authed) {
@@ -172,6 +173,17 @@ if (__authed) {
       toast(r.ok ? (enabled ? "已關閉 Agent" : "已啟動 Agent") : r.reason ?? "失敗");
       render();
     });
+
+    // 異動高亮：跟已儲存的 Agent 設定比。prompt 改錯一個字影響很大，
+    // 存檔前看得到自己動了哪裡比事後回想可靠。
+    for (const [id, saved] of [
+      ["agent-title", agent.title],
+      ["agent-role", agent.agentRoleBrief ?? ""],
+      ["agent-prompt", agent.agentPrompt ?? ""],
+    ] as const) {
+      const el = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
+      if (el && canEdit) attachDiffSummary(el, () => saved);
+    }
 
     document.getElementById("btn-save-agent")?.addEventListener("click", () => {
       const title = (document.getElementById("agent-title") as HTMLInputElement).value.trim();
