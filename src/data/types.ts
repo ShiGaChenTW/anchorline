@@ -279,6 +279,31 @@ export type Session = {
   loggedInAt: string;
 };
 
+/**
+ * PRD 的一個版本。
+ *
+ * 兩種：
+ * - `commit` —— 送審時對**整份 PRD** 拍的快照。審閱者看到的是這一份，
+ *   不是「送審之後又被改過的當下內容」。
+ * - `merge` —— 核准時把該 commit 併進主線；它成為下一次比較的基準。
+ *
+ * 為什麼存整份而不是只存有改動的章節：審閱要能重建「當時送出去的完整版本」，
+ * diff 由系統從兩個快照算出來就好。只存差異的話，任何一次資料結構調整都會讓
+ * 舊版本無法重建。
+ */
+export type PrdVersion = {
+  id: string;
+  kind: "commit" | "merge";
+  /** ISO 8601 */
+  at: string;
+  byId: string;
+  byName: string;
+  /** 送審說明／核准註記 */
+  message: string;
+  /** 整份 PRD：sectionId → fieldKey → 內容 */
+  docs: Record<string, Record<string, string>>;
+};
+
 export type AppState = {
   projects: Project[];
   sections: Section[];
@@ -298,6 +323,21 @@ export type AppState = {
    * key = projectId → sectionId
    */
   projectSectionMeta: Record<string, Record<string, SectionMeta>>;
+  /**
+   * 未儲存的編輯 —— **不是**事實，只是還沒決定要不要留下的東西。
+   *
+   * 取消自動存檔之後，每個按鍵仍然寫進這裡並持久化，所以當機／關視窗
+   * 不會掉字；但它跟 `projectSectionValues`（已儲存的正文）是分開的兩份，
+   * 「改過但還沒存」才有明確定義，異動高亮才有基準可比。
+   *
+   * key = projectId → sectionId → fieldKey
+   */
+  prdDrafts: Record<string, Record<string, Record<string, string>>>;
+  /**
+   * 版本線。git 心智模型：working copy →（送審）commit →（核准）merge。
+   * 最新的排在最前面。key = projectId
+   */
+  prdVersions: Record<string, PrdVersion[]>;
   /** 隱藏範例時暫存的正文，以便一鍵還原 */
   sampleSectionValues: Record<string, Record<string, string>> | null;
   comments: Comment[];

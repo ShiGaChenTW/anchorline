@@ -28,6 +28,7 @@ import type {
   CaseStage,
   Comment,
   Employee,
+  PrdVersion,
   Project,
   ProjectImportSummary,
   Section,
@@ -36,6 +37,7 @@ import type {
   WorkflowStageDef,
 } from "./types";
 import { emptySectionValues } from "../lib/export";
+import { pickBaseline, pickLatestCommit } from "../lib/prd-versions";
 import { applyMeta, metaFromSections, orphanSectionIds, pickDomain } from "../lib/section-meta";
 import { DEFAULT_DOMAIN, domainPacks, reloadUserPacks } from "./domains";
 import { autoRescanUserDomains } from "../lib/user-domains";
@@ -194,6 +196,8 @@ function seedState(): AppState {
     sectionValues,
     projectSectionValues,
     projectSectionMeta: {},
+    prdDrafts: {},
+    prdVersions: {},
     sampleSectionValues: null,
     comments: isTest ? structuredClone(SEED_COMMENTS) : [],
     approvals: isTest ? approvalsFromCase(cases.p1) : structuredClone(SEED_APPROVALS).map((a) => ({
@@ -411,6 +415,9 @@ function load(): AppState {
       projectSectionMeta,
       sectionValues: activeDocs,
       projectSectionValues,
+      // 舊存檔沒有這兩個欄位 —— 補空的，不要讓 undefined 流進畫面
+      prdDrafts: (parsed.prdDrafts as AppState["prdDrafts"] | undefined) ?? {},
+      prdVersions: (parsed.prdVersions as AppState["prdVersions"] | undefined) ?? {},
       sampleSectionValues: parsed.sampleSectionValues ?? null,
       comments: parsed.comments ?? base.comments,
       approvals: activeCase
@@ -943,6 +950,14 @@ export const store = {
     emit();
   },
 
+  /**
+   * 直接寫進已儲存的正文。
+   *
+   * **一般編輯不要走這裡** —— 使用者打字請用 `setSectionDraft`，按下儲存才
+   * 用 `saveSection`。這支保留給「本來就等於已儲存」的寫入：匯入、還原快照、
+   * 核准後合併主線。分兩支的理由是取消自動存檔之後，「已儲存」必須是一個
+   * 使用者明確做過的動作，不能被任何一個 setter 順手改掉。
+   */
   setSectionField(sectionId: string, key: string, value: string) {
     const cur = state.sectionValues[sectionId] ?? {};
     const sectionValues = {
@@ -954,6 +969,178 @@ export const store = {
     state = { ...state, sectionValues, projectSectionValues: bag };
     touchProjectMeta(state.activeProjectId);
     emit();
+  },
+
+  // ── 草稿（未儲存）────────────────────────────────────────────
+  //
+  // 取消自動存檔之後每個按鍵寫這裡。持久化，所以當機不掉字；
+  // 但它不是「已儲存」，異動高亮就是拿它跟 projectSectionValues 比。
+
+  /** 使用者打字的落點。與已儲存值相同時自動清掉草稿 —— 改回原樣就不算 dirty。 */
+  setSectionDraft(sectionId: string, key: string, value: string) {
+    const pid = state.activeProjectId;
+    if (!pid) return;
+    const saved = state.sectionValues[sectionId]?.[key] ?? "";
+    const proj = { ...(state.prdDrafts[pid] ?? {}) };
+    const sec = { ...(proj[sectionId] ?? {}) };
+
+    if (value === saved) delete sec[key];
+    else sec[key] = value;
+
+    if (Object.keys(sec).length) proj[sectionId] = sec;
+    else delete proj[sectionId];
+
+    const prdDrafts = { ...state.prdDrafts };
+    if (Object.keys(proj).length) prdDrafts[pid] = proj;
+    else delete prdDrafts[pid];
+
+    state = { ...state, prdDrafts };
+    emit();
+  },
+
+  /** 這個欄位現在該顯示什麼：有草稿用草稿，否則用已儲存的 */
+  sectionFieldValue(sectionId: string, key: string): string {
+    const pid = state.activeProjectId;
+    const draft = pid ? state.prdDrafts[pid]?.[sectionId]?.[key] : undefined;
+    return draft ?? state.sectionValues[sectionId]?.[key] ?? "";
+  },
+
+  /** 已儲存的值 —— 異動高亮的基準 */
+  sectionFieldSaved(sectionId: string, key: string): string {
+    return state.sectionValues[sectionId]?.[key] ?? "";
+  },
+
+  /** 有未儲存變更的章節 id */
+  dirtySectionIds(): string[] {
+    const pid = state.activeProjectId;
+    return pid ? Object.keys(state.prdDrafts[pid] ?? {}) : [];
+  },
+
+  isSectionDirty(sectionId: string): boolean {
+    const pid = state.activeProjectId;
+    return Boolean(pid && state.prdDrafts[pid]?.[sectionId]);
+  },
+
+  hasUnsaved(): boolean {
+    return this.dirtySectionIds().length > 0;
+  },
+
+  /** 把草稿寫進已儲存的正文。不給 sectionId 就存全部。 */
+  saveSections(sectionId?: string): { ok: boolean; saved: number } {
+    const pid = state.activeProjectId;
+    if (!pid) return { ok: false, saved: 0 };
+    const drafts = state.prdDrafts[pid] ?? {};
+    const ids = sectionId ? (drafts[sectionId] ? [sectionId] : []) : Object.keys(drafts);
+    if (!ids.length) return { ok: true, saved: 0 };
+
+    const sectionValues = { ...state.sectionValues };
+    for (const sid of ids) {
+      sectionValues[sid] = { ...(sectionValues[sid] ?? {}), ...drafts[sid] };
+    }
+    const bag = { ...state.projectSectionValues, [pid]: sectionValues };
+
+    const nextDrafts = { ...drafts };
+    for (const sid of ids) delete nextDrafts[sid];
+    const prdDrafts = { ...state.prdDrafts };
+    if (Object.keys(nextDrafts).length) prdDrafts[pid] = nextDrafts;
+    else delete prdDrafts[pid];
+
+    state = { ...state, sectionValues, projectSectionValues: bag, prdDrafts };
+    touchProjectMeta(pid);
+    emit();
+    return { ok: true, saved: ids.length };
+  },
+
+  /** 丟掉草稿，回到已儲存的內容。不給 sectionId 就丟全部。 */
+  discardDrafts(sectionId?: string): number {
+    const pid = state.activeProjectId;
+    if (!pid) return 0;
+    const drafts = state.prdDrafts[pid] ?? {};
+    const ids = sectionId ? (drafts[sectionId] ? [sectionId] : []) : Object.keys(drafts);
+    if (!ids.length) return 0;
+    const next = { ...drafts };
+    for (const sid of ids) delete next[sid];
+    const prdDrafts = { ...state.prdDrafts };
+    if (Object.keys(next).length) prdDrafts[pid] = next;
+    else delete prdDrafts[pid];
+    state = { ...state, prdDrafts };
+    emit();
+    return ids.length;
+  },
+
+  // ── 版本線（送審 = commit，核准 = merge）─────────────────────
+
+  prdVersionsOf(projectId?: string): PrdVersion[] {
+    return state.prdVersions[projectId ?? state.activeProjectId] ?? [];
+  },
+
+  /** 最近一次核准合併的版本 —— 主線，也是「這一輪改了什麼」的比較基準 */
+  prdBaseline(projectId?: string): PrdVersion | null {
+    return pickBaseline(this.prdVersionsOf(projectId));
+  },
+
+  /** 最近一次送審的快照 —— 審閱者看的就是這一份 */
+  prdLatestCommit(projectId?: string): PrdVersion | null {
+    return pickLatestCommit(this.prdVersionsOf(projectId));
+  },
+
+  /**
+   * 送審 = commit：對整份 PRD 拍快照。
+   *
+   * 有未儲存的草稿就先擋下 —— 送出一份「跟你螢幕上看到的不一樣」的版本
+   * 是最難察覺也最貴的錯誤。
+   */
+  commitForReview(message: string): { ok: boolean; reason?: string; version?: PrdVersion } {
+    const pid = state.activeProjectId;
+    if (!pid) return { ok: false, reason: "沒有選擇專案" };
+    if (this.hasUnsaved()) {
+      return { ok: false, reason: "還有未儲存的變更 —— 先儲存，送審才會包含它們" };
+    }
+    const u = state.currentUser;
+    const version: PrdVersion = {
+      id: `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      kind: "commit",
+      at: nowIso(),
+      byId: u.id,
+      byName: u.name,
+      message: message.trim(),
+      docs: structuredClone(state.sectionValues),
+    };
+    state = {
+      ...state,
+      prdVersions: { ...state.prdVersions, [pid]: [version, ...(state.prdVersions[pid] ?? [])] },
+    };
+    emit();
+    return { ok: true, version };
+  },
+
+  /**
+   * 核准 = merge：把最近一次送審的快照併進主線。
+   *
+   * 合併的是**那個 commit**，不是「現在的內容」—— 審閱者核准的是他看過的
+   * 那一份。送審後又改的東西留在 working copy，等下一次送審。
+   */
+  mergeApproved(message = ""): { ok: boolean; reason?: string; version?: PrdVersion } {
+    const pid = state.activeProjectId;
+    if (!pid) return { ok: false, reason: "沒有選擇專案" };
+    const commit = this.prdLatestCommit(pid);
+    if (!commit) return { ok: false, reason: "還沒有送審過的版本可以合併" };
+    const u = state.currentUser;
+    const version: PrdVersion = {
+      id: `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      kind: "merge",
+      at: nowIso(),
+      byId: u.id,
+      byName: u.name,
+      message: message.trim() || `核准並合併 ${commit.id}`,
+      docs: structuredClone(commit.docs),
+    };
+    state = {
+      ...state,
+      prdVersions: { ...state.prdVersions, [pid]: [version, ...(state.prdVersions[pid] ?? [])] },
+    };
+    emit();
+    return { ok: true, version };
   },
 
   /** 自訂側欄顯示名稱（空字串＝清除自訂，改回資料夾／標題） */
