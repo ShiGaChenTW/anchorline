@@ -1285,6 +1285,8 @@ table.data tbody tr.selected td.col-actions {
   font-weight: 400;
 }
 .section-list { padding: 6px; display: flex; flex-direction: column; gap: 1px; /* overflow set with coach-body above */ }
+/* 同 .coach-body：不加這行，章節一多就會被壓扁而不是捲動（領域包會讓章節變 10–11 個） */
+.section-list > * { flex: 0 0 auto; }
 .sec {
   display: grid;
   grid-template-columns: 20px 1fr auto;
@@ -1439,6 +1441,13 @@ table.data tbody tr.selected td.col-actions {
 
 .coach { background: var(--bg); }
 .coach-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+/**
+ * flex 子項預設 flex-shrink: 1 —— 在高度固定的直向 flex 容器裡，這代表卡片會被
+ * **壓縮**以塞進容器，而不是溢出。結果 scrollHeight 永遠等於 clientHeight，
+ * overflow:auto 因此從不產生捲軸，而每張卡片的內容被裁在自己裡面。
+ * 症狀：寫作教練的結構 gate 清單一長就斷在半行，滑鼠也拉不動。
+ */
+.coach-body > * { flex: 0 0 auto; }
 .card {
   background: var(--surface);
   border: 1px solid var(--border);

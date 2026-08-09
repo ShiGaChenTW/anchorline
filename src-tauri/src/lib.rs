@@ -16,7 +16,7 @@ mod paths;
 pub mod testing {
     pub use crate::commands::{append_line, scan_plans};
     pub use crate::exec::strip_ansi;
-    pub use crate::paths::{append_allowed, editable, normalize_line, RegisteredRoots};
+    pub use crate::paths::{append_allowed, domain_pack_writable, editable, normalize_line, RegisteredRoots};
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -33,6 +33,7 @@ pub fn run() {
             commands::tracking_scan,
             commands::read_file,
             commands::write_file,
+            commands::write_domain_pack,
             commands::append_file,
             commands::open_path,
             commands::openspec_status,

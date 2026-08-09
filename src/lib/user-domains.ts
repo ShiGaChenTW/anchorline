@@ -190,7 +190,7 @@ export async function addUserPack(
 
   if (dir && isNative()) {
     try {
-      await native.writeFile(`${dir}/${file}`, raw);
+      await native.writeDomainPack(dir, file, raw);
       await refreshUserDomains();
       return { ok: true, persisted: "disk" };
     } catch (e) {
@@ -205,4 +205,30 @@ export async function addUserPack(
     autoRescan: cache?.autoRescan,
   });
   return { ok: true, persisted: "cache" };
+}
+
+/**
+ * 把一份領域包存到磁碟。桌面版寫進領域包資料夾；沒有資料夾就先請使用者選一個。
+ *
+ * 為什麼不用瀏覽器的 blob 下載：WKWebView 沒有下載管理員，`<a download>`
+ * 點下去完全沒有反應——不是報錯，是靜默無事。桌面 App 裡「下載」這個動作
+ * 本來就該是「存到某個資料夾」。
+ */
+export async function saveUserPackToDisk(
+  filename: string,
+  raw: string,
+): Promise<{ ok: true; path: string } | { ok: false; reason: string }> {
+  if (!isNative()) return { ok: false, reason: "需要桌面版" };
+  let dir = userDomainsDir();
+  if (!dir) {
+    const pick = await native.pickFolder();
+    if (pick.cancelled) return { ok: false, reason: "已取消" };
+    dir = pick.folderPath;
+  }
+  try {
+    const r = await native.writeDomainPack(dir, filename, raw);
+    return { ok: true, path: r.path };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
 }

@@ -77,11 +77,30 @@ export type AuthorResult =
   | { ok: true; raw: string; pack: DomainPack; repaired: boolean }
   | { ok: false; reason: string; raw?: string };
 
-/** 模型很愛加圍欄，即使叫它不要 */
-function stripFence(text: string): string {
-  const m = text.match(/```(?:markdown|md|yaml)?\s*([\s\S]*?)```/i);
-  return (m ? m[1] : text).trim();
+/**
+ * 從模型的回覆裡把領域包檔案挖出來。
+ *
+ * 叫它「只輸出檔案內容」是沒有用的——實測它會加 ``` 圍欄、會在前面寫
+ * 「好的，以下是…」、會在後面補一段說明。這些都不是品質問題，是模型的常態。
+ * 解析器對磁碟上的檔案應該嚴格（第一行就要是 `---`），但對模型輸出嚴格
+ * 只會換來一個「產生失敗：缺少 frontmatter」，而內容其實好好的躺在那裡。
+ *
+ * 挖的方式：先脫圍欄，再從第一行單獨的 `---` 開始取，取到收尾的 `---` 之後
+ * 的所有內容（正文不使用，但留著讓使用者看得到模型寫了什麼）。
+ */
+export function extractPackSource(text: string): string {
+  const fenced = text.match(/```(?:markdown|md|yaml)?\s*\n([\s\S]*?)```/i);
+  const body = (fenced ? fenced[1] : text).replace(/\r\n/g, "\n").trim();
+  if (body.startsWith("---\n")) return body;
+
+  // frontmatter 不在開頭：找第一行單獨的 ---，從那裡開始
+  const lines = body.split("\n");
+  const start = lines.findIndex((l) => l.trim() === "---");
+  if (start < 0) return body; // 真的沒有，讓解析器去報「缺少 frontmatter」
+  return lines.slice(start).join("\n").trim();
 }
+
+const stripFence = extractPackSource;
 
 function userPrompt(input: AuthorInput): string {
   if (input.prior) {

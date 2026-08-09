@@ -129,6 +129,9 @@ export const native = {
 
   readFile: (path: string) => call<{ path: string; text: string }>("read_file", { path }),
   writeFile: (path: string, text: string) => call<{ path: string }>("write_file", { path, text }),
+  /** 領域包專用：唯一能建新檔的寫入路徑，檔名在 Rust 端驗證 */
+  writeDomainPack: (dir: string, name: string, text: string) =>
+    call<{ path: string }>("write_domain_pack", { dir, name, text }),
   appendFile: (path: string, line: string) => call<{ path: string }>("append_file", { path, line }),
   openPath: (path: string) => call<{ path: string }>("open_path", { path }),
 
