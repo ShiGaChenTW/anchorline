@@ -125,14 +125,23 @@ CI 都證明一次）、W3-✅ repo 轉公開**不執行**——2026-08-09 決�
   但它們只算一個 `hasPlanSteps` 布林值，降級後果是流程條少一格
 - **Tauri 視窗未實機目視**：進程、視窗標題、無 crash 都驗過，但兩次
   screencapture 都拍到 Scott 其他視窗，隱私風險大於驗證價值，改用契約測試
-- **Linux 已驗**（Docker，Debian 12 / aarch64，15 測試全過）。**Windows 仍未實機**，只能靠 CI
+- **Linux 已驗**（Docker，Debian 12 / aarch64，15 測試全過）。~~**Windows 仍未實機**，只能靠 CI~~
+  → **2026-08-09 已驗證**：PR #3 併入 main 的那次 CI（run `31284523216`）三平台全綠，
+  含 `原生殼（windows-latest）` success。這條缺口關閉
 - ~~轉公開前必須處理 plans/ 的個人策略內容~~ → **已處理（06:20）**，且 **06:50 決定暫不開放**，這條連帶失效。清理仍然保留：評估報告的 TELOS 代號、求職脈絡、個人挑戰已改寫成中性技術理由，技術判斷一字未刪（789 行不變）
 - **W4 散佈未做** → 暫緩。簽章解的是散佈問題，不散佈就沒有那個問題
 
 ### 後續建議
 
 1. ~~轉公開~~ → 暫不開放（06:50 決定）
-2. **仍建議 push 到私有 remote。** Windows 建置是目前唯一還沒被驗證的假設，而 CI 在私有 repo 一樣會跑——驗證它不需要公開
+2. ~~**仍建議 push 到私有 remote。** Windows 建置是目前唯一還沒被驗證的假設~~
+   → **已達成，而且不需要額外動作**：main 早就 push 了，`ci.yml` 在每次 push to main
+   都跑三平台，Windows 已 success。
+
+   順帶釐清一個誤解：`git push origin v1.1.0-pre-workbench` **不會觸發 CI**。
+   tag 走的是 `release.yml`（`on: push: tags: ["v*"]`），它用 tauri-action 建立
+   **GitHub Release 草稿**與未簽章安裝檔。簽章是 W4、尚未做，repo 也決定暫不開放 ——
+   2026-08-09 決定**不推這個 tag**
 3. LICENSE 與開源文件保留。它們現在的作用是「把設計理由寫下來給未來的自己和 agent 看」，那個價值與公不公開無關
 
 ```bash
