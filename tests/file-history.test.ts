@@ -22,8 +22,13 @@ describe("markChangedLines", () => {
     expect(out).toEqual([{ index: 1, kind: "added", before: null }]);
   });
 
-  test("只刪不增時，後面的文字沒有需要標記的行", () => {
-    expect(marks("a\nb\nc", "a\nc")).toEqual([]);
+  test("只刪不增時，存活的行不標記 —— 但刪掉的那一行要回報", () => {
+    // 原本這裡斷言整個結果是 []。名字講的「後面的文字沒有需要標記的行」是對的
+    // （a 與 c 都沒動），但那個 [] 順帶把「刪除不回報」也固化成規格 —— 於是
+    // 整行刪除在畫面上完全沒有痕跡，而 CSS 的 .fv-del 一直都在等資料。
+    const out = marks("a\nb\nc", "a\nc");
+    expect(out.filter((m) => m.kind === "added" || m.kind === "modified")).toEqual([]);
+    expect(out).toEqual([{ index: 1, kind: "removed", before: "b" }]);
   });
 
   test("同一區段改兩行 —— 逐行配對，不是一堆刪除加一堆新增", () => {
@@ -193,5 +198,47 @@ describe("visibleSegs", () => {
 
   test("純刪除時還原出的就是剩下的文字", () => {
     expect(visibleSegs(inlineDiff("abc def", "abc")).map((s) => s.text).join("")).toBe("abc");
+  });
+});
+
+describe("整行刪除（回歸：刪除線一直畫不出來的根因）", () => {
+  // 這一組原本不存在，所以 markChangedLines 對「整行刪除」回傳空陣列這件事
+  // 從來沒被發現。症狀是刪掉一整段，畫面上完全沒有痕跡 —— 對比欄空的、
+  // 狀態列的「N 行未儲存」是 0。CSS 的 .fv-del 一直都在，沒有資料餵給它。
+  test("刪掉中間一行要產生 removed mark", () => {
+    const marks = markChangedLines("第一行\n第二行\n第三行", "第一行\n第三行");
+    expect(marks).toHaveLength(1);
+    expect(marks[0]!.kind).toBe("removed");
+    expect(marks[0]!.before).toBe("第二行");
+  });
+
+  test("刪掉最後一行也要算", () => {
+    const marks = markChangedLines("a\nb\nc", "a\nb");
+    expect(marks.filter((m) => m.kind === "removed").map((m) => m.before)).toEqual(["c"]);
+  });
+
+  test("連續刪掉多行 → 每一行各一個 mark", () => {
+    const marks = markChangedLines("a\nx\ny\nz\nb", "a\nb");
+    expect(marks.filter((m) => m.kind === "removed").map((m) => m.before)).toEqual(["x", "y", "z"]);
+  });
+
+  test("刪除會被算進未儲存行數", () => {
+    expect(changedLineCount("a\nb\nc", "a\nc")).toBe(1);
+  });
+
+  test("同時有刪除與新增時，removed 排在同 index 的其他種類之前", () => {
+    const marks = markChangedLines("keep\nold1\nold2\nold3", "keep\nnew");
+    const kinds = marks.map((m) => m.kind);
+    // old1 被 new 取代（modified），old2/old3 是純刪除
+    expect(kinds).toContain("removed");
+    const removedIdx = kinds.indexOf("removed");
+    const modifiedIdx = kinds.indexOf("modified");
+    if (modifiedIdx >= 0 && marks[removedIdx]!.index === marks[modifiedIdx]!.index) {
+      expect(removedIdx).toBeLessThan(modifiedIdx);
+    }
+  });
+
+  test("沒有變動時不產生任何 mark", () => {
+    expect(markChangedLines("a\nb", "a\nb")).toEqual([]);
   });
 });

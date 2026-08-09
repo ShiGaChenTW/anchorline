@@ -7938,6 +7938,13 @@ p.gd-warn {
   text-decoration-thickness: 1.5px;
   opacity: 0.85;
 }
+/* 整行被刪掉。橘底留給「改過的行」，被刪掉的用紅底 —— 兩者是不同的事：
+   一個還在文件裡、一個已經不在了。 */
+.fv-line-removed {
+  display: block;
+  background: color-mix(in oklab, var(--danger, #f85149) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--danger, #f85149);
+}
 
 /* 對比欄：畫得出不在 textarea 裡的字（刪除的部分），所以獨立一欄。
    有改動時自動出現，和編輯欄捲動同步。 */
