@@ -3,14 +3,11 @@ dist/
 .DS_Store
 *.local
 .vite/
-SpecForge.app
-SpecForge Test.app
-PRD開發監控台.app
-PRD開發監控台 Test.app
-PRD開發監控台 測試.app
+# 桌面版建置產物。舊的 SpecForge / PRD開發監控台 名稱已於 2026-08-09 隨改名清除，
+# 逐一列舉換成萬用字元 —— 下次改名不必再回來改這裡。
+*.app
 *.dmg
-mac-app-build/SpecForge
-mac-app-build/SpecForgeTest
+mac-app-build/*
 vendor/markamd/node_modules/
 vendor/markamd/src-tauri/target/
 

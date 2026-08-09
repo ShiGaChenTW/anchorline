@@ -133,11 +133,18 @@ if (!requireAuth()) {
     if (navTpl) navTpl.textContent = String(store.get().templates.length);
   }
 
-  const planModules = import.meta.glob("../../plans/*.md", {
-    query: "?raw",
-    import: "default",
-    eager: true,
-  }) as Record<string, string>;
+  // plans/*.md 只在開發時預嵌。
+  // eager glob 會把「這個 repo 自己的」內部規劃文件整包打進 bundle ——
+  // 正式版曾因此多出一個 160KB chunk，等於把開發筆記發布給使用者。
+  // 桌面版本來就走原生橋讀「使用者選取專案」的 plans/，不靠這份預嵌；
+  // 瀏覽器版失去的只是開發用的假資料。
+  const planModules = (import.meta.env.DEV
+    ? import.meta.glob("../../plans/*.md", {
+        query: "?raw",
+        import: "default",
+        eager: true,
+      })
+    : {}) as Record<string, string>;
 
   type PlanHit = { name: string; meta: PlanMeta; pct: number };
 
