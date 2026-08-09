@@ -8,6 +8,8 @@ import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { renderMarkdown } from "../lib/markamd/markdown";
 import { applySemanticHighlight } from "../lib/markamd/semantic-highlight";
+import { diffDocs } from "../lib/prd-versions";
+import { inlineDiff } from "../lib/file-history";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { initTheme } from "../lib/theme";
 import { syncRailContext } from "../lib/rail-projects";
@@ -571,9 +573,96 @@ function expandComments(open: boolean) {
   if (open) expandEnter(body);
 }
 
+/**
+ * 這一版相對主線改了什麼。
+ *
+ * 比的是「送審時的快照」與「上一次核准合併的快照」—— 不是當下的編輯內容。
+ * 審閱者要看的是他即將核准的那一份，作者送審後又改的東西不該混進來。
+ *
+ * 沒有主線（第一次送審）就整份都是新的，不畫 diff —— 全部標成新增等於
+ * 沒有資訊，直接看正文比較快。
+ */
+function renderVersionDiff() {
+  const host = document.getElementById("rv-diff");
+  if (!host) return;
+  const commit = store.prdLatestCommit();
+  const base = store.prdBaseline();
+  if (!commit || !base) {
+    host.hidden = true;
+    return;
+  }
+
+  const diffs = diffDocs(base.docs, commit.docs);
+  if (!diffs.length) {
+    host.hidden = true;
+    return;
+  }
+
+  const secTitle = (id: string) => {
+    const sec = store.get().sections.find((x) => x.id === id);
+    return sec ? `${sec.n} · ${sec.title}` : id;
+  };
+
+  host.hidden = false;
+  host.innerHTML = `
+    <header class="rv-diff-head">
+      <h2>這一版改了什麼</h2>
+      <p class="rv-diff-sub">
+        對照上次核准的版本（${escapeHtml(base.at.slice(0, 10))}）·
+        ${diffs.length} 個欄位有變更 ·
+        <span class="fv-add">新增</span> / <span class="fv-del">刪除</span>
+      </p>
+    </header>
+    ${diffs
+      .map((d) => {
+        const afterLines = d.after.split("\n");
+        const removedAt = new Map<number, string[]>();
+        const byIndex = new Map<number, (typeof d.marks)[number]>();
+        for (const m of d.marks) {
+          if (m.kind === "removed") {
+            const list = removedAt.get(m.index) ?? [];
+            list.push(m.before ?? "");
+            removedAt.set(m.index, list);
+          } else byIndex.set(m.index, m);
+        }
+        const rows: string[] = [];
+        const pushRemoved = (at: number) => {
+          for (const gone of removedAt.get(at) ?? []) {
+            rows.push(
+              `<span class="fv-line fv-changed fv-line-removed"><span class="fv-del">${
+                escapeHtml(gone) || "&nbsp;"
+              }</span></span>`,
+            );
+          }
+        };
+        afterLines.forEach((ln, i) => {
+          pushRemoved(i);
+          const m = byIndex.get(i);
+          if (!m) return;
+          rows.push(
+            `<span class="fv-line fv-changed">${
+              m.kind === "modified"
+                ? inlineDiff(m.before ?? "", ln)
+                    .map((sg) => `<span class="fv-${sg.kind}">${escapeHtml(sg.text)}</span>`)
+                    .join("")
+                : `<span class="fv-add">${escapeHtml(ln) || "&nbsp;"}</span>`
+            }</span>`,
+          );
+        });
+        pushRemoved(afterLines.length);
+        return `<div class="rv-diff-item">
+          <p class="rv-diff-where">${escapeHtml(secTitle(d.sectionId))} · <span class="mono">${escapeHtml(d.key)}</span></p>
+          <div class="rv-diff-body">${rows.join("\n") || "<em>（僅空白差異）</em>"}</div>
+        </div>`;
+      })
+      .join("")}
+  `;
+}
+
 function render() {
   syncMotionPreferenceClass();
   syncProjectChrome();
+  renderVersionDiff();
   renderApprovals();
   renderFocusBar();
   renderSecNav();
@@ -660,7 +749,16 @@ document.getElementById("btn-approve")?.addEventListener("click", () => {
     toast(r.reason ?? "無法簽核");
     return;
   }
-  toast("規格已核准並鎖定");
+
+  // 核准 = merge：把**送審時那一份快照**併進主線，成為下一輪比較的基準。
+  // 合併的不是「現在的內容」—— 審閱者核准的是他看過的那一份；送審之後
+  // 作者又改的東西留在 working copy，等下一次送審。
+  const merged = store.mergeApproved();
+  toast(
+    merged.ok
+      ? "已核准並合併進主線 —— 之後的修改會以這一版為基準"
+      : `已核准（${merged.reason ?? "沒有可合併的送審版本"}）`,
+  );
   render();
 });
 
