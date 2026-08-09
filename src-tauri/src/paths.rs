@@ -37,6 +37,40 @@ impl RegisteredRoots {
     }
 }
 
+/// 領域包檔的建立界線。**比 [`editable`] 鬆一點（允許建新檔），但範圍窄得多。**
+///
+/// `editable` 要求 `is_file()`，所以它建不了新檔——那是刻意的，寫入既有檔
+/// 與憑空造檔是兩種風險。但領域包本來就需要建新檔（AI 產出、範本下載），
+/// 於是給它一條自己的窄路：
+///
+/// 1. 目錄必須是使用者**親手選過**的（在已註冊根目錄內）——授權來源與 append 相同
+/// 2. 檔名由 Rust 驗證，不是前端說了算：只收 `[A-Za-z0-9._-]`，且不得含
+///    路徑分隔符或 `..`。前端只能決定「叫什麼名字」，不能決定「放到哪裡去」
+/// 3. 副檔名限 `.md`
+///
+/// 這樣即使前端被注入，它能做的最壞的事是在使用者自己選的領域包資料夾裡
+/// 多放一個 `.md`——而那個資料夾的內容本來就會被當成領域包讀進來。
+pub fn domain_pack_writable(dir: &Path, name: &str, roots: &RegisteredRoots) -> bool {
+    if !roots.contains_ancestor_of(dir) {
+        return false;
+    }
+    if name.is_empty() || name.len() > 64 || name == ".." {
+        return false;
+    }
+    if !name.to_ascii_lowercase().ends_with(".md") {
+        return false;
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-')
+    {
+        return false;
+    }
+    // `..md` 之類：去掉副檔名後不能是空的或全是點
+    let stem = &name[..name.len() - 3];
+    !stem.is_empty() && stem.chars().any(|c| c != '.')
+}
+
 /// `canonicalize` 解得開就用解開的，解不開（檔案還不存在）就退回逐段正規化。
 ///
 /// append 的目標檔第一次寫入時**還不存在**，所以不能無條件依賴 canonicalize。

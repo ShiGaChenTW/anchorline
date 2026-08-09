@@ -12,7 +12,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { validatePackStructure as validate } from "../src/lib/domain-pack";
-import { authorDomainPack } from "../src/lib/domain-pack-author";
+import { authorDomainPack, extractPackSource } from "../src/lib/domain-pack-author";
 
 const OK = `---
 name: insurance
@@ -195,5 +195,43 @@ describe("authorDomainPack", () => {
     expect(user).toContain("ins-exclusions"); // 前一版在裡面
     expect(user).toContain("把那條改成 warn");
     expect(user).toContain("不要只給差異");
+  });
+});
+
+// ── 從模型回覆裡挖出檔案 ──────────────────────────────────────
+
+describe("extractPackSource", () => {
+  const body = "---\nname: x\ndisplayName: X\n---\n\n正文";
+
+  test("乾淨的輸出原樣回傳", () => {
+    expect(extractPackSource(body)).toBe(body);
+  });
+
+  test("``` 圍欄脫掉", () => {
+    for (const tag of ["", "markdown", "md", "yaml"]) {
+      expect(extractPackSource("```" + tag + "\n" + body + "\n```"), tag).toBe(body);
+    }
+  });
+
+  test("前面多寫一段話 → 從第一行單獨的 --- 開始取（實測回報的失敗模式）", () => {
+    const withPreamble = `好的，以下是依照你的描述產生的領域包：\n\n${body}`;
+    expect(extractPackSource(withPreamble)).toBe(body);
+  });
+
+  test("前面有話、又包了圍欄", () => {
+    expect(extractPackSource("這是產出：\n\n```markdown\n" + body + "\n```\n希望符合需求")).toBe(body);
+  });
+
+  test("後面補一段說明 → 保留（正文不使用，但要讓使用者看得到）", () => {
+    const trailing = `${body}\n\n以上，如需調整請告訴我。`;
+    expect(extractPackSource(trailing)).toBe(trailing);
+  });
+
+  test("CRLF 正規化成 LF，否則 frontmatter regex 對不上", () => {
+    expect(extractPackSource(body.replace(/\n/g, "\r\n"))).toBe(body);
+  });
+
+  test("真的沒有 frontmatter → 原樣回傳，讓解析器去講原因", () => {
+    expect(extractPackSource("完全沒有分隔線的一段話")).toBe("完全沒有分隔線的一段話");
   });
 });

@@ -7,7 +7,7 @@
 //! - `ahead = -1` 的語意有沒有被正規化掉
 //! - 掃描的上限與去重
 
-use anchorline_lib::testing::{append_line, scan_plans};
+use anchorline_lib::testing::{append_line, domain_pack_writable, scan_plans, RegisteredRoots};
 use std::fs;
 use std::path::PathBuf;
 
@@ -114,4 +114,89 @@ fn scan_plans_skips_empty_and_oversized() {
     let scan = scan_plans(&[dir.to_string_lossy().to_string()]);
     assert_eq!(scan.files.len(), 1);
     assert_eq!(scan.files[0].name, "ok.md");
+}
+
+// ── 領域包寫入的守門 ──────────────────────────────────────────────
+//
+// 這是唯一一支**能建新檔**的寫入路徑（`editable` 要求 is_file()），
+// 所以它的界線要被釘死：目錄必須是使用者親手選過的，檔名由 Rust 驗證。
+
+fn roots_with(dir: &PathBuf) -> RegisteredRoots {
+    let r = RegisteredRoots::default();
+    r.register(dir);
+    r
+}
+
+#[test]
+fn domain_pack_only_writes_into_registered_dirs() {
+    let dir = tmp("dp-ok");
+    fs::create_dir_all(&dir).unwrap();
+    let other = tmp("dp-other");
+    fs::create_dir_all(&other).unwrap();
+    let roots = roots_with(&dir);
+
+    assert!(domain_pack_writable(&dir, "insurance.md", &roots));
+    // 沒註冊過的資料夾一律不行——授權來源只有「使用者親手選過」
+    assert!(!domain_pack_writable(&other, "insurance.md", &roots));
+}
+
+#[test]
+fn domain_pack_rejects_path_traversal_in_name() {
+    let dir = tmp("dp-trav");
+    fs::create_dir_all(&dir).unwrap();
+    let roots = roots_with(&dir);
+
+    // 前端只能決定「叫什麼名字」，不能決定「放到哪裡去」
+    for bad in [
+        "../escape.md",
+        "../../etc/passwd.md",
+        "sub/dir.md",
+        "sub\\dir.md",
+        "..",
+        "..md",
+        ".md",
+        "",
+    ] {
+        assert!(!domain_pack_writable(&dir, bad, &roots), "應拒絕：{bad:?}");
+    }
+}
+
+#[test]
+fn domain_pack_requires_md_extension() {
+    let dir = tmp("dp-ext");
+    fs::create_dir_all(&dir).unwrap();
+    let roots = roots_with(&dir);
+
+    assert!(domain_pack_writable(&dir, "a.md", &roots));
+    assert!(domain_pack_writable(&dir, "A.MD", &roots));
+    for bad in ["a.sh", "a.md.sh", "a.json", "a"] {
+        assert!(!domain_pack_writable(&dir, bad, &roots), "應拒絕：{bad}");
+    }
+}
+
+#[test]
+fn domain_pack_rejects_odd_characters_and_overlong_names() {
+    let dir = tmp("dp-chars");
+    fs::create_dir_all(&dir).unwrap();
+    let roots = roots_with(&dir);
+
+    assert!(domain_pack_writable(&dir, "my-pack_2.md", &roots));
+    // 非 ASCII 檔名擋掉：不是歧視中文，是不想處理正規化差異帶來的同名混淆
+    assert!(!domain_pack_writable(&dir, "保險.md", &roots));
+    assert!(!domain_pack_writable(&dir, "a b.md", &roots));
+    assert!(!domain_pack_writable(&dir, &format!("{}.md", "x".repeat(70)), &roots));
+}
+
+#[test]
+fn domain_pack_blocks_symlink_escape() {
+    // 註冊 real/，但透過 link/ 這條 symlink 指進去以外的地方要擋住
+    let base = tmp("dp-link");
+    let real = base.join("real");
+    let outside = base.join("outside");
+    fs::create_dir_all(&real).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    let roots = roots_with(&real);
+
+    assert!(domain_pack_writable(&real, "ok.md", &roots));
+    assert!(!domain_pack_writable(&outside, "ok.md", &roots));
 }

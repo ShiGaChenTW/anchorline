@@ -452,6 +452,28 @@ pub fn write_file(path: String, text: String) -> R<FilePath> {
     })
 }
 
+/// 領域包寫入。`write_file` 建不了新檔（`editable` 要求 `is_file()`），
+/// 而 AI 產出與範本下載都需要建新檔——見 `paths::domain_pack_writable`。
+///
+/// **檔名在 Rust 端驗證**：前端只能說「叫什麼名字」，不能說「放到哪裡去」。
+#[tauri::command]
+pub fn write_domain_pack(
+    dir: String,
+    name: String,
+    text: String,
+    roots: State<'_, RegisteredRoots>,
+) -> R<FilePath> {
+    let d = PathBuf::from(&dir);
+    if !paths::domain_pack_writable(&d, &name, &roots) {
+        return Err("不能寫入這個位置：資料夾必須是你親手選過的，檔名只能是單純的 .md".into());
+    }
+    let target = d.join(&name);
+    fs::write(&target, text).map_err(|e| format!("寫不進去：{e}"))?;
+    Ok(FilePath {
+        path: target.to_string_lossy().to_string(),
+    })
+}
+
 /// 稽核軌跡的寫入端。**真 O_APPEND**，不是 read-modify-write。
 ///
 /// 三類 writer（App 內動作 / Claude Code hook / git 回填）會併發，

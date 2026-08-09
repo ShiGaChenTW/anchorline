@@ -18,6 +18,7 @@ import {
   getUserPacks,
   pickUserDomainsFolder,
   refreshUserDomains,
+  saveUserPackToDisk,
   setAutoRescan,
   userDomainsDir,
 } from "../lib/user-domains";
@@ -643,7 +644,16 @@ function daShow(raw: string) {
   if (box) box.hidden = false;
 }
 
-function downloadMd(filename: string, text: string) {
+/**
+ * 存檔。桌面版寫進領域包資料夾（WKWebView 沒有下載管理員，`<a download>`
+ * 按下去是靜默無事——不是報錯，所以特別難查）；瀏覽器版走 blob 下載。
+ */
+async function saveMd(filename: string, text: string) {
+  if (canUseUserDomains()) {
+    const r = await saveUserPackToDisk(filename, text);
+    toast(r.ok ? `已存到 ${r.path}` : `存檔失敗：${r.reason}`);
+    return;
+  }
   const url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;
@@ -694,14 +704,13 @@ daEl("da-refine")?.addEventListener("click", () => {
 });
 
 daEl("da-template")?.addEventListener("click", () => {
-  downloadMd("domain-pack-template.md", TEMPLATE_MD);
-  toast("已下載範本 — 改名、改內容，放進領域包資料夾");
+  void saveMd("domain-pack-template.md", TEMPLATE_MD);
 });
 
 daEl("da-download")?.addEventListener("click", () => {
   const raw = daEl<HTMLTextAreaElement>("da-raw")?.value ?? "";
   const v = validatePack(raw);
-  downloadMd(v.ok ? `${v.pack.name}.md` : "domain-pack.md", raw);
+  void saveMd(v.ok ? `${v.pack.name}.md` : "domain-pack.md", raw);
 });
 
 daEl("da-add")?.addEventListener("click", async () => {
