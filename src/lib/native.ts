@@ -84,7 +84,32 @@ export async function call<T>(cmd: string, args?: Record<string, unknown>): Prom
   if (!isNative()) {
     throw new Error("需要桌面版 App：瀏覽器沒有原生通道");
   }
-  return invoke<T>(cmd, args);
+  try {
+    return await invoke<T>(cmd, args);
+  } catch (e) {
+    // Tauri 的 `Err(String)` reject 出來的是**字串，不是 Error**。
+    // 而全 app 的呼叫端都寫 `e instanceof Error ? e.message : "某某失敗"`，
+    // 於是每一個真正的失敗原因都在這裡被換成通用文案 —— OpenSpec 點檔案
+    // 只顯示「讀取失敗」、完全查不出是路徑被擋還是 OS 不給讀，就是這樣來的。
+    // 在唯一的出入口收斂成 Error，所有呼叫端不必改就拿得到真訊息。
+    throw normalizeBridgeError(cmd, e);
+  }
+}
+
+/** 把 Rust 端各種形狀的 reject 收斂成帶得動訊息的 Error */
+function normalizeBridgeError(cmd: string, e: unknown): Error {
+  if (e instanceof Error) return e;
+  if (typeof e === "string") return new Error(e);
+  if (e && typeof e === "object") {
+    const msg = (e as { message?: unknown }).message;
+    if (typeof msg === "string") return new Error(msg);
+    try {
+      return new Error(JSON.stringify(e));
+    } catch {
+      /* 有循環參照就走下面的泛用訊息 */
+    }
+  }
+  return new Error(`${cmd} 失敗（原生端沒有給訊息）`);
 }
 
 /**

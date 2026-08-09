@@ -125,6 +125,26 @@ describe("groupOpenspecFiles — 其他形狀", () => {
 });
 
 describe("absolutePathFor", () => {
+  // 這一組是漏掉的那個形狀。原生資料夾掃描（scanFromNativeFolder）存進
+  // allPaths 的就是絕對路徑，但實作與測試都只想過「相對路徑」，於是 root
+  // 被再接一次，組出 `/…/Proj//Users/…/Proj/openspec/x.md`。
+  // 症狀是點 OpenSpec 任何檔案都回「找不到檔案」。
+  test("已經是絕對路徑就原樣回傳，不能再接一次 root", () => {
+    const abs = "/Users/s/Projects/Border-loom/openspec/config.yaml";
+    expect(absolutePathFor("/Users/s/Projects/Border-loom", abs)).toBe(abs);
+  });
+
+  test("絕對路徑即使不在 rootPath 底下也不改寫", () => {
+    const abs = "/Volumes/ext/other/openspec/a.md";
+    expect(absolutePathFor("/Users/s/Projects/Border-loom", abs)).toBe(abs);
+  });
+
+  test("回傳的路徑永遠不含連續斜線", () => {
+    const abs = "/Users/s/Projects/Border-loom/openspec/config.yaml";
+    expect(absolutePathFor("/Users/s/Projects/Border-loom", abs)).not.toContain("//");
+    expect(absolutePathFor("/Users/s/p/", "openspec/a.md")).not.toContain("//");
+  });
+
   test("相對路徑帶專案資料夾名時要去掉，不然會多一層", () => {
     expect(
       absolutePathFor("/Users/s/Projects/Border-loom", "Border-loom/openspec/config.yaml"),

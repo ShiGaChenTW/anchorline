@@ -90,10 +90,21 @@ export function groupOpenspecFiles(files: readonly string[]): OsGroup[] {
 }
 
 /**
- * allPaths 存的是含專案資料夾名的相對路徑；接回 rootPath 才是真正的檔案位置。
- * 掃描來源不一定帶那層前綴，所以兩種都要能接。
+ * 把 `allPaths` 的一筆換成真正的檔案位置。
+ *
+ * **三種形狀都會進來**，因為掃描來源不只一個：
+ *   1. 絕對路徑 —— 原生資料夾掃描（`scanFromNativeFolder`）存的就是這個
+ *   2. `<專案資料夾>/openspec/…` —— 瀏覽器 `webkitRelativePath` 帶前綴
+ *   3. `openspec/…` —— 已經去過前綴的相對路徑
+ *
+ * 原本只處理 2 與 3，於是第 1 種會被當成相對路徑再接一次 root，組出
+ * `/…/Project_X//Users/…/Project_X/openspec/README.md` 這種雙串路徑，
+ * 點 OpenSpec 任何檔案都回「找不到檔案」。絕對路徑必須先擋在最前面。
  */
 export function absolutePathFor(rootPath: string, rel: string): string {
+  // 已經是絕對路徑就別再動它 —— 這是原生掃描的常態，不是例外
+  if (rel.startsWith("/")) return rel;
+
   const base = rootPath.replace(/\/+$/, "");
   const folder = base.split("/").pop() ?? "";
   const trimmed = folder && rel.startsWith(`${folder}/`) ? rel.slice(folder.length + 1) : rel;
