@@ -58,6 +58,7 @@ import {
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { DEFAULT_DOMAIN, listDomains } from "../data/domains";
 import { initTheme } from "../lib/theme";
+import { renderDiffSummary } from "../lib/diff-summary";
 import { changedFieldCount } from "../lib/prd-versions";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
@@ -940,15 +941,8 @@ function saveAllSections(): void {
 }
 
 /**
- * 章節欄位的異動高亮。
- *
- * 跟檔案編輯器同一套語意，**但呈現方式必須不同**：檔案編輯器有整片
- * textarea 可以疊背板，章節欄位是一堆長短不一的 input／雙欄 Markdown，
- * 疊背板要對齊每一個欄位的字體度量，成本高且脆弱。
- *
- * 所以這裡走「差異摘要」：每個有改動的欄位底下掛一條，用同一組
- * .fv-add／.fv-del 樣式畫出藍字新增與紅字刪除線，被整行刪掉的也在。
- * 顏色語彙一致，位置貼著欄位，不必去別的地方對照。
+ * 章節欄位的異動高亮 —— 呈現交給共用元件 `diff-summary`，
+ * 這裡只負責決定「哪個欄位、跟什麼比、掛在哪」。
  */
 function renderFieldDiffs(s: Section): void {
   const saved = savedValuesFor(s);
@@ -956,64 +950,10 @@ function renderFieldDiffs(s: Section): void {
   const body = document.getElementById("editor-body");
   if (!body) return;
 
-  body.querySelectorAll(".field-diff").forEach((el) => el.remove());
-
   for (const f of s.fields) {
-    const before = saved[f.key] ?? "";
-    const after = shown[f.key] ?? "";
-    if (before === after) continue;
-
-    const host = body.querySelector(`[data-od-id="field-${f.key}"]`)
-      ?? body.querySelector(`[data-md-field="${f.key}"]`)
-      ?? body.querySelector(`[data-key="${f.key}"]`)?.closest(".field, .md-field");
+    const host = body.querySelector<HTMLElement>(`[data-od-id="field-${f.key}"]`);
     if (!host) continue;
-
-    const marks = markChangedLines(before, after);
-    const afterLines = after.split("\n");
-    const removedAt = new Map<number, string[]>();
-    const byIndex = new Map<number, LineMark>();
-    for (const m of marks) {
-      if (m.kind === "removed") {
-        const list = removedAt.get(m.index) ?? [];
-        list.push(m.before ?? "");
-        removedAt.set(m.index, list);
-      } else byIndex.set(m.index, m);
-    }
-
-    const rows: string[] = [];
-    const pushRemoved = (at: number) => {
-      for (const gone of removedAt.get(at) ?? []) {
-        rows.push(
-          `<span class="fv-line fv-changed fv-line-removed"><span class="fv-del">${
-            escapeHtml(gone) || "&nbsp;"
-          }</span></span>`,
-        );
-      }
-    };
-    afterLines.forEach((ln, i) => {
-      pushRemoved(i);
-      const m = byIndex.get(i);
-      if (!m) return; // 沒動的行不列出來 —— 摘要只講改了什麼
-      rows.push(
-        `<span class="fv-line fv-changed">${
-          m.kind === "modified"
-            ? segsHtml(inlineDiff(m.before ?? "", ln))
-            : `<span class="fv-add">${escapeHtml(ln) || "&nbsp;"}</span>`
-        }</span>`,
-      );
-    });
-    pushRemoved(afterLines.length);
-    if (!rows.length) continue;
-
-    const box = document.createElement("div");
-    box.className = "field-diff";
-    box.innerHTML = `
-      <p class="field-diff-head">未儲存的變更 ·
-        <span class="fv-add">新增</span> / <span class="fv-del">刪除</span>
-      </p>
-      <div class="field-diff-body">${rows.join("\n")}</div>
-    `;
-    host.appendChild(box);
+    renderDiffSummary(host, saved[f.key] ?? "", shown[f.key] ?? "");
   }
 }
 

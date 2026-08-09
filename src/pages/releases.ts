@@ -24,6 +24,7 @@ import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 import { isDesktop, requestProjectStats, type ProjectStats } from "../lib/project-stats";
+import { attachDiffSummary } from "../lib/diff-summary";
 
 if (requireAuth()) {
   initTheme();
@@ -232,6 +233,9 @@ function bindDetail(r: Release) {
     if (title.value.trim() !== r.title) store.updateRelease(r.id, { title: title.value.trim() });
   });
   const note = document.getElementById("rl-note") as HTMLTextAreaElement;
+  // 版本說明是要發出去給人看的，存檔前先看到自己改了哪些字
+  attachDiffSummary(note, () => r.note);
+  attachDiffSummary(title, () => r.title);
   note.addEventListener("blur", () => {
     if (note.value.trim() !== r.note) store.updateRelease(r.id, { note: note.value.trim() });
   });

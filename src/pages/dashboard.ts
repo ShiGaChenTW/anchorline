@@ -33,6 +33,7 @@ import {
 } from "../lib/project-stats";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+import { attachDiffSummary } from "../lib/diff-summary";
 
 if (!requireAuth()) {
   /* redirected */
@@ -566,6 +567,8 @@ if (!requireAuth()) {
       };
       autosize();
       descEl.addEventListener("input", autosize);
+      // 專案介紹是 blur 才存 —— 中間那段「改了但還沒離開欄位」正是需要標出來的
+      attachDiffSummary(descEl, () => store.get().projects.find((x) => x.id === p.id)?.description ?? "");
       descEl.addEventListener("blur", () => {
         if (descEl.value.trim() === (p.description ?? "")) return;
         store.setProjectDescription(p.id, descEl.value);
