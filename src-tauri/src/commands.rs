@@ -157,13 +157,28 @@ fn pick(app: &tauri::AppHandle, roots: &RegisteredRoots) -> FolderPick {
     }
 }
 
+// **這兩支必須是 async。**
+//
+// Tauri 的同步 command 跑在主執行緒上，而 `blocking_pick_folder()` 會擋住
+// 呼叫它的那條執行緒直到使用者選完 —— 在主執行緒上做這件事等於自己鎖死
+// 自己：對話框需要主事件迴圈去 pump，但主執行緒正卡在等對話框。
+// 表現出來就是點「新增專案資料夾」整個 App 凍住。
+//
+// 標成 async 之後 Tauri 會把它丟到 async runtime 的 worker 執行緒，
+// 主事件迴圈保持自由，對話框才畫得出來。
 #[tauri::command]
-pub fn pick_folder(app: tauri::AppHandle, roots: State<RegisteredRoots>) -> R<FolderPick> {
+pub async fn pick_folder(
+    app: tauri::AppHandle,
+    roots: State<'_, RegisteredRoots>,
+) -> R<FolderPick> {
     Ok(pick(&app, &roots))
 }
 
 #[tauri::command]
-pub fn pick_project_folder(app: tauri::AppHandle, roots: State<RegisteredRoots>) -> R<FolderPick> {
+pub async fn pick_project_folder(
+    app: tauri::AppHandle,
+    roots: State<'_, RegisteredRoots>,
+) -> R<FolderPick> {
     Ok(pick(&app, &roots))
 }
 
@@ -266,7 +281,12 @@ fn collect_git(root: &Path, o: &CliOverrides) -> Option<GitStats> {
 }
 
 #[tauri::command]
-pub fn project_stats(folder_path: String, overrides: State<CliOverrides>) -> R<ProjectStats> {
+// async：這支會走完整個專案資料夾再跑好幾條 git，同步版等於在主執行緒上
+// 卡住整個 UI 好幾秒。它不像 pick 那樣會死鎖，但畫面一樣是凍的。
+pub async fn project_stats(
+    folder_path: String,
+    overrides: State<'_, CliOverrides>,
+) -> R<ProjectStats> {
     if folder_path.is_empty() {
         return Err("缺少 folderPath".into());
     }
@@ -334,7 +354,8 @@ fn mtime_ms(p: &Path) -> Option<f64> {
 }
 
 #[tauri::command]
-pub fn tracking_scan(plans_dirs: Vec<String>) -> R<TrackingScan> {
+// async：掃 plans/ 每秒會被呼叫一次，別佔著主執行緒
+pub async fn tracking_scan(plans_dirs: Vec<String>) -> R<TrackingScan> {
     Ok(scan_plans(&plans_dirs))
 }
 
@@ -406,7 +427,8 @@ pub struct FilePath {
 }
 
 #[tauri::command]
-pub fn read_file(path: String) -> R<FileRead> {
+// async：讀檔是 I/O，沒有理由佔用主執行緒
+pub async fn read_file(path: String) -> R<FileRead> {
     let p = PathBuf::from(&path);
     if !paths::editable(&p) {
         return Err("不能存取這個路徑：必須是家目錄底下既有的文件檔".into());
