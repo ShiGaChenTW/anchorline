@@ -18,19 +18,69 @@ use std::sync::Mutex;
 /// **這是 [`append_allowed`] 唯一的授權來源。** 前端傳來的路徑只能被檢查，
 /// 不能被信任成根目錄 —— 否則「限制在專案內」就等於「限制在前端說的專案內」，
 /// 而那不是限制。
+///
+/// ## 為什麼要落地成檔案
+///
+/// 這份集合原本只活在記憶體裡，於是**每次重開 App 就全部歸零**。後果不是
+/// 「功能不能用」那麼明顯——`event-writer` 的 append 失敗是 `.catch(() => {})`
+/// 吞掉的，所以稽核軌跡會在每次重啟之後**靜默停止寫入**，直到使用者剛好又去
+/// 選了一次資料夾。那正是這個 App 拿來當賣點的那條軌跡。
+///
+/// 授權來源沒有變——仍然只有「使用者親手用系統選擇器選過」能加進來。改變的是
+/// 那份授權會被記住，就像 macOS 的 security-scoped bookmark 一樣。
+/// 代價寫在 `docs/SECURITY.md`：能寫這個檔的人可以塞進一個根目錄。但能寫到
+/// App 資料夾的人本來就能做更糟的事。
 #[derive(Default)]
-pub struct RegisteredRoots(pub Mutex<HashSet<PathBuf>>);
+pub struct RegisteredRoots {
+    set: Mutex<HashSet<PathBuf>>,
+    /// 落地位置。測試時為 None——不要讓單元測試互相污染同一份檔案。
+    store: Mutex<Option<PathBuf>>,
+}
 
 impl RegisteredRoots {
+    /// 指定落地檔並載回先前的授權。已經不存在的路徑會被丟掉——
+    /// 一份指向已刪除資料夾的舊授權沒有保留的理由。
+    pub fn attach(&self, path: PathBuf) {
+        let loaded: Vec<PathBuf> = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|t| serde_json::from_str::<Vec<String>>(&t).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .map(PathBuf::from)
+            .filter(|p| p.is_dir())
+            .collect();
+        if let Ok(mut s) = self.set.lock() {
+            s.extend(loaded);
+        }
+        if let Ok(mut st) = self.store.lock() {
+            *st = Some(path);
+        }
+        self.persist();
+    }
+
+    fn persist(&self) {
+        let Ok(st) = self.store.lock() else { return };
+        let Some(path) = st.as_ref() else { return };
+        let Ok(set) = self.set.lock() else { return };
+        let list: Vec<String> = set.iter().map(|p| p.to_string_lossy().to_string()).collect();
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(json) = serde_json::to_string(&list) {
+            let _ = std::fs::write(path, json);
+        }
+    }
+
     pub fn register(&self, p: &Path) {
-        if let Ok(mut set) = self.0.lock() {
+        if let Ok(mut set) = self.set.lock() {
             set.insert(canonical(p));
         }
+        self.persist();
     }
 
     pub fn contains_ancestor_of(&self, p: &Path) -> bool {
         let target = canonical(p);
-        self.0
+        self.set
             .lock()
             .map(|set| set.iter().any(|root| target.starts_with(root)))
             .unwrap_or(false)
@@ -150,7 +200,7 @@ pub fn append_allowed(p: &Path, roots: &RegisteredRoots) -> bool {
     }
     // 相對路徑必須落在 .anchorline/ 底下。用 components 比對而不是字串 contains，
     // 否則 `~/x/not-.anchorline-really/a.jsonl` 這種名字會過。
-    let Ok(set) = roots.0.lock() else {
+    let Ok(set) = roots.set.lock() else {
         return false;
     };
     set.iter().any(|root| {

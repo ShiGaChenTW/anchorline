@@ -22,6 +22,16 @@ pub mod testing {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            // 把「使用者親手選過的資料夾」落地，否則每次重開 App 授權就歸零，
+            // 稽核軌跡會靜默停止寫入（append 失敗被前端 catch 吞掉）。
+            use tauri::Manager;
+            if let Ok(dir) = app.path().app_data_dir() {
+                app.state::<paths::RegisteredRoots>()
+                    .attach(dir.join("registered-roots.json"));
+            }
+            Ok(())
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(paths::RegisteredRoots::default())
