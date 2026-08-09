@@ -8324,3 +8324,54 @@ p.gd-warn {
 .domain-pack-row code { color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
 .domain-pack-row .tag { margin-left: auto; }
 .domain-pack-row--err { border-color: var(--danger); color: var(--danger); }
+
+/* ─── 章節欄位：未儲存變更的摘要 ───
+   跟檔案編輯器同一組色彩語彙（藍字新增／紅字刪除線），但走「摘要」而不是
+   疊背板：章節欄位是一堆長短不一的 input 與雙欄 Markdown，要對齊每一個
+   欄位的字體度量才畫得準，成本高又脆弱。摘要貼在欄位底下，不必去別處對照。 */
+.field-diff {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  background: color-mix(in oklab, var(--warn, #eab308) 8%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--warn, #eab308) 32%, var(--border));
+  border-radius: var(--radius-sm, 6px);
+}
+.field-diff-head {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: var(--meta);
+}
+.field-diff-body {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+}
+/* 摘要裡每一條都是獨立一行，不像編輯層要跟 textarea 對齊 */
+.field-diff-body .fv-line { display: block; }
+
+/* ─── 章節儲存列 ───
+   取消自動存檔之後，「現在是不是已經存了」必須一眼看得到。
+   沒有未存變更時它是安靜的一行提示；一旦 dirty 就變成有邊框的動作列。 */
+.sec-save-bar.is-dirty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: color-mix(in oklab, var(--warn, #eab308) 10%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--warn, #eab308) 38%, var(--border));
+  border-radius: var(--radius-sm, 6px);
+}
+.sec-save-bar .sec-save-state {
+  font-weight: 600;
+  color: var(--fg);
+}
+.sec-save-bar .sec-save-others { color: var(--meta); }
+.sec-save-bar .spacer { flex: 1 1 auto; }
+/* 標題列的未儲存提示 —— 不能安靜 */
+.toolbar .sub.is-dirty { color: var(--warn, #eab308); font-weight: 600; }
