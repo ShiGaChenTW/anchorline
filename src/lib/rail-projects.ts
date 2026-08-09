@@ -313,11 +313,21 @@ function bindAddMenu(block: HTMLElement) {
   const projects = store.visibleProjects();
   const activeId = store.get().activeProjectId;
 
-  // 影響這一塊長相的所有輸入：專案身分／顯示名／狀態／時間戳＋目前選取
+  // 簽章要用**畫面上真的看得到的值**，不是原始資料。
+  //
+  // 第一版用了 lastFileAt（ISO 時間戳）—— 但 touchProjectMeta 在每一次
+  // setSectionField 都會把它設成 nowIso()，等於在編輯台打一個字簽章就變一次，
+  // 守衛完全失效、整份清單照樣每個按鍵重建一遍。
+  // 改用 formatLastUpdate 的輸出（「3 小時前」這種），它一分鐘才會變一次。
   const sig = [
     activeId,
     projects
-      .map((p) => `${p.id}:${projectDisplayName(p)}:${p.status}:${p.lastFileAt ?? p.updated}`)
+      .map((p) => {
+        const when = formatLastUpdate(
+          p.lastFileAt || p.importSummary?.scannedAt || p.updated,
+        );
+        return `${p.id}:${projectDisplayName(p)}:${p.status}:${when}:${p.isImported ? 1 : 0}`;
+      })
       .join("|"),
   ].join("#");
   if (sig === lastRailSig && document.getElementById("rail-projects-block")?.children.length) {
