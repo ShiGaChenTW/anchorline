@@ -431,9 +431,24 @@ pub struct FilePath {
 pub async fn read_file(path: String) -> R<FileRead> {
     let p = PathBuf::from(&path);
     if !paths::editable(&p) {
-        return Err("不能存取這個路徑：必須是家目錄底下既有的文件檔".into());
+        // 一句「不能存取這個路徑」四種原因共用，前端只能原樣轉述，
+        // 使用者與維護者都無從下手。分開講，每一種都指得出下一步。
+        return Err(paths::why_not_editable(&p));
     }
-    let text = fs::read_to_string(&p).map_err(|e| format!("讀不到檔案：{e}"))?;
+    let text = fs::read_to_string(&p).map_err(|e| {
+        // macOS 的 TCC 會把「App 沒有取用這個資料夾的權限」表現成 EPERM。
+        // 這跟「檔案不見了」的處理方式完全不同，必須講出來。
+        if e.kind() == std::io::ErrorKind::PermissionDenied {
+            format!(
+                "macOS 不讓這個 App 讀取「{}」。到「系統設定 → 隱私權與安全性 → 檔案與資料夾」\
+                 把 Anchorline 的存取權打開；若清單裡沒有它，請用「專案匯入」重新選一次資料夾。\
+                 （原始錯誤：{e}）",
+                p.display()
+            )
+        } else {
+            format!("讀不到檔案：{e}")
+        }
+    })?;
     Ok(FileRead {
         path: p.to_string_lossy().to_string(),
         text,

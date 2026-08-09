@@ -166,6 +166,54 @@ fn home() -> Option<PathBuf> {
 /// 「必須已存在」擋掉用寫入建立任意新檔。
 pub const EDITABLE_EXTS: &[&str] = &["md", "markdown", "yaml", "yml", "json", "txt", "toml"];
 
+/// `editable` 為什麼不通過。
+///
+/// `editable` 只回 bool，四種截然不同的原因（不在家目錄／副檔名不支援／
+/// 檔案不存在／不是普通檔）共用同一句錯誤訊息，使用者看不出下一步是什麼。
+/// 這支把原因講出來 —— 診斷用，不改變任何判定。
+pub fn why_not_editable(p: &Path) -> String {
+    let target = canonical(p);
+    let Some(home) = home() else {
+        return "找不到家目錄，無法判斷這個路徑是否可讀".into();
+    };
+    if !target.starts_with(&home) {
+        return format!("「{}」不在家目錄底下，基於安全不開放存取", target.display());
+    }
+    let ext = target
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase());
+    match ext {
+        Some(e) if EDITABLE_EXTS.contains(&e.as_str()) => {}
+        Some(e) => {
+            return format!(
+                "不支援 .{e} 這種檔案，只能開 {}",
+                EDITABLE_EXTS.join(" / ")
+            )
+        }
+        None => return "這個路徑沒有副檔名，判斷不出是不是文件檔".into(),
+    }
+    // `exists()` / `is_file()` 把「不存在」與「不准看」混成同一個 false。
+    // macOS 的 TCC 擋掉家目錄下的 Documents／Desktop 時連 stat 都不給，
+    // 這裡若直接說「檔案被刪掉了」就是把人導向完全錯的方向。
+    match std::fs::symlink_metadata(&target) {
+        Ok(m) if m.is_file() => format!("「{}」無法存取（原因不明）", target.display()),
+        Ok(m) if m.is_dir() => format!("「{}」是資料夾，不是檔案", target.display()),
+        Ok(_) => format!("「{}」不是普通檔案", target.display()),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => format!(
+            "macOS 不讓這個 App 看「{}」。到「系統設定 → 隱私權與安全性 → 檔案與資料夾」\
+             把 Anchorline 的存取權打開；清單裡沒有它的話，用「專案匯入」重新選一次資料夾\
+             就會跳出授權對話框。",
+            target.display()
+        ),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => format!(
+            "找不到「{}」—— 檔案可能被移動或刪掉了，重新匯入這個專案可以更新路徑",
+            target.display()
+        ),
+        Err(e) => format!("看不到「{}」：{e}", target.display()),
+    }
+}
+
 pub fn editable(p: &Path) -> bool {
     let target = canonical(p);
     let Some(home) = home() else { return false };
@@ -294,5 +342,35 @@ mod tests {
     fn editable_rejects_missing_file_and_bad_ext() {
         assert!(!editable(Path::new("/definitely/not/here.md")));
         assert!(!editable(Path::new("/etc/passwd")));
+    }
+}
+
+#[cfg(test)]
+mod why_not_editable_tests {
+    use super::*;
+
+    /// 不在家目錄底下 → 講邊界，不要講「檔案不見了」
+    #[test]
+    fn outside_home_says_boundary() {
+        let msg = why_not_editable(Path::new("/etc/hosts"));
+        assert!(msg.contains("不在家目錄"), "got: {msg}");
+    }
+
+    /// 副檔名不支援 → 要列出支援的種類，使用者才知道下一步
+    #[test]
+    fn bad_extension_lists_supported() {
+        let Some(home) = home() else { return };
+        let msg = why_not_editable(&home.join("some-file.png"));
+        assert!(msg.contains("不支援"), "got: {msg}");
+        assert!(msg.contains("md"), "應列出支援的副檔名, got: {msg}");
+    }
+
+    /// 家目錄下、副檔名合法、但檔案真的不存在 → 才可以說「找不到」
+    #[test]
+    fn missing_file_says_missing_not_permission() {
+        let Some(home) = home() else { return };
+        let msg = why_not_editable(&home.join("definitely-not-here-9f3a2b1c.md"));
+        assert!(msg.contains("找不到"), "got: {msg}");
+        assert!(!msg.contains("隱私權"), "不該誤報成權限問題, got: {msg}");
     }
 }
