@@ -111,6 +111,35 @@ tool call 參數裡很可能有 API key、token、私有路徑。
 
 ---
 
+## 4.5 CSP：`connect-src` 為什麼允許任何 https
+
+```
+connect-src 'self' ipc: http://ipc.localhost https: http://localhost:* http://127.0.0.1:*
+```
+
+AI 寫作教練會直接從 webview 打使用者自己設定的 LLM 端點。那個端點**沒有白名單
+可言**——它可能是 Anthropic、Gemini、OpenAI，也可能是本機 Ollama、公司內部的
+LiteLLM proxy，或任何相容端點。設定頁明講「可直接打字填任何模型 ID」，
+硬塞一份主機白名單只會讓自訂端點的人卡住，然後去改原始碼。
+
+於是：**https 全開，http 只留 loopback。** 後者是為了 Ollama（`localhost:11434`）；
+不允許非 loopback 的 http，明文流量不該從這個 App 出去。
+
+**為什麼不改走 Rust 端代發（像其他所有外部呼叫那樣）**：量過了——
+webview 的 origin 是 `tauri://localhost`，直接 fetch Anthropic 會拿到正常的
+HTTP 回應（401，代表 CORS 通過），不需要繞道。§1 拒絕 `tauri-plugin-shell`
+是因為「前端組參數去執行程式」；這裡前端組的是**自己要打給誰的 HTTP 請求**，
+而使用者本來就有權決定那件事。兩者不是同一類風險。
+
+**實際暴露**：一個能執行任意 JS 的攻擊者可以把資料 POST 到任何 https 主機。
+但在這個 App 裡，能執行任意 JS 就已經能透過 `appendFile` 與 `openPath` 做更糟的事，
+所以 `connect-src` 不是這條鏈的最短處。真正的防線是「不載入外部腳本」
+（`script-src 'self'`，未放寬）。
+
+金鑰只存在 localStorage、只往使用者自己設定的端點送，不經過任何我們的伺服器。
+
+---
+
 ## 5. 目前的已知弱點（誠實清單）
 
 | 項目 | 狀態 |
@@ -119,6 +148,7 @@ tool call 參數裡很可能有 API key、token、私有路徑。
 | **CLI 探測會走 PATH** | 若你的 PATH 上有惡意的同名 `git`／`gh`，App 會用到它。這與你在終端打指令的風險相同，但值得知道 |
 | **`.anchorline/log` 是明文** | 沒有加密。它在你自己的磁碟上，威脅模型假設本機是可信的 |
 | **沒有沙盒** | App 需要跑 `git` 才有功能，所以未啟用 macOS App Sandbox |
+| **`connect-src` 允許任何 https** | LLM 端點由使用者自訂，無法白名單。理由與取捨見 §4.5 |
 
 ---
 
