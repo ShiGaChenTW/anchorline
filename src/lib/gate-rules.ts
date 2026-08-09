@@ -36,6 +36,18 @@ export type GateReport = {
   findings: GateFinding[];
   blocks: number;
   warns: number;
+  /**
+   * block 中「還沒開始」的數量（來源欄位全空）。
+   * `blocks` 不減 —— 送審門檻不變；但跨專案彙總時必須分開講：
+   * 把「還沒寫」跟「寫了但不合格」加成同一個數字，會讓總覽首屏
+   * 出現一個誇大的阻擋總數，正是那一頁想消除的那種焦慮。
+   *
+   * 這兩個欄位靠 `GateFinding.untouched`，而直譯器保證只有 block 級規則會帶
+   * 那個旗標（見 runGroups）——合併時這一點剛好對得上，不需要額外的判定。
+   */
+  untouchedBlocks: number;
+  /** block 中真的「動過但沒過」的數量 = blocks - untouchedBlocks */
+  activeBlocks: number;
   /** 可送審：無 block */
   canSubmit: boolean;
   /** 可核准：無 block（可另加更嚴規則） */
@@ -217,7 +229,9 @@ export function runGateSpec(input: GateInput, spec: GateSpec): GateReport {
     }
   }
 
-  const blocks = findings.filter((f) => f.level === "block").length;
+  const blockFindings = findings.filter((f) => f.level === "block");
+  const blocks = blockFindings.length;
+  const untouchedBlocks = blockFindings.filter((f) => f.untouched).length;
   const warns = findings.filter((f) => f.level === "warn").length;
   const passes = findings.filter((f) => f.level === "pass").length;
   const score = Math.max(
@@ -225,5 +239,14 @@ export function runGateSpec(input: GateInput, spec: GateSpec): GateReport {
     Math.min(100, Math.round((passes / Math.max(1, findings.length)) * 100 - blocks * 15 - warns * 5)),
   );
 
-  return { findings, blocks, warns, canSubmit: blocks === 0, canApprove: blocks === 0, score };
+  return {
+    findings,
+    blocks,
+    warns,
+    untouchedBlocks,
+    activeBlocks: blocks - untouchedBlocks,
+    canSubmit: blocks === 0,
+    canApprove: blocks === 0,
+    score,
+  };
 }

@@ -828,6 +828,12 @@ export const store = {
       newProjects.push(p);
       ids.push(id);
 
+      // 每個匯入的專案都要有自己的空白正文袋。
+      // 少了這一步，總覽的 gateOf() 會 fallback 到 `{}` —— 那不是「空白文件」，
+      // 而是「連 sections 骨架都沒有」，evaluatePrdGates 會據此判出 4 項阻擋。
+      // 六個專案就憑空長出十幾項不存在的阻擋，首屏標題直接被灌水。
+      if (!bag[id]) bag[id] = blankDocsForSections(state.sections);
+
       if (!state.cases[id]) {
         state = {
           ...state,

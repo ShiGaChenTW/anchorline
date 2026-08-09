@@ -10,6 +10,7 @@
  */
 import { describe, expect, test } from "bun:test";
 import type { AppState, Section } from "../src/data/types";
+import type { GateReport } from "../src/lib/gate-rules";
 import { type GateSpec, runSectionCoach } from "../src/lib/gate-rules";
 import { BASE_GATE_SPEC, evaluatePrdGates, gateSummaryLine } from "../src/lib/prd-gates";
 
@@ -251,16 +252,40 @@ describe("彙總", () => {
     expect(r.score).toBe(expected);
   });
 
-  test("gateSummaryLine 三種語氣", () => {
-    expect(gateSummaryLine({ findings: [], blocks: 2, warns: 1, canSubmit: false, canApprove: false, score: 0 })).toBe(
-      "結構檢查：2 項阻擋 · 1 警告",
+  test("gateSummaryLine：全部沒動過時不講「阻擋」", () => {
+    // main 的改動（1f92c57）：全部 block 都是「還沒開始」時，講「N 項阻擋」
+    // 是錯的敘事——那是還沒開始，不是做錯了。合併時我這邊的 characterization
+    // test 鎖著舊文案而紅掉，那正是它該做的事：逼人看見文案被改了。
+    const r = (o: Partial<GateReport>): GateReport =>
+      ({ findings: [], blocks: 0, warns: 0, untouchedBlocks: 0, activeBlocks: 0,
+         canSubmit: true, canApprove: true, score: 0, ...o }) as GateReport;
+
+    expect(gateSummaryLine(r({ blocks: 4, untouchedBlocks: 4, activeBlocks: 0 }))).toBe(
+      "PRD 還沒開始（4 個必填章節）",
     );
-    expect(gateSummaryLine({ findings: [], blocks: 0, warns: 3, canSubmit: true, canApprove: true, score: 0 })).toBe(
-      "結構檢查通過（3 則建議）",
+    expect(gateSummaryLine(r({ blocks: 3, untouchedBlocks: 1, activeBlocks: 2, warns: 1 }))).toBe(
+      "結構檢查：2 項要改 · 1 項還沒開始 · 1 警告",
     );
-    expect(gateSummaryLine({ findings: [], blocks: 0, warns: 0, canSubmit: true, canApprove: true, score: 0 })).toBe(
-      "結構檢查全部通過",
+    expect(gateSummaryLine(r({ blocks: 2, untouchedBlocks: 0, activeBlocks: 2, warns: 1 }))).toBe(
+      "結構檢查：2 項要改 · 1 警告",
     );
+    expect(gateSummaryLine(r({ warns: 3 }))).toBe("結構檢查通過（3 則建議）");
+    expect(gateSummaryLine(r({}))).toBe("結構檢查全部通過");
+  });
+
+  test("untouchedBlocks / activeBlocks 由直譯器算出，且相加等於 blocks", () => {
+    // main 的計數靠 GateFinding.untouched，而直譯器保證只有 block 級規則帶那個
+    // 旗標——兩邊的假設剛好對得上，這條測試把那個巧合釘成契約
+    const r = evaluatePrdGates(st({}, ["empty", "empty", "empty"]));
+    expect(r.blocks).toBe(4);
+    expect(r.untouchedBlocks).toBe(4); // 全空 = 全部還沒開始
+    expect(r.activeBlocks).toBe(0);
+
+    const partial = evaluatePrdGates(st(withSection(OK, "goals", { ...OK.goals, goals: "太短" })));
+    expect(partial.blocks).toBe(1);
+    expect(partial.untouchedBlocks).toBe(0); // 寫了但不合格
+    expect(partial.activeBlocks).toBe(1);
+    expect(partial.untouchedBlocks + partial.activeBlocks).toBe(partial.blocks);
   });
 });
 

@@ -22,7 +22,7 @@ import {
 import { syncRailContext } from "../lib/rail-projects";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
-import { buildFocusCard, othersLine, type FocusCard } from "../lib/focus-card";
+import { buildFocusCard, type FocusCard } from "../lib/focus-card";
 import { fetchStaleLabel, GH_REFRESH_MS, prRadarLine, type GhResult } from "../lib/gh-status";
 import { canQueryStatus, getGhStatusCached, requestOpenspecStatus } from "../lib/status-bridge";
 import { openspecProgressPct } from "../lib/openspec-status";
@@ -80,6 +80,10 @@ if (!requireAuth()) {
   type Row = {
     p: Project;
     blocks: number;
+    /** 動過但沒過 —— 真正需要你回去改的 */
+    activeBlocks: number;
+    /** 還沒開始寫 —— 是「未起步」，不是「被擋住」 */
+    untouchedBlocks: number;
     warns: number;
     canSubmit: boolean;
     bound: boolean;
@@ -93,6 +97,8 @@ if (!requireAuth()) {
       return {
         p,
         blocks: g.blocks,
+        activeBlocks: g.activeBlocks,
+        untouchedBlocks: g.untouchedBlocks,
         warns: g.warns,
         canSubmit: g.canSubmit,
         bound: !!root,
@@ -111,8 +117,20 @@ if (!requireAuth()) {
   function pickNext(rows: Row[]): { row: Row; why: string } | null {
     if (!rows.length) return null;
 
-    const review = rows.find((r) => r.p.status === "review" && r.canSubmit);
-    if (review) return { row: review, why: "在審閱佇列裡，而且結構檢查已經全過 —— 可以直接核准。" };
+    // 審閱中的一律優先，**不再要求 canSubmit**。
+    // 舊版跳過「審閱中但結構沒過」的專案，結果戰情列把「等你核准」標成
+    // 最響的紅字，焦點卡卻指向別的專案 —— 畫面上最大聲的訊號和唯一的 CTA
+    // 互相矛盾。別人在等你這件事本身就是最貴的，擋住了就講為什麼擋住。
+    const review = rows.find((r) => r.p.status === "review");
+    if (review)
+      return {
+        row: review,
+        why: review.canSubmit
+          ? "在審閱佇列裡，而且結構檢查已經全過 —— 可以直接核准。"
+          : review.activeBlocks
+            ? `別人在等這一份，但還有 ${review.activeBlocks} 項要改才能核准。`
+            : "別人在等這一份，但 PRD 還沒開始寫 —— 先補三行摘要。",
+      };
 
     const ready = rows.find((r) => r.p.status === "draft" && r.canSubmit);
     if (ready) return { row: ready, why: "草稿已無阻擋項，差一步就能送審。" };
@@ -124,13 +142,68 @@ if (!requireAuth()) {
         why: `有 ${dirty.stats?.git?.dirtyCount} 個檔案還沒提交 —— 寫了但沒進版控。`,
       };
 
+    // 排序與文案都用 activeBlocks。
+    // 用 blocks 會把「還沒開始寫」算成阻擋，講出來的理由跟戰情列對不起來 ——
+    // 同一畫面兩個數字不一致，就是逼使用者用工作記憶去對帳。
     const closest = [...rows]
       .filter((r) => r.p.status === "draft")
-      .sort((a, b) => a.blocks - b.blocks)[0];
-    if (closest)
-      return { row: closest, why: `還有 ${closest.blocks} 項阻擋，是所有草稿裡最接近完成的。` };
+      .sort((a, b) => a.activeBlocks - b.activeBlocks || b.p.pct - a.p.pct)[0];
+    if (closest) {
+      if (closest.activeBlocks)
+        return { row: closest, why: `還有 ${closest.activeBlocks} 項要改，是所有草稿裡最接近完成的。` };
+      if (closest.untouchedBlocks)
+        return { row: closest, why: `PRD 還沒開始寫 —— 先補三行摘要，其餘章節會跟著好填。` };
+      return { row: closest, why: "進度最前面的草稿，繼續往下填。" };
+    }
 
     return { row: rows[0]!, why: "全部都已核准，沒有待辦。" };
+  }
+
+  // ── 戰情列 ──────────────────────────────────────────────────
+
+  /**
+   * 「今天」的四個數字。KPI stat tile：label + value，沒有圖表。
+   *
+   * ADHD 取捨有兩層。第一層是**分流**：「還沒開始寫 PRD」跟「寫了但沒過」
+   * 混成同一個「阻擋」總數，會讓首屏長出一個誇大的數字（實測 6 個專案
+   * 灌出 12 項，其中大半是空白文件產生的）。未起步不是被擋住。
+   *
+   * 第二層是**只讓一個 tile 響**：四個都標紅等於沒有優先序，等於還是要
+   * 自己挑。所以 tone 只給「真的需要你現在動手」的那一個，其餘保持中性。
+   */
+  type Tile = { label: string; value: string; hint: string; tone: "" | "warn" | "danger" };
+
+  function warRoom(rows: Row[]): string {
+    const review = rows.filter((r) => r.p.status === "review").length;
+    const active = rows.reduce((a, r) => a + r.activeBlocks, 0);
+    const notStarted = rows.filter((r) => r.untouchedBlocks > 0).length;
+    const dirty = rows.reduce((a, r) => a + (r.stats?.git?.dirtyCount ?? 0), 0);
+    // GhResult 是 union：unavailable 分支沒有 prs，要先收窄
+    const prs = ghResult?.available ? ghResult.prs.length : 0;
+
+    // 只有最上游那一個掛 tone —— 別人在等你 > 你被擋住 > 東西沒進版控
+    const hot = review ? 0 : active ? 1 : dirty ? 2 : -1;
+
+    const tiles: Tile[] = [
+      { label: "等你核准", value: String(review), hint: "別人在等", tone: "" },
+      { label: "阻擋", value: String(active), hint: "寫了但沒過", tone: "" },
+      { label: "還沒開始", value: String(notStarted), hint: "個專案沒 PRD", tone: "" },
+      { label: "未提交", value: String(dirty), hint: dirty ? "個檔案" : "都乾淨", tone: "" },
+      { label: "PR 開著", value: String(prs), hint: prs ? "待處理" : "沒有", tone: "" },
+    ];
+    if (hot >= 0) tiles[hot]!.tone = hot === 0 ? "danger" : "warn";
+
+    return `<section class="ov-war" aria-label="今天的狀況">
+      ${tiles
+        .map(
+          (t) => `<div class="ov-tile${t.tone ? ` is-${t.tone}` : ""}">
+            <p class="ov-tile-label">${escapeHtml(t.label)}</p>
+            <p class="ov-tile-value">${escapeHtml(t.value)}</p>
+            <p class="ov-tile-hint">${escapeHtml(t.hint)}</p>
+          </div>`,
+        )
+        .join("")}
+    </section>`;
   }
 
   // ── 卡片 ────────────────────────────────────────────────────
@@ -148,13 +221,28 @@ if (!requireAuth()) {
     }
 
     const card = focusCardOf(next.row);
+    const pct = Math.max(0, Math.min(100, Number.isFinite(next.row.p.pct) ? next.row.p.pct : 0));
+    // meter 的填色帶嚴重度；軌道是同 ramp 的淺階，狀態才讀得出整條
+    const tone = next.row.activeBlocks ? "warn" : pct >= 95 ? "ok" : "go";
 
-    return `<section class="d-hero tone-${totalBlocks ? "warn" : "ok"}">
-      <p class="d-eyebrow">現在做這一個</p>
-      <p class="d-hero-figure">${escapeHtml(projectDisplayName(next.row.p))}</p>
-      <p class="d-hero-sub">${escapeHtml(next.why)}</p>
-      <p class="d-hero-meta">${escapeHtml(othersLine(rows.length - 1) || "只有這一個專案。")}這裡一次只指一個。</p>
-      <dl class="d-facts">${card.fields
+    return `<section class="ov-hero tone-${totalBlocks ? "warn" : "ok"}">
+      <p class="ov-hero-kicker">現在做這一個</p>
+      <h2 class="ov-hero-name">${escapeHtml(projectDisplayName(next.row.p))}</h2>
+
+      <div class="ov-meter meter-${tone}" role="img"
+           aria-label="完成度 ${pct}%">
+        <div class="ov-meter-track"><i style="width:${pct}%"></i></div>
+        <span class="ov-meter-value">${pct}<span class="ov-meter-unit">%</span></span>
+      </div>
+
+      <p class="ov-hero-why">${escapeHtml(next.why)}</p>
+
+      <p class="ov-hero-cta">
+        <a class="btn btn-primary btn-lg" href="dashboard.html" data-go="${escapeHtml(next.row.p.id)}">打開這個專案 →</a>
+      </p>
+
+      <dl class="ov-hero-facts">${card.fields
+        .filter((f) => f.label !== "進度")
         .map((f) => `<div><dt>${escapeHtml(f.label)}</dt><dd>${escapeHtml(f.value)}</dd></div>`)
         .join("")}</dl>
       ${
@@ -162,9 +250,6 @@ if (!requireAuth()) {
           ? `<p class="ov-warn">⚠ ${card.unanchored} 個步驟沒有錨點，接不上事件流 —— 在終端跑 <code>bun run track</code> 按 i 補鑄。</p>`
           : ""
       }
-      <p class="ov-hero-cta">
-        <a class="btn btn-primary btn-sm" href="dashboard.html" data-go="${escapeHtml(next.row.p.id)}">打開這個專案</a>
-      </p>
     </section>`;
   }
 
@@ -188,7 +273,15 @@ if (!requireAuth()) {
       {
         projectId: row.p.id,
         name: projectDisplayName(row.p),
-        nextStep: row.blocks ? `補齊 ${row.blocks} 項阻擋` : row.canSubmit ? "送出審閱" : "繼續填章節",
+        // 用 activeBlocks，不用 blocks：戰情列講「阻擋 0」而這裡講「補齊 4 項阻擋」
+        // 就是同一畫面兩個數字打架 —— 正是這次要消滅的東西。
+        nextStep: row.activeBlocks
+          ? `補齊 ${row.activeBlocks} 項`
+          : row.untouchedBlocks
+            ? "先寫三行摘要"
+            : row.canSubmit
+              ? "送出審閱"
+              : "繼續填章節",
         planPct: Number.isFinite(row.p.pct) ? row.p.pct : null,
         // 只有焦點專案查得到；其餘給 null，rollup 會讓 plan 佔滿
         openspecPct: row.p.id === openspecFor ? openspecPct : null,
@@ -218,23 +311,37 @@ if (!requireAuth()) {
   }
 
   /** 每個專案一列：狀態、進度、阻擋數。整列可點。 */
+  /**
+   * 其他專案。焦點那一個不重複出現在這裡 —— 它已經是上面整張卡。
+   * 狀態欄改講具體狀態，不再把「還沒開始」講成「N 阻擋」。
+   */
   function cardProjects(rows: Row[]): string {
-    const sorted = [...rows].sort((a, b) => b.blocks - a.blocks || a.p.pct - b.p.pct);
-    return `<section class="d-card d-tall">
-      <p class="d-eyebrow">所有專案</p>
-      <p class="d-figure">${rows.length}</p>
-      <p class="d-figure-sub">依待處理程度排序　阻擋最多的在最上面</p>
+    const focusId = pickNext(rows)?.row.p.id;
+    const rest = rows.filter((r) => r.p.id !== focusId);
+    if (!rest.length) return "";
+    const sorted = [...rest].sort((a, b) => b.activeBlocks - a.activeBlocks || b.p.pct - a.p.pct);
+
+    const stateOf = (r: Row): { text: string; tone: string } => {
+      if (r.p.status === "approved") return { text: "已核准", tone: "ready" };
+      if (r.p.status === "review") return { text: "等你核准", tone: "review" };
+      if (r.activeBlocks) return { text: `${r.activeBlocks} 項要改`, tone: "blocked" };
+      if (r.untouchedBlocks) return { text: "還沒開始", tone: "idle" };
+      if (r.canSubmit) return { text: "可送審", tone: "ready" };
+      return { text: "進行中", tone: "" };
+    };
+
+    return `<section class="ov-others">
+      <p class="ov-others-head">其他 ${rest.length} 個專案</p>
       <ul class="ov-rows">${sorted
         .map((r) => {
-          const tone = r.blocks ? "blocked" : r.canSubmit ? "ready" : "";
-          return `<li class="${tone}">
+          const s = stateOf(r);
+          const pct = Math.max(0, Math.min(100, r.p.pct));
+          return `<li>
             <button type="button" class="ov-row" data-go="${escapeHtml(r.p.id)}">
               <span class="ov-row-name">${escapeHtml(projectDisplayName(r.p))}</span>
-              <span class="ov-row-state">${
-                r.blocks ? `${r.blocks} 阻擋` : r.canSubmit ? "可送審" : "—"
-              }</span>
-              <span class="ov-bar"><i style="width:${Math.max(2, r.p.pct)}%"></i></span>
-              <span class="ov-row-pct mono">${r.p.pct}%</span>
+              <span class="ov-row-state tone-${s.tone}">${escapeHtml(s.text)}</span>
+              <span class="ov-bar"><i style="width:${Math.max(2, pct)}%"></i></span>
+              <span class="ov-row-pct">${pct}%</span>
               ${r.bound ? "" : `<span class="ov-row-flag">未綁資料夾</span>`}
             </button>
           </li>`;
@@ -345,10 +452,12 @@ if (!requireAuth()) {
     updateUserRailFooter(toRailUser(store.get().currentUser));
     syncRailContext({ mode: "全部專案總覽", projectName: `${rows.length} 個專案`, statusLabel: "總覽", statusTone: "draft" });
 
+    // 副標不再喊全域阻擋總數 —— 那個數字跟 hero 裡的「還有 N 項阻擋」
+    // 和狀態列的檢查結果是三個不同範圍，擺在同一畫面只會逼人對帳。
+    // 首屏只留一個時間錨點：ADHD 的時間盲需要「多久沒動」而不是「幾項待辦」。
     const sub = document.querySelector<HTMLElement>('[data-od-id="page-sub"]');
     if (sub) {
-      const b = rows.reduce((a, r) => a + r.blocks, 0);
-      sub.textContent = b ? `${b} 項阻擋分佈在 ${rows.filter((r) => r.blocks).length} 個專案` : "沒有阻擋項";
+      sub.textContent = rows.length ? `${rows.length} 個專案在追蹤中` : "還沒有專案";
     }
 
     const root = document.getElementById("ov-root");
@@ -357,11 +466,17 @@ if (!requireAuth()) {
     // 展開狀態存 localStorage —— 每次回來都要重新收合，比一開始就展開更煩。
     // 不用 .d-top —— 那是兩欄 grid（hero + 專案清單），第二個孩子搬進 details
     // 之後 hero 會被 align-items:stretch 拉成一整列的高度，中間開一個大洞。
-    root.innerHTML = `<div class="ov-focus">${hero(rows)}</div>
+    // 版面順序 = 回答問題的順序：
+    //   今天怎麼樣（戰情列）→ 現在做哪一個（焦點）→ 其他還有什麼（清單）
+    // 清單改成常駐而不是收在 <details>：原本首屏下半是一大片空白，
+    // 而空白對 ADHD 不是留白，是「還沒載完？我漏看什麼？」的不確定感。
+    // 真正的次要資訊（狀態分佈／技術線／待補資料夾）才留在摺疊裡。
+    root.innerHTML = `${warRoom(rows)}
+      <div class="ov-focus">${hero(rows)}</div>
       ${prRadar()}
+      ${cardProjects(rows)}
       <details class="ov-more"${moreOpen() ? " open" : ""}>
-        <summary>${escapeHtml(othersLine(Math.max(0, rows.length - 1)) || "其他資訊 ▸")}</summary>
-        <div class="d-top">${cardProjects(rows)}</div>
+        <summary>更多統計 ▸</summary>
         <div class="d-grid">${cardStatus(rows)}${cardStack(rows)}${cardUnbound(rows)}</div>
       </details>`;
 
