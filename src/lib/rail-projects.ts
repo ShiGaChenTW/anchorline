@@ -113,6 +113,66 @@ export function syncRailContext(opts: RailContextOpts) {
   });
 }
 
+/**
+ * 側欄兩個區塊（工作區 / 專案）的收合。
+ *
+ * 狀態掛在 <html> 的 class，不是節點自己 —— initRailNav 每次進頁都會整段重建
+ * nav.innerHTML，狀態放在節點上等於每次換頁都歸零。
+ */
+const SECTION_KEYS = {
+  ws: "anchorline:collapse:ws",
+  projects: "anchorline:collapse:projects",
+} as const;
+
+type SectionKey = keyof typeof SECTION_KEYS;
+
+function sectionCollapsed(key: SectionKey): boolean {
+  try {
+    return localStorage.getItem(SECTION_KEYS[key]) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setSectionCollapsed(key: SectionKey, on: boolean) {
+  try {
+    localStorage.setItem(SECTION_KEYS[key], on ? "1" : "0");
+  } catch {
+    /* private mode */
+  }
+  document.documentElement.classList.toggle(`rail-${key}-collapsed`, on);
+}
+
+/**
+ * 把某個 .nav-label 變成可收合的區塊標題。
+ * 每次 render 都呼叫（自帶存在性守衛）——區塊標題會被 innerHTML 重建。
+ */
+function ensureSectionToggle(label: Element, key: SectionKey, name: string) {
+  const on = sectionCollapsed(key);
+  document.documentElement.classList.toggle(`rail-${key}-collapsed`, on);
+
+  let btn = label.querySelector<HTMLButtonElement>(".rail-sec-toggle");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "rail-sec-toggle";
+    btn.innerHTML = `<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M12.78 6.22a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L3.22 7.28a.75.75 0 0 1 1.06-1.06L8 9.94l3.72-3.72a.75.75 0 0 1 1.06 0z"/></svg>`;
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const next = !sectionCollapsed(key);
+      setSectionCollapsed(key, next);
+      btn!.setAttribute("aria-expanded", next ? "false" : "true");
+      btn!.title = next ? `展開${name}` : `收合${name}`;
+    });
+    label.classList.add("rail-sec-head");
+    label.appendChild(btn);
+  }
+  btn.setAttribute("aria-expanded", on ? "false" : "true");
+  btn.setAttribute("aria-label", on ? `展開${name}` : `收合${name}`);
+  btn.title = on ? `展開${name}` : `收合${name}`;
+}
+
 function bumpCounts() {
   import("./rail-nav")
     .then((m) => m.refreshNavCounts())
@@ -145,6 +205,8 @@ function ensureWorkspaceNav(nav: Element) {
     (el) => /工作區/.test(el.textContent || "") && !el.classList.contains("rail-proj-head"),
   );
   if (!workLabel) return;
+
+  ensureSectionToggle(workLabel, "ws", "工作區");
 
   const items: { href: string; label: string; icon: string; count?: "review" | "templates"; title: string }[] = [
     { href: "overview.html", label: "專案總覽", icon: IC.dashboard, title: "所有專案的彙整儀表板" },
@@ -341,6 +403,7 @@ function bindAddMenu(block: HTMLElement) {
       <div class="rail-projects-empty">尚無專案<br /><span class="muted">新建或匯入資料夾</span></div>
     `;
     bindAddMenu(block);
+    ensureProjToggle(block);
     bumpCounts();
     return;
   }
@@ -414,7 +477,14 @@ function bindAddMenu(block: HTMLElement) {
 
   bindAddMenu(block);
   bindListResize(block);
+  ensureProjToggle(block);
   bumpCounts();
+}
+
+/** 「專案 N」那一行的收合鈕（每次重建後重掛） */
+function ensureProjToggle(block: HTMLElement) {
+  const head = block.querySelector(".rail-proj-head");
+  if (head) ensureSectionToggle(head, "projects", "專案清單");
 }
 
 const RAIL_LIST_H_KEY = "anchorline:rail-projects-height";

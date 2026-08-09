@@ -69,8 +69,10 @@ export const RAIL_ITEMS: RailItem[] = [
   { page: "templates", href: "templates.html", label: "章節範本", odId: "nav-templates", icon: IC.templates, count: true, hidden: true },
   // 審閱佇列改掛在「工作區」區塊標題右側（rail-projects.ts）
   { page: "review", href: "review.html", label: "審閱佇列", odId: "nav-review", icon: IC.review, count: true, hidden: true },
-  { page: "admin", href: "admin.html", label: "管理中心", odId: "nav-admin", icon: IC.admin },
-  { page: "agents", href: "agents.html", label: "Agent 管理", odId: "nav-agents", icon: IC.agents },
+  // 管理中心與 Agent 管理是系統設定，不是日常導覽 —— 入口改在設定彈窗的
+  // 「工作區管理」分類（settings.html）。頁面本身照舊存在，detectRailPage 仍要認得。
+  { page: "admin", href: "admin.html", label: "管理中心", odId: "nav-admin", icon: IC.admin, hidden: true },
+  { page: "agents", href: "agents.html", label: "Agent 管理", odId: "nav-agents", icon: IC.agents, hidden: true },
   // 偏好設定不進側欄清單 —— 入口改成品牌列右側的齒輪圖示
   { page: "settings", href: "settings.html", label: "偏好設定", odId: "nav-settings", icon: IC.settings, hidden: true },
 ];
@@ -149,13 +151,6 @@ export function initRailNav(active: RailPage) {
   // 專案清單掛回
   renderRailProjects(nav as HTMLElement);
   refreshNavCounts();
-
-  // ADHD：主流程 3 項 + 其他收合（動態 import 避免循環）
-  import("./adhd-ui")
-    .then((m) => m.reapplyAdhdRail())
-    .catch(() => {
-      /* ignore */
-    });
 }
 
 function syncActive(nav: Element, active: RailPage) {
@@ -168,12 +163,6 @@ function syncActive(nav: Element, active: RailPage) {
     if (on) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   }
-  // 目前頁在「其他功能」內時展開並標示
-  import("./adhd-ui")
-    .then((m) => m.expandOtherNavIfNeeded(nav))
-    .catch(() => {
-      /* ignore */
-    });
 }
 
 /** 更新側欄 count（專案數／範本數／待審） */

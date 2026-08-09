@@ -41,7 +41,7 @@ export function openSettingsModal() {
     <div class="set-modal" role="dialog" aria-modal="true" aria-labelledby="set-modal-title">
       <header class="set-modal-head">
         <div class="set-modal-titles">
-          <p class="set-modal-eyebrow">PRD 開發監控台</p>
+          <p class="set-modal-eyebrow">Anchorline</p>
           <h2 id="set-modal-title">設定</h2>
           <p class="set-modal-sub">自訂你的工作區。快捷鍵：<kbd>Cmd+,</kbd></p>
         </div>

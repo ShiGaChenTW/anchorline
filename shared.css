@@ -2690,8 +2690,117 @@ a.is-disabled {
   opacity: 0.45;
   pointer-events: none;
 }
+/* ─── 人員與 Agent 列表（設定 → 人員與權限） ───
+   原本整列寫在 inline style 裡。inline 樣式沒有選擇器，媒體／容器查詢完全
+   碰不到它 —— 容器一窄就只能整列垂直堆疊，頭像自己一行、四行文字權重相同。
+   改成真元件後，窄寬度是「結構改變」而不是「版面崩掉」。 */
+.emp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* 容器查詢而非媒體查詢：這份清單在設定頁與設定彈窗裡的可用寬度差很多，
+     但視窗寬度是一樣的 —— 該看的是容器，不是螢幕。 */
+  container-type: inline-size;
+}
+
+.emp-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "avatar name     controls"
+    "avatar meta     controls";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.emp-card-avatar {
+  grid-area: avatar;
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+}
+
+.emp-card-name {
+  grid-area: name;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--fg);
+}
+
+.emp-card-meta {
+  grid-area: meta;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--meta);
+  /* 長 email 不該撐破格線 */
+  overflow-wrap: anywhere;
+}
+
+.emp-card-controls {
+  grid-area: controls;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 刪除是破壞性動作，但不該跟「切換登入」一樣響。
+   平時退到 meta 色，滑過去才變警示色 —— 找得到，但不搶。 */
+/* html 前綴是為了贏過 `html[data-theme="github"] .btn-ghost`（同為 0,2,1，
+   靠位置在後決勝）—— 不用 !important 換取一條可預測的規則。 */
+html .emp-card-controls .btn-del-emp {
+  color: var(--meta);
+}
+html .emp-card-controls .btn-del-emp:hover,
+html .emp-card-controls .btn-del-emp:focus-visible {
+  color: var(--danger, #f85149);
+}
+
+.emp-card-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .emp-card select {
   max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+}
+
+/* 窄容器：控制項整條移到第二列，身分那一組保持頭像在左、文字在右。
+   ——不是讓每個東西各佔一行，而是把「人」跟「對這個人做的事」拆成兩層。 */
+@container (max-width: 520px) {
+  .emp-card {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "avatar name"
+      "avatar meta"
+      "controls controls";
+    row-gap: 10px;
+  }
+  .emp-card-controls {
+    justify-content: flex-start;
+  }
 }
 #perm-banner:not([hidden]) {
   display: block;
@@ -3971,82 +4080,41 @@ html.adhd-calm .adhd-nav-primary .ic {
 html.adhd-calm .adhd-nav-primary.active {
   box-shadow: inset 3px 0 0 var(--accent);
 }
-.adhd-nav-more {
-  margin: 8px 6px 4px;
-  border-top: 1px solid var(--border-muted);
-  padding-top: 6px;
-  border-radius: 8px;
-}
-.adhd-nav-more.has-active {
-  border: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border));
-  border-top: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border));
-  background: color-mix(in oklab, var(--accent) 6%, transparent);
-  padding: 4px;
-}
-.adhd-nav-more > summary,
-.adhd-nav-more-summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 8px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--meta);
-  border-radius: var(--radius-sm);
-  user-select: none;
+/* 側欄區塊收合（工作區 / 專案）——狀態掛在 <html>，換頁重建也不會歸零 */
+.rail-sec-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
 }
-.adhd-nav-more > summary::-webkit-details-marker { display: none; }
-.adhd-nav-more > summary:hover,
-.adhd-nav-more-summary:hover {
-  background: var(--inset);
-  color: var(--fg-2);
+.rail-sec-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
 }
-.adhd-nav-more > summary::before,
-.adhd-nav-more-summary::before {
-  content: "▸";
-  font-size: 10px;
-  flex-shrink: 0;
-  color: var(--meta);
+.rail-sec-toggle:hover {
+  opacity: 1;
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
 }
-.adhd-nav-more[open] > summary::before,
-.adhd-nav-more[open] > .adhd-nav-more-summary::before {
-  content: "▾";
+.rail-sec-toggle[aria-expanded="false"] {
+  transform: rotate(-90deg);
 }
-.adhd-nav-more.has-active > summary,
-.adhd-nav-more.has-active > .adhd-nav-more-summary {
-  color: var(--fg);
-  font-weight: 700;
-}
-.adhd-nav-more-summary-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.adhd-nav-more-body {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 0 0 6px;
-}
-.adhd-nav-more-body .nav-item {
-  font-size: 12.5px;
-  padding: 7px 10px;
-  color: var(--muted);
-  border-radius: 8px;
-}
-.adhd-nav-more-body .nav-item.active,
-.adhd-nav-more-body .nav-item[aria-current="page"] {
-  background: color-mix(in oklab, var(--accent) 14%, var(--bg));
-  color: var(--fg);
-  font-weight: 650;
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-.adhd-nav-more-body .nav-label {
-  margin-top: 6px;
-  opacity: 0.85;
+html.rail-ws-collapsed .rail-wsnav,
+html.rail-projects-collapsed .rail-projects,
+html.rail-projects-collapsed .rail-projects-empty,
+html.rail-projects-collapsed .rail-proj-resize,
+html.rail-projects-collapsed .rail-proj-actions {
+  display: none;
 }
 
 /* 專案卡片：更易掃讀 */
@@ -7059,7 +7127,113 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 
 /* 總覽頭條窄一點，專案清單需要寬度放進度條 */
 .ov-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
-.ov-hero-cta { margin: 16px 0 0; }
+
+/* ─── 總覽：戰情列 → 焦點 → 其他專案 ───
+   版面順序等於回答問題的順序。舊版首屏只有一張卡＋一大片空白，
+   空白對 ADHD 不是留白，是「還沒載完嗎、我是不是漏看什麼」。 */
+
+.ov-war {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.ov-tile {
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 10px);
+}
+.ov-tile-label { margin: 0; font-size: 11.5px; color: var(--meta); }
+/* stat tile 的值用比例數字：tabular 在大字級會顯得鬆散，
+   對齊需求只存在於「一整欄數字」，這裡是並排的獨立值 */
+.ov-tile-value {
+  margin: 4px 0 2px;
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1.1;
+  color: var(--fg);
+}
+.ov-tile-hint { margin: 0; font-size: 11px; color: var(--meta); }
+/* 只有最上游那一個掛狀態色。四個都響等於沒有優先序。
+   邊框＋左緣一起變色，不是只換數字顏色 —— 顏色不能是唯一通道。 */
+.ov-tile.is-warn {
+  border-color: color-mix(in oklab, var(--warn) 45%, var(--border));
+  box-shadow: inset 2px 0 0 var(--warn);
+}
+.ov-tile.is-warn .ov-tile-value { color: var(--warn); }
+.ov-tile.is-danger {
+  border-color: color-mix(in oklab, var(--danger) 45%, var(--border));
+  box-shadow: inset 2px 0 0 var(--danger);
+}
+.ov-tile.is-danger .ov-tile-value { color: var(--danger); }
+
+.ov-hero {
+  padding: 22px 24px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+}
+.ov-hero-kicker { margin: 0; font-size: 11.5px; color: var(--meta); letter-spacing: 0.04em; }
+/* 一個畫面只有一個 hero figure：專案名。它就是「哪一個」的答案。 */
+.ov-hero-name {
+  margin: 6px 0 16px;
+  font-size: clamp(22px, 2.6vw, 32px);
+  font-weight: 680;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
+/* meter：填色帶嚴重度，軌道是同 ramp 的淺階，狀態讀得出整條 */
+.ov-meter { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
+.ov-meter-track {
+  flex: 1 1 auto;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+}
+.ov-meter-track i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ov-meter.meter-warn .ov-meter-track { background: color-mix(in oklab, var(--warn) 16%, transparent); }
+.ov-meter.meter-warn .ov-meter-track i { background: var(--warn); }
+.ov-meter.meter-ok .ov-meter-track { background: color-mix(in oklab, var(--success) 16%, transparent); }
+.ov-meter.meter-ok .ov-meter-track i { background: var(--success); }
+.ov-meter-value {
+  flex: 0 0 auto;
+  font-size: 20px;
+  font-weight: 650;
+  color: var(--fg);
+}
+.ov-meter-unit { font-size: 13px; font-weight: 500; color: var(--meta); margin-left: 1px; }
+
+.ov-hero-why { margin: 0 0 18px; font-size: 13.5px; line-height: 1.6; color: var(--fg-2, var(--fg)); }
+/* 任務啟動困難是 ADHD 的核心障礙 —— CTA 要是畫面上最響的東西，
+   不是角落一顆小按鈕。 */
+.ov-hero-cta { margin: 0 0 18px; }
+.ov-hero-cta .btn-lg { padding: 11px 22px; font-size: 14.5px; font-weight: 600; }
+
+.ov-hero-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px 32px;
+  margin: 0;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--border-muted, var(--border));
+}
+.ov-hero-facts div { margin: 0; }
+.ov-hero-facts dt { margin: 0 0 3px; font-size: 11px; color: var(--meta); }
+.ov-hero-facts dd { margin: 0; font-size: 13px; color: var(--fg); }
+
+.ov-others { margin: 18px 0 0; }
+.ov-others-head { margin: 0 0 8px; font-size: 11.5px; color: var(--meta); }
 
 .ov-rows { list-style: none; margin: 0; padding: 0; flex: 1 1 auto; min-height: 0; overflow: auto; }
 .ov-row {
@@ -7081,9 +7255,12 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .ov-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ov-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ov-row-state { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
-/* 阻擋用 warn、可送審用 success —— 這兩個是狀態不是類別，用狀態色才對 */
-.ov-rows li.blocked .ov-row-state { color: var(--warn); }
-.ov-rows li.ready .ov-row-state { color: var(--success); }
+/* 狀態色（保留給狀態，不當類別色用）。「還沒開始」刻意保持中性 ——
+   未起步不是錯誤，標紅只會觸發迴避。 */
+.ov-row-state.tone-review { color: var(--danger); }
+.ov-row-state.tone-blocked { color: var(--warn); }
+.ov-row-state.tone-ready { color: var(--success); }
+.ov-row-state.tone-idle { color: var(--meta); }
 .ov-bar { height: 4px; border-radius: 999px; background: var(--border); overflow: hidden; }
 .ov-bar i { display: block; height: 100%; background: var(--accent); }
 .ov-rows li.ready .ov-bar i { background: var(--success); }
