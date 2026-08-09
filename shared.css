@@ -7232,8 +7232,19 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .ov-hero-facts dt { margin: 0 0 3px; font-size: 11px; color: var(--meta); }
 .ov-hero-facts dd { margin: 0; font-size: 13px; color: var(--fg); }
 
-.ov-others { margin: 18px 0 0; }
-.ov-others-head { margin: 0 0 8px; font-size: 11.5px; color: var(--meta); }
+/* 其他專案／PR 雷達／更多統計都套同一層卡片。
+   它們原本是裸在背景上的，跟上面的 tile 與焦點卡不同層級 —— 同一頁出現
+   「有殼」與「沒殼」兩種區塊，掃視時會誤讀成兩個不同重要性的東西。 */
+.ov-others {
+  margin: 18px 0 0;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+}
+.ov-others-head { margin: 0 0 10px; font-size: 11.5px; color: var(--meta); }
+/* 卡片自帶內距，列就不必再縮排一層 */
+.ov-others .ov-row { padding-left: 6px; padding-right: 6px; }
 
 .ov-rows { list-style: none; margin: 0; padding: 0; flex: 1 1 auto; min-height: 0; overflow: auto; }
 .ov-row {
@@ -8130,7 +8141,11 @@ p.gd-warn {
 /* PR 雷達：焦點卡「下方」獨立一行。刻意不進卡片 —— 卡片欄位封頂 4 個，
    這是第 5 個資訊，而且 PR 是跨 repo 的，不屬於任何單一專案。 */
 .ov-pr-radar {
-  margin: 10px 2px 0;
+  margin: 12px 0 0;
+  padding: 12px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
   font-size: 13px;
   color: var(--fg-2);
 }
@@ -8142,11 +8157,15 @@ p.gd-warn {
 /* 其他資訊摺疊。預設收起 —— 工作記憶約 4 個開放迴圈，
    把 13 個專案跟三張統計卡同框展開就是把已經修好的問題搬回首屏。 */
 .ov-more {
-  margin-top: 18px;
+  margin-top: 12px;
+  padding: 4px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
 }
 .ov-more > summary {
   cursor: pointer;
-  padding: 8px 2px;
+  padding: 12px 0;
   color: var(--muted);
   font-size: 13px;
   list-style: none;
@@ -8154,7 +8173,8 @@ p.gd-warn {
 }
 .ov-more > summary::-webkit-details-marker { display: none; }
 .ov-more > summary:hover { color: var(--fg-2); }
-.ov-more[open] > summary { margin-bottom: 10px; }
+.ov-more[open] > summary { margin-bottom: 6px; border-bottom: 1px solid var(--border-muted, var(--border)); }
+.ov-more[open] { padding-bottom: 16px; }
 
 /* ── 稽核軌跡三層（P2-11/12/13）─────────────────────────────────
    預設停在第一層。時間軸要點兩下才到 —— 無限捲動的事件流是注意力黑洞，
