@@ -23,6 +23,15 @@ export type GateReport = {
   findings: GateFinding[];
   blocks: number;
   warns: number;
+  /**
+   * block 中「還沒開始」的數量（來源欄位全空）。
+   * `blocks` 不減 —— 送審門檻不變；但跨專案彙總時必須分開講：
+   * 把「還沒寫」跟「寫了但不合格」加成同一個數字，會讓總覽首屏
+   * 出現一個誇大的阻擋總數，正是本頁想消除的那種焦慮。
+   */
+  untouchedBlocks: number;
+  /** block 中真的「動過但沒過」的數量 = blocks - untouchedBlocks */
+  activeBlocks: number;
   /** 可送審：無 block */
   canSubmit: boolean;
   /** 可核准：無 block（可另加更嚴規則） */
@@ -194,7 +203,9 @@ export function evaluatePrdGates(state: AppState): GateReport {
     });
   }
 
-  const blocks = findings.filter((f) => f.level === "block").length;
+  const blockFindings = findings.filter((f) => f.level === "block");
+  const blocks = blockFindings.length;
+  const untouchedBlocks = blockFindings.filter((f) => f.untouched).length;
   const warns = findings.filter((f) => f.level === "warn").length;
   const passes = findings.filter((f) => f.level === "pass").length;
   const score = Math.max(0, Math.min(100, Math.round((passes / Math.max(1, findings.length)) * 100 - blocks * 15 - warns * 5)));
@@ -203,6 +214,8 @@ export function evaluatePrdGates(state: AppState): GateReport {
     findings,
     blocks,
     warns,
+    untouchedBlocks,
+    activeBlocks: blocks - untouchedBlocks,
     canSubmit: blocks === 0,
     canApprove: blocks === 0,
     score,
@@ -210,7 +223,14 @@ export function evaluatePrdGates(state: AppState): GateReport {
 }
 
 export function gateSummaryLine(report: GateReport): string {
-  if (report.blocks) return `結構檢查：${report.blocks} 項阻擋 · ${report.warns} 警告`;
+  // 全部 block 都是「沒動過」時，講「N 項阻擋」是錯的敘事 —— 那是還沒開始，
+  // 不是做錯了。這一行會出現在狀態列，跟總覽的戰情列必須講同一種話。
+  if (report.blocks && report.activeBlocks === 0)
+    return `PRD 還沒開始（${report.blocks} 個必填章節）`;
+  if (report.blocks)
+    return `結構檢查：${report.activeBlocks} 項要改${
+      report.untouchedBlocks ? ` · ${report.untouchedBlocks} 項還沒開始` : ""
+    } · ${report.warns} 警告`;
   if (report.warns) return `結構檢查通過（${report.warns} 則建議）`;
   return "結構檢查全部通過";
 }
