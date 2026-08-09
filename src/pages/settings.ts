@@ -16,6 +16,7 @@ import {
   canUseUserDomains,
   clearUserDomains,
   getUserPacks,
+  isDirAuthorized,
   pickUserDomainsFolder,
   refreshUserDomains,
   saveUserPackToDisk,
@@ -579,6 +580,15 @@ function renderDomainPacks() {
     status.textContent = dir
       ? `自訂資料夾：${dir}${errors.length ? `（${errors.length} 個檔解析失敗）` : ""}`
       : "尚未指定自訂資料夾，目前只有內建領域。";
+    // 寫入授權在 Rust 端，可能與 localStorage 記的資料夾不同步（App 更新後第一次）。
+    // 提前講，比讓人按下去才看到「不能寫入這個位置」好。
+    if (dir) {
+      void isDirAuthorized().then((ok) => {
+        if (!ok && status.textContent?.startsWith("自訂資料夾")) {
+          status.textContent += " · ⚠️ 寫入授權需重新確認，第一次存檔時會請你再選一次這個資料夾";
+        }
+      });
+    }
   }
 
   if (!list) return;

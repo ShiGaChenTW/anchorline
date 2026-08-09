@@ -452,6 +452,18 @@ pub fn write_file(path: String, text: String) -> R<FilePath> {
     })
 }
 
+/// 這個資料夾現在有授權嗎。
+///
+/// 唯讀查詢，沒有副作用。存在的理由是**授權可能在前端不知情的情況下消失**：
+/// 前端把「使用者選過哪個資料夾」記在 localStorage，但真正的授權在 Rust 端。
+/// App 更新、換機器、或那份授權檔被刪掉，兩邊就會不同步——而使用者看到的
+/// 是「設定頁顯示資料夾好好的，按下去卻說沒授權」。有這支查詢，前端就能在
+/// 動手之前先問，然後用系統選擇器把授權補回來（那才是真正的授權來源）。
+#[tauri::command]
+pub fn is_root_registered(dir: String, roots: State<'_, RegisteredRoots>) -> R<bool> {
+    Ok(roots.contains_ancestor_of(&PathBuf::from(&dir)))
+}
+
 /// 領域包寫入。`write_file` 建不了新檔（`editable` 要求 `is_file()`），
 /// 而 AI 產出與範本下載都需要建新檔——見 `paths::domain_pack_writable`。
 ///
