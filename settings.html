@@ -477,8 +477,37 @@
               <button type="button" class="btn" id="btn-refresh-domains">重新讀取</button>
               <button type="button" class="btn btn-ghost" id="btn-clear-domains">清除自訂</button>
             </div>
+            <label class="switch-group" style="margin-top:8px">
+              <input type="checkbox" id="domain-auto-rescan" />
+              <span>開 App 時自動重掃資料夾 — 新增的 <code>.md</code> 會自己出現；關閉時按「重新讀取」才更新</span>
+            </label>
             <p class="sub" id="domain-pack-status" style="margin-top:8px">—</p>
             <div class="domain-pack-list" id="domain-pack-list"></div>
+
+            <details class="ask-advanced" id="domain-author" style="margin-top:14px">
+              <summary>用 AI 產生一個領域包</summary>
+              <div class="ask-advanced-body">
+                <p class="sub" style="margin-top:0">描述你的產業與這類產品必須守的規矩。產出會先過解析器；不合格會自動修一次，仍不合格就把錯誤顯示給你。</p>
+                <label class="ask-adv-label" for="da-brief">領域描述</label>
+                <textarea id="da-brief" class="ask-input" rows="5" placeholder="例：台灣的產險線上投保。必須涵蓋保險法第 148 條之揭露、招攬人員登錄、以及要保書告知義務。理賠爭議多半出在不保事項沒寫清楚。"></textarea>
+                <div class="actions-row" style="margin-top:8px">
+                  <button type="button" class="btn btn-primary" id="da-generate">產生</button>
+                  <button type="button" class="btn" id="da-template">下載空白範本</button>
+                </div>
+                <p class="sub" id="da-status" style="margin-top:8px"></p>
+                <div id="da-result" hidden>
+                  <label class="ask-adv-label" for="da-raw">產出（可直接手改）</label>
+                  <textarea id="da-raw" class="ask-input" rows="18" spellcheck="false" style="font-family:var(--font-mono);font-size:12px"></textarea>
+                  <label class="ask-adv-label" for="da-instruction">要改哪裡？</label>
+                  <input type="text" id="da-instruction" class="ask-input" placeholder="例：把 KYC 那條改成 warn，另外加一段費率揭露" />
+                  <div class="actions-row" style="margin-top:8px">
+                    <button type="button" class="btn" id="da-refine">依指示重產</button>
+                    <button type="button" class="btn" id="da-download">下載 .md</button>
+                    <button type="button" class="btn btn-primary" id="da-add">加入我的領域</button>
+                  </div>
+                </div>
+              </div>
+            </details>
           </div>
 
           <!-- Section 4: Data Management -->

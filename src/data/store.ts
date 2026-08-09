@@ -38,6 +38,7 @@ import type {
 import { emptySectionValues } from "../lib/export";
 import { applyMeta, metaFromSections, orphanSectionIds, pickDomain } from "../lib/section-meta";
 import { DEFAULT_DOMAIN, domainPacks, reloadUserPacks } from "./domains";
+import { autoRescanUserDomains } from "../lib/user-domains";
 import { resolveDomain } from "../lib/domain-pack";
 import { BASE_GATE_SPEC } from "../lib/prd-gates";
 import type { GateSpec } from "../lib/gate-rules";
@@ -1990,3 +1991,20 @@ export function evaluateChecks(section: Section, values: Record<string, string>)
     return { ...c, pass };
   });
 }
+
+/**
+ * 開 App 時對齊自訂領域包資料夾。
+ *
+ * 預設關（見 `UserDomainCache.autoRescan`），開了才會走這一段。放在這裡而不是
+ * 每個頁面各叫一次：漏掉一個頁面的症狀是「在那一頁看不到新加的領域」，
+ * 那種不一致比多一次磁碟走訪難查得多。
+ *
+ * 非同步且吞掉錯誤：領域包資料夾被移走、外接碟沒掛，都不該讓 App 開不起來。
+ */
+void autoRescanUserDomains()
+  .then((changed) => {
+    if (changed) store.refreshDomainPacks();
+  })
+  .catch(() => {
+    /* 掃不到就用快取，這不是錯誤 */
+  });
