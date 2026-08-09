@@ -4,6 +4,7 @@
  */
 import { store } from "../data/store";
 import type { AISettings } from "../data/types";
+import { anthropicMessagesUrl, anthropicModelsUrl, geminiBase } from "./api-url";
 
 export type AiReady =
   | { ok: true; provider: "gemini" | "openai" | "anthropic" | "custom" }
@@ -95,11 +96,7 @@ function normalizeOpenAiBase(endpoint: string, isLocal: boolean): string {
 
 async function callGemini(system: string, user: string, s: AISettings): Promise<string> {
   const model = s.model.startsWith("gemini") ? s.model : "gemini-2.5-flash";
-  const base = (s.endpoint || "https://generativelanguage.googleapis.com/v1beta").replace(
-    /\/$/,
-    "",
-  );
-  // 支援使用者填 v1beta 或完整 base
+  const base = geminiBase(s.endpoint);
   const url = `${base}/models/${model}:generateContent?key=${encodeURIComponent(s.apiKey.trim())}`;
   const body = {
     systemInstruction: { parts: [{ text: system }] },
@@ -181,8 +178,7 @@ async function callOpenAICompat(system: string, user: string, s: AISettings): Pr
 }
 
 async function callAnthropic(system: string, user: string, s: AISettings): Promise<string> {
-  const base = (s.endpoint || "https://api.anthropic.com").replace(/\/$/, "");
-  const url = base.includes("/messages") ? base : `${base}/v1/messages`;
+  const url = anthropicMessagesUrl(s.endpoint);
   const model = s.model.startsWith("claude") ? s.model : "claude-sonnet-4-5";
   const headers = {
     "Content-Type": "application/json",
@@ -309,11 +305,9 @@ export async function listModels(): Promise<string[]> {
   const headers: Record<string, string> = {};
 
   if (ready.provider === "gemini") {
-    const base = (s.endpoint || "https://generativelanguage.googleapis.com/v1beta").replace(/\/$/, "");
-    url = `${base}/models?key=${encodeURIComponent(key)}&pageSize=200`;
+    url = `${geminiBase(s.endpoint)}/models?key=${encodeURIComponent(key)}&pageSize=200`;
   } else if (ready.provider === "anthropic") {
-    const base = (s.endpoint || "https://api.anthropic.com").replace(/\/$/, "");
-    url = `${base}/v1/models?limit=100`;
+    url = `${anthropicModelsUrl(s.endpoint)}?limit=100`;
     headers["x-api-key"] = key;
     headers["anthropic-version"] = "2023-06-01";
     headers["anthropic-dangerous-direct-browser-access"] = "true";
