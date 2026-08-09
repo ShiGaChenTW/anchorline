@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>偏好與 AI 設定 · PRD 引導工作台</title>
+<title>偏好與 AI 設定 · Anchorline</title>
 <link rel="stylesheet" href="shared.css" />
 <style>
   .settings-container {
@@ -173,7 +173,7 @@
   <div class="shell">
     <aside class="rail" data-od-id="rail">
             <div class="rail-brand">
-        <div class="rail-logo">PR</div>
+        <div class="rail-logo">AL</div>
         <div class="rail-brand-text">
           <strong>Anchorline</strong>
           <span>anchorline.local</span>
@@ -204,12 +204,6 @@
           計劃追蹤
         </a>
 
-                <a class="nav-item" href="admin.html" data-od-id="nav-admin">
-          管理中心
-        </a>
-        <a class="nav-item" href="agents.html" data-od-id="nav-agents">
-          Agent 管理
-        </a>
 
 <a class="nav-item active" href="settings.html" data-od-id="nav-settings">
           <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm0 14.5a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13zM6.5 8a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z"/></svg>
@@ -256,9 +250,26 @@
             <button type="button" class="set-cat" data-set-cat="ai">AI 工具</button>
             <button type="button" class="set-cat" data-set-cat="quality">品質檢查</button>
             <button type="button" class="set-cat" data-set-cat="people">人員與權限</button>
+            <button type="button" class="set-cat" data-set-cat="workspace">工作區管理</button>
             <button type="button" class="set-cat" data-set-cat="data">資料</button>
           </nav>
           <div class="settings-container" id="set-pane">
+
+          <!-- 工作區管理：從側欄搬過來的兩個系統功能。
+               保持連結而不是把兩頁重寫進表單 —— 它們各有完整的表格與流程，
+               複製一份進來只會產生兩份會各自腐爛的畫面。
+               target="_top"：設定是用 iframe 開在彈窗裡的，不指定會把整頁關進 900px 的框。 -->
+          <div class="settings-section" data-cat="workspace">
+            <h2>🗂️ 工作區管理</h2>
+            <p class="sub">團隊、流程與 AI Agent 的設定。這些是偶爾才調一次的東西，所以放在設定裡而不是側欄。</p>
+            <div class="actions-row" style="gap:12px;flex-wrap:wrap">
+              <a class="btn" href="admin.html" target="_top" data-od-id="set-admin">管理中心</a>
+              <a class="btn" href="agents.html" target="_top" data-od-id="set-agents">Agent 管理</a>
+            </div>
+            <p class="sub" style="margin-top:10px">
+              管理中心：成員、角色與審核流程。Agent 管理：AI 助教的 prompt 與進場時機。
+            </p>
+          </div>
 
           <!-- Section 1: AI Model & Key -->
           <div class="settings-section" data-cat="ai">
@@ -328,7 +339,7 @@
             </div>
 
             <h4 style="margin:16px 0 10px;font-size:14px;color:var(--fg)">人員與 Agent 列表</h4>
-            <div id="employee-list-container" style="display:flex;flex-direction:column;gap:8px"></div>
+            <div id="employee-list-container" class="emp-list"></div>
 
             <div id="add-employee-panel" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
               <h4 style="margin:0 0 10px;font-size:14px;color:var(--fg)">➕ 新增人員 / Agent</h4>

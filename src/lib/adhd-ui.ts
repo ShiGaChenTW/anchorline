@@ -447,107 +447,11 @@ function collapseNoiseBlocks() {
   document.querySelector("#flow-strip-host")?.classList.add("adhd-flow-quiet");
 }
 
-/** 側欄：主流程 3 項 + 其餘收合；目前頁在「其他」內則展開並標示 */
-export function applyAdhdRail(nav: Element) {
-  if (nav.getAttribute("data-adhd-rail") === "1") {
-    // 已套過：仍同步展開／摘要（換頁或 re-sync active 時）
-    expandOtherNavIfNeeded(nav);
-    return;
-  }
-  nav.setAttribute("data-adhd-rail", "1");
-
-  // 主流程的入口全部移出固定導覽了：專案動作掛在卡片下方，
-  // 跨專案的四個入口在「工作區」那一組。剩下的（管理中心、Agent 管理）
-  // 都是偶爾才進去一次的，一律收進「其他功能」。
-  const primary = new Set<string>();
-  const secondary: HTMLElement[] = [];
-
-  nav.querySelectorAll<HTMLElement>("a.nav-item, button.nav-item").forEach((el) => {
-    const od = el.getAttribute("data-od-id") || "";
-    if (primary.has(od)) {
-      el.classList.add("adhd-nav-primary");
-      return;
-    }
-    // 專案卡片區不進 secondary
-    if (el.closest("#rail-projects-block")) return;
-    // 「工作區」那一組（總覽／清單／審閱佇列／章節範本）也不進 —— 它本來就是
-    // 被挑出來放在最上面的主路徑，再被掃進「其他功能」等於白搬一次。
-    // 這一組沿用 .nav-item 的外觀，所以會被這個選擇器掃到。
-    if (el.closest(".rail-wsnav")) return;
-    secondary.push(el);
-  });
-
-  // 快捷 label + TUI 也進 secondary 群組
-  const labels = Array.from(nav.querySelectorAll(".nav-label")).filter(
-    (l) => !/工作區|專案/.test(l.textContent || ""),
-  );
-
-  if (!secondary.length) return;
-
-  const details = document.createElement("details");
-  details.className = "adhd-nav-more";
-  details.innerHTML = `<summary class="adhd-nav-more-summary"><span class="adhd-nav-more-summary-label">其他功能</span></summary><div class="adhd-nav-more-body"></div>`;
-  const body = details.querySelector(".adhd-nav-more-body")!;
-
-  // 插在最後一個 primary 後面
-  const lastPrimary =
-    nav.querySelector('[data-od-id="nav-review"]') ||
-    nav.querySelector('[data-od-id="nav-editor"]') ||
-    nav.querySelector('[data-od-id="nav-projects"]');
-
-  secondary.forEach((el) => body.appendChild(el));
-  labels.forEach((l) => {
-    if (l.parentElement === nav) body.appendChild(l);
-  });
-
-  if (lastPrimary?.nextSibling) {
-    lastPrimary.parentElement?.insertBefore(details, lastPrimary.nextSibling);
-  } else {
-    nav.appendChild(details);
-  }
-
-  expandOtherNavIfNeeded(nav);
-}
-
-/**
- * 目前頁若在「其他功能」內：展開 details、標 active、summary 顯示當前項
- */
-export function expandOtherNavIfNeeded(nav: Element = document.querySelector(".rail-nav")!) {
-  if (!nav) return;
-  const details = nav.querySelector<HTMLDetailsElement>("details.adhd-nav-more");
-  if (!details) return;
-
-  const activeItem = details.querySelector<HTMLElement>(
-    "a.nav-item.active, a.nav-item[aria-current='page'], button.nav-item.active",
-  );
-  const summary = details.querySelector(".adhd-nav-more-summary");
-  const labelEl =
-    summary?.querySelector(".adhd-nav-more-summary-label") ||
-    summary;
-
-  if (activeItem) {
-    details.open = true;
-    details.classList.add("has-active");
-    activeItem.classList.add("active");
-    activeItem.setAttribute("aria-current", "page");
-    // 取出可見名稱（去掉 count）
-    const name = (activeItem.textContent || "")
-      .replace(/\s+/g, " ")
-      .replace(/\d+\s*$/, "")
-      .trim();
-    if (labelEl) {
-      labelEl.textContent = name ? `其他功能 · ${name}` : "其他功能";
-    }
-    // 捲到可見
-    requestAnimationFrame(() => {
-      activeItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    });
-  } else {
-    details.classList.remove("has-active");
-    if (labelEl) labelEl.textContent = "其他功能";
-    // 沒有 active 子項時保持使用者手動開合狀態，不強制關閉
-  }
-}
+// 「其他功能」收合區退休了。
+// 它當初存在的理由是「側欄項目太多」——但主流程入口早就搬去專案卡片與
+// 「工作區」那一組，剩在裡面的只有管理中心與 Agent 管理兩個系統設定項。
+// 兩個項目卻要一整塊邊框、一個標題、一次展開動作，包裝比內容重。
+// 兩者已改由設定彈窗的「工作區管理」分類進入（settings.html）。
 
 /** 空狀態大引導（專案頁） */
 function enhanceEmptyState() {
@@ -603,29 +507,9 @@ export function initAdhdUi() {
   collapseNoiseBlocks();
   enhanceEmptyState();
 
-  // 側欄 ADHD 簡化（在 rail-nav 重建後呼叫）
-  const nav = document.querySelector(".rail-nav");
-  if (nav) applyAdhdRail(nav);
-
   // store 變更時刷新下一步與空狀態
   store.subscribe(() => {
     ensureFocusStrip(nextStepForPage(detectRailPage()));
     enhanceEmptyState();
   });
-}
-
-/** rail 重建後再套一次（auth 呼叫） */
-export function reapplyAdhdRail() {
-  const nav = document.querySelector(".rail-nav");
-  if (!nav) return;
-  nav.removeAttribute("data-adhd-rail");
-  // 清掉舊的「其他功能」再重建（避免重複巢狀）
-  nav.querySelectorAll("details.adhd-nav-more").forEach((d) => {
-    const body = d.querySelector(".adhd-nav-more-body");
-    if (body) {
-      Array.from(body.childNodes).forEach((n) => d.parentElement?.insertBefore(n, d));
-    }
-    d.remove();
-  });
-  applyAdhdRail(nav);
 }

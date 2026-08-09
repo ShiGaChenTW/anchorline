@@ -170,11 +170,11 @@ export function renderWelcome(list: FastfetchEntry[] | null) {
   root.innerHTML = `
     <div class="modal welcome-modal" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
       <header class="welcome-head">
-        <div class="welcome-mark" aria-hidden="true">PR</div>
+        <div class="welcome-mark" aria-hidden="true">AL</div>
         <div class="welcome-hello">
           <h3 id="welcome-title">${escapeHtml(greeting())}${who ? `，${escapeHtml(who)}` : ""}</h3>
           <p class="welcome-appline">
-            <span>PRD 開發監控台</span>
+            <span>Anchorline</span>
             <span class="welcome-ver mono">v${escapeHtml(APP_VERSION)}</span>
           </p>
         </div>
