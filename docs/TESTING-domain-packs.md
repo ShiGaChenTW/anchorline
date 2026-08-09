@@ -11,15 +11,19 @@
 
 ## 0. 安裝與啟動
 
-```
-產物：src-tauri/target/release/bundle/macos/Anchorline Test.app
-安裝：已複製到 /Applications/
-```
+**已安裝好：`/Applications/Anchorline Test.app`**（quarantine 屬性已移除，直接雙擊即可，不必右鍵）
 
-**未簽章，第一次開會被 Gatekeeper 擋。** 兩種開法：
+它與你平常用的 `Anchorline.app` 是**兩個獨立的 App**：
 
-- 在 Finder 對著 App **按右鍵 → 打開** → 對話框再按一次「打開」
-- 或 `xattr -dr com.apple.quarantine "/Applications/Anchorline Test.app"` 後正常開啟
+| | 識別碼 | localStorage key |
+|---|---|---|
+| Anchorline.app（你原本的） | `dev.anchorline.app` | `anchorline:state:v6:prod` |
+| Anchorline Test.app（這次） | `dev.anchorline.app.test` | `anchorline:state:v6:test` |
+
+測壞了不影響正式資料，也不會蓋掉原本的 App。要移除就直接把
+`/Applications/Anchorline Test.app` 丟到垃圾桶。
+
+> 重建：`VITE_APP_VARIANT=test bunx tauri build --config '{"productName":"Anchorline Test","identifier":"dev.anchorline.app.test"}'`
 
 登入：使用者選 **Scott（管理員）**，密碼 `demo`。
 
@@ -75,8 +79,15 @@
 
 ## 4. 自帶領域包（桌面才有，這是主菜）
 
-素材已經準備好：**`<專案資料夾>/examples/domain-packs/`**，裡面有
-`insurance.md`（可直接用的保險領域包）與 `_template.md`（空白範本）。
+素材已經準備好，選資料夾時指這裡（可直接複製貼上）：
+
+```
+~/orca/workspaces/Project_Anchorline/Fintech-PRD-Agent導入/examples/domain-packs
+```
+
+裡面有 `insurance.md`（可直接用的保險領域包）與 `_template.md`（空白範本）。
+
+> 在 macOS 的選擇資料夾對話框按 `⌘⇧G` 可以直接貼路徑。
 
 進 **偏好設定 → 🏷️ 領域包**。
 
