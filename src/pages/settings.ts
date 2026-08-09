@@ -113,45 +113,43 @@ function renderEmployees() {
               `<option value="${r}" ${e.accessRole === r ? "selected" : ""}>${ACCESS_ROLE_LABEL[r]}</option>`,
           )
           .join("");
+        // 「角色：X」那一行拿掉了 —— 右邊的下拉本來就寫著同一件事，
+        // 同一個事實講兩次只是讓四行文字擠在一起、誰都不突出。
+        // 族系只有 Agent 有意義，人員不必佔一行講「族系：—」。
+        const meta = [e.title, e.email, e.kind === "agent" ? `族系 ${family}` : ""]
+          .filter(Boolean)
+          .map((s) => escapeHtml(s))
+          .join(" · ");
         return `
-        <div class="emp-card" style="display:flex;flex-direction:column;gap:10px;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm)">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-            <div style="display:flex;align-items:center;gap:10px">
-              <div class="avatar" style="width:28px;height:28px;font-size:12px">${escapeHtml(e.avatar || e.name.slice(0, 1))}</div>
-              <div>
-                <div style="font-weight:600;font-size:13.5px;color:var(--fg)">
-                  ${escapeHtml(e.name)}
-                  ${isCur ? '<span class="pill pill-approved" style="font-size:10px;margin-left:6px">目前登入</span>' : ""}
-                  <span class="pill" style="font-size:10px;margin-left:4px">${kind}</span>
-                </div>
-                <div style="font-size:12px;color:var(--muted)">${escapeHtml(e.title)} · <span class="mono">${escapeHtml(e.email)}</span></div>
-                <div style="font-size:11px;color:var(--muted);margin-top:2px">角色：${ACCESS_ROLE_LABEL[e.accessRole]} · 族系：${escapeHtml(family)}</div>
-              </div>
-            </div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              ${
-                !isCur
-                  ? `<button type="button" class="btn btn-sm btn-ghost btn-switch-emp" data-id="${e.id}">切換登入</button>`
-                  : ""
-              }
-              ${
-                canManage && !isCur
-                  ? `<button type="button" class="btn btn-sm btn-ghost btn-del-emp" data-id="${e.id}" style="color:var(--muted)">✕ 刪除</button>`
-                  : ""
-              }
-            </div>
+        <div class="emp-card">
+          <div class="avatar emp-card-avatar">${escapeHtml(e.avatar || e.name.slice(0, 1))}</div>
+          <div class="emp-card-name">
+            ${escapeHtml(e.name)}
+            ${isCur ? '<span class="pill pill-approved">目前登入</span>' : ""}
+            <span class="pill">${kind}</span>
           </div>
-          ${
-            canManage
-              ? `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                  <label style="font-size:12px;color:var(--muted)">系統角色
-                    <select class="emp-role" data-id="${e.id}" style="margin-left:6px;background:var(--surface);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:4px 8px">
+          <div class="emp-card-meta">${meta}</div>
+          <div class="emp-card-controls">
+            ${
+              canManage
+                ? `<label class="emp-card-role">角色
+                    <select class="emp-role" data-id="${e.id}" aria-label="${escapeHtml(e.name)} 的系統角色">
                       ${roleOpts}
                     </select>
-                  </label>
-                </div>`
-              : ""
-          }
+                  </label>`
+                : ""
+            }
+            ${
+              !isCur
+                ? `<button type="button" class="btn btn-sm btn-ghost btn-switch-emp" data-id="${e.id}">切換登入</button>`
+                : ""
+            }
+            ${
+              canManage && !isCur
+                ? `<button type="button" class="btn btn-sm btn-ghost btn-del-emp" data-id="${e.id}">刪除</button>`
+                : ""
+            }
+          </div>
         </div>
       `;
       })

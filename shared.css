@@ -2681,8 +2681,117 @@ a.is-disabled {
   opacity: 0.45;
   pointer-events: none;
 }
+/* ─── 人員與 Agent 列表（設定 → 人員與權限） ───
+   原本整列寫在 inline style 裡。inline 樣式沒有選擇器，媒體／容器查詢完全
+   碰不到它 —— 容器一窄就只能整列垂直堆疊，頭像自己一行、四行文字權重相同。
+   改成真元件後，窄寬度是「結構改變」而不是「版面崩掉」。 */
+.emp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* 容器查詢而非媒體查詢：這份清單在設定頁與設定彈窗裡的可用寬度差很多，
+     但視窗寬度是一樣的 —— 該看的是容器，不是螢幕。 */
+  container-type: inline-size;
+}
+
+.emp-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "avatar name     controls"
+    "avatar meta     controls";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.emp-card-avatar {
+  grid-area: avatar;
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+}
+
+.emp-card-name {
+  grid-area: name;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--fg);
+}
+
+.emp-card-meta {
+  grid-area: meta;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--meta);
+  /* 長 email 不該撐破格線 */
+  overflow-wrap: anywhere;
+}
+
+.emp-card-controls {
+  grid-area: controls;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 刪除是破壞性動作，但不該跟「切換登入」一樣響。
+   平時退到 meta 色，滑過去才變警示色 —— 找得到，但不搶。 */
+/* html 前綴是為了贏過 `html[data-theme="github"] .btn-ghost`（同為 0,2,1，
+   靠位置在後決勝）—— 不用 !important 換取一條可預測的規則。 */
+html .emp-card-controls .btn-del-emp {
+  color: var(--meta);
+}
+html .emp-card-controls .btn-del-emp:hover,
+html .emp-card-controls .btn-del-emp:focus-visible {
+  color: var(--danger, #f85149);
+}
+
+.emp-card-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .emp-card select {
   max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+}
+
+/* 窄容器：控制項整條移到第二列，身分那一組保持頭像在左、文字在右。
+   ——不是讓每個東西各佔一行，而是把「人」跟「對這個人做的事」拆成兩層。 */
+@container (max-width: 520px) {
+  .emp-card {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "avatar name"
+      "avatar meta"
+      "controls controls";
+    row-gap: 10px;
+  }
+  .emp-card-controls {
+    justify-content: flex-start;
+  }
 }
 #perm-banner:not([hidden]) {
   display: block;
@@ -3962,82 +4071,41 @@ html.adhd-calm .adhd-nav-primary .ic {
 html.adhd-calm .adhd-nav-primary.active {
   box-shadow: inset 3px 0 0 var(--accent);
 }
-.adhd-nav-more {
-  margin: 8px 6px 4px;
-  border-top: 1px solid var(--border-muted);
-  padding-top: 6px;
-  border-radius: 8px;
-}
-.adhd-nav-more.has-active {
-  border: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border));
-  border-top: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border));
-  background: color-mix(in oklab, var(--accent) 6%, transparent);
-  padding: 4px;
-}
-.adhd-nav-more > summary,
-.adhd-nav-more-summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 8px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--meta);
-  border-radius: var(--radius-sm);
-  user-select: none;
+/* 側欄區塊收合（工作區 / 專案）——狀態掛在 <html>，換頁重建也不會歸零 */
+.rail-sec-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
 }
-.adhd-nav-more > summary::-webkit-details-marker { display: none; }
-.adhd-nav-more > summary:hover,
-.adhd-nav-more-summary:hover {
-  background: var(--inset);
-  color: var(--fg-2);
+.rail-sec-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
 }
-.adhd-nav-more > summary::before,
-.adhd-nav-more-summary::before {
-  content: "▸";
-  font-size: 10px;
-  flex-shrink: 0;
-  color: var(--meta);
+.rail-sec-toggle:hover {
+  opacity: 1;
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
 }
-.adhd-nav-more[open] > summary::before,
-.adhd-nav-more[open] > .adhd-nav-more-summary::before {
-  content: "▾";
+.rail-sec-toggle[aria-expanded="false"] {
+  transform: rotate(-90deg);
 }
-.adhd-nav-more.has-active > summary,
-.adhd-nav-more.has-active > .adhd-nav-more-summary {
-  color: var(--fg);
-  font-weight: 700;
-}
-.adhd-nav-more-summary-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.adhd-nav-more-body {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 0 0 6px;
-}
-.adhd-nav-more-body .nav-item {
-  font-size: 12.5px;
-  padding: 7px 10px;
-  color: var(--muted);
-  border-radius: 8px;
-}
-.adhd-nav-more-body .nav-item.active,
-.adhd-nav-more-body .nav-item[aria-current="page"] {
-  background: color-mix(in oklab, var(--accent) 14%, var(--bg));
-  color: var(--fg);
-  font-weight: 650;
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-.adhd-nav-more-body .nav-label {
-  margin-top: 6px;
-  opacity: 0.85;
+html.rail-ws-collapsed .rail-wsnav,
+html.rail-projects-collapsed .rail-projects,
+html.rail-projects-collapsed .rail-projects-empty,
+html.rail-projects-collapsed .rail-proj-resize,
+html.rail-projects-collapsed .rail-proj-actions {
+  display: none;
 }
 
 /* 專案卡片：更易掃讀 */
