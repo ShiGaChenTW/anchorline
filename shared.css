@@ -8375,3 +8375,29 @@ p.gd-warn {
 .sec-save-bar .spacer { flex: 1 1 auto; }
 /* 標題列的未儲存提示 —— 不能安靜 */
 .toolbar .sub.is-dirty { color: var(--warn, #eab308); font-weight: 600; }
+
+/* ─── 審閱頁：這一版相對主線的變更 ───
+   審閱者最需要的問題是「跟上次核准的比，改了什麼」。以前只能整份重讀。 */
+.rv-diff {
+  margin: 0 0 20px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+}
+.rv-diff-head h2 { margin: 0 0 4px; font-size: 15px; color: var(--fg); }
+.rv-diff-sub { margin: 0 0 14px; font-size: 12px; color: var(--meta); }
+.rv-diff-item + .rv-diff-item {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-muted, var(--border));
+}
+.rv-diff-where { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--fg-2, var(--fg)); }
+.rv-diff-body {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.rv-diff-body .fv-line { display: block; }

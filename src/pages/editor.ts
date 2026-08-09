@@ -58,6 +58,7 @@ import {
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { DEFAULT_DOMAIN, listDomains } from "../data/domains";
 import { initTheme } from "../lib/theme";
+import { changedFieldCount } from "../lib/prd-versions";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
 /** MarkaMD 雙欄欄位清理 */
@@ -1688,17 +1689,45 @@ document.getElementById("btn-submit")?.addEventListener("click", () => {
     toast("目前身分無法送出編輯成果");
     return;
   }
+  // 未儲存的變更一律先擋 —— 送審拍的是「已儲存的內容」的快照。
+  // 讓一份「跟作者螢幕上看到的不一樣」的版本送出去，是最難察覺也最貴的錯誤：
+  // 審閱者核准的東西跟作者以為送出的東西不同，而兩邊都不會發現。
+  const dirty = store.dirtySectionIds().length;
+  if (dirty) {
+    if (!window.confirm(`還有 ${dirty} 個章節未儲存。要先全部儲存再送審嗎？`)) {
+      toast("已取消送審 —— 未儲存的內容不會被包含進去");
+      return;
+    }
+    store.saveSections();
+    render();
+  }
+
   const gate = evaluatePrdGates(store.get(), store.activeGateSpec());
   if (!gate.canSubmit) {
     toast(gateSummaryLine(gate) + " — 請先補齊 BLOCK 項");
     renderCoach();
     return;
   }
+
+  // 送審 = commit：對整份 PRD 拍快照。審閱者看的是這一份，
+  // 不是「送審之後又被改過的當下內容」。
+  const commit = store.commitForReview("");
+  if (!commit.ok) {
+    toast(commit.reason ?? "無法送審");
+    return;
+  }
+
   store.submitForReview();
-  toast("結構檢查通過，已送出審閱佇列");
+  const base = store.prdBaseline();
+  const changed = base ? changedFieldCount(base.docs, commit.version!.docs) : null;
+  toast(
+    changed === null
+      ? "已送出審閱 —— 這是第一個版本"
+      : `已送出審閱 —— 這一版改了 ${changed} 個欄位`,
+  );
   window.setTimeout(() => {
     location.href = "review.html";
-  }, 600);
+  }, 800);
 });
 
 document.getElementById("btn-outline")?.addEventListener("click", () => {
