@@ -139,14 +139,17 @@ function syncProjectChrome() {
   const h1 = document.querySelector<HTMLElement>('[data-od-id="page-title"], .toolbar h1');
   if (h1) h1.textContent = name;
 
-  const now = new Date();
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mm = String(now.getMinutes()).padStart(2, "0");
+  // 不再寫「自動儲存 HH:MM」—— 那個標籤在取消自動存檔之後就是謊話，
+  // 而且是最危險的那一種：使用者會相信東西已經存了。
   const sub = document.querySelector<HTMLElement>('[data-od-id="page-sub"], .toolbar .sub');
   if (sub) {
+    const dirty = store.dirtySectionIds().length;
     sub.textContent = p
-      ? `${meta} · 自動儲存 ${hh}:${mm}`
+      ? dirty
+        ? `${meta} · ${dirty} 個章節未儲存`
+        : `${meta} · 已儲存`
       : "回總覽選一個專案";
+    sub.classList.toggle("is-dirty", Boolean(p && dirty));
   }
 
   document.title = `${name} · 編輯 · Anchorline`;
@@ -173,7 +176,20 @@ function sections(): Section[] {
   return store.get().sections;
 }
 
+/**
+ * 這一節「畫面上該顯示的內容」= 已儲存的值疊上未儲存的草稿。
+ *
+ * 取消自動存檔之後，textarea 裡的東西可能還沒進 sectionValues；
+ * 直接讀 sectionValues 會讓使用者重新進來時看到自己的字不見了。
+ */
 function valuesFor(s: Section): Record<string, string> {
+  const saved = store.get().sectionValues[s.id] ?? {};
+  const draft = store.get().prdDrafts[store.get().activeProjectId]?.[s.id];
+  return draft ? { ...saved, ...draft } : saved;
+}
+
+/** 這一節已儲存的內容 —— 異動高亮的基準 */
+function savedValuesFor(s: Section): Record<string, string> {
   return store.get().sectionValues[s.id] ?? {};
 }
 
@@ -892,6 +908,154 @@ function renderFileView(): boolean {
   return true;
 }
 
+/**
+ * 儲存目前這一節的草稿。
+ *
+ * 取消自動存檔之後這是「內容真正落地」的唯一動作 —— 送審拍的快照、
+ * 異動高亮的基準、gate 讀的內容，全部以已儲存的值為準。
+ */
+function saveCurrentSection(): void {
+  const s = sections()[idx];
+  if (!s) return;
+  if (!store.isSectionDirty(s.id)) {
+    toast("沒有需要儲存的變更");
+    return;
+  }
+  store.saveSections(s.id);
+  toast(`已儲存「${s.title}」`);
+  render();
+}
+
+/** 儲存所有章節的草稿 */
+function saveAllSections(): void {
+  const n = store.dirtySectionIds().length;
+  if (!n) {
+    toast("沒有需要儲存的變更");
+    return;
+  }
+  store.saveSections();
+  toast(`已儲存 ${n} 個章節`);
+  render();
+}
+
+/**
+ * 章節欄位的異動高亮。
+ *
+ * 跟檔案編輯器同一套語意，**但呈現方式必須不同**：檔案編輯器有整片
+ * textarea 可以疊背板，章節欄位是一堆長短不一的 input／雙欄 Markdown，
+ * 疊背板要對齊每一個欄位的字體度量，成本高且脆弱。
+ *
+ * 所以這裡走「差異摘要」：每個有改動的欄位底下掛一條，用同一組
+ * .fv-add／.fv-del 樣式畫出藍字新增與紅字刪除線，被整行刪掉的也在。
+ * 顏色語彙一致，位置貼著欄位，不必去別的地方對照。
+ */
+function renderFieldDiffs(s: Section): void {
+  const saved = savedValuesFor(s);
+  const shown = valuesFor(s);
+  const body = document.getElementById("editor-body");
+  if (!body) return;
+
+  body.querySelectorAll(".field-diff").forEach((el) => el.remove());
+
+  for (const f of s.fields) {
+    const before = saved[f.key] ?? "";
+    const after = shown[f.key] ?? "";
+    if (before === after) continue;
+
+    const host = body.querySelector(`[data-od-id="field-${f.key}"]`)
+      ?? body.querySelector(`[data-md-field="${f.key}"]`)
+      ?? body.querySelector(`[data-key="${f.key}"]`)?.closest(".field, .md-field");
+    if (!host) continue;
+
+    const marks = markChangedLines(before, after);
+    const afterLines = after.split("\n");
+    const removedAt = new Map<number, string[]>();
+    const byIndex = new Map<number, LineMark>();
+    for (const m of marks) {
+      if (m.kind === "removed") {
+        const list = removedAt.get(m.index) ?? [];
+        list.push(m.before ?? "");
+        removedAt.set(m.index, list);
+      } else byIndex.set(m.index, m);
+    }
+
+    const rows: string[] = [];
+    const pushRemoved = (at: number) => {
+      for (const gone of removedAt.get(at) ?? []) {
+        rows.push(
+          `<span class="fv-line fv-changed fv-line-removed"><span class="fv-del">${
+            escapeHtml(gone) || "&nbsp;"
+          }</span></span>`,
+        );
+      }
+    };
+    afterLines.forEach((ln, i) => {
+      pushRemoved(i);
+      const m = byIndex.get(i);
+      if (!m) return; // 沒動的行不列出來 —— 摘要只講改了什麼
+      rows.push(
+        `<span class="fv-line fv-changed">${
+          m.kind === "modified"
+            ? segsHtml(inlineDiff(m.before ?? "", ln))
+            : `<span class="fv-add">${escapeHtml(ln) || "&nbsp;"}</span>`
+        }</span>`,
+      );
+    });
+    pushRemoved(afterLines.length);
+    if (!rows.length) continue;
+
+    const box = document.createElement("div");
+    box.className = "field-diff";
+    box.innerHTML = `
+      <p class="field-diff-head">未儲存的變更 ·
+        <span class="fv-add">新增</span> / <span class="fv-del">刪除</span>
+      </p>
+      <div class="field-diff-body">${rows.join("\n")}</div>
+    `;
+    host.appendChild(box);
+  }
+}
+
+/**
+ * 儲存列：dirty 狀態 + 儲存／捨棄。
+ *
+ * 每次 renderEditor 都重畫（章節內容整段重建），所以自帶存在性守衛沒有意義 ——
+ * 直接依當下狀態產生內容即可。
+ */
+function renderSaveBar(s: Section): void {
+  const host = document.getElementById("sec-save-hint");
+  if (!host) return;
+  const dirty = store.isSectionDirty(s.id);
+  const others = store.dirtySectionIds().filter((id) => id !== s.id).length;
+
+  if (!dirty && !others) {
+    host.className = "hint adhd-editor-hint";
+    host.innerHTML = `已儲存 · <span class="mono">⌘S</span> 儲存 · <span class="mono">⌘↵</span> 下一節`;
+    return;
+  }
+
+  host.className = "hint adhd-editor-hint sec-save-bar is-dirty";
+  host.innerHTML = `
+    <span class="sec-save-state">${
+      dirty ? "這一節有未儲存的變更" : `其他 ${others} 個章節有未儲存的變更`
+    }</span>
+    ${others && dirty ? `<span class="sec-save-others">另有 ${others} 節未存</span>` : ""}
+    <span class="spacer"></span>
+    ${dirty ? `<button type="button" class="btn btn-sm" id="btn-sec-discard">捨棄這一節</button>` : ""}
+    ${dirty ? `<button type="button" class="btn btn-sm btn-primary" id="btn-sec-save">儲存</button>` : ""}
+    ${others ? `<button type="button" class="btn btn-sm" id="btn-sec-save-all">全部儲存</button>` : ""}
+  `;
+
+  document.getElementById("btn-sec-save")?.addEventListener("click", () => saveCurrentSection());
+  document.getElementById("btn-sec-save-all")?.addEventListener("click", () => saveAllSections());
+  document.getElementById("btn-sec-discard")?.addEventListener("click", () => {
+    if (!window.confirm(`捨棄「${s.title}」未儲存的變更？改回上次儲存的內容。`)) return;
+    store.discardDrafts(s.id);
+    toast("已捨棄未儲存的變更");
+    render();
+  });
+}
+
 function renderEditor() {
   if (renderFileView()) return;
   const list = sections();
@@ -965,7 +1129,7 @@ function renderEditor() {
       </div>
     </details>
     ${fields}
-    <div class="hint adhd-editor-hint">變更即時存檔 · <span class="mono">⌘↵</span> 下一節 · <span class="mono">⌘S</span> 確認</div>
+    <div class="hint adhd-editor-hint" id="sec-save-hint"></div>
   `;
 
   // 一般 input
@@ -977,8 +1141,9 @@ function renderEditor() {
     input.addEventListener("input", () => {
       if (!editable()) return;
       const key = input.dataset.key!;
-      store.setSectionField(s.id, key, input.value);
-      const len = Object.values(store.get().sectionValues[s.id] ?? {}).join("").length;
+      // 寫草稿，不寫已儲存 —— 「已儲存」必須是使用者按過儲存才成立
+      store.setSectionDraft(s.id, key, input.value);
+      const len = Object.values(valuesFor(s)).join("").length;
       if (len > 80 && s.status === "empty") {
         store.updateSection(s.id, { status: "warn" });
       }
@@ -986,14 +1151,18 @@ function renderEditor() {
       renderCoach();
       renderOutline();
       renderProgress(idx, list.length);
+      // 只重畫這兩塊，不走 render()：整段重建會把 textarea 換掉，
+      // 游標與輸入法組字狀態都會沒。
+      renderSaveBar(s);
+      renderFieldDiffs(s);
     });
   });
 
   // MarkaMD 雙欄 textarea
   unbindMd = bindMdField(body, (key, value) => {
     if (!editable()) return;
-    store.setSectionField(s.id, key, value);
-    const len = Object.values(store.get().sectionValues[s.id] ?? {}).join("").length;
+    store.setSectionDraft(s.id, key, value);
+    const len = Object.values(valuesFor(s)).join("").length;
     if (len > 80 && s.status === "empty") {
       store.updateSection(s.id, { status: "warn" });
     }
@@ -1001,7 +1170,12 @@ function renderEditor() {
     renderCoach();
     renderOutline();
     renderProgress(idx, list.length);
+    renderSaveBar(s);
+    renderFieldDiffs(s);
   });
+
+  renderSaveBar(s);
+  renderFieldDiffs(s);
 
   const prev = document.getElementById("btn-prev") as HTMLButtonElement | null;
   const next = document.getElementById("btn-next") as HTMLButtonElement | null;
@@ -1550,7 +1724,9 @@ document.addEventListener("keydown", (e) => {
   }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
-    toast("已儲存");
+    // 以前這裡只是 toast 一句「已儲存」—— 因為當時本來就即時存檔，
+    // 這顆快捷鍵是純安慰劑。現在它真的會存。
+    saveCurrentSection();
   }
 });
 
