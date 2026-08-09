@@ -27,6 +27,45 @@ export function isUnavailable(v: unknown): v is Unavailable {
 }
 
 /**
+ * Tauri 只把 `__TAURI_INTERNALS__` 注入**頂層 frame**，iframe 裡沒有。
+ *
+ * 偏好設定是用 iframe 載入 `settings.html` 的（見 `settings-modal.ts`），
+ * 所以設定頁裡的任何原生功能都會誤判成「這裡不是桌面版」——症狀是按鈕
+ * 直接灰掉，而且完全不像橋接問題。這個坑之所以到現在才爆，是因為在此之前
+ * 每一個 `isNative()` 呼叫點都剛好只出現在頂層頁面。
+ *
+ * iframe 與父層同源（都是 `tauri://localhost`），所以直接把父層的 internals
+ * 借過來用。修在這裡而不是在呼叫端加 workaround：native 偵測只有一個擁有者，
+ * 下一個放進設定頁的原生功能不該再踩一次。
+ *
+ * 匯出是為了測試——它跑在模組載入時，正式路徑不需要有人呼叫它。
+ */
+export function adoptParentInternals(w: {
+  parent?: unknown;
+  top?: unknown;
+  [k: string]: unknown;
+}): boolean {
+  if (!w || "__TAURI_INTERNALS__" in w) return false;
+  for (const frame of [w.parent, w.top]) {
+    if (!frame || frame === w) continue;
+    try {
+      const internals = (frame as Record<string, unknown>).__TAURI_INTERNALS__;
+      if (internals) {
+        w.__TAURI_INTERNALS__ = internals;
+        return true;
+      }
+    } catch {
+      // 跨來源存取被擋。iframe 不同源就真的沒有原生通道，維持 false 是對的。
+    }
+  }
+  return false;
+}
+
+if (typeof window !== "undefined") {
+  adoptParentInternals(window as unknown as Record<string, unknown>);
+}
+
+/**
  * 跑在 Tauri 殼裡嗎。
  *
  * 判斷 `__TAURI_INTERNALS__` 而不是 user agent —— UA 會被改，內部物件不會。
