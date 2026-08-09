@@ -332,8 +332,8 @@ function renderFileTree() {
       const sid = btn.dataset.ftSection!;
       const i = sections().findIndex((s) => s.id === sid);
       if (i < 0) return;
+      if (!goToSection(sid)) return;
       idx = i;
-      store.setActiveSection(sid);
       render();
     };
   });
@@ -476,9 +476,10 @@ function renderOutline() {
 
   el.querySelectorAll(".sec").forEach((btn) => {
     (btn as HTMLButtonElement).onclick = () => {
-      idx = Number((btn as HTMLElement).dataset.i);
-      const s = sections()[idx];
-      if (s) store.setActiveSection(s.id);
+      const i = Number((btn as HTMLElement).dataset.i);
+      const s = sections()[i];
+      if (s && !goToSection(s.id)) return;
+      idx = i;
       render();
     };
   });
@@ -519,6 +520,27 @@ function closeFileView(force = false) {
   if (!force && !confirmLeaveFile()) return false;
   openFile = null;
   render();
+  return true;
+}
+
+/**
+ * 切換 PRD 章節的唯一入口。
+ *
+ * `renderEditor()` 的第一行是 `if (renderFileView()) return;` —— 只要 `openFile`
+ * 還在，章節內容就永遠畫不出來。而原本六個 `store.setActiveSection()` 呼叫點
+ * 沒有任何一個會清掉它，所以「點過 OpenSpec 的檔案之後再點 PRD 章節，編輯區
+ * 一片空白」。修在這裡而不是六個點各補一次：真正的事件是「換章節」，只有一個。
+ *
+ * 有未存變更時仍會攔一次 —— 換章節跟關檔一樣會讓編輯中的內容離開視野。
+ */
+function goToSection(id: string): boolean {
+  if (openFile) {
+    if (!confirmLeaveFile()) return false;
+    // 直接清掉而不呼叫 closeFileView()：下面的 setActiveSection 會觸發 render，
+    // 不需要為了同一次操作畫兩遍。
+    openFile = null;
+  }
+  store.setActiveSection(id);
   return true;
 }
 
@@ -1355,8 +1377,8 @@ function renderBeginnerCoach() {
       const id = (btn as HTMLElement).dataset.sec!;
       const i = sections().findIndex((s) => s.id === id);
       if (i >= 0) {
+        if (!goToSection(id)) return;
         idx = i;
-        store.setActiveSection(id);
         render();
       }
     };
@@ -1427,7 +1449,8 @@ document.getElementById("domain-select")?.addEventListener("change", (e) => {
   // 章節集合換了，目前游標可能指到已經不存在的一節
   idx = 0;
   const first = sections()[0];
-  if (first) store.setActiveSection(first.id);
+  // 換領域等於整組章節換掉，開著的檔案檢視必須讓位
+  if (first) goToSection(first.id);
   const orphans = store.orphanSectionIds().length;
   toast(orphans ? `已換領域 — ${orphans} 個章節的內容暫時收起，沒有刪除` : "已換領域");
   render();
@@ -1435,8 +1458,8 @@ document.getElementById("domain-select")?.addEventListener("change", (e) => {
 
 document.getElementById("btn-prev")?.addEventListener("click", () => {
   if (idx > 0) {
+    if (!goToSection(sections()[idx - 1]!.id)) return;
     idx--;
-    store.setActiveSection(sections()[idx]!.id);
     render();
   }
 });
@@ -1444,8 +1467,8 @@ document.getElementById("btn-prev")?.addEventListener("click", () => {
 document.getElementById("btn-next")?.addEventListener("click", () => {
   const list = sections();
   if (idx < list.length - 1) {
+    if (!goToSection(list[idx + 1]!.id)) return;
     idx++;
-    store.setActiveSection(list[idx]!.id);
     render();
   } else {
     toast("所有章節已走完 — 可送出審閱");
