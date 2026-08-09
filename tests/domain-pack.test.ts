@@ -153,6 +153,40 @@ describe("resolveDomain", () => {
   });
 });
 
+// ── 範本 ────────────────────────────────────────────────────
+
+describe("_template.md", () => {
+  test("存在，且不會出現在可選領域裡", () => {
+    expect(PACKS._template).toBeDefined();
+    expect(Object.keys(PACKS).filter((n) => !n.startsWith("_"))).not.toContain("_template");
+  });
+
+  test("自己就是一個有效的包 — 使用者是照抄它的", () => {
+    const d = resolveDomain("_template", PACKS, BASE);
+    expect(d.sections.length).toBe(SEED_SECTIONS.length + 1);
+    const byId = new Map(d.sections.map((s) => [s.id, s]));
+    for (const g of [...d.gateSpec.groups, ...(d.gateSpec.hints ?? [])]) {
+      for (const r of g.rules) {
+        const sec = byId.get(r.section);
+        expect(sec, `${r.id} 指向不存在的章節`).toBeDefined();
+        for (const k of r.fields ?? []) {
+          expect(sec!.fields.some((f) => f.key === k), `${r.id} 指向不存在的欄位 ${k}`).toBe(true);
+        }
+        if (r.require.kind === "match") {
+          expect(() => new RegExp(r.require.re, r.require.flags)).not.toThrow();
+        }
+      }
+    }
+  });
+
+  test("四種 predicate 都示範到了 — 少一種使用者就不知道它存在", () => {
+    const raw = readFileSync(join(DIR, "_template.md"), "utf8");
+    for (const kind of ["present", "minLength", "match", "bullets"]) {
+      expect(raw, `範本沒示範 ${kind}`).toContain(kind);
+    }
+  });
+});
+
 // ── 全領域掃描：加一份 .md 就自動被這一組守住 ─────────────────
 
 describe("每一個領域包的健全性", () => {

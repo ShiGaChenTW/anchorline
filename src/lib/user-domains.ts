@@ -20,6 +20,14 @@ export type UserDomainCache = {
   /** 檔名 → 原始 markdown */
   sources: Record<string, string>;
   scannedAt: string;
+  /**
+   * 開 App 時自動重掃資料夾。預設關。
+   *
+   * 開了之後在資料夾裡新增 `.md` 就會自動出現，不必回設定頁按重新讀取；
+   * 代價是每次開 App 多一次磁碟走訪。關著的時候快取就是唯一真相，
+   * 想更新按「重新讀取」即可。
+   */
+  autoRescan?: boolean;
 };
 
 export function readCache(): UserDomainCache | null {
@@ -79,6 +87,16 @@ export function userDomainsDir(): string {
   return readCache()?.dir ?? "";
 }
 
+export function autoRescanEnabled(): boolean {
+  return readCache()?.autoRescan === true;
+}
+
+export function setAutoRescan(on: boolean) {
+  const c = readCache();
+  if (!c) return;
+  writeCache({ ...c, autoRescan: on });
+}
+
 export type ScanResult =
   | { ok: true; dir: string; count: number; errors: { file: string; message: string }[] }
   | { ok: false; reason: string };
@@ -96,27 +114,36 @@ export async function pickUserDomainsFolder(): Promise<ScanResult> {
   return ingest(pick.folderPath, pick.files);
 }
 
-/** 用已知路徑重掃（開 App 時背景對齊磁碟） */
+/**
+ * 整個資料夾重掃——新增、修改、刪除都會反映。
+ *
+ * 借用 `tracking_scan`：它做的事就是「列出這幾個資料夾裡的 `.md`，連內容一起回來」，
+ * 正好是這裡要的，不必為此新增一個 Rust command。代價是綁上它的上限
+ * （單檔 512KB、總計 300 檔）與「只掃第一層、不遞迴」的行為——
+ * 領域包資料夾不該長到需要突破這兩條。若哪天 `tracking_scan` 開始按 plan
+ * 格式過濾，這裡會跟著壞，所以在那邊改動時要記得回頭看這一段。
+ */
 export async function refreshUserDomains(): Promise<ScanResult> {
   const dir = userDomainsDir();
   if (!dir) return { ok: false, reason: "尚未指定領域包資料夾" };
   if (!isNative()) return { ok: false, reason: "自訂領域包需要桌面版" };
-  // pickFolder 會開對話框，重掃不能用它。逐檔讀已知檔名即可——
-  // 新增的檔案要等下一次手動選資料夾才會進來，這是刻意的：
-  // 背景自動掃整個資料夾等於每次開 App 都做一次不必要的磁碟走訪。
-  const cache = readCache();
-  const sources: Record<string, string> = {};
-  const errors: { file: string; message: string }[] = [];
-  for (const file of Object.keys(cache?.sources ?? {})) {
-    try {
-      sources[file] = (await native.readFile(`${dir}/${file}`)).text;
-    } catch (e) {
-      errors.push({ file, message: e instanceof Error ? e.message : String(e) });
-    }
-  }
-  if (!Object.keys(sources).length) return { ok: false, reason: "資料夾裡沒有讀得到的領域包" };
-  writeCache({ dir, sources, scannedAt: new Date().toISOString() });
-  return { ok: true, dir, count: Object.keys(sources).length, errors };
+  const scan = await native.trackingScan([dir]);
+  return ingest(
+    dir,
+    scan.files.map((f) => ({ path: f.path, name: f.name, text: f.text })),
+  );
+}
+
+/**
+ * 開 App 時的自動對齊。沒開選項就什麼都不做——
+ * 回傳「內容有沒有變」，呼叫端據此決定要不要重繪。
+ */
+export async function autoRescanUserDomains(): Promise<boolean> {
+  if (!autoRescanEnabled()) return false;
+  const before = JSON.stringify(readCache()?.sources ?? {});
+  const r = await refreshUserDomains();
+  if (!r.ok) return false;
+  return JSON.stringify(readCache()?.sources ?? {}) !== before;
 }
 
 function ingest(dir: string, files: { path: string; name: string; text: string }[]): ScanResult {
@@ -136,6 +163,46 @@ function ingest(dir: string, files: { path: string; name: string; text: string }
   if (!Object.keys(sources).length) {
     return { ok: false, reason: `${md.length} 個 .md 都不是有效的領域包` };
   }
-  writeCache({ dir, sources, scannedAt: new Date().toISOString() });
+  writeCache({ dir, sources, scannedAt: new Date().toISOString(), autoRescan: readCache()?.autoRescan });
   return { ok: true, dir, count: Object.keys(sources).length, errors };
+}
+
+/**
+ * 收一份單一領域包（AI 產生的，或使用者貼進來的）。
+ *
+ * 有指定資料夾且在桌面版時**寫進磁碟**，不是只放記憶體——否則開了自動重掃之後
+ * 這份包會在下一次開 App 時消失（重掃以磁碟為準）。那是最難查的一種資料遺失：
+ * 使用者記得自己加過，App 說沒有。
+ */
+export async function addUserPack(
+  filename: string,
+  raw: string,
+): Promise<{ ok: true; persisted: "disk" | "cache" } | { ok: false; reason: string }> {
+  let name: string;
+  try {
+    name = parseDomainPack(raw, filename).name;
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
+  const file = filename.toLowerCase().endsWith(".md") ? filename : `${name}.md`;
+  const cache = readCache();
+  const dir = cache?.dir ?? "";
+
+  if (dir && isNative()) {
+    try {
+      await native.writeFile(`${dir}/${file}`, raw);
+      await refreshUserDomains();
+      return { ok: true, persisted: "disk" };
+    } catch (e) {
+      return { ok: false, reason: `寫入資料夾失敗：${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
+
+  writeCache({
+    dir,
+    sources: { ...(cache?.sources ?? {}), [file]: raw },
+    scannedAt: new Date().toISOString(),
+    autoRescan: cache?.autoRescan,
+  });
+  return { ok: true, persisted: "cache" };
 }

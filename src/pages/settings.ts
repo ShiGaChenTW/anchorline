@@ -7,12 +7,18 @@ import { canManageUsers } from "../lib/permissions";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 import { BUILTIN_PACKS, listDomains } from "../data/domains";
+import { authorDomainPack, validate as validatePack } from "../lib/domain-pack-author";
+import { chatCompletion, isAiConfigured } from "../lib/ai-client";
+import TEMPLATE_MD from "../data/domains/_template.md?raw";
 import {
+  addUserPack,
+  autoRescanEnabled,
   canUseUserDomains,
   clearUserDomains,
   getUserPacks,
   pickUserDomainsFolder,
   refreshUserDomains,
+  setAutoRescan,
   userDomainsDir,
 } from "../lib/user-domains";
 
@@ -562,6 +568,12 @@ function renderDomainPacks() {
 
   const dir = userDomainsDir();
   const { errors } = getUserPacks();
+  const auto = document.getElementById("domain-auto-rescan") as HTMLInputElement | null;
+  if (auto) {
+    auto.checked = autoRescanEnabled();
+    // 沒指定資料夾就沒有東西可以重掃
+    auto.disabled = !dir || !canUseUserDomains();
+  }
   if (status) {
     status.textContent = dir
       ? `自訂資料夾：${dir}${errors.length ? `（${errors.length} 個檔解析失敗）` : ""}`
@@ -609,6 +621,115 @@ document.getElementById("btn-refresh-domains")?.addEventListener("click", async 
   store.refreshDomainPacks();
   renderDomainPacks();
   toast(`已重新讀取 ${r.count} 個自訂領域`);
+});
+
+// ── 用 AI 產生領域包 ──────────────────────────────────────────
+
+function daEl<T extends HTMLElement>(id: string): T | null {
+  return document.getElementById(id) as T | null;
+}
+
+function daStatus(msg: string, tone: "" | "err" = "") {
+  const el = daEl("da-status");
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = tone === "err" ? "var(--danger)" : "";
+}
+
+function daShow(raw: string) {
+  const box = daEl("da-result");
+  const ta = daEl<HTMLTextAreaElement>("da-raw");
+  if (ta) ta.value = raw;
+  if (box) box.hidden = false;
+}
+
+function downloadMd(filename: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function daRun(input: { brief: string; prior?: string; instruction?: string }) {
+  if (!isAiConfigured()) {
+    daStatus("尚未設定 AI 金鑰。請先在上面「AI 寫作教練模型與金鑰設定」填好並儲存。", "err");
+    return;
+  }
+  const btns = ["da-generate", "da-refine"].map((id) => daEl<HTMLButtonElement>(id));
+  btns.forEach((b) => b && (b.disabled = true));
+  daStatus("產生中…（會先過解析器驗證，不合格會自動修一次）");
+  try {
+    const r = await authorDomainPack(input, chatCompletion);
+    if (!r.ok) {
+      daStatus(`產生失敗：${r.reason}`, "err");
+      // 失敗的原文也給出來——多半只要手改一兩行就能用，丟掉太浪費
+      if (r.raw) daShow(r.raw);
+      return;
+    }
+    daShow(r.raw);
+    daStatus(
+      `已產生「${r.pack.displayName}」（${r.pack.sections?.length ?? 0} 個章節）${r.repaired ? " · 第一次驗證未過，已自動修正" : ""}`,
+    );
+  } finally {
+    btns.forEach((b) => b && (b.disabled = false));
+  }
+}
+
+daEl("da-generate")?.addEventListener("click", () => {
+  const brief = daEl<HTMLTextAreaElement>("da-brief")?.value.trim() ?? "";
+  if (brief.length < 10) {
+    daStatus("描述太短。至少寫出產業、產品類型，以及一條必須守的規矩。", "err");
+    return;
+  }
+  void daRun({ brief });
+});
+
+daEl("da-refine")?.addEventListener("click", () => {
+  const prior = daEl<HTMLTextAreaElement>("da-raw")?.value ?? "";
+  const instruction = daEl<HTMLInputElement>("da-instruction")?.value.trim() ?? "";
+  if (!prior.trim()) return;
+  void daRun({ brief: daEl<HTMLTextAreaElement>("da-brief")?.value ?? "", prior, instruction });
+});
+
+daEl("da-template")?.addEventListener("click", () => {
+  downloadMd("domain-pack-template.md", TEMPLATE_MD);
+  toast("已下載範本 — 改名、改內容，放進領域包資料夾");
+});
+
+daEl("da-download")?.addEventListener("click", () => {
+  const raw = daEl<HTMLTextAreaElement>("da-raw")?.value ?? "";
+  const v = validatePack(raw);
+  downloadMd(v.ok ? `${v.pack.name}.md` : "domain-pack.md", raw);
+});
+
+daEl("da-add")?.addEventListener("click", async () => {
+  // 手改過的內容要重新驗——textarea 是可編輯的，不能信任上一次的驗證結果
+  const raw = daEl<HTMLTextAreaElement>("da-raw")?.value ?? "";
+  const v = validatePack(raw);
+  if (!v.ok) {
+    daStatus(`還不能加入：${v.reason}`, "err");
+    return;
+  }
+  const r = await addUserPack(`${v.pack.name}.md`, raw);
+  if (!r.ok) {
+    daStatus(r.reason, "err");
+    return;
+  }
+  store.refreshDomainPacks();
+  renderDomainPacks();
+  toast(
+    r.persisted === "disk"
+      ? `已寫入領域包資料夾：${v.pack.name}.md`
+      : `已加入「${v.pack.displayName}」— 只存在這台瀏覽器，建議下載後放進資料夾`,
+  );
+});
+
+document.getElementById("domain-auto-rescan")?.addEventListener("change", (e) => {
+  const on = (e.target as HTMLInputElement).checked;
+  setAutoRescan(on);
+  toast(on ? "開 App 時會自動重掃領域包資料夾" : "已關閉自動重掃 — 按「重新讀取」才更新");
 });
 
 document.getElementById("btn-clear-domains")?.addEventListener("click", () => {

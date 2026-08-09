@@ -169,3 +169,54 @@ export function resolveDomain(
     gateSpec: { groups, hints, emptySections: base.gates.emptySections },
   };
 }
+
+// ── 結構驗證（AI 產出／使用者貼上時用）──────────────────────
+
+export type ValidatedPack = { ok: true; pack: DomainPack } | { ok: false; reason: string };
+
+/**
+ * 比 `parseDomainPack` 更嚴的一層：規則指向不存在的章節或欄位、id 撞號、
+ * regex 編不過。
+ *
+ * 為什麼不併進 `parseDomainPack`：那支要能解析**部分**的包（章節疊在 base 上，
+ * 規則可以指向 base 的章節）。這一支檢查的是「這份包自己是完整自洽的」，
+ * 用在 AI 產出與使用者貼上的內容——那些沒有經過人眼審過。
+ *
+ * 放在這個檔而不是 `domain-pack-author.ts`：那個檔 import 了 ai-client → store
+ * → `import.meta.glob`，`bun test` 載不進來。閘門必須測得到。
+ */
+export function validatePackStructure(raw: string): ValidatedPack {
+  let pack: DomainPack;
+  try {
+    pack = parseDomainPack(raw, "AI 產出");
+  } catch (e) {
+    return { ok: false, reason: e instanceof DomainPackError ? e.message : String(e) };
+  }
+  if (pack.name.startsWith("_")) {
+    return { ok: false, reason: `name 不可用 _ 開頭（目前是 ${pack.name}）——那是內部保留的前綴` };
+  }
+
+  const sections = new Map((pack.sections ?? []).map((s) => [s.id, new Set((s.fields ?? []).map((f) => f.key))]));
+  const ids = new Set<string>();
+  for (const g of [...(pack.gates ?? []), ...(pack.hints ?? [])]) {
+    for (const r of g.rules ?? []) {
+      if (ids.has(r.id)) return { ok: false, reason: `規則 id 重複：${r.id}` };
+      ids.add(r.id);
+      const keys = sections.get(r.section);
+      if (!keys) return { ok: false, reason: `規則 ${r.id} 指向不存在的章節 ${r.section}` };
+      for (const k of r.fields ?? []) {
+        if (!keys.has(k)) return { ok: false, reason: `規則 ${r.id} 指向章節 ${r.section} 不存在的欄位 ${k}` };
+      }
+      if (r.require?.kind === "match") {
+        try {
+          new RegExp(r.require.re, r.require.flags);
+        } catch {
+          return { ok: false, reason: `規則 ${r.id} 的正規表達式無效：${r.require.re}` };
+        }
+      }
+    }
+    if (g.pass && ids.has(g.pass.id)) return { ok: false, reason: `pass id 與規則 id 重複：${g.pass.id}` };
+    if (g.pass) ids.add(g.pass.id);
+  }
+  return { ok: true, pack };
+}
