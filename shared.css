@@ -8050,43 +8050,12 @@ p.gd-warn {
 .tk-step.done .tk-step-toggle { border-color: var(--success); background: var(--success); }
 
 /* ═══════════════════════════════════════════════════════════════
-   側欄：少重畫、有變化才動
-   這一區的原則是「畫面異動用動畫交代，不要整塊換掉」——
-   整塊 innerHTML 重設會閃、會把展開狀態與焦點清掉。
+   側欄：「目前」卡固定在品牌列下方
    ═══════════════════════════════════════════════════════════════ */
-
-/* 「目前」卡片固定在品牌列下方，不跟著清單捲走 */
 .rail-context {
   position: sticky;
   top: 0;
   z-index: 3;
   flex: 0 0 auto;
 }
-/* 專案真的換了才淡入一次；同一個專案重繪不會觸發 */
-.rail-context-project.is-swap {
-  animation: rail-ctx-swap 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-@keyframes rail-ctx-swap {
-  from { opacity: 0; transform: translateY(-3px); }
-  to { opacity: 1; transform: none; }
-}
 .rail-context-status[hidden], .rail-context-meta[hidden] { display: none; }
-
-/* 選中專案的動作列：展開／收起用高度動畫，不要瞬間跳出來 */
-.rail-proj-actions {
-  overflow: hidden;
-  animation: rail-actions-open 200ms cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-@keyframes rail-actions-open {
-  from { opacity: 0; max-height: 0; }
-  to { opacity: 1; max-height: 120px; }
-}
-
-/* 計數變動時輕輕點一下，不要整條列重畫 */
-.rail-wsnav .count { transition: background 200ms ease, color 200ms ease; }
-
-@media (prefers-reduced-motion: reduce) {
-  .rail-context-project.is-swap,
-  .rail-proj-actions { animation: none; }
-  .rail-wsnav .count { transition: none; }
-}
