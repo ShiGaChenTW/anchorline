@@ -8,6 +8,7 @@ import {
 } from "../lib/beginner-flow";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile, exportOpenspecBundle } from "../lib/export";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
+import { DEFAULT_DOMAIN, listDomains } from "../data/domains";
 import {
   scanFolderFromFileList,
   scanFromNativeFolder,
@@ -174,7 +175,7 @@ if (!requireAuth()) {
     const hasPlanSteps = Object.values(planModules).some((raw) =>
       /^- \[[ xXvV]\]/m.test(raw),
     );
-    host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps }));
+    host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps, gateSpec: store.activeGateSpec() }));
   }
 
   /** 顯示方式：列表／卡片／資料夾。存 localStorage —— 換了頁回來不該重來。 */
@@ -761,6 +762,19 @@ if (!requireAuth()) {
     openModal("modal");
   }
 
+  // 領域下拉：選項來自 src/data/domains/ 的 .md，加一個檔就多一個選項
+  for (const id of ["new-domain", "import-domain"]) {
+    const sel = document.getElementById(id) as HTMLSelectElement | null;
+    if (sel && !sel.options.length) {
+      sel.innerHTML = listDomains()
+        .map(
+          (d) =>
+            `<option value="${escapeHtml(d.name)}"${d.name === DEFAULT_DOMAIN ? " selected" : ""}>${escapeHtml(d.displayName)}</option>`,
+        )
+        .join("");
+    }
+  }
+
   // 每次輸入都存草稿
   for (const a of ASK) {
     document.getElementById(a.id)?.addEventListener("input", saveDraft);
@@ -833,6 +847,8 @@ if (!requireAuth()) {
       lastFileAt: new Date().toISOString(),
       tag: tpl.includes("資安") ? "security" : tpl.includes("成長") ? "growth" : "product",
       isSample: false,
+      domain:
+        (document.getElementById("new-domain") as HTMLSelectElement | null)?.value || DEFAULT_DOMAIN,
     };
     store.addProject(p);
     store.setActiveProject(p.id);
@@ -1367,7 +1383,11 @@ if (!requireAuth()) {
       importErr("請先選擇資料夾");
       return;
     }
-    const r = store.importProjectCandidates(candidates, scanResult.folderName);
+    const r = store.importProjectCandidates(
+      candidates,
+      scanResult.folderName,
+      (document.getElementById("import-domain") as HTMLSelectElement | null)?.value || DEFAULT_DOMAIN,
+    );
     if (!r.ok) {
       importErr(r.reason ?? "匯入失敗");
       toast(r.reason ?? "匯入失敗");

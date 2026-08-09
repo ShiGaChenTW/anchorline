@@ -219,6 +219,9 @@
               <option value="資安">資安</option>
               <option value="成長">成長</option>
             </select>
+            <label class="ask-adv-label" for="new-domain">領域</label>
+            <select id="new-domain"></select>
+            <p class="ask-help" style="margin:4px 0 0">決定 PRD 有哪些章節與哪些結構檢查。之後在編輯台還能改。</p>
             <label class="ask-adv-label" for="new-target">目標發布</label>
             <input type="text" id="new-target" class="ask-input" value="Q3 · 2026-09" autocomplete="off" />
           </div>
@@ -260,6 +263,8 @@
       <p class="login-error" id="import-err" role="alert"></p>
     </div>
     <footer>
+      <label class="ask-adv-label" for="import-domain" style="margin:0 6px 0 0">領域</label>
+      <select id="import-domain" style="margin-right:auto"></select>
       <button type="button" class="btn" id="import-cancel">取消</button>
       <button type="button" class="btn" id="import-rescan">重新選擇</button>
       <button type="button" class="btn btn-primary" id="import-confirm" disabled>確認匯入並進入工作區</button>

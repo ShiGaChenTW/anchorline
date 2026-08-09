@@ -55,6 +55,7 @@ import {
   restoreCaret,
 } from "../lib/writing-assist";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
+import { DEFAULT_DOMAIN, listDomains } from "../data/domains";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
@@ -404,8 +405,50 @@ function renderOpenSpec() {
   });
 }
 
+/**
+ * 領域選擇器 + 孤兒章節提示。
+ *
+ * 放在章節清單正上方，因為換領域最直接的後果就是下面那份清單會變——
+ * 把因和果放在同一個視野裡，比放進偏好設定裡讓人自己連起來好。
+ *
+ * 孤兒提示是這裡的重點：換領域**不刪任何正文**，但不屬於新領域的章節
+ * 會從清單上消失。沒有這行提示，那看起來就跟資料掉了一模一樣。
+ */
+function renderDomainBar() {
+  const sel = document.getElementById("domain-select") as HTMLSelectElement | null;
+  const orphanBox = document.getElementById("domain-orphans");
+  if (!sel) return;
+  const st = store.get();
+  const project = st.projects.find((p) => p.id === st.activeProjectId);
+  const current = project?.domain ?? DEFAULT_DOMAIN;
+  const editable = canEditContent(st.currentUser) && !st.locked;
+
+  const opts = listDomains();
+  const sig = `${opts.map((o) => o.name).join(",")}|${current}|${editable}`;
+  if (sel.dataset.sig !== sig) {
+    sel.dataset.sig = sig;
+    sel.innerHTML = opts
+      .map(
+        (o) =>
+          `<option value="${escapeHtml(o.name)}"${o.name === current ? " selected" : ""}>${escapeHtml(o.displayName)}</option>`,
+      )
+      .join("");
+    sel.disabled = !editable;
+  }
+
+  const orphans = store.orphanSectionIds();
+  if (orphanBox) {
+    orphanBox.hidden = orphans.length === 0;
+    // 不列出章節 id——那是內部名稱，對使用者沒有意義。給數量與「還在」這件事就夠。
+    orphanBox.textContent = orphans.length
+      ? `${orphans.length} 個章節的內容不屬於目前領域。內容仍保留，換回原領域就會回來。`
+      : "";
+  }
+}
+
 function renderOutline() {
   renderFileTree();
+  renderDomainBar();
   const el = document.getElementById("outline");
   if (!el) return;
   const list = sections();
@@ -925,7 +968,7 @@ function renderCoach() {
   const passN = checks.filter((c) => c.pass).length;
   const settings = store.get().settings;
 
-  const gate = evaluatePrdGates(store.get());
+  const gate = evaluatePrdGates(store.get(), store.activeGateSpec());
   const coach = document.getElementById("coach-body");
   if (!coach) return;
 
@@ -1158,7 +1201,7 @@ function renderCoach() {
       feedbackEl.innerHTML = `<span class="adhd-ai-busy">${isAiConfigured() ? "本機規則 + AI 評估中…" : "本機規則檢查中…"}</span>`;
     setAiBusy(true);
     try {
-      const critique = await critiqueSectionWithAI(s, valuesFor(s), settings);
+      const critique = await critiqueSectionWithAI(s, valuesFor(s), settings, store.activeGateSpec());
       if (feedbackEl) {
         feedbackEl.innerHTML = `
           <div class="adhd-ai-critique">
@@ -1333,7 +1376,7 @@ function render() {
   const host = document.getElementById("flow-strip-host");
   if (host) {
     const hasPlanSteps = Object.values(planModules).some((raw) => /^- \[[ xXvV]\]/m.test(raw));
-    host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps }));
+    host.innerHTML = renderFlowStripHtml(deriveFlowLayers(store.get(), { hasPlanSteps, gateSpec: store.activeGateSpec() }));
   }
 
   // Phase A：章節切換視線錨定；送審就緒單次 pulse
@@ -1344,7 +1387,7 @@ function render() {
   }
   prevIdx = idx;
 
-  const gate = evaluatePrdGates(store.get());
+  const gate = evaluatePrdGates(store.get(), store.activeGateSpec());
   const submitBtn = document.getElementById("btn-submit");
   pulseSubmitWhenBecameReady(submitBtn, gate.canSubmit && editable());
   syncMotionPreferenceClass();
@@ -1364,6 +1407,24 @@ if (pending && editable()) {
 } else if (pending && !editable()) {
   toast("目前身分無法插入範本到內文");
 }
+
+document.getElementById("domain-select")?.addEventListener("change", (e) => {
+  const next = (e.target as HTMLSelectElement).value;
+  const st = store.get();
+  if (!editable() || !st.activeProjectId) return;
+  const r = store.setProjectDomain(st.activeProjectId, next);
+  if (!r.ok) {
+    toast(r.reason ?? "換領域失敗");
+    return;
+  }
+  // 章節集合換了，目前游標可能指到已經不存在的一節
+  idx = 0;
+  const first = sections()[0];
+  if (first) store.setActiveSection(first.id);
+  const orphans = store.orphanSectionIds().length;
+  toast(orphans ? `已換領域 — ${orphans} 個章節的內容暫時收起，沒有刪除` : "已換領域");
+  render();
+});
 
 document.getElementById("btn-prev")?.addEventListener("click", () => {
   if (idx > 0) {
@@ -1389,7 +1450,7 @@ document.getElementById("btn-submit")?.addEventListener("click", () => {
     toast("目前身分無法送出編輯成果");
     return;
   }
-  const gate = evaluatePrdGates(store.get());
+  const gate = evaluatePrdGates(store.get(), store.activeGateSpec());
   if (!gate.canSubmit) {
     toast(gateSummaryLine(gate) + " — 請先補齊 BLOCK 項");
     renderCoach();

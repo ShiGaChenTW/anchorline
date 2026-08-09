@@ -6,6 +6,15 @@ import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/expor
 import { canManageUsers } from "../lib/permissions";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+import { BUILTIN_PACKS, listDomains } from "../data/domains";
+import {
+  canUseUserDomains,
+  clearUserDomains,
+  getUserPacks,
+  pickUserDomainsFolder,
+  refreshUserDomains,
+  userDomainsDir,
+} from "../lib/user-domains";
 
 const __authed = requireAuth();
 if (__authed) {
@@ -540,7 +549,78 @@ document.getElementById("new-emp-kind")?.addEventListener("change", () => {
   if (accessEl && kind === "agent" && accessEl.value === "admin") accessEl.value = "editor";
 });
 
+// ── 領域包 ───────────────────────────────────────────────────
+
+function renderDomainPacks() {
+  const status = document.getElementById("domain-pack-status");
+  const list = document.getElementById("domain-pack-list");
+  const pick = document.getElementById("btn-pick-domains") as HTMLButtonElement | null;
+  if (pick) {
+    pick.disabled = !canUseUserDomains();
+    pick.title = canUseUserDomains() ? "" : "自訂領域包需要桌面版";
+  }
+
+  const dir = userDomainsDir();
+  const { errors } = getUserPacks();
+  if (status) {
+    status.textContent = dir
+      ? `自訂資料夾：${dir}${errors.length ? `（${errors.length} 個檔解析失敗）` : ""}`
+      : "尚未指定自訂資料夾，目前只有內建領域。";
+  }
+
+  if (!list) return;
+  const rows = listDomains()
+    .map(
+      (d) =>
+        `<div class="domain-pack-row">
+           <strong>${escapeHtml(d.displayName)}</strong>
+           <code>${escapeHtml(d.name)}</code>
+           <span class="tag">${d.custom ? (d.name in BUILTIN_PACKS ? "自訂（覆寫內建）" : "自訂") : "內建"}</span>
+         </div>`,
+    )
+    .join("");
+  // 解析失敗要看得到是哪個檔為什麼——默默少一個領域是最難查的那種問題
+  const errRows = errors
+    .map(
+      (e) =>
+        `<div class="domain-pack-row domain-pack-row--err"><strong>${escapeHtml(e.file)}</strong><span>${escapeHtml(e.message)}</span></div>`,
+    )
+    .join("");
+  list.innerHTML = rows + errRows;
+}
+
+document.getElementById("btn-pick-domains")?.addEventListener("click", async () => {
+  const r = await pickUserDomainsFolder();
+  if (!r.ok) {
+    toast(r.reason);
+    return;
+  }
+  store.refreshDomainPacks();
+  renderDomainPacks();
+  toast(`已載入 ${r.count} 個自訂領域${r.errors.length ? `（${r.errors.length} 個失敗）` : ""}`);
+});
+
+document.getElementById("btn-refresh-domains")?.addEventListener("click", async () => {
+  const r = await refreshUserDomains();
+  if (!r.ok) {
+    toast(r.reason);
+    return;
+  }
+  store.refreshDomainPacks();
+  renderDomainPacks();
+  toast(`已重新讀取 ${r.count} 個自訂領域`);
+});
+
+document.getElementById("btn-clear-domains")?.addEventListener("click", () => {
+  if (!confirm("清除自訂領域包？已經選了自訂領域的專案會退回通用，但內容不會被刪除。")) return;
+  clearUserDomains();
+  store.refreshDomainPacks();
+  renderDomainPacks();
+  toast("已清除自訂領域包");
+});
+
 populateSettings();
+renderDomainPacks();
 store.subscribe(populateSettings);
 } // end __authed
 

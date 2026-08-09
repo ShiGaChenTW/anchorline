@@ -213,7 +213,7 @@ function renderFocusBar() {
     }
   }
 
-  const gate = evaluatePrdGates(st);
+  const gate = evaluatePrdGates(st, store.activeGateSpec());
   if (!items.length && gate.canApprove) {
     bar.hidden = true;
     bar.innerHTML = "";
@@ -414,7 +414,7 @@ function renderApprovals() {
     }
   }
 
-  const prdGate = evaluatePrdGates(store.get());
+  const prdGate = evaluatePrdGates(store.get(), store.activeGateSpec());
   const approveBtn = document.getElementById("btn-approve") as HTMLButtonElement | null;
   if (approveBtn) {
     const blocked = locked || withdrawn || !gate.ok || !prdGate.canApprove;
@@ -580,7 +580,7 @@ function render() {
       /^- \[[ xXvV]\]/m.test(raw),
     );
     host.innerHTML = renderFlowStripHtml(
-      deriveFlowLayers(store.get(), { hasPlanSteps }),
+      deriveFlowLayers(store.get(), { hasPlanSteps, gateSpec: store.activeGateSpec() }),
     );
   }
 
@@ -643,7 +643,7 @@ document.getElementById("btn-post")?.addEventListener("click", () => {
 
 document.getElementById("btn-approve")?.addEventListener("click", () => {
   if (store.get().locked) return;
-  const prdGate = evaluatePrdGates(store.get());
+  const prdGate = evaluatePrdGates(store.get(), store.activeGateSpec());
   if (!prdGate.canApprove) {
     toast(gateSummaryLine(prdGate) + " — 無法核准");
     return;

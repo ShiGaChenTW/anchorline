@@ -4,6 +4,7 @@
  */
 import type { AppState, Project } from "../data/types";
 import { evaluatePrdGates } from "./prd-gates";
+import type { GateSpec } from "./gate-rules";
 
 export type FlowLayerId = "l1" | "l2" | "l3" | "l4" | "l5" | "l6";
 
@@ -36,9 +37,10 @@ function activeProject(state: AppState): Project | null {
 
 export function deriveFlowLayers(
   state: AppState,
-  opts?: { hasPlanSteps?: boolean },
+  opts?: { hasPlanSteps?: boolean; gateSpec?: GateSpec },
 ): FlowLayer[] {
-  const gate = evaluatePrdGates(state);
+  // gateSpec 由呼叫端給（store.activeGateSpec()）——這個檔是純函式，不該認得 store
+  const gate = evaluatePrdGates(state, opts?.gateSpec);
   const summary = state.sectionValues.summary ?? {};
   const problem = (state.sectionValues.problem?.problem ?? "").trim();
   const project = activeProject(state);
