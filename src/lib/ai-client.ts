@@ -13,7 +13,7 @@ export type AiReady =
 export class AiError extends Error {
   constructor(
     message: string,
-    public code: "not_configured" | "http" | "parse" | "empty" | "network" = "http",
+    public code: "not_configured" | "http" | "parse" | "empty" | "network" | "truncated" = "http",
   ) {
     super(message);
     this.name = "AiError";
@@ -190,7 +190,10 @@ async function callAnthropic(system: string, user: string, s: AISettings): Promi
   const body = (withTemp: boolean) =>
     JSON.stringify({
       model,
-      max_tokens: 4096,
+      // 4096 對散文夠，對「產生一份完整的領域包」遠遠不夠——實測一份含五個
+      // 章節與法規引用的包會被切在半句話。而截斷的症狀不是「內容變短」，是
+      // 下游解析器說「缺少 frontmatter」，完全指不到真正的原因。
+      max_tokens: 16384,
       ...(withTemp ? { temperature: Math.min(1, Math.max(0, s.temperature ?? 0.7)) } : {}),
       system,
       messages: [{ role: "user", content: user }],
@@ -207,6 +210,7 @@ async function callAnthropic(system: string, user: string, s: AISettings): Promi
   if (!res.ok) throw new AiError(parseHttpError("Anthropic", res.status, raw), "http");
   let data: {
     content?: { type?: string; text?: string }[];
+    stop_reason?: string;
     error?: { message?: string };
   };
   try {
@@ -220,6 +224,13 @@ async function callAnthropic(system: string, user: string, s: AISettings): Promi
     .map((c) => c.text || "")
     .join("");
   if (!text.trim()) throw new AiError("Anthropic 回傳空內容", "empty");
+  // 截斷要當場講。不講的話下游只會看到「格式不對」，然後所有人去查格式。
+  if (data.stop_reason === "max_tokens") {
+    throw new AiError(
+      `回應超過長度上限被截斷（max_tokens ${16384}）。請把要求縮小，或分兩次產生。`,
+      "truncated",
+    );
+  }
   return text.trim();
 }
 

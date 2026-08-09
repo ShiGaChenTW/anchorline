@@ -200,3 +200,61 @@ fn domain_pack_blocks_symlink_escape() {
     assert!(domain_pack_writable(&real, "ok.md", &roots));
     assert!(!domain_pack_writable(&outside, "ok.md", &roots));
 }
+
+// ── 授權跨重啟保留 ────────────────────────────────────────────────
+//
+// 原本 RegisteredRoots 只活在記憶體：每次重開 App 授權歸零，而 append 失敗
+// 被前端 `.catch(() => {})` 吞掉——稽核軌跡於是靜默停止寫入。這一組守住
+// 「使用者選過就記得」與「記得的東西不會憑空長出來」。
+
+#[test]
+fn registered_roots_survive_restart() {
+    let base = tmp("roots-persist");
+    fs::create_dir_all(&base).unwrap();
+    let project = base.join("proj");
+    fs::create_dir_all(&project).unwrap();
+    let store = base.join("registered-roots.json");
+    let _ = fs::remove_file(&store);
+
+    // 第一次「執行」：使用者選了資料夾
+    let a = RegisteredRoots::default();
+    a.attach(store.clone());
+    a.register(&project);
+    assert!(a.contains_ancestor_of(&project));
+
+    // 第二次「執行」：沒有再選一次，但授權還在
+    let b = RegisteredRoots::default();
+    b.attach(store.clone());
+    assert!(b.contains_ancestor_of(&project), "重開之後授權不該歸零");
+}
+
+#[test]
+fn registered_roots_drop_paths_that_no_longer_exist() {
+    let base = tmp("roots-stale");
+    fs::create_dir_all(&base).unwrap();
+    let gone = base.join("deleted");
+    fs::create_dir_all(&gone).unwrap();
+    let store = base.join("registered-roots.json");
+    let _ = fs::remove_file(&store);
+
+    let a = RegisteredRoots::default();
+    a.attach(store.clone());
+    a.register(&gone);
+    fs::remove_dir_all(&gone).unwrap();
+
+    // 指向已刪除資料夾的舊授權沒有保留的理由——留著只是讓集合越長越大
+    let b = RegisteredRoots::default();
+    b.attach(store.clone());
+    assert!(!b.contains_ancestor_of(&gone));
+}
+
+#[test]
+fn registered_roots_without_store_do_not_touch_disk() {
+    // 沒有 attach 就純記憶體。測試之間不該互相污染同一份檔案
+    let base = tmp("roots-nostore");
+    fs::create_dir_all(&base).unwrap();
+    let r = RegisteredRoots::default();
+    r.register(&base);
+    assert!(r.contains_ancestor_of(&base));
+    assert!(!base.join("registered-roots.json").exists());
+}

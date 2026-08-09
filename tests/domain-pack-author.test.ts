@@ -12,7 +12,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { validatePackStructure as validate } from "../src/lib/domain-pack";
-import { authorDomainPack, extractPackSource } from "../src/lib/domain-pack-author";
+import { authorDomainPack, extractPackSource, looksTruncated } from "../src/lib/domain-pack-author";
 
 const OK = `---
 name: insurance
@@ -233,5 +233,32 @@ describe("extractPackSource", () => {
 
   test("真的沒有 frontmatter → 原樣回傳，讓解析器去講原因", () => {
     expect(extractPackSource("完全沒有分隔線的一段話")).toBe("完全沒有分隔線的一段話");
+  });
+});
+
+// ── 截斷要指對方向 ────────────────────────────────────────────
+
+describe("looksTruncated", () => {
+  test("開頭有 --- 但沒有收尾 → 判定為截斷", () => {
+    const cut = "---\nname: x\ndisplayName: X\nsections:\n  - id: a\n    title: 寫到一半就";
+    expect(looksTruncated(cut)).toContain("截斷");
+  });
+
+  test("完整的 frontmatter → 不是截斷", () => {
+    expect(looksTruncated("---\nname: x\ndisplayName: X\n---\n")).toBeNull();
+  });
+
+  test("根本沒有 frontmatter → 不是截斷（讓解析器去講「缺少 frontmatter」）", () => {
+    // 兩種情況的訊息必須分開，否則使用者會被指去查格式，而真因是長度上限
+    expect(looksTruncated("一段完全沒有分隔線的話")).toBeNull();
+  });
+
+  test("authorDomainPack 遇到截斷時直接說截斷，不再浪費一次重試", async () => {
+    const cut = "---\nname: x\ndisplayName: X\nsections:\n  - id: a";
+    let calls = 0;
+    const r = await authorDomainPack({ brief: "x" }, async () => (calls++, cut));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain("截斷");
+    expect(calls).toBe(1); // 截斷不是模型寫錯格式，重試只會再截一次
   });
 });

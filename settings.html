@@ -255,6 +255,7 @@
             <button type="button" class="set-cat" data-set-cat="appearance">外觀</button>
             <button type="button" class="set-cat" data-set-cat="ai">AI 工具</button>
             <button type="button" class="set-cat" data-set-cat="quality">品質檢查</button>
+            <button type="button" class="set-cat" data-set-cat="domains">領域包</button>
             <button type="button" class="set-cat" data-set-cat="people">人員與權限</button>
             <button type="button" class="set-cat" data-set-cat="data">資料</button>
           </nav>
@@ -468,8 +469,9 @@
             </div>
           </div>
 
-          <!-- Section 3.5: Domain Packs -->
-          <div class="settings-section" data-cat="quality">
+          <!-- Section 3.5: Domain Packs（自成一個分類——它決定 PRD 長什麼樣，
+               不只是「檢查器的一個選項」；混在品質檢查裡會被當成細項忽略） -->
+          <div class="settings-section" data-cat="domains">
             <h2>🏷️ 領域包（產業章節與法遵檢查）</h2>
             <p class="sub">領域決定 PRD 有哪些章節、以及哪些結構檢查會擋簽核。內建 5 個；也可以指一個資料夾，裡面每個 <code>.md</code> 就是一個領域。同名會覆寫內建的那份。</p>
             <div class="actions-row">

@@ -62,7 +62,13 @@ require 只有四種，不可組合、不可自創：
   gate 只放「用關鍵字、長度、條目數就能決定性判斷」的東西。
 - 章節只加通用 7 章（三行摘要／問題陳述／目標與非目標／成功指標／使用者故事／
   範圍與階段／開放問題）沒有對應物的。重複開一份只會讓同一件事有兩個地方可寫。
-- 全部使用繁體中文。引用法規寫出具體條號或函令名稱。`;
+- 全部使用繁體中文。引用法規寫出具體條號或函令名稱。
+
+長度限制（超過會被模型的輸出上限切斷，整份作廢）：
+- 章節最多 4 個。挑最重要的，不要把所有想得到的都放進去。
+- 每個章節的 guide 最多 3 行、tips 最多 4 條、example 最多 3 行、欄位最多 4 個。
+- prompt 最多 20 行。條列必須涵蓋的法規面向即可，不要展開成教學。
+- gates 最多 6 條。`;
 
 export type AuthorInput = {
   /** 使用者對這個產業／子領域的描述 */
@@ -136,6 +142,9 @@ export async function authorDomainPack(input: AuthorInput, complete: Complete): 
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
   }
 
+  const cut = looksTruncated(raw);
+  if (cut) return { ok: false, reason: cut, raw };
+
   const first = validate(raw);
   if (first.ok) return { ok: true, raw, pack: first.pack, repaired: false };
 
@@ -159,7 +168,25 @@ ${raw}
     return { ok: false, reason: `${first.reason}（重試也失敗：${e instanceof Error ? e.message : String(e)}）`, raw };
   }
 
+  const cut2 = looksTruncated(fixed);
+  if (cut2) return { ok: false, reason: cut2, raw: fixed };
+
   const second = validate(fixed);
   if (second.ok) return { ok: true, raw: fixed, pack: second.pack, repaired: true };
   return { ok: false, reason: `修正後仍無法解析：${second.reason}`, raw: fixed };
+}
+
+/**
+ * 開頭有 `---` 但找不到收尾的 `---` = 回應在半路被切斷。
+ *
+ * 這個區分很重要：解析器對兩種情況都只會說「缺少 frontmatter」，於是所有人
+ * 去查格式，而真正的原因是輸出長度上限。實測一份五章的領域包會被 4096 tokens
+ * 切在半句話——訊息指錯方向，就會白花一整輪。
+ */
+export function looksTruncated(source: string): string | null {
+  const lines = source.split("\n");
+  if (lines[0]?.trim() !== "---") return null;
+  const closing = lines.slice(1).findIndex((l) => l.trim() === "---");
+  if (closing >= 0) return null;
+  return "產出被截斷了（frontmatter 沒有收尾的 ---）。多半是回應超過長度上限——把描述縮小，或分成兩個領域分別產生。";
 }
