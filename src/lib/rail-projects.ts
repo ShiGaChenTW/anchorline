@@ -92,10 +92,6 @@ export function syncRailContext(opts: RailContextOpts) {
   if (proj && proj.textContent !== name) {
     proj.textContent = name;
     proj.title = name;
-    // 專案換了才給一次淡入 —— 沒換就完全不動
-    proj.classList.remove("is-swap");
-    void proj.offsetWidth; // 重啟動畫
-    proj.classList.add("is-swap");
   }
 
   const st = el.querySelector(".rail-context-status") as HTMLElement | null;
