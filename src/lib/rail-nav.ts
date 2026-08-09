@@ -2,7 +2,7 @@
  * 側邊導覽：全站同一套 icon + 文案，每次進入頁面重建，避免缺 icon / 重複節點重疊。
  */
 import { store } from "../data/store";
-import { renderRailProjects } from "./rail-projects";
+import { ensureRailContextDefaults, renderRailProjects } from "./rail-projects";
 
 export type RailPage =
   | "projects"
@@ -140,6 +140,11 @@ export function initRailNav(active: RailPage) {
     .catch(() => {
       /* ignore */
     });
+
+  // 「目前」那張卡固定存在 —— 有些頁面不會呼叫 syncRailContext，
+  // 沒有這一步它們的側欄就會少一塊
+  const label = RAIL_ITEMS.find((it) => it.page === active)?.label ?? "工作區";
+  ensureRailContextDefaults(label);
 
   // 專案清單掛回
   renderRailProjects(nav as HTMLElement);

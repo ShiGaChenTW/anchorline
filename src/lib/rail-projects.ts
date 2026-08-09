@@ -20,38 +20,96 @@ export type RailContextOpts = {
 /**
  * 把「目前頁面 · 專案名」放到左側欄（不再塞 titlebar）
  */
-export function syncRailContext(opts: RailContextOpts) {
+/**
+ * 「目前」這張卡固定存在。
+ *
+ * 之前只有 editor / overview / dashboard / review 四頁會呼叫 syncRailContext，
+ * 其餘七頁（專案清單、Task Tracking、章節範本、偏好設定、Agent、管理、版本取號）
+ * 根本不會建立這張卡 —— 所以它在某些頁面「消失」不是被隱藏，是從來沒生成過。
+ * 改成側欄一初始化就先把骨架放好，四頁再各自填細節。
+ */
+function ensureContextCard(): HTMLElement | null {
   const rail = document.querySelector(".rail");
-  if (!rail) return;
-
+  if (!rail) return null;
   let el = document.getElementById("rail-context");
-  if (!el) {
-    el = document.createElement("div");
-    el.id = "rail-context";
-    el.className = "rail-context";
-    el.setAttribute("role", "status");
-    el.setAttribute("aria-label", "目前工作區");
-    const brand = rail.querySelector(".rail-brand");
-    if (brand) brand.insertAdjacentElement("afterend", el);
-    else rail.prepend(el);
+  if (el) return el;
+  el = document.createElement("div");
+  el.id = "rail-context";
+  el.className = "rail-context";
+  el.setAttribute("role", "status");
+  el.setAttribute("aria-live", "polite");
+  el.setAttribute("aria-label", "目前工作區");
+  el.innerHTML = `
+    <div class="rail-context-kicker">目前</div>
+    <div class="rail-context-mode"></div>
+    <div class="rail-context-project"></div>
+    <div class="rail-context-status rail-context-status--draft" hidden></div>
+    <div class="rail-context-meta" hidden></div>
+  `;
+  const brand = rail.querySelector(".rail-brand");
+  if (brand) brand.insertAdjacentElement("afterend", el);
+  else rail.prepend(el);
+  return el;
+}
+
+function setText(root: HTMLElement, sel: string, text: string) {
+  const n = root.querySelector(sel);
+  if (n && n.textContent !== text) n.textContent = text;
+}
+
+/**
+ * 沒有呼叫 syncRailContext 的頁面也要有這張卡。
+ * 從目前頁面與 active 專案推一組合理的預設值。
+ */
+export function ensureRailContextDefaults(pageLabel: string) {
+  if (document.getElementById("rail-context")?.querySelector(".rail-context-mode")?.textContent) {
+    return; // 已經有頁面填過細節就不要覆蓋
   }
+  const st = store.get();
+  const cur = st.projects.find((p) => p.id === st.activeProjectId);
+  syncRailContext({
+    mode: pageLabel,
+    projectName: cur ? projectDisplayName(cur) : "未選擇專案",
+    statusLabel: cur ? statusLabel(cur) : "",
+    statusTone: cur ? statusTone(cur) : "draft",
+  });
+}
+
+export function syncRailContext(opts: RailContextOpts) {
+  const el = ensureContextCard();
+  if (!el) return;
 
   const name = (opts.projectName ?? "").trim() || "未選擇專案";
   const tone = opts.statusTone ?? "draft";
   const status = (opts.statusLabel ?? "").trim();
   const meta = (opts.meta ?? "").trim();
 
-  el.innerHTML = `
-    <div class="rail-context-kicker">目前</div>
-    <div class="rail-context-mode">${escapeHtml(opts.mode)}</div>
-    <div class="rail-context-project" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
-    ${
-      status
-        ? `<div class="rail-context-status rail-context-status--${tone}">${escapeHtml(status)}</div>`
-        : ""
-    }
-    ${meta ? `<div class="rail-context-meta">${escapeHtml(meta)}</div>` : ""}
-  `;
+  // 逐欄位更新，不重建 innerHTML。
+  // 這張卡每次 store emit 都會被同步一次；整塊重畫的代價是每次都閃一下，
+  // 而且會把使用者選取的文字、hover 狀態一併清掉。
+  setText(el, ".rail-context-mode", opts.mode);
+  const proj = el.querySelector(".rail-context-project") as HTMLElement | null;
+  if (proj && proj.textContent !== name) {
+    proj.textContent = name;
+    proj.title = name;
+    // 專案換了才給一次淡入 —— 沒換就完全不動
+    proj.classList.remove("is-swap");
+    void proj.offsetWidth; // 重啟動畫
+    proj.classList.add("is-swap");
+  }
+
+  const st = el.querySelector(".rail-context-status") as HTMLElement | null;
+  if (st) {
+    st.hidden = !status;
+    if (status && st.textContent !== status) st.textContent = status;
+    st.className = `rail-context-status rail-context-status--${tone}`;
+    st.hidden = !status;
+  }
+  const mt = el.querySelector(".rail-context-meta") as HTMLElement | null;
+  if (mt) {
+    mt.hidden = !meta;
+    if (meta && mt.textContent !== meta) mt.textContent = meta;
+  }
 
   // 側欄品牌名固定（titlebar 已移除）
   document.querySelectorAll(".rail-brand strong, .rail-brand-text strong").forEach((n) => {
@@ -143,7 +201,7 @@ function projActionsHtml(): string {
   </div>`;
 }
 
-function statusTone(p: Project): string {
+function statusTone(p: Project): NonNullable<RailContextOpts["statusTone"]> {
   if (p.status === "approved") return "ok";
   if (p.status === "review") return "warn";
   return "draft";
@@ -155,6 +213,15 @@ function statusLabel(p: Project): string {
   if (p.status === "withdrawn") return "已抽單";
   return "草稿";
 }
+
+/**
+ * 上一次畫出來的內容簽章。
+ *
+ * store 每一次 emit 都會叫這支重畫（自動存檔、追蹤刷新、切頁…），
+ * 無條件重設 innerHTML 的代價是：畫面閃、展開的 details 收合、
+ * hover 與鍵盤焦點全部歸零。內容沒變就整段跳過。
+ */
+let lastRailSig = "__init__";
 
 export function renderRailProjects(host?: HTMLElement | null) {
   const nav = host ?? document.querySelector(".rail-nav");
@@ -245,6 +312,19 @@ function bindAddMenu(block: HTMLElement) {
 
   const projects = store.visibleProjects();
   const activeId = store.get().activeProjectId;
+
+  // 影響這一塊長相的所有輸入：專案身分／顯示名／狀態／時間戳＋目前選取
+  const sig = [
+    activeId,
+    projects
+      .map((p) => `${p.id}:${projectDisplayName(p)}:${p.status}:${p.lastFileAt ?? p.updated}`)
+      .join("|"),
+  ].join("#");
+  if (sig === lastRailSig && document.getElementById("rail-projects-block")?.children.length) {
+    bumpCounts();
+    return;
+  }
+  lastRailSig = sig;
 
   if (!projects.length) {
     block.innerHTML = `
