@@ -36,6 +36,7 @@ import { absolutePathFor, groupOpenspecFiles, openspecFiles } from "../lib/opens
 import { canEditFiles, readFile, shortPath, writeFile } from "../lib/file-editor";
 import {
   changedLineCount,
+  type LineMark,
   inlineDiff,
   loadSnapshots,
   markChangedLines,
@@ -579,7 +580,11 @@ function renderHighlightBackdrop() {
   if (!ta || !back) return;
 
   const marks = markChangedLines(openFile.original, ta.value);
-  const byIndex = new Map(marks.map((m) => [m.index, m]));
+  // 編輯層只認 added / modified —— removed 的內容不在 textarea 裡，
+  // 畫進來字數就會多於實際文字，游標位置跟畫面對不上。
+  const byIndex = new Map(
+    marks.filter((m) => m.kind !== "removed").map((m) => [m.index, m]),
+  );
   const lines = ta.value.split("\n");
 
   // 只畫 same + add：兩者串起來剛好等於 textarea 現在的文字，才不會錯位。
@@ -641,20 +646,49 @@ function renderDiffPane() {
   wrap.hidden = hidden || marks.length === 0;
   if (wrap.hidden) return;
 
-  const byIndex = new Map(marks.map((m) => [m.index, m]));
+  // removed 沒有對應的「改之後」行，用 index 當插入點掛在那一行之前。
+  // 同一個 index 可能有好幾行被刪，所以是陣列不是單一值。
+  const removedAt = new Map<number, string[]>();
+  const byIndex = new Map<number, LineMark>();
+  for (const m of marks) {
+    if (m.kind === "removed") {
+      const list = removedAt.get(m.index) ?? [];
+      list.push(m.before ?? "");
+      removedAt.set(m.index, list);
+    } else {
+      byIndex.set(m.index, m);
+    }
+  }
   const lines = ta.value.split("\n");
 
-  host.innerHTML = lines
-    .map((ln, i) => {
-      const m = byIndex.get(i);
-      if (!m) return `<span class="fv-line">${escapeHtml(ln) || "&nbsp;"}</span>`;
-      const inner =
-        m.kind === "modified"
-          ? segsHtml(inlineDiff(m.before ?? "", ln))
-          : `<span class="fv-add">${escapeHtml(ln) || "&nbsp;"}</span>`;
-      return `<span class="fv-line fv-changed">${inner || "&nbsp;"}</span>`;
-    })
-    .join("\n");
+  const rowsHtml: string[] = [];
+  const pushRemoved = (at: number) => {
+    for (const gone of removedAt.get(at) ?? []) {
+      rowsHtml.push(
+        `<span class="fv-line fv-changed fv-line-removed"><span class="fv-del">${
+          escapeHtml(gone) || "&nbsp;"
+        }</span></span>`,
+      );
+    }
+  };
+
+  lines.forEach((ln, i) => {
+    pushRemoved(i);
+    const m = byIndex.get(i);
+    if (!m) {
+      rowsHtml.push(`<span class="fv-line">${escapeHtml(ln) || "&nbsp;"}</span>`);
+      return;
+    }
+    const inner =
+      m.kind === "modified"
+        ? segsHtml(inlineDiff(m.before ?? "", ln))
+        : `<span class="fv-add">${escapeHtml(ln) || "&nbsp;"}</span>`;
+    rowsHtml.push(`<span class="fv-line fv-changed">${inner || "&nbsp;"}</span>`);
+  });
+  // 刪在檔案最後面的那幾行，掛在尾端
+  pushRemoved(lines.length);
+
+  host.innerHTML = rowsHtml.join("\n");
   host.scrollTop = ta.scrollTop;
 }
 

@@ -13,13 +13,19 @@
  * 一堆碎片，畫面上反而看不出改了什麼。
  */
 
-export type LineChange = "same" | "added" | "modified";
+export type LineChange = "same" | "added" | "modified" | "removed";
 
 export type LineMark = {
-  /** 在「改之後」文字裡的行號，0-based */
+  /**
+   * 在「改之後」文字裡的行號，0-based。
+   *
+   * `removed` 沒有對應的「改之後」行 —— 它用**接在哪一行之前**來定位，
+   * 也就是原本那一行被刪掉後，游標會落在的位置。所以同一個 index 可能
+   * 同時有一個 removed 與一個 added／modified，呼叫端要能處理。
+   */
   index: number;
   kind: LineChange;
-  /** modified 時是被取代掉的那一行；added 時為 null */
+  /** modified 是被取代掉的那一行；removed 是被刪掉的整行；added 為 null */
   before: string | null;
 };
 
@@ -92,9 +98,21 @@ export function markChangedLines(before: string, after: string): LineMark[] {
           : { index, kind: "added", before: null },
       );
     }
+    // 「改之前」多出來的那幾行 = 被整行刪掉。
+    //
+    // 原本這裡什麼都不做，於是整行刪除產生零個 mark：對比欄看不到、
+    // 狀態列的「N 行未儲存」不算它、紅字刪除線更無從畫起 —— 刪掉一整段
+    // 在畫面上完全沒有痕跡。行內改字之所以看得到刪除，是因為那條路徑走的是
+    // inlineDiff；整行刪除根本走不到那裡。
+    for (let k = bCount; k < aCount; k++) {
+      out.push({ index: bE, kind: "removed", before: a[aS + k] });
+    }
   }
 
-  return out.sort((x, y) => x.index - y.index);
+  // removed 沒有自己的「改之後」行，同一個 index 上要排在其他種類之前 ——
+  // 讀起來才是「這裡原本有這幾行，被換成了下面這些」。
+  const rank = (k: LineChange) => (k === "removed" ? 0 : 1);
+  return out.sort((x, y) => x.index - y.index || rank(x.kind) - rank(y.kind));
 }
 
 /** 有幾行動過 —— 給狀態列顯示 */
