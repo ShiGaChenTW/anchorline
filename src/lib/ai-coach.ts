@@ -222,7 +222,11 @@ Return ONLY a JSON object whose keys are exactly the field keys listed.
 Values are markdown-friendly plain text for each field.
 Do NOT invent unrelated SaaS/2FA demos unless the current content is about that.
 Stay on-topic with the section title and existing draft.
-JSON only, no markdown fences.`;
+JSON only, no markdown fences.${
+    settings.aiWriting?.styleSample?.trim()
+      ? `\n\nMatch the tone and structure of this sample the user provided:\n"""\n${settings.aiWriting.styleSample.trim().slice(0, 4000)}\n"""`
+      : ""
+  }`;
 
   const user = `Section ${section.n} ${section.title}
 Guide: ${section.guide}
@@ -234,7 +238,7 @@ ${fieldSpec}
 Current draft:
 ${current}
 
-${prompt ? `User instruction:\n${prompt}\n` : "User instruction: improve and fill empty fields based on existing context.\n"}
+${settings.aiWriting?.globalInstruction?.trim() ? `Workspace guidance (applies to every section):\n${settings.aiWriting.globalInstruction.trim()}\n\n` : ""}${prompt ? `User instruction:\n${prompt}\n` : "User instruction: improve and fill empty fields based on existing context.\n"}
 Return JSON with keys: ${section.fields.map((f) => f.key).join(", ")}`;
 
   const raw = await chatCompletion(withDomain(system), user);
@@ -316,3 +320,97 @@ Deliver a concise operational result for this agent job.`;
 }
 
 export { getAiReadiness, isAiConfigured, AiError };
+
+// ── AI 撰寫初版 PRD ────────────────────────────────────────────
+
+export type WriteProgress = {
+  /** 目前處理到第幾節（1-based） */
+  index: number;
+  total: number;
+  section: Section;
+  phase: "start" | "done" | "failed" | "skipped";
+  /** done 時帶回這一節寫出來的欄位 */
+  patch?: Record<string, string>;
+  error?: string;
+};
+
+export type WriteFullOptions = {
+  /** 只寫這幾節；不給就全部 */
+  sectionIds?: string[];
+  /**
+   * 已經有內容的章節要不要重寫。
+   * 預設 false —— 覆蓋使用者已經寫好的東西是最不該預設發生的事。
+   */
+  overwriteFilled?: boolean;
+  /** 額外指令，會併進每一節的 prompt */
+  instruction?: string;
+  onProgress?: (p: WriteProgress) => void;
+  signal?: AbortSignal;
+};
+
+/** 這一節算不算「已經有內容」 */
+function sectionHasContent(values: Record<string, string>): boolean {
+  return Object.values(values).join("").trim().length >= 20;
+}
+
+/**
+ * 逐節撰寫初版 PRD。
+ *
+ * **刻意序列而非並行。** 三個理由：
+ * 1. 後面的章節要看得到前面寫了什麼（目標要呼應問題陳述），並行就各寫各的。
+ * 2. 使用者要看得到「正在寫哪一節」—— 並行只會得到一個轉圈圈。
+ * 3. 免費／低階 API 金鑰幾乎都有併發限制，並行第一個撞上的就是 429。
+ *
+ * 每寫完一節就立刻回報並落地，中途取消會保留已完成的部分 —— 寫了五節被
+ * 取消卻整批丟掉，比不做這個功能還糟。
+ */
+export async function writeFullPrd(
+  sections: Section[],
+  valuesOf: (s: Section) => Record<string, string>,
+  opts: WriteFullOptions = {},
+): Promise<{ written: number; failed: number; skipped: number }> {
+  const ready = getAiReadiness();
+  if (!ready.ok) throw new AiError(ready.reason, "not_configured");
+
+  const targets = opts.sectionIds?.length
+    ? sections.filter((s) => opts.sectionIds!.includes(s.id))
+    : sections;
+
+  let written = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (let i = 0; i < targets.length; i++) {
+    if (opts.signal?.aborted) break;
+    const section = targets[i]!;
+    const base = { index: i + 1, total: targets.length, section };
+
+    const current = valuesOf(section);
+    const overwrite = opts.overwriteFilled ?? store.get().settings.aiWriting?.overwriteFilled ?? false;
+    if (!overwrite && sectionHasContent(current)) {
+      skipped++;
+      opts.onProgress?.({ ...base, phase: "skipped" });
+      continue;
+    }
+
+    opts.onProgress?.({ ...base, phase: "start" });
+    try {
+      // 每節覆寫優先於本次的一次性指令；兩者都沒有就用內建 prompt
+      const perSection = store.get().settings.aiWriting?.sectionPrompts?.[section.id]?.trim();
+      const patch = await generateAIDraft(section, current, perSection || opts.instruction);
+      if (opts.signal?.aborted) break;
+      written++;
+      opts.onProgress?.({ ...base, phase: "done", patch });
+    } catch (e) {
+      // 單節失敗不中斷整批 —— 一個章節寫壞不該讓另外六節也沒得寫
+      failed++;
+      opts.onProgress?.({
+        ...base,
+        phase: "failed",
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  return { written, failed, skipped };
+}

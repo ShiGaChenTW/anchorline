@@ -35,8 +35,64 @@ function syncUser() {
   updateUserRailFooter(toRailUser(u));
 }
 
+/** 從 AI 撰寫頁籤讀回設定。找不到欄位時保留原值 —— 頁籤可能還沒渲染。 */
+function readAiWriting(): AISettings["aiWriting"] {
+  const cur = store.get().settings.aiWriting;
+  const g = document.getElementById("aw-global") as HTMLTextAreaElement | null;
+  const st = document.getElementById("aw-style") as HTMLTextAreaElement | null;
+  const ov = document.getElementById("aw-overwrite") as HTMLInputElement | null;
+
+  const sectionPrompts: Record<string, string> = {};
+  document
+    .querySelectorAll<HTMLTextAreaElement>("#aw-sections textarea[data-aw-section]")
+    .forEach((ta) => {
+      const v = ta.value.trim();
+      // 只存有內容的 —— 空字串跟「沒設定」是同一件事，不必佔位
+      if (v) sectionPrompts[ta.dataset.awSection!] = v;
+    });
+
+  return {
+    globalInstruction: g ? g.value : cur.globalInstruction,
+    styleSample: st ? st.value : cur.styleSample,
+    overwriteFilled: ov ? ov.checked : cur.overwriteFilled,
+    sectionPrompts: document.getElementById("aw-sections") ? sectionPrompts : cur.sectionPrompts,
+  };
+}
+
+/**
+ * 各章節的 prompt 覆寫。章節清單來自目前的領域包，所以換領域後這裡也會跟著換 ——
+ * 舊領域留下的覆寫仍存在 settings 裡，只是不顯示（跟章節正文的孤兒處理一致，不刪）。
+ */
+function renderAiWritingSections() {
+  const host = document.getElementById("aw-sections");
+  if (!host) return;
+  const { sections, settings } = store.get();
+  const saved = settings.aiWriting.sectionPrompts ?? {};
+
+  host.innerHTML = sections
+    .map(
+      (sec) => `<div class="aw-section">
+        <label for="aw-sec-${escapeHtml(sec.id)}">
+          ${escapeHtml(sec.n)} · ${escapeHtml(sec.title)}
+          ${saved[sec.id] ? '<span class="aw-badge">已覆寫</span>' : ""}
+        </label>
+        <textarea id="aw-sec-${escapeHtml(sec.id)}" data-aw-section="${escapeHtml(sec.id)}" rows="2"
+          placeholder="留空＝用內建 prompt">${escapeHtml(saved[sec.id] ?? "")}</textarea>
+      </div>`,
+    )
+    .join("");
+}
+
 function populateSettings() {
   const s = store.get().settings;
+
+  const awG = document.getElementById("aw-global") as HTMLTextAreaElement | null;
+  const awS = document.getElementById("aw-style") as HTMLTextAreaElement | null;
+  const awO = document.getElementById("aw-overwrite") as HTMLInputElement | null;
+  if (awG) awG.value = s.aiWriting.globalInstruction;
+  if (awS) awS.value = s.aiWriting.styleSample;
+  if (awO) awO.checked = s.aiWriting.overwriteFilled;
+  renderAiWritingSections();
   const modelEl = document.getElementById("ai-model") as HTMLInputElement | null;
   const tempEl = document.getElementById("ai-temp") as HTMLInputElement | null;
   const tempValEl = document.getElementById("temp-val");
@@ -356,6 +412,7 @@ function saveSettings() {
       highlightIntensity,
       reduceMotion,
     },
+    aiWriting: readAiWriting(),
   });
 
   import("../lib/attention-motion")

@@ -3160,10 +3160,16 @@ html .emp-card-controls .btn-del-emp:focus-visible {
 }
 
 /* ─── 側邊欄專案清單 ─── */
+/* 專案清單是側欄下半唯一的東西 —— 讓它吃掉全部剩餘空間。
+   原本清單被 max-height 卡在 320px 而底下閒置三百多 px：空間浪費了，
+   清單還被迫捲動。「其他功能」搬走之後就沒有東西要跟它搶了。 */
 .rail-projects-block {
   margin: 0 0 8px;
-  padding: 0 0 8px;
-  border-bottom: 1px solid var(--border-muted);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .rail-projects-block .nav-label {
   display: flex;
@@ -3185,7 +3191,11 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: min(40vh, 320px);
+  /* 縮到內容大小，但最多吃滿可用空間。
+     用 1 1 auto 的話容器會比內容高，底下就多出一塊「看起來像區塊、
+     但沒有內容也不能點」的空容器 —— 那正是使用者回報的東西。 */
+  flex: 0 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 4px 8px 10px;
 }
@@ -4112,7 +4122,6 @@ html.adhd-calm .adhd-nav-primary.active {
 html.rail-ws-collapsed .rail-wsnav,
 html.rail-projects-collapsed .rail-projects,
 html.rail-projects-collapsed .rail-projects-empty,
-html.rail-projects-collapsed .rail-proj-resize,
 html.rail-projects-collapsed .rail-proj-actions {
   display: none;
 }
@@ -4130,7 +4139,6 @@ html.adhd-calm .rail-proj-card-sub {
 }
 html.adhd-calm .rail-projects {
   gap: 10px;
-  max-height: min(36vh, 280px);
 }
 
 /* 權限 chips 收斂 */
@@ -7634,28 +7642,6 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
 }
 
 /* 專案清單的上下拖曳把手。與檔案樹那條同一套手感。 */
-.rail-proj-resize {
-  height: 9px;
-  margin: 2px 8px 0;
-  cursor: row-resize;
-  touch-action: none;
-  position: relative;
-}
-.rail-proj-resize::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 4px;
-  width: 30px;
-  height: 2px;
-  border-radius: 2px;
-  transform: translateX(-50%);
-  background: var(--border);
-  transition: background 140ms ease;
-}
-.rail-proj-resize:hover::after,
-.rail-proj-resize.is-dragging::after { background: var(--accent); }
-@media (prefers-reduced-motion: reduce) { .rail-proj-resize::after { transition: none; } }
 
 /* ═══════════════════════════════════════════════════════════════
    編輯台大綱欄：OpenSpec 章節 + Task List
@@ -8435,4 +8421,50 @@ p.gd-warn {
   backdrop-filter: blur(8px);
   background: color-mix(in oklab, var(--warn, #eab308) 12%, var(--surface));
   box-shadow: 0 -6px 16px -8px rgb(0 0 0 / 0.5);
+}
+
+/* ─── AI 撰寫（寫作教練面板）───
+   逐節進度而非轉圈圈：串流 UI 的價值不是快，是證明系統在動、
+   並且讓人能在看到方向不對時提早喊停。 */
+.ai-write-card { display: flex; flex-direction: column; gap: 10px; }
+.ai-write-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-write-progress {
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px 10px;
+  background: var(--inset, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.ai-write-line { display: flex; align-items: center; gap: 6px; }
+.ai-write-count { margin-left: auto; color: var(--meta); font-variant-numeric: tabular-nums; }
+.ai-write-line.is-running { color: var(--accent); }
+.ai-write-line.is-done { color: var(--success); }
+.ai-write-line.is-skip { color: var(--meta); }
+.ai-write-line.is-fail { color: var(--danger, #f85149); }
+.ai-write-note { margin: 0; font-size: 11px; color: var(--meta); line-height: 1.5; }
+
+/* ─── 設定：各章節 prompt 覆寫 ─── */
+.aw-sections { display: flex; flex-direction: column; gap: 12px; }
+.aw-section { display: flex; flex-direction: column; gap: 5px; }
+.aw-section label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 600; color: var(--fg);
+}
+.aw-badge {
+  padding: 1px 7px; border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+  color: var(--accent); font-size: 10px; font-weight: 600;
+}
+.aw-section textarea,
+#aw-global, #aw-style {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px); padding: 8px 10px;
+  color: var(--fg); font: inherit; font-size: 12.5px; line-height: 1.6;
+  resize: vertical;
+}
+.aw-section textarea:focus, #aw-global:focus, #aw-style:focus {
+  outline: none; border-color: var(--accent); box-shadow: var(--focus-ring);
 }

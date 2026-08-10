@@ -252,6 +252,29 @@ export type AISettings = {
     requireStoriesAC: boolean;
     warnVagueTerms: boolean;
   };
+  /**
+   * AI 撰寫設定。
+   *
+   * 參考 ChatPRD 的做法：內建 prompt 藏在後面（使用者不必自己工程化），
+   * 但留出三個可調的旋鈕 —— 全域補充指令、每節覆寫、風格範本。
+   * 三者都留空時行為與內建完全相同。
+   */
+  aiWriting: {
+    /** 併進每一節 prompt 的全域指令（產品脈絡、慣用語、禁用詞…） */
+    globalInstruction: string;
+    /**
+     * 每節的 prompt 覆寫。key = sectionId。
+     * 留空的章節用內建 prompt —— 覆寫是例外，不是預設。
+     */
+    sectionPrompts: Record<string, string>;
+    /**
+     * 風格範本：一份寫得好的 PRD 片段，讓 AI 模仿語氣與結構。
+     * ChatPRD 讓使用者上傳範本 PRD 是它最被稱讚的客製化方式。
+     */
+    styleSample: string;
+    /** 已經有內容的章節要不要重寫。預設 false —— 覆蓋使用者寫好的東西是最不該預設發生的事 */
+    overwriteFilled: boolean;
+  };
   /** 編輯台偏好 */
   editor: {
     /** 顯示行號（左側 gutter，與文字間距 5px） */
