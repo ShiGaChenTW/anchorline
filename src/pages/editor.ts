@@ -955,7 +955,10 @@ function renderFieldDiffs(s: Section): void {
     if (!host) continue;
     const before = saved[f.key] ?? "";
     const after = shown[f.key] ?? "";
-    renderDiffSummary(host, before, after);
+    // 插在欄位標題之後 = 編輯器上方。掛在欄位底下時，紅藍字會落在
+    // 600px 高的編輯器之下，打字當下完全看不到。
+    const fieldHead = host.querySelector(".mdv-field-head, label");
+    renderDiffSummary(host, before, after, { after: fieldHead });
 
     // 標記掛在欄位「標題」旁，不是只掛在底下的摘要。
     // 雙欄 Markdown 編輯器有 600px 以上高，打字時視線在上緣，底下的摘要
