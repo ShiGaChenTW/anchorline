@@ -13,6 +13,7 @@ import {
   baseValue,
   isInherited,
   isSectionInherited,
+  sectionKey,
   type InheritableField,
 } from "../lib/ai-writing-config";
 import { authorDomainPack, validate as validatePack } from "../lib/domain-pack-author";
@@ -69,10 +70,16 @@ function readAiWriting(): AISettings["aiWriting"] {
  */
 function inheritToggleHtml(inherited: boolean, attr: string): string {
   if (awDomain === BASE_DOMAIN) return "";
-  return `<label class="aw-toggle" title="開＝沿用通用版本，關＝這個領域自訂">
-    <input type="checkbox" ${attr} ${inherited ? "checked" : ""} />
-    <span class="aw-toggle-track"><span class="aw-toggle-thumb"></span></span>
-    <span class="aw-toggle-text">${inherited ? "沿用通用" : "自訂"}</span>
+  // 選項名稱寫在滑塊裡：外掛一段說明文字的話，使用者得先讀字才知道哪邊是哪邊。
+  // 左＝自訂、右＝通用，滑塊停在哪邊就是目前狀態。
+  return `<label class="aw-seg" title="左＝這個領域自訂，右＝沿用通用版本">
+    <input type="checkbox" ${attr} ${inherited ? "checked" : ""}
+      aria-label="設定來源：${inherited ? "沿用通用" : "自訂"}" />
+    <span class="aw-seg-track">
+      <span class="aw-seg-thumb"></span>
+      <span class="aw-seg-opt">自訂</span>
+      <span class="aw-seg-opt">通用</span>
+    </span>
   </label>`;
 }
 
@@ -93,7 +100,7 @@ function renderAiWritingDomain() {
     desc.textContent =
       awDomain === BASE_DOMAIN
         ? "通用是所有領域的基底。這裡改的東西，其他領域只要沒自訂就會跟著變。"
-        : "沒有自訂的欄位會沿用通用版本。用欄位旁的開關切換。";
+        : "每個欄位預設是這個領域自己的（空白）。滑到「通用」才會沿用通用版本。";
   }
 
   const byDomain = awByDomain();
@@ -195,30 +202,19 @@ function bindAiWritingDomain() {
     if ((ev.target as HTMLElement | null)?.closest("#btn-aw-suggest")) void runProfileSuggestion();
   });
 
-  // 開關走 change。勾起來 = 沿用通用；取消 = 改成自訂（以通用值當起點，
-  // 從空白開始等於逼使用者把同樣的話重打一次）。
+  // 滑塊走 change。右（checked）= 沿用通用，左 = 自訂。
+  // 切換只改來源標記，**不動已寫的自訂內容** —— 切過去再切回來，字還在。
   root.addEventListener("change", (ev) => {
     const el = ev.target as HTMLInputElement | null;
     if (!el) return;
 
-    const field = el.dataset.inheritToggle as InheritableField | undefined;
-    if (field) {
-      store.setDomainWriteField(
-        awDomain,
-        field,
-        el.checked ? undefined : baseValue(awByDomain(), field),
-      );
-      populateSettings();
-      return;
-    }
-
+    const field = el.dataset.inheritToggle;
     const secId = el.dataset.secToggle;
-    if (!secId) return;
-    store.setDomainSectionPrompt(
-      awDomain,
-      secId,
-      el.checked ? undefined : baseSectionValue(awByDomain(), secId),
-    );
+    if (!field && !secId) return;
+
+    // 切成沿用之前先把畫面上的字存起來，否則這一輪打的內容會被重畫蓋掉
+    saveCurrentDomainFields();
+    store.setDomainInherit(awDomain, field ?? sectionKey(secId!), el.checked);
     populateSettings();
   });
 }
@@ -239,9 +235,7 @@ function saveCurrentDomainFields() {
     .forEach((ta) => {
       const id = ta.dataset.awSection!;
       if (ta.readOnly) return;
-      const v = ta.value.trim();
-      // 空字串在通用等於「沒設定」，直接刪掉不佔位；在其他領域則是明確的「我要它空著」
-      store.setDomainSectionPrompt(awDomain, id, awDomain === BASE_DOMAIN && !v ? undefined : v);
+      store.setDomainSectionPrompt(awDomain, id, ta.value.trim());
     });
 }
 
