@@ -531,7 +531,7 @@
   html[data-theme="claude"] .btn-ghost,
   html[data-theme="github"] .btn-ghost { color: var(--accent); }
 </style>
-<script>(function(){try{var t=localStorage.getItem("anchorline:theme")||localStorage.getItem("specforge:theme");if(t==="warp")t="github";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
+<script>(function(){try{var t=localStorage.getItem("anchorline:theme")||localStorage.getItem("specforge:theme");if(t==="warp")t="terminal";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"],terminal:["dark","#0d0b08"]};if(!m[t])t="terminal";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","terminal");}})();</script>
 </head>
 <body class="hub-body">
 <a class="skip-link" href="#main">跳到主要內容</a>
@@ -559,6 +559,7 @@
           <div class="theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
         <button type="button" data-theme-value="kami" aria-pressed="false">LIGHT</button>
         <button type="button" data-theme-value="github" aria-pressed="true">DARK</button>
+        <button type="button" data-theme-value="terminal" aria-pressed="false">TERMINAL</button>
       </div>
 <span class="pill pill-review" data-theme-label aria-live="polite">DARK</span>
     <a class="btn btn-sm btn-primary" href="login.html" data-od-id="chrome-open">登入 / 進入工作區</a>
@@ -685,7 +686,7 @@
     </section>
 
     <footer class="hub-foot" data-od-id="hub-foot">
-      <span>主題 · LIGHT / DARK</span>
+      <span>主題 · LIGHT / DARK / TERMINAL</span>
       <span>文案 · 繁體中文 · 桌面 App 原型</span>
       <span>鍵盤 · 1–4 開啟畫面 · ? 說明</span>
     </footer>

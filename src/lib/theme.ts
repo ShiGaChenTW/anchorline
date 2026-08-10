@@ -9,19 +9,20 @@ const KEY = "anchorline:theme";
 const THEMES: Record<ThemeId, { label: string; scheme: "dark" | "light"; bg: string }> = {
   kami: { label: "LIGHT", scheme: "light", bg: "#f5f4ed" },
   github: { label: "DARK", scheme: "dark", bg: "#0d1117" },
+  terminal: { label: "TERMINAL", scheme: "dark", bg: "#0d0b08" },
 };
 
-/** 舊主題遷移：warp→github、claude→kami */
+/** 舊主題遷移：warp→terminal（warp 本來就是終端機，現在有真的了）、claude→kami */
 function migrateLegacy(theme: string | null | undefined): ThemeId | null {
   if (!theme) return null;
-  if (theme === "kami" || theme === "github") return theme;
-  if (theme === "warp") return "github";
+  if (theme in THEMES) return theme as ThemeId;
+  if (theme === "warp") return "terminal";
   if (theme === "claude") return "kami";
   return null;
 }
 
 function normalize(theme: string | null | undefined): ThemeId {
-  return migrateLegacy(theme) ?? "github";
+  return migrateLegacy(theme) ?? "terminal";
 }
 
 export function applyTheme(theme: string | null | undefined) {
