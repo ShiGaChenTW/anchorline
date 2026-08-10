@@ -1,5 +1,5 @@
 #!/bin/sh
-# Live tracking 段 1 的寫入端（SPEC-live-tracking.md §4 / §9）。
+# Live tracking 段 1 的寫入端（docs/SPEC-live-tracking.md §4 / §9）。
 #
 # 用法：anchorline-active.sh [路徑]
 #   路徑省略時用 $CLAUDE_PROJECT_DIR，再退到 $PWD。

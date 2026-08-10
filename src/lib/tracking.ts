@@ -1,6 +1,6 @@
 /**
  * Live Tracking —— 判定「哪一份 plan 是 agent 此刻正在動的」。
- * 規格：`SPEC-live-tracking.md`。
+ * 規格：`docs/SPEC-live-tracking.md`。
  *
  * ## 為什麼是純函式 + snapshot
  *
