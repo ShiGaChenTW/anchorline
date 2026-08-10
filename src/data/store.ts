@@ -38,6 +38,7 @@ import type {
 } from "./types";
 import { emptySectionValues } from "../lib/export";
 import { pickBaseline, pickLatestCommit } from "../lib/prd-versions";
+import { canResolveComment, migrateComments, projectOfComment } from "../lib/comment-scope";
 import { applyMeta, metaFromSections, orphanSectionIds, pickDomain } from "../lib/section-meta";
 import { DEFAULT_DOMAIN, domainPacks, reloadUserPacks } from "./domains";
 import { autoRescanUserDomains } from "../lib/user-domains";
@@ -419,7 +420,10 @@ function load(): AppState {
       prdDrafts: (parsed.prdDrafts as AppState["prdDrafts"] | undefined) ?? {},
       prdVersions: (parsed.prdVersions as AppState["prdVersions"] | undefined) ?? {},
       sampleSectionValues: parsed.sampleSectionValues ?? null,
-      comments: parsed.comments ?? base.comments,
+      // 舊存檔的留言沒有 projectId。掛到當時的 active 專案 —— 那是唯一
+      // 說得出口的猜測（留言本來就是在某個專案的審閱頁上寫的），而且
+      // 不掛的話它們會變成孤兒：任何專案都看不到、也永遠無法標記已解決。
+      comments: migrateComments(parsed.comments ?? base.comments, activeProjectId),
       approvals: activeCase
         ? approvalsFromCase(activeCase)
         : (parsed.approvals ?? base.approvals),
@@ -1368,24 +1372,21 @@ export const store = {
   resolveComment(id: string): { ok: boolean; reason?: string } {
     const comment = state.comments.find((c) => c.id === id);
     if (!comment) return { ok: false, reason: "留言不存在" };
-    // Peer review rule: editors cannot resolve on their own docs (use active project p1 heuristic)
-    const project = state.projects.find((p) => p.id === "p1") ?? state.projects[0];
-    const peer = canPeerReview(state.currentUser, project);
-    const isApprover = canApproveProject(state.currentUser, project).ok;
-    if (!peer.ok && !isApprover && state.currentUser.accessRole !== "admin") {
-      return { ok: false, reason: peer.reason ?? "無權覆核" };
-    }
-    // Editor cannot peer-review own work
-    if (
-      state.currentUser.accessRole === "editor" &&
-      project &&
-      (project.authorId === state.currentUser.id || comment.authorId === state.currentUser.id)
-    ) {
-      // Allow resolving others' comments on others' docs only — if own project, block
-      if (project.authorId === state.currentUser.id) {
-        return { ok: false, reason: "編輯人員不可覆核自己的檔案" };
-      }
-    }
+
+    // 用留言自己的專案，不是硬編的 p1。
+    //
+    // 原本這裡是 `projects.find(p => p.id === "p1") ?? projects[0]` —— 因為
+    // Comment 當時沒有 projectId，判不出這則留言屬於誰。後果是自審檢查會拿
+    // **別的專案**的作者去比對：在自己的專案上該擋的沒擋，在別人的專案上
+    // 反而可能被誤擋。兩種都不會有任何錯誤訊息，只會靜靜地判錯。
+    const project = projectOfComment(comment, state.projects);
+    const check = canResolveComment({
+      user: state.currentUser,
+      project,
+      hasPeerReview: canPeerReview(state.currentUser, project).ok,
+      hasApprove: canApproveProject(state.currentUser, project).ok,
+    });
+    if (!check.ok) return check;
     state = {
       ...state,
       comments: state.comments.map((c) => (c.id === id ? { ...c, resolved: true } : c)),
@@ -2124,6 +2125,7 @@ export const store = {
             comments: [
               {
                 id: `c${Date.now()}`,
+                projectId: job.projectId,
                 author: agent.name,
                 authorId: agent.id,
                 avatar: agent.avatar,

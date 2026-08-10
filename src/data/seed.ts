@@ -532,9 +532,11 @@ export const SEED_TEMPLATES: Template[] = [
   { id: "t26", cat: "core", title: "量測與埋點計畫", blurb: "先想清楚要回答什麼問題，再決定埋什麼點。", uses: 0, body: "## 這個功能要回答的問題\n1. …\n\n## 事件\n| 事件名 | 何時觸發 | 屬性 | 回答上面哪一題 |\n|---|---|---|---|\n| … | … | … | 1 |\n\n## 判定成功的門檻\n- [指標] 在 [期間] 內達到 [數值]\n\n## 什麼情況算失敗（要收手）\n- …" },
 ];
 
+/** 示範留言 —— 全部屬於示範專案 p1 */
 export const SEED_COMMENTS: Comment[] = [
   {
     id: "c1",
+    projectId: "p1",
     author: "Codex",
     authorId: "codex-approve",
     avatar: "X+",
@@ -545,6 +547,7 @@ export const SEED_COMMENTS: Comment[] = [
   },
   {
     id: "c2",
+    projectId: "p1",
     author: "Grok",
     authorId: "grok-edit",
     avatar: "G",
@@ -555,6 +558,7 @@ export const SEED_COMMENTS: Comment[] = [
   },
   {
     id: "c3",
+    projectId: "p1",
     author: "Claude Code",
     authorId: "claude-approve",
     avatar: "C+",
