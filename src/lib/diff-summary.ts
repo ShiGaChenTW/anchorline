@@ -73,7 +73,12 @@ export function diffRowsHtml(before: string, after: string): string {
  * 在 `host` 裡渲染（或移除）差異摘要。
  * 同一個 host 重複呼叫是安全的 —— 舊的會先被清掉。
  */
-export function renderDiffSummary(host: HTMLElement, before: string, after: string): void {
+export function renderDiffSummary(
+  host: HTMLElement,
+  before: string,
+  after: string,
+  opts: { after?: Element | null } = {},
+): void {
   host.querySelectorAll(`:scope > .${BOX_CLASS}`).forEach((el) => el.remove());
   const rows = diffRowsHtml(before, after);
   if (!rows) return;
@@ -86,7 +91,17 @@ export function renderDiffSummary(host: HTMLElement, before: string, after: stri
     </p>
     <div class="field-diff-body">${rows}</div>
   `;
-  host.appendChild(box);
+
+  // 預設掛在欄位最後面；給了 opts.after 就插在那個節點之後。
+  //
+  // 這個參數的存在理由：雙欄 Markdown 編輯器單一欄位就超過 600px 高，
+  // 摘要掛在它「底下」時，打字當下整塊在畫面外 —— 紅藍字做了等於沒做。
+  // 呼叫端可以把它插在欄位標題之後，讓它落在編輯器上方。
+  if (opts.after && opts.after.parentElement === host) {
+    opts.after.insertAdjacentElement("afterend", box);
+  } else {
+    host.appendChild(box);
+  }
 }
 
 /**
