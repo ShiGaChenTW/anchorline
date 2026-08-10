@@ -455,6 +455,11 @@ function load(): AppState {
           ...base.settings.editor,
           ...((parsed.settings as AISettings | undefined)?.editor ?? {}),
         },
+        // 後加的巢狀物件：舊存檔沒有它，淺合併會讓整塊變 undefined
+        aiWriting: {
+          ...base.settings.aiWriting,
+          ...((parsed.settings as AISettings | undefined)?.aiWriting ?? {}),
+        },
       },
       showSamples: APP_VARIANT === "prod" ? false : parsed.showSamples !== false,
       agentJobs: Array.isArray(parsed.agentJobs) ? (parsed.agentJobs as AgentJob[]) : [],
@@ -1810,7 +1815,12 @@ export const store = {
     const merged = {
       ...seedState(),
       ...newState,
-      settings: { ...DEFAULT_SETTINGS, ...(newState.settings ?? {}) },
+      // aiWriting 是後加的巢狀物件，淺合併會讓舊存檔拿到 undefined
+      settings: {
+        ...DEFAULT_SETTINGS,
+        ...(newState.settings ?? {}),
+        aiWriting: { ...DEFAULT_SETTINGS.aiWriting, ...(newState.settings?.aiWriting ?? {}) },
+      },
     };
     // 匯入的備份可能是 Comment 還沒有 projectId 的年代產生的。
     // 載入路徑有跑 migration，匯入路徑原本沒有 —— 於是舊備份匯進來之後

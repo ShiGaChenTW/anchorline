@@ -798,6 +798,12 @@ export const DEFAULT_SETTINGS: AISettings = {
   temperature: 0.7,
   persona: "executive",
   language: "zh-TW",
+  aiWriting: {
+    globalInstruction: "",
+    sectionPrompts: {},
+    styleSample: "",
+    overwriteFilled: false,
+  },
   enableLinters: {
     requireNonGoals: true,
     requireMetrics: true,

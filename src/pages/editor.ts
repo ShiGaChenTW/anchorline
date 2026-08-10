@@ -2,6 +2,7 @@ import {
   AiError,
   critiqueSectionWithAI,
   generateAIDraft,
+  writeFullPrd,
   getAiReadiness,
   isAiConfigured,
   polishTextWithAI,
@@ -1172,6 +1173,139 @@ function renderEditor() {
   syncUser();
 }
 
+/**
+ * AI 撰寫的執行狀態。放模組層而不是 renderCoach 內：面板每次 store emit 都會
+ * 重畫，狀態放在裡面會在第一次重畫時就消失。
+ */
+let aiWriteAbort: AbortController | null = null;
+
+/** 進度列。逐節顯示，讓人看得到它在寫、寫到哪 —— 也才知道停止鈕停掉了什麼。 */
+function setAiWriteProgress(html: string, running: boolean) {
+  const box = document.getElementById("ai-write-progress");
+  const stop = document.getElementById("btn-ai-write-stop");
+  const all = document.getElementById("btn-ai-write-all") as HTMLButtonElement | null;
+  const one = document.getElementById("btn-ai-write-one") as HTMLButtonElement | null;
+  if (box) {
+    box.hidden = !html;
+    box.innerHTML = html;
+  }
+  if (stop) stop.hidden = !running;
+  if (all) all.disabled = running || !getAiReadiness().ok;
+  if (one) one.disabled = running || !getAiReadiness().ok;
+}
+
+/**
+ * 跑一次 AI 撰寫。
+ *
+ * 產出一律進**草稿**：AI 寫的東西沒有理由跳過「明確儲存」這道關，而且進草稿
+ * 之後異動高亮會直接把它改了哪幾個字畫出來 —— 這是這套 diff 最有價值的用途。
+ */
+async function runAiWrite(sectionIds?: string[]) {
+  const list = sections();
+  if (!list.length) return;
+  aiWriteAbort = new AbortController();
+  const lines: string[] = [];
+  const paint = (running: boolean) =>
+    setAiWriteProgress(lines.slice(-6).join(""), running);
+
+  try {
+    const res = await writeFullPrd(list, (sec) => valuesFor(sec), {
+      sectionIds,
+      signal: aiWriteAbort.signal,
+      onProgress: (p) => {
+        if (p.phase === "start") {
+          lines.push(
+            `<div class="ai-write-line is-running">正在寫 ${escapeHtml(p.section.n)} · ${escapeHtml(p.section.title)}<span class="ai-write-count">${p.index}/${p.total}</span></div>`,
+          );
+        } else if (p.phase === "done") {
+          lines[lines.length - 1] =
+            `<div class="ai-write-line is-done">✓ ${escapeHtml(p.section.n)} · ${escapeHtml(p.section.title)}<span class="ai-write-count">${p.index}/${p.total}</span></div>`;
+          // 立刻落地成草稿 —— 中途停止也保留已完成的部分
+          for (const [key, value] of Object.entries(p.patch ?? {})) {
+            store.setSectionDraft(p.section.id, key, value);
+          }
+        } else if (p.phase === "skipped") {
+          lines.push(
+            `<div class="ai-write-line is-skip">— ${escapeHtml(p.section.title)} 已有內容，略過</div>`,
+          );
+        } else {
+          lines[lines.length - 1] =
+            `<div class="ai-write-line is-fail">✕ ${escapeHtml(p.section.title)}：${escapeHtml(p.error ?? "失敗")}</div>`;
+        }
+        paint(true);
+      },
+    });
+
+    const parts = [`寫了 ${res.written} 節`];
+    if (res.skipped) parts.push(`略過 ${res.skipped} 節（已有內容）`);
+    if (res.failed) parts.push(`${res.failed} 節失敗`);
+    toast(parts.join("· ") + " —— 都在草稿裡，確認後再儲存");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "AI 撰寫失敗");
+  } finally {
+    aiWriteAbort = null;
+    paint(false);
+    render();
+  }
+}
+
+function bindAiWrite() {
+  document.getElementById("btn-ai-write-all")?.addEventListener("click", () => {
+    if (!editable()) return void toast("目前身分無法編輯內文");
+    void runAiWrite();
+  });
+  document.getElementById("btn-ai-write-one")?.addEventListener("click", () => {
+    if (!editable()) return void toast("目前身分無法編輯內文");
+    const s = sections()[idx];
+    // 單節撰寫等於明確指定要寫它 —— 已有內容也重寫，否則按了沒反應
+    if (s) void runAiWriteOne(s.id);
+  });
+  document.getElementById("btn-ai-write-stop")?.addEventListener("click", () => {
+    aiWriteAbort?.abort();
+    toast("已停止 —— 已寫好的章節留在草稿裡");
+  });
+}
+
+/** 只寫這一節：使用者明確指定，所以覆蓋既有內容 */
+async function runAiWriteOne(sectionId: string) {
+  const list = sections();
+  aiWriteAbort = new AbortController();
+  try {
+    await writeFullPrd(list, (sec) => valuesFor(sec), {
+      sectionIds: [sectionId],
+      overwriteFilled: true,
+      signal: aiWriteAbort.signal,
+      onProgress: (p) => {
+        if (p.phase === "start") {
+          setAiWriteProgress(
+            `<div class="ai-write-line is-running">正在寫 ${escapeHtml(p.section.title)}</div>`,
+            true,
+          );
+        } else if (p.phase === "done") {
+          for (const [key, value] of Object.entries(p.patch ?? {})) {
+            store.setSectionDraft(p.section.id, key, value);
+          }
+          setAiWriteProgress(
+            `<div class="ai-write-line is-done">✓ ${escapeHtml(p.section.title)}</div>`,
+            false,
+          );
+        } else if (p.phase === "failed") {
+          setAiWriteProgress(
+            `<div class="ai-write-line is-fail">✕ ${escapeHtml(p.error ?? "失敗")}</div>`,
+            false,
+          );
+        }
+      },
+    });
+    toast("已寫入草稿 —— 高亮標出它改了哪些字，確認後再儲存");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "AI 撰寫失敗");
+  } finally {
+    aiWriteAbort = null;
+    render();
+  }
+}
+
 function renderCoach() {
   const s = sections()[idx];
   if (!s) return;
@@ -1211,6 +1345,23 @@ function renderCoach() {
           ? `<p class="adhd-coach-more-count">另外還有 ${failing.length - 1} 項稍後再補</p>`
           : ""
       }
+    </div>
+
+    <div class="card ai-write-card" data-od-id="ai-write-card">
+      <p class="adhd-coach-kicker">AI 撰寫</p>
+      <div class="ai-write-actions">
+        <button type="button" class="btn btn-sm btn-primary" id="btn-ai-write-all"
+                ${aiReadyNow ? "" : "disabled"}>撰寫初版（全部章節）</button>
+        <button type="button" class="btn btn-sm" id="btn-ai-write-one"
+                ${aiReadyNow ? "" : "disabled"}>只寫這一節</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="btn-ai-write-stop" hidden>停止</button>
+      </div>
+      <div class="ai-write-progress" id="ai-write-progress" hidden></div>
+      <p class="ai-write-note">${
+        aiReadyNow
+          ? "產出進<strong>草稿</strong>，不會直接存檔 —— 改了哪幾個字會標成藍字新增／紅字刪除線，你決定要不要留。"
+          : "尚未設定 AI 金鑰。到設定 → AI 工具填好之後這裡就會啟用。"
+      }</p>
     </div>
 
     <div class="card adhd-score-card" data-od-id="score-card">
@@ -1489,6 +1640,9 @@ function renderCoach() {
       inp.placeholder = "需先設定 API Key";
     }
   }
+
+  // 面板每次都整段重畫，所以事件也要每次重掛
+  bindAiWrite();
 
   if (!editable()) {
     coach.querySelectorAll("button, input").forEach((el) => {
