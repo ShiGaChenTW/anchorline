@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { c, dw, pad, pal } from "../src/cli/ansi";
+import { c, dw, pad, pal, stripAnsi } from "../src/cli/ansi";
+import { bar, relTime, tooSmall } from "../src/cli/track-tui";
 import {
   asStatusWord,
   parsePlanMeta,
@@ -139,4 +140,61 @@ describe("狀態詞彙 — 封閉列舉，完全比對", () => {
       expect(asStatusWord(s)).toBeNull();
     },
   );
+});
+
+describe("bar — ASCII-only gauge", () => {
+  test("不含任何 block glyph", () => {
+    // █ ░ 在某些等寬字型會被反鋸齒黏成一整條實色，刻度就消失了
+    const plain = stripAnsi(bar(50, 20));
+    expect(plain).not.toMatch(/[▀-▟]/);
+    expect(plain).toBe("=".repeat(10) + ".".repeat(10));
+  });
+
+  test("寬度恆定，兩端不溢位", () => {
+    for (const pct of [-50, 0, 33, 99, 100, 500]) {
+      expect(stripAnsi(bar(pct, 12))).toHaveLength(12);
+    }
+  });
+});
+
+describe("relTime — 相對時間", () => {
+  const now = Date.UTC(2026, 7, 10, 12, 0, 0);
+
+  test("plan 檔的空格時間戳解析得動", () => {
+    const iso = new Date(now - 3 * 3600_000).toISOString().slice(0, 16).replace("T", " ");
+    expect(relTime(iso, now)).toBe("3 小時前");
+  });
+
+  test("解析不了就原樣吐回，不假裝知道", () => {
+    expect(relTime("下週某天", now)).toBe("下週某天");
+  });
+
+  test("空值與 — 都回 —", () => {
+    expect(relTime("", now)).toBe("—");
+    expect(relTime("—", now)).toBe("—");
+  });
+});
+
+describe("tooSmall — 版面引擎的下限", () => {
+  test.each([
+    [120, 40],
+    [100, 28],
+    [50, 12],
+  ])("%ix%i 走正常版面（回 null）", (cols, rows) => {
+    expect(tooSmall(cols, rows)).toBeNull();
+  });
+
+  // 舊寫法 Math.max(60, cols) 會照樣按 60 欄排版，內容比終端寬 → 整片自動換行
+  test.each([
+    [49, 40],
+    [120, 11],
+    [20, 5],
+  ])("%ix%i 不啟動版面引擎，只印置中提示", (cols, rows) => {
+    const out = tooSmall(cols, rows);
+    expect(out).not.toBeNull();
+    expect(out!.length).toBeLessThanOrEqual(Math.max(1, rows));
+    // 每一列都必須排得進終端寬度，否則就是換了個方式犯同一個錯
+    for (const line of out!) expect(dw(line)).toBeLessThanOrEqual(cols);
+    expect(out!.join("\n")).toContain("終端太小");
+  });
 });
