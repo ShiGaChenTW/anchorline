@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { buildHandoff, buildPrompt, shellQuote, type HandoffInput } from "../src/lib/agent-handoff";
+import {
+  buildHandoff,
+  buildPayload,
+  buildPrompt,
+  shellQuote,
+  validAnchor,
+  type HandoffInput,
+} from "../src/lib/agent-handoff";
 
 const base: HandoffInput = {
   projectRoot: "/Users/x/my project",
@@ -76,5 +83,63 @@ describe("永遠不執行", () => {
     expect(names).not.toContain("exec");
     expect(names).not.toContain("dispatch");
     expect(typeof buildHandoff(base).command).toBe("string");
+  });
+});
+
+describe("錨點交接（L2）", () => {
+  const base = {
+    projectRoot: "/repo",
+    task: "在 README 加安裝說明",
+    family: "claude" as const,
+  };
+
+  test("帶合法錨點時，prompt 要求 agent 把它寫進 commit 訊息", () => {
+    const p = buildPrompt({ ...base, anchor: "HNTPRY5R" });
+    expect(p).toContain("anc:t=HNTPRY5R");
+    // 自成一段。埋在句子中間 agent 容易連帶改寫，而改一個字元就等於沒有錨點。
+    expect(p).toContain("\n\n");
+  });
+
+  test("沒有錨點時 prompt 一個字都不變", () => {
+    expect(buildPrompt(base)).toBe(buildPrompt({ ...base, anchor: null }));
+    expect(buildPrompt(base)).not.toContain("anc:t=");
+  });
+
+  // 這條是整組測試的核心：帶一個永遠對不上的錨點，比不帶更糟 ——
+  // 它看起來像串起來了，實際上事件會掛在一個不存在的任務上。
+  test("不合法的錨點一律當成沒有，不會混進 prompt", () => {
+    for (const bad of ["L0PROBE1", "abc", "abc123", "HAS-DASH", "TOOSHORT!"]) {
+      expect(validAnchor(bad)).toBeNull();
+      expect(buildPrompt({ ...base, anchor: bad })).not.toContain("anc:t=");
+    }
+  });
+
+  test("帶前綴傳進來也接受，輸出一律裸 id", () => {
+    expect(validAnchor("anc:t=HNTPRY5R")).toBe("HNTPRY5R");
+    expect(validAnchor("sf:t=ABC12345")).toBe("ABC12345");
+  });
+
+  test("payload 的 taskName 是短標題，不是整段 prompt", () => {
+    const long = "第一行標題\n第二行細節".repeat(10);
+    const payload = buildPayload({ ...base, task: long, anchor: "HNTPRY5R" });
+    expect(payload.taskName.length).toBeLessThanOrEqual(60);
+    expect(payload.taskName).not.toContain("\n");
+    expect(payload.prompt).toContain("anc:t=HNTPRY5R");
+    expect(payload.anchor).toBe("HNTPRY5R");
+  });
+
+  test("payload 帶著撰寫者族系 —— 執行端要靠它記 actor 與擋同族核准", () => {
+    expect(buildPayload({ ...base, authorFamily: "codex" }).authorFamily).toBe("codex");
+    expect(buildPayload(base).authorFamily).toBeNull();
+  });
+
+  test("職務分離仍然生效，加了錨點不會繞過它", () => {
+    const h = buildHandoff({
+      ...base,
+      anchor: "HNTPRY5R",
+      isApproval: true,
+      authorFamily: "claude",
+    });
+    expect(h.blocked).not.toBeNull();
   });
 });
