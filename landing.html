@@ -1,0 +1,1156 @@
+<!doctype html>
+<html lang="zh-TW" data-theme="warp">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anchorline — 本機優先的開發專案工作台</title>
+<meta name="description" content="一條治理鏈，加一份落在磁碟上的稽核軌跡。缺的從來不是一個資料庫，是一把 join key。" />
+<meta name="color-scheme" content="dark light" />
+<meta property="og:title" content="Anchorline — 本機優先的開發專案工作台" />
+<meta property="og:description" content="PRD 撰寫 → 結構 gate → 簽核 → openspec change → commits → PR → release。一條治理鏈，一份稽核軌跡。" />
+<meta property="og:type" content="website" />
+<link rel="icon" href="logos/export/favicon.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@400;600;700&display=swap" />
+<style>
+/* ─────────────────────────────────────────────────────────────
+   Tokens — 值取自 shared.css，三套主題與 App 一致
+   warp（預設 · 暖暗終端）/ kami（紙本編輯）/ github（Primer dark）
+   ───────────────────────────────────────────────────────────── */
+:root {
+  --bg: #161412;
+  --surface: #201e1b;
+  --inset: rgba(255,255,255,.04);
+  --fg: #faf9f6;
+  --fg-2: #d4d2ce;
+  --muted: #a3a19d;
+  --meta: #82807b;
+  --border: rgba(226,226,226,.22);
+  --border-soft: rgba(226,226,226,.13);
+  --accent: #f59e0b;
+  --accent-on: #0f0e0c;
+  --accent-soft: rgba(245,158,11,.13);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+  --danger-bg: rgba(220,38,38,.14);
+  --done: #a78bfa;
+  --font-display: "Inter", "Noto Sans TC", "PingFang TC", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", "Noto Sans TC", "PingFang TC", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --leading-body: 1.7;
+  --tracking-display: -0.03em;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --shell-outer: #0c0b0a;
+  --weight-em: 600;
+  --rule: rgba(226,226,226,.13);
+  --grain: .5;
+}
+html[data-theme="kami"] {
+  --bg: #f5f4ed;
+  --surface: #faf9f5;
+  --inset: #eef2f7;
+  --fg: #141413;
+  --fg-2: #3d3d3a;
+  --muted: #504e49;
+  --meta: #6b6a64;
+  --border: #ddd9cb;
+  --border-soft: #e5e3d8;
+  --accent: #1b365d;
+  --accent-on: #faf9f5;
+  --accent-soft: #e4ecf5;
+  --success: #4a6b3a;
+  --warn: #8a6b1f;
+  --danger: #8a3a30;
+  --danger-bg: #f3e4e1;
+  --done: #1b365d;
+  --font-display: "Noto Serif TC", "Source Han Serif TC", "Songti TC", Charter, Georgia, Palatino, serif;
+  --font-body: "Noto Serif TC", "Source Han Serif TC", "Songti TC", Charter, Georgia, Palatino, serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", Consolas, Monaco, monospace;
+  --leading-body: 1.85;
+  --tracking-display: -0.02em;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --shell-outer: #e8e6dc;
+  --weight-em: 600;
+  --rule: #ddd9cb;
+  --grain: 0;
+}
+html[data-theme="github"] {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --inset: #21262d;
+  --fg: #e6edf3;
+  --fg-2: #c9d1d9;
+  --muted: #8b949e;
+  --meta: #8b949e;
+  --border: #30363d;
+  --border-soft: #21262d;
+  --accent: #2f81f7;
+  --accent-on: #ffffff;
+  --accent-soft: rgba(56,139,253,.15);
+  --success: #3fb950;
+  --warn: #d29922;
+  --danger: #f85149;
+  --danger-bg: rgba(248,81,73,.15);
+  --done: #a371f7;
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", Helvetica, Arial, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --leading-body: 1.7;
+  --tracking-display: -0.01em;
+  --radius-sm: 6px;
+  --radius-md: 6px;
+  --shell-outer: #010409;
+  --weight-em: 600;
+  --rule: #30363d;
+  --grain: 0;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html {
+  background: var(--shell-outer);
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  transition: background 220ms cubic-bezier(.2,0,0,1), color 220ms cubic-bezier(.2,0,0,1);
+}
+a { color: inherit; text-decoration: none; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 700; letter-spacing: var(--tracking-display); margin: 0; }
+p { margin: 0; }
+code, kbd, .mono { font-family: var(--font-mono); font-variant-ligatures: none; }
+::selection { background: var(--accent); color: var(--accent-on); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+
+/* sticky chrome 高度 62px — 錨點跳轉時留出空間 */
+section, main[id], [id] { scroll-margin-top: 78px; }
+.wrap { width: min(1120px, 100% - clamp(32px, 7vw, 96px)); margin-inline: auto; }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--meta);
+}
+.rule { height: 1px; background: var(--rule); border: 0; margin: 0; }
+
+/* ── Chrome ───────────────────────────────────────────────── */
+.chrome {
+  position: sticky; top: 0; z-index: 40;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border-bottom: 1px solid transparent;
+  transition: border-color 200ms, background 200ms;
+}
+.chrome[data-stuck="true"] { border-bottom-color: var(--rule); }
+.chrome-in {
+  display: flex; align-items: center; gap: 10px 14px;
+  min-height: 62px; padding-block: 9px;
+  flex-wrap: wrap;   /* 極窄視窗寧可換行，也不要橫向溢出 */
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand svg { width: 26px; height: 26px; border-radius: 6px; display: block; flex: none; }
+.brand b { font-size: 15px; font-weight: var(--weight-em); letter-spacing: -.01em; }
+.brand span { font-family: var(--font-mono); font-size: 11px; color: var(--meta); }
+.chrome nav { display: flex; gap: 2px; margin-left: 12px; }
+.chrome nav a {
+  font-size: 13.5px; color: var(--muted); padding: 7px 11px; border-radius: var(--radius-sm);
+  transition: color 150ms, background 150ms;
+}
+.chrome nav a:hover { color: var(--fg); background: var(--inset); }
+.chrome .spacer { flex: 1; }
+
+.themeswitch {
+  display: flex; gap: 2px; padding: 3px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+}
+.themeswitch button {
+  font: inherit; font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em;
+  padding: 5px 11px; border: 0; border-radius: 999px; cursor: pointer;
+  background: transparent; color: var(--muted); transition: color 150ms, background 150ms;
+}
+.themeswitch button:hover { color: var(--fg); }
+.themeswitch button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+
+.ghlink {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: var(--weight-em);
+  padding: 7px 13px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--fg-2); transition: border-color 150ms, color 150ms, background 150ms;
+}
+.ghlink:hover { color: var(--fg); border-color: var(--fg); background: var(--inset); }
+.ghlink svg { width: 15px; height: 15px; fill: currentColor; flex: none; }
+
+/* 窄視窗：章節導覽在頁面裡本來就走得到，先讓它退場，
+   保住品牌、主題切換與 GitHub 這三個真的要按的東西。 */
+@media (max-width: 900px) {
+  .chrome nav { display: none; }
+}
+@media (max-width: 560px) {
+  .ghlink .lbl { display: none; }
+  .ghlink { padding: 7px 10px; }
+  .brand span { display: none; }
+  .themeswitch button { padding: 5px 9px; }
+}
+
+/* ── Section rail (progress + TOC) ────────────────────────── */
+.rail {
+  position: fixed; left: max(20px, calc((100vw - 1120px) / 2 - 108px)); top: 50%;
+  transform: translateY(-50%); z-index: 30;
+  display: none; flex-direction: column; gap: 0;
+}
+@media (min-width: 1320px) { .rail { display: flex; } }
+.rail a {
+  display: flex; align-items: center; gap: 10px; height: 30px;
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em;
+  color: var(--meta); opacity: .55; transition: opacity 200ms, color 200ms;
+}
+.rail a::before {
+  content: ""; width: 14px; height: 1px; background: currentColor;
+  transition: width 220ms cubic-bezier(.2,0,0,1), background 220ms;
+}
+.rail a:hover { opacity: 1; color: var(--fg-2); }
+.rail a[aria-current="true"] { opacity: 1; color: var(--accent); }
+.rail a[aria-current="true"]::before { width: 26px; }
+
+/* ── Hero ─────────────────────────────────────────────────── */
+.hero { padding: clamp(56px, 9vw, 104px) 0 clamp(48px, 7vw, 80px); }
+.hero-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(32px, 5vw, 72px); align-items: center;
+}
+@media (max-width: 900px) { .hero-grid { grid-template-columns: minmax(0,1fr); gap: 40px; } }
+h1 {
+  font-size: clamp(38px, 6.4vw, 68px);
+  line-height: 1.12;
+  margin: 18px 0 0;
+  text-wrap: balance;
+}
+h1 .dim { color: var(--muted); }
+.lead {
+  margin-top: 22px; font-size: clamp(16px, 1.5vw, 18px); color: var(--fg-2);
+  max-width: 46ch;
+}
+.lead b { color: var(--fg); font-weight: var(--weight-em); }
+.hero-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; align-items: center; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: var(--weight-em); font-family: var(--font-body);
+  padding: 11px 18px; border-radius: var(--radius-sm); cursor: pointer;
+  border: 1px solid transparent; transition: transform 150ms cubic-bezier(.2,0,0,1), background 150ms, border-color 150ms, color 150ms;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--accent); color: var(--accent-on); }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-ghost { border-color: var(--border); color: var(--fg-2); }
+.btn-ghost:hover { border-color: var(--fg); color: var(--fg); background: var(--inset); }
+.btn svg { width: 15px; height: 15px; fill: currentColor; }
+
+.notice {
+  display: flex; gap: 10px; align-items: flex-start;
+  margin-top: 30px; padding: 12px 14px;
+  border: 1px solid var(--border); border-left: 2px solid var(--warn);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--surface);
+  font-size: 13px; line-height: 1.6; color: var(--muted); max-width: 46ch;
+}
+.notice b { color: var(--fg-2); font-weight: var(--weight-em); }
+
+.diagram { width: 100%; height: auto; display: block; overflow: visible; }
+.diagram .box { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
+.diagram .box-key { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+.diagram .src { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .1em; fill: var(--meta); }
+.diagram .val { font-family: var(--font-mono); font-size: 11.5px; fill: var(--fg-2); }
+.diagram .cap { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; fill: var(--meta); }
+.diagram .key-lbl { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .16em; fill: var(--muted); }
+.diagram .key-val { font-family: var(--font-mono); font-size: 15px; font-weight: 500; fill: var(--accent); }
+.diagram .note { font-size: 12px; fill: var(--muted); font-family: var(--font-body); }
+.diagram .link { fill: none; stroke: var(--border); stroke-width: 1.25; }
+.diagram .dot { fill: var(--accent); }
+html.js .diagram .link, html.js .diagram .dot { opacity: 0; }
+html.js .in .diagram .link {
+  stroke-dasharray: 200; stroke-dashoffset: 200; opacity: 1;
+  animation: draw 900ms cubic-bezier(.16,1,.3,1) forwards;
+}
+html.js .in .diagram .dot { animation: pop 400ms cubic-bezier(.16,1,.3,1) forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes pop { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── Generic section ──────────────────────────────────────── */
+section { padding: clamp(56px, 8vw, 104px) 0; }
+.sec-head { max-width: 62ch; }
+.sec-head h2 { font-size: clamp(26px, 3.4vw, 38px); line-height: 1.25; margin-top: 14px; text-wrap: balance; }
+.sec-head p { margin-top: 16px; color: var(--muted); font-size: 16px; max-width: 56ch; }
+.sec-head p b { color: var(--fg-2); font-weight: var(--weight-em); }
+
+/* ── Q1–Q4 ────────────────────────────────────────────────── */
+.qlist { margin-top: 44px; border-top: 1px solid var(--rule); }
+.qrow {
+  display: grid; grid-template-columns: 58px minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 20px; align-items: start;
+  padding: 24px 4px; border-bottom: 1px solid var(--rule);
+  transition: background 200ms;
+}
+.qrow:hover { background: var(--inset); }
+@media (max-width: 760px) {
+  .qrow { grid-template-columns: 44px minmax(0,1fr); gap: 8px 14px; }
+  .qrow .qa { grid-column: 2; }
+}
+.qrow .qn {
+  font-family: var(--font-mono); font-size: 12px; color: var(--meta);
+  letter-spacing: .08em; padding-top: 4px;
+}
+.qrow .qq { font-size: clamp(17px, 2vw, 21px); font-weight: var(--weight-em); line-height: 1.45; }
+.qrow .qa { color: var(--muted); font-size: 14.5px; line-height: 1.65; }
+.qrow .qa .mono { color: var(--fg-2); font-size: 13px; }
+.qrow[data-diff="true"] .qn { color: var(--accent); }
+.qrow[data-diff="true"] .qq { color: var(--fg); }
+.qrow[data-diff="true"] .qq::after {
+  content: "差異化"; display: inline-block; vertical-align: middle;
+  margin-left: 10px; padding: 2px 7px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent);
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .1em; font-weight: 500;
+  transform: translateY(-1px);
+}
+.qnote {
+  margin-top: 30px; padding-left: 18px; border-left: 2px solid var(--accent);
+  font-size: 15px; color: var(--fg-2); max-width: 54ch; line-height: 1.75;
+}
+
+/* ── Chain ────────────────────────────────────────────────── */
+.chain-grid {
+  margin-top: 44px; display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 1.15fr);
+  gap: clamp(28px, 4vw, 56px); align-items: start;
+}
+@media (max-width: 900px) { .chain-grid { grid-template-columns: minmax(0,1fr); } }
+.stations { position: relative; padding-left: 26px; }
+.stations::before {
+  content: ""; position: absolute; left: 5px; top: 14px; bottom: 14px;
+  width: 1px; background: var(--rule);
+}
+.stations::after {
+  content: ""; position: absolute; left: 5px; top: 14px;
+  width: 1px; height: var(--fill, 0px); background: var(--accent);
+  transition: height 320ms cubic-bezier(.2,0,0,1);
+}
+.station {
+  position: relative; display: block; width: 100%; text-align: left;
+  font: inherit; background: none; border: 0; cursor: pointer;
+  padding: 10px 12px; margin-left: -12px; border-radius: var(--radius-sm);
+  color: var(--muted); transition: color 180ms, background 180ms;
+}
+.station::before {
+  content: ""; position: absolute; left: 0px; top: 50%;
+  width: 9px; height: 9px; margin-top: -4.5px; margin-left: -19px;
+  border-radius: 50%; background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--border);
+  transition: background 180ms, box-shadow 180ms, transform 180ms;
+}
+.station:hover { color: var(--fg-2); background: var(--inset); }
+.station[aria-selected="true"] { color: var(--fg); }
+.station[aria-selected="true"]::before {
+  background: var(--accent); box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-soft);
+  transform: scale(1.15);
+}
+.station .st-n { font-family: var(--font-mono); font-size: 11px; color: var(--meta); letter-spacing: .08em; }
+.station .st-t { display: block; font-size: 15.5px; font-weight: var(--weight-em); margin-top: 1px; }
+.station .st-d { display: block; font-size: 13px; color: var(--meta); margin-top: 1px; line-height: 1.5; }
+
+.evt {
+  position: sticky; top: 86px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface); overflow: hidden;
+}
+.evt-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 13px; border-bottom: 1px solid var(--border-soft); background: var(--inset);
+}
+.evt-bar .dots { display: flex; gap: 5px; }
+.evt-bar .dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--border); display: block; }
+.evt-bar .path { font-family: var(--font-mono); font-size: 11px; color: var(--meta); margin-left: 4px; }
+.evt-body { padding: 16px 18px 18px; }
+.evt-body pre {
+  margin: 0; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.85;
+  color: var(--fg-2); white-space: pre-wrap; word-break: break-word;
+}
+.evt-body .k { color: var(--muted); }
+.evt-body .s { color: var(--accent); }
+.evt-body .n { color: var(--done); }
+.evt-caption {
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-soft);
+  font-size: 13.5px; color: var(--muted); line-height: 1.7;
+}
+.fade-swap { animation: fadeSwap 260ms cubic-bezier(.16,1,.3,1); }
+@keyframes fadeSwap { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ── Replay / violation ───────────────────────────────────── */
+.replay {
+  margin-top: 40px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface); overflow: hidden;
+}
+.replay-body { padding: 18px clamp(14px, 3vw, 24px); overflow-x: auto; }
+.replay pre {
+  margin: 0; font-family: var(--font-mono); font-size: 12.5px; line-height: 2;
+  color: var(--fg-2); min-width: 520px;
+}
+.replay .ok { color: var(--success); }
+.replay .bad { color: var(--danger); font-weight: 500; }
+.replay .dimtxt { color: var(--meta); }
+.replay .ln { display: block; }
+/* 違規那一行的底色掃過去——文字本身一直是可讀的，動畫只加強調，
+   不負責讓內容出現。內容的可見性不該押在 observer 有沒有觸發上。 */
+.replay .hl {
+  position: relative; display: inline-block; padding: 0 6px;
+  border-radius: 3px; color: var(--danger);
+}
+.replay .hl::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: var(--danger-bg); border-radius: 3px;
+  transform-origin: left center;
+}
+html.js .replay .hl::before { transform: scaleX(0); }
+html.js .in .replay .hl::before { animation: sweep 520ms 220ms cubic-bezier(.16,1,.3,1) forwards; }
+@keyframes sweep { to { transform: scaleX(1); } }
+
+/* ── Boundaries ───────────────────────────────────────────── */
+.bounds { margin-top: 44px; display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: var(--radius-md); overflow: hidden; }
+.bound { background: var(--bg); padding: clamp(20px, 3vw, 30px); }
+.bound h3 { font-size: 17px; margin-bottom: 10px; }
+.bound h3 .mono { color: var(--accent); font-size: 14px; font-weight: 400; }
+.bound p { color: var(--muted); font-size: 14.5px; line-height: 1.75; }
+.bound pre {
+  margin: 14px 0 0; padding: 12px 14px; border-radius: var(--radius-sm);
+  background: var(--surface); border: 1px solid var(--border-soft);
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.8; color: var(--fg-2);
+  overflow-x: auto;
+}
+.bound pre .c { color: var(--meta); }
+.never { margin-top: 30px; }
+.never-item {
+  display: flex; gap: 14px; align-items: baseline;
+  padding: 13px 0; border-bottom: 1px solid var(--rule);
+}
+.never-item:first-of-type { border-top: 1px solid var(--rule); }
+.never-item code { font-size: 13px; color: var(--danger); flex: none; }
+.never-item span { font-size: 14px; color: var(--muted); }
+
+/* ── Not doing ────────────────────────────────────────────── */
+.nope { margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 1px 1px; }
+.nope-i { padding: 20px 22px 22px; border-top: 1px solid var(--rule); }
+.nope-i b { display: block; font-size: 15px; font-weight: var(--weight-em); color: var(--fg-2); }
+.nope-i b::before {
+  content: "✕"; color: var(--danger); font-family: var(--font-mono);
+  margin-right: 9px; font-size: 12px; vertical-align: 1px;
+}
+.nope-i p { margin-top: 7px; font-size: 13.5px; color: var(--meta); line-height: 1.7; }
+
+/* ── Architecture stats ───────────────────────────────────── */
+.stats { margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1px; background: var(--rule); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.stat { background: var(--bg); padding: 22px 4px 22px 0; }
+.stat .v { font-family: var(--font-mono); font-size: clamp(28px, 3.6vw, 40px); font-weight: 500; letter-spacing: -.02em; color: var(--fg); line-height: 1.1; }
+.stat .v small { font-size: .45em; color: var(--muted); margin-left: 4px; letter-spacing: 0; }
+.stat .l { margin-top: 8px; font-size: 13px; color: var(--muted); line-height: 1.6; max-width: 24ch; }
+
+/* ── Install ──────────────────────────────────────────────── */
+.install-grid { margin-top: 40px; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: clamp(28px, 4vw, 52px); align-items: start; }
+@media (max-width: 860px) { .install-grid { grid-template-columns: minmax(0,1fr); } }
+.code {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface); overflow: hidden;
+}
+.code-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--border-soft); background: var(--inset);
+}
+.code-bar span { font-family: var(--font-mono); font-size: 11px; color: var(--meta); letter-spacing: .06em; }
+.copy {
+  font: inherit; font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em;
+  padding: 5px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: transparent; color: var(--muted); cursor: pointer;
+  transition: color 150ms, border-color 150ms, background 150ms;
+}
+.copy:hover { color: var(--fg); border-color: var(--fg); }
+.copy[data-done="true"] { color: var(--success); border-color: var(--success); }
+.code pre {
+  margin: 0; padding: 16px 18px; overflow-x: auto;
+  font-family: var(--font-mono); font-size: 13px; line-height: 2; color: var(--fg-2);
+}
+.code pre .c { color: var(--meta); }
+.code pre .p { color: var(--accent); }
+
+.reqs { border-top: 1px solid var(--rule); }
+.req {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 12px 2px; border-bottom: 1px solid var(--rule); font-size: 14px;
+}
+.req .nm { font-family: var(--font-mono); font-size: 13px; color: var(--fg-2); flex: 1; min-width: 0; }
+.req .vr { font-family: var(--font-mono); font-size: 12px; color: var(--meta); }
+.req .tag {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em;
+  padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted);
+}
+.req[data-need="req"] .tag { color: var(--accent); border-color: var(--accent); }
+.reqs-note { margin-top: 18px; font-size: 13.5px; color: var(--meta); line-height: 1.75; }
+
+/* ── Footer ───────────────────────────────────────────────── */
+footer { border-top: 1px solid var(--rule); padding: 44px 0 56px; }
+.foot { display: flex; flex-wrap: wrap; gap: 24px 40px; justify-content: space-between; align-items: flex-start; }
+.foot-b { max-width: 34ch; }
+.foot-b p { margin-top: 10px; font-size: 13px; color: var(--meta); line-height: 1.7; }
+.foot-cols { display: flex; flex-wrap: wrap; gap: 40px; }
+.foot-col h4 { margin: 0 0 10px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--meta); font-weight: 400; }
+.foot-col a { display: block; font-size: 13.5px; color: var(--muted); padding: 4px 0; transition: color 150ms; }
+.foot-col a:hover { color: var(--fg); }
+.foot-end { margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--rule); display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; font-family: var(--font-mono); font-size: 11px; color: var(--meta); letter-spacing: .04em; }
+
+/* ── Reveal ───────────────────────────────────────────────────
+   刻意不做「整段淡入」。文字內容一律先在，只有兩個地方會動：
+   錨線的連接線（畫出來）與 replay 的逐行輸出——那兩個動作本身
+   就是在說明產品在做什麼。其餘捲動觸發的裝飾動畫只會延遲閱讀。
+   `.rv` 現在只是「進入視窗時掛上 .in」的標記，不隱藏任何東西。 */
+@media (prefers-reduced-motion: reduce) {
+  html.js .diagram .link, html.js .diagram .dot { opacity: 1; }
+  html.js .in .diagram .link { animation: none; stroke-dashoffset: 0; }
+  html.js .in .diagram .dot { animation: none; }
+  html.js .replay .hl::before, html.js .in .replay .hl::before { animation: none; transform: none; }
+  .fade-swap { animation: none; }
+  .stations::after { transition: none; }
+}
+</style>
+<script>
+  /* 在第一次繪製前就標記 JS 可用，避免進場效果造成內容閃爍；
+     同時先套用已儲存的主題，避免載入時的主題跳動。 */
+  document.documentElement.classList.add("js");
+  try {
+    var _t = localStorage.getItem("anchorline:theme");
+    if (_t === "warp" || _t === "kami" || _t === "github") {
+      document.documentElement.setAttribute("data-theme", _t);
+      document.documentElement.style.colorScheme = _t === "kami" ? "light" : "dark";
+    }
+  } catch (e) {}
+</script>
+</head>
+<body>
+
+<header class="chrome" id="chrome">
+  <div class="wrap chrome-in">
+    <a class="brand" href="#top" aria-label="Anchorline 首頁">
+      <svg viewBox="0 0 512 512" aria-hidden="true">
+        <defs><linearGradient id="lg" x1=".15" y1="0" x2=".85" y2="1"><stop offset="0" stop-color="#142a48"/><stop offset="1" stop-color="#1b365d"/></linearGradient></defs>
+        <rect width="512" height="512" rx="96" fill="url(#lg)"/>
+        <rect x="118" y="128" width="276" height="72" rx="20" fill="#2d5a8a" opacity=".5"/>
+        <rect x="118" y="196" width="276" height="72" rx="20" fill="#3d6f9e"/>
+        <rect x="118" y="264" width="276" height="120" rx="24" fill="#faf9f5"/>
+        <rect x="148" y="148" width="48" height="32" rx="10" fill="#faf9f5" opacity=".8"/>
+        <rect x="148" y="216" width="48" height="32" rx="10" fill="#faf9f5" opacity=".9"/>
+        <rect x="148" y="292" width="48" height="32" rx="10" fill="#1b365d"/>
+        <rect x="216" y="300" width="140" height="16" rx="8" fill="#1b365d" opacity=".88"/>
+        <rect x="216" y="332" width="108" height="16" rx="8" fill="#1b365d" opacity=".38"/>
+      </svg>
+      <b>Anchorline</b><span>v1.1.0</span>
+    </a>
+    <nav aria-label="主要導覽">
+      <a href="#questions">四個問題</a>
+      <a href="#chain">治理鏈</a>
+      <a href="#family">同族系</a>
+      <a href="#security">安全</a>
+      <a href="#install">安裝</a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="themeswitch" role="group" aria-label="切換主題">
+      <button type="button" data-theme-btn="warp" aria-pressed="true">warp</button>
+      <button type="button" data-theme-btn="kami" aria-pressed="false">kami</button>
+      <button type="button" data-theme-btn="github" aria-pressed="false">github</button>
+    </div>
+    <a class="ghlink" href="https://github.com/ShiGaChenTW/anchorline" rel="noopener">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      <span class="lbl">GitHub</span>
+    </a>
+  </div>
+</header>
+
+<nav class="rail" aria-label="章節">
+  <a href="#top" data-rail="top">開頭</a>
+  <a href="#questions" data-rail="questions">四個問題</a>
+  <a href="#chain" data-rail="chain">治理鏈</a>
+  <a href="#family" data-rail="family">同族系</a>
+  <a href="#security" data-rail="security">安全界線</a>
+  <a href="#nope" data-rail="nope">不做</a>
+  <a href="#arch" data-rail="arch">架構</a>
+  <a href="#install" data-rail="install">安裝</a>
+</nav>
+
+<main id="top">
+
+<!-- ── HERO ────────────────────────────────────────────────── -->
+<div class="hero">
+  <div class="wrap hero-grid">
+    <div class="rv">
+      <p class="eyebrow">本機優先 · 桌面 App · MIT</p>
+      <h1>缺的從來不是<br>一個資料庫，<br><span class="dim">是一把 join key。</span></h1>
+      <p class="lead">
+        <code class="mono">plans/*.md</code> 的 checkbox、git commit、簽核、openspec change
+        各有各的身分，對不起來就只能各自顯示。Anchorline 給每個工作單元
+        <b>一個穩定錨點</b>，四份資料才串得成一條線。
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#install">
+          自行建置
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1v9.5m0 0L4.5 7M8 10.5 11.5 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13.5h12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </a>
+        <a class="btn btn-ghost" href="#security">讀安全模型</a>
+        <a class="btn btn-ghost" href="#chain">看治理鏈</a>
+      </div>
+      <div class="notice">
+        <span aria-hidden="true">⚠</span>
+        <span><b>早期階段。</b>目前產物未簽章，macOS 會被 Gatekeeper 擋、Windows 會被 SmartScreen 擋。簽章與 notarization 尚未做。</span>
+      </div>
+    </div>
+
+    <div class="rv" aria-hidden="false">
+      <svg class="diagram" viewBox="0 0 570 400" role="img" aria-label="四份資料——plans 檔的 checkbox、git commit、簽核、openspec change——透過同一個穩定錨點 anc:t=HNTPRY5R 串成一條線">
+        <text class="cap" x="8" y="18">四份來源 · 各有各的身分</text>
+
+        <g id="srcs">
+          <g><rect class="box" x="8" y="36" width="214" height="56" rx="6"/>
+             <text class="src" x="22" y="58">PLANS/*.MD</text>
+             <text class="val" x="22" y="77">☑ 補上穩定錨點</text></g>
+          <g><rect class="box" x="8" y="116" width="214" height="56" rx="6"/>
+             <text class="src" x="22" y="138">GIT COMMIT</text>
+             <text class="val" x="22" y="157">a3f19c2 feat: 錨點回填</text></g>
+          <g><rect class="box" x="8" y="196" width="214" height="56" rx="6"/>
+             <text class="src" x="22" y="218">簽核</text>
+             <text class="val" x="22" y="237">approved · scott</text></g>
+          <g><rect class="box" x="8" y="276" width="214" height="56" rx="6"/>
+             <text class="src" x="22" y="298">OPENSPEC CHANGE</text>
+             <text class="val" x="22" y="317">add-anchor-backfill</text></g>
+        </g>
+
+        <g id="links">
+          <path class="link" d="M222,64 C288,64 300,184 366,184" style="animation-delay:60ms"/>
+          <path class="link" d="M222,144 C288,144 300,184 366,184" style="animation-delay:140ms"/>
+          <path class="link" d="M222,224 C288,224 300,184 366,184" style="animation-delay:220ms"/>
+          <path class="link" d="M222,304 C288,304 300,184 366,184" style="animation-delay:300ms"/>
+        </g>
+
+        <text class="key-lbl" x="366" y="130">JOIN KEY</text>
+        <rect class="box-key" x="366" y="144" width="196" height="80" rx="8"/>
+        <text class="key-val" x="464" y="192" text-anchor="middle">anc:t=HNTPRY5R</text>
+        <circle class="dot" cx="366" cy="184" r="3.5" style="animation-delay:380ms"/>
+
+        <text class="note" x="366" y="264">一個工作單元，</text>
+        <text class="note" x="366" y="286">一個永不改動的錨點。</text>
+        <text class="cap" x="366" y="326">舊的 SF: 錨點仍可讀取</text>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<hr class="rule" />
+
+<!-- ── FOUR QUESTIONS ──────────────────────────────────────── -->
+<section id="questions">
+  <div class="wrap">
+    <div class="sec-head rv">
+      <p class="eyebrow">01 — 它解決什麼</p>
+      <h2>一個開發專案工作台要回答四個問題。<br>多數工具答得出前兩個。</h2>
+    </div>
+
+    <div class="qlist rv">
+      <div class="qrow">
+        <div class="qn">Q1</div>
+        <div class="qq">下一步做什麼？</div>
+        <div class="qa">焦點卡 · openspec 的第一個 <span class="mono">ready</span> artifact。欄位硬性封頂 4 個，其餘專案摺疊——一次只指一個。</div>
+      </div>
+      <div class="qrow">
+        <div class="qn">Q2</div>
+        <div class="qq">現在到哪了？</div>
+        <div class="qa">plan checkbox × openspec artifact 的加權 rollup。不是把兩個百分比並排，是算成一個。</div>
+      </div>
+      <div class="qrow" data-diff="true">
+        <div class="qn">Q3</div>
+        <div class="qq">為什麼變成這樣？</div>
+        <div class="qa">決策紀錄，讀 ISA 的 <span class="mono">Decisions</span> / <span class="mono">Changelog</span>。不另存一份會分岔的 ADR。</div>
+      </div>
+      <div class="qrow" data-diff="true">
+        <div class="qn">Q4</div>
+        <div class="qq">實際發生了什麼？</div>
+        <div class="qa">append-only 稽核軌跡，JSONL，按月分片，落在你自己的磁碟上。</div>
+      </div>
+    </div>
+
+    <p class="qnote rv">
+      2026 年 ADR 復甦的理由很直白：<b>AI agent 現在寫掉大部分程式碼，而看不到「為什麼」的 agent
+      會很開心地把理由重構掉。</b>
+    </p>
+  </div>
+</section>
+
+<!-- ── CHAIN ───────────────────────────────────────────────── -->
+<section id="chain">
+  <div class="wrap">
+    <div class="sec-head rv">
+      <p class="eyebrow">02 — 治理鏈</p>
+      <h2>七個關卡，每一個都在磁碟上留下一行。</h2>
+      <p>市面上的 AI 開發工作台都在解「怎麼讓 agent 跑得更多」。這個解另一件事：<b>怎麼證明這些 agent 做的事是被治理過的。</b>點任一站，看它寫進稽核軌跡的那一行。</p>
+    </div>
+
+    <div class="chain-grid rv">
+      <div class="stations" id="stations" role="tablist" aria-label="治理鏈關卡"></div>
+      <div class="evt">
+        <div class="evt-bar">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="path" id="evtPath">.anchorline/log/2026-08.jsonl</span>
+        </div>
+        <div class="evt-body">
+          <pre id="evtCode" role="tabpanel" aria-live="polite"></pre>
+          <p class="evt-caption" id="evtCap"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── AGENT FAMILY ────────────────────────────────────────── -->
+<section id="family">
+  <div class="wrap">
+    <div class="sec-head rv">
+      <p class="eyebrow">03 — 一個市面上沒有的機制</p>
+      <h2><span class="mono" style="font-size:.78em;color:var(--accent)">authorAgentFamily</span><br>同一個 agent 族系撰寫的文件，不能由同族系核准。</h2>
+      <p>GitHub 的 CODEOWNERS 與 branch protection 只認人，不認 AI 族系，抓不到這一類。治理鏈 replay 會把違規標出來——<b>一條沒有標示違規的治理鏈沒有說服力。</b></p>
+    </div>
+
+    <div class="replay rv">
+      <div class="evt-bar">
+        <span class="dots"><i></i><i></i><i></i></span>
+        <span class="path">governance replay · anc:t=HNTPRY5R</span>
+      </div>
+      <div class="replay-body">
+<pre><span class="ln"><span class="ok">✓</span> doc.draft       <span class="dimtxt">actor=</span>agent/claude   <span class="dimtxt">2026-08-09T09:12:04Z</span></span><span class="ln"><span class="ok">✓</span> gate.pass       <span class="dimtxt">actor=</span>human/scott    <span class="dimtxt">2026-08-09T09:31:22Z</span></span><span class="ln"><span class="bad">✗</span> review.approve  <span class="dimtxt">actor=</span>agent/claude   <span class="dimtxt">2026-08-09T09:33:10Z</span></span><span class="ln">    <span class="hl">violation: authorAgentFamily — 撰寫者與核准者同族系（claude）</span></span><span class="ln">    <span class="dimtxt">→ 這一關不算過。核准要換一個族系，或換一個人。</span></span><span class="ln"><span class="dimtxt">·</span></span><span class="ln"><span class="ok">✓</span> review.approve  <span class="dimtxt">actor=</span>human/scott    <span class="dimtxt">2026-08-09T10:02:47Z</span></span><span class="ln"><span class="ok">✓</span> spec.change     <span class="dimtxt">actor=</span>agent/claude   <span class="dimtxt">2026-08-09T10:14:03Z</span></span><span class="ln"><span class="dimtxt">──────────────────────────────────────────────────────</span></span><span class="ln">  7 事件 · <span class="bad">1 違規</span> · 鏈完整</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECURITY ────────────────────────────────────────────── -->
+<section id="security">
+  <div class="wrap">
+    <div class="sec-head rv">
+      <p class="eyebrow">04 — 安全界線</p>
+      <h2>這個 App 讀得到你所有專案資料夾、會寫檔、會跑 CLI。</h2>
+      <p>三件事都不小，所以在你看程式碼之前，先把界線講清楚。一句話：<b>前端只能說「對哪個已授權的專案做這件已列舉的事」，不能說「用這些參數去跑這個程式」。</b></p>
+    </div>
+
+    <div class="bounds rv">
+      <div class="bound">
+        <h3>沒有 <span class="mono">tauri-plugin-shell</span></h3>
+        <p>allowlist 管得住「可以跑哪支程式」，管不住「參數長什麼樣」。而 <code class="mono">git</code>、<code class="mono">gh</code>、<code class="mono">openspec</code> 的破壞力幾乎全在參數裡。所以指令與旗標是 Rust 常數，前端能決定的只有工作目錄是哪個專案。</p>
+<pre><span class="c">// exec.rs —— 前端傳不進任何一個旗標</span>
+run(&amp;bin, &amp;["search", "prs", "--author=@me",
+             "--state=open", ...], None)</pre>
+      </div>
+      <div class="bound">
+        <h3>兩條路徑謂詞，刻意不共用</h3>
+        <p>合併成一條「通用安全路徑檢查」是很自然的重構衝動，但那會讓 append 的嚴格度悄悄降到 <span class="mono">editable</span> 的水準——<b style="color:var(--fg-2);font-weight:inherit">而降級不會有任何測試失敗</b>，只會多出一個「可以在家目錄任何地方建 .jsonl」的能力。</p>
+<pre><span class="c">append_allowed(path)</span>
+canonicalize(path) 仍在已註冊專案根目錄內   <span class="c">← 擋 symlink</span>
+∧ 相對路徑第一段 = .anchorline
+∧ 副檔名 = jsonl
+∧ 單行 &lt; 4KB</pre>
+      </div>
+      <div class="bound">
+        <h3>只開兩個 Tauri 權限</h3>
+        <p><code class="mono">dialog:allow-open</code>（資料夾選擇器）與 <code class="mono">opener:allow-open-path</code>（用系統預設程式開檔）。沒有第三個。整個原生層的設計前提是不信任前端——不是「前端應該不會亂傳」，是<b style="color:var(--fg-2);font-weight:inherit">「前端亂傳也拿不到東西」</b>。</p>
+      </div>
+    </div>
+
+    <div class="never rv">
+      <p class="eyebrow" style="margin-bottom:14px">永不執行</p>
+      <div class="never-item"><code>gh pr review --approve</code><span>不可逆的對外動作。工具產生指令，人自己執行。</span></div>
+      <div class="never-item"><code>gh pr merge · pr comment</code><span>同上。PR 雷達只讀，不寫。</span></div>
+      <div class="never-item"><code>git commit · push · reset</code><span>同上。界線沿用 <span class="mono">src/lib/git-doctor.ts</span>。</span></div>
+      <div class="never-item"><code>openspec archive</code><span>破壞性，會改寫真相來源。</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── NOT DOING ───────────────────────────────────────────── -->
+<section id="nope">
+  <div class="wrap">
+    <div class="sec-head rv">
+      <p class="eyebrow">05 — 明確不做</p>
+      <h2>拒絕清單和功能清單一樣重要。</h2>
+      <p>每一條都有理由，理由寫在原始碼的檔頭裡。</p>
+    </div>
+    <div class="nope rv">
+      <div class="nope-i"><b>Kanban／拖曳／優先級／指派</b><p>Linear 的形狀，做進來就是兩套任務系統。</p></div>
+      <div class="nope-i"><b>agent 派工執行</b><p>要讓原生端跑 JS 傳來的任意 prompt，等於直接拆掉整個注入防護。改成產生交接指令。</p></div>
+      <div class="nope-i"><b>自建 openspec spec.md parser</b><p>上游格式會演進，自己解析等於維護一份會分岔的第二實作。這是對 OpenSpec 生態的相容承諾，不是實作細節。</p></div>
+      <div class="nope-i"><b>SQLite</b><p>單人量級換不到查詢優勢，卻換來二進位進 git 與 agent 寫不進去兩個真痛。</p></div>
+      <div class="nope-i"><b>PR diff 檢視器</b><p>過度專注黑洞。看 diff 去 GitHub 或 IDE。</p></div>
+      <div class="nope-i"><b>雲端同步／多人伺服器</b><p>本機 + 檔案 + git 就是產品邊界。</p></div>
+      <div class="nope-i"><b>瀏覽器版</b><p>降級路徑的維護成本大於價值。桌面獨佔換到少維護 19 個 guard 分支。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── ARCHITECTURE ────────────────────────────────────────── -->
+<section id="arch">
+  <div class="wrap">
+    <div class="sec-head rv">
+      <p class="eyebrow">06 — 架構</p>
+      <h2>判定邏輯一律是純函式，<span class="mono" style="font-size:.72em">nowMs</span> 一律可注入。</h2>
+      <p>那不是潔癖。從 WKWebView 換到 Tauri 時，整個 <code class="mono">src/lib</code> 裡有 <b>47 個檔一行都不用改</b>——當初把 I/O 全推到呼叫端，代價在這裡回收。</p>
+    </div>
+    <div class="stats rv">
+      <div class="stat"><div class="v">47<small>/ 57</small></div><div class="l">個 lib 模組不碰原生層，可獨立測試</div></div>
+      <div class="stat"><div class="v">12</div><div class="l">個 bridge action，契約凍結在 docs/BRIDGE.md</div></div>
+      <div class="stat"><div class="v">28</div><div class="l">份測試檔，外加 Rust 契約測試</div></div>
+      <div class="stat"><div class="v">2</div><div class="l">個 Tauri 權限，沒有第三個</div></div>
+    </div>
+
+    <div class="chain-grid rv" style="margin-top:52px">
+      <div>
+        <h3 style="font-size:19px">為什麼是 JSONL，不是 SQLite</h3>
+        <p style="margin-top:14px;color:var(--muted);font-size:14.5px">
+          git 可 diff、agent 用一行 shell 就能追加、壞掉的影響範圍是一行而不是整個檔。
+          唯一輸的是查詢效能——而單人專案的量級（&lt; 10 萬筆）換不到那個優勢。
+        </p>
+        <p style="margin-top:14px;color:var(--muted);font-size:14.5px">
+          按月分片，因為 git 每次 commit 存整顆 blob；一個持續長大的單檔每天 commit
+          一次會讓 repo 爆炸。合併衝突 100% 落在檔尾，所以
+          <code class="mono" style="color:var(--fg-2)">*.jsonl merge=union</code> 是一行解法。
+        </p>
+      </div>
+      <div class="code">
+        <div class="code-bar"><span>.anchorline/log/2026-08.jsonl</span></div>
+<pre>{
+  <span class="p">"v"</span>: 1,
+  <span class="p">"event_id"</span>: "01K2Q9V4B7XM8N",
+  <span class="p">"ts"</span>: "2026-08-09T14:23:11Z",
+  <span class="p">"actor"</span>: { "kind": "agent", "family": "claude" },
+  <span class="p">"kind"</span>: "task.done",
+  <span class="p">"subject"</span>: "anc:t=HNTPRY5R",   <span class="c">← join key</span>
+  <span class="p">"payload"</span>: { "title": "補上穩定錨點" }
+}</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── INSTALL ─────────────────────────────────────────────── -->
+<section id="install">
+  <div class="wrap">
+    <div class="sec-head rv">
+      <p class="eyebrow">07 — 安裝</p>
+      <h2>目前請自行建置。</h2>
+      <p>未簽章產物的發布流程還在做。平台：macOS · Windows · Linux——CI 三平台都建置，但<b>目前只有 macOS 有實機驗證</b>。</p>
+    </div>
+
+    <div class="install-grid rv">
+      <div>
+        <div class="code">
+          <div class="code-bar">
+            <span>bash</span>
+            <button class="copy" type="button" data-copy="git clone https://github.com/ShiGaChenTW/anchorline.git&#10;cd anchorline&#10;bun install&#10;bun run tauri build">複製</button>
+          </div>
+<pre><span class="c">$</span> git clone https://github.com/ShiGaChenTW/anchorline.git
+<span class="c">$</span> cd anchorline
+<span class="c">$</span> bun install
+<span class="c">$</span> bun run tauri build
+<span class="c">  # 產物在 src-tauri/target/release/bundle/</span></pre>
+        </div>
+
+        <div class="code" style="margin-top:20px">
+          <div class="code-bar">
+            <span>終端 TUI · 不開 App 也能用</span>
+            <button class="copy" type="button" data-copy="bun run track">複製</button>
+          </div>
+<pre><span class="c">$</span> bun run track      <span class="c"># plans/ 進度，j/k 切換，i 補鑄錨點</span>
+<span class="c">$</span> bun run backfill   <span class="c"># git 歷史回填成稽核軌跡（冪等）</span></pre>
+        </div>
+      </div>
+
+      <div>
+        <p class="eyebrow" style="margin-bottom:14px">需求</p>
+        <div class="reqs">
+          <div class="req" data-need="req"><span class="nm">Bun</span><span class="vr">≥ 1.3</span><span class="tag">必要</span></div>
+          <div class="req" data-need="req"><span class="nm">Rust</span><span class="vr">≥ 1.77</span><span class="tag">必要</span></div>
+          <div class="req" data-need="req"><span class="nm">git</span><span class="vr">任意</span><span class="tag">必要</span></div>
+          <div class="req"><span class="nm">openspec</span><span class="vr">≥ 1.6</span><span class="tag">選用</span></div>
+          <div class="req"><span class="nm">gh</span><span class="vr">任意</span><span class="tag">選用</span></div>
+        </div>
+        <p class="reqs-note">
+          <b style="color:var(--fg-2);font-weight:var(--weight-em)">選用的 CLI 找不到時不會報錯</b>，畫面會顯示一行安裝提示。
+          App 會依序找：你在設定裡指定的路徑 → <code class="mono">PATH</code> → 三平台常見安裝點。
+          找不到就在設定裡填絕對路徑——任何猜路徑的邏輯都會漏掉某個人的環境。
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div class="foot-b">
+        <a class="brand" href="#top">
+          <svg viewBox="0 0 512 512" aria-hidden="true">
+            <defs><linearGradient id="lg2" x1=".15" y1="0" x2=".85" y2="1"><stop offset="0" stop-color="#142a48"/><stop offset="1" stop-color="#1b365d"/></linearGradient></defs>
+            <rect width="512" height="512" rx="96" fill="url(#lg2)"/>
+            <rect x="118" y="128" width="276" height="72" rx="20" fill="#2d5a8a" opacity=".5"/>
+            <rect x="118" y="196" width="276" height="72" rx="20" fill="#3d6f9e"/>
+            <rect x="118" y="264" width="276" height="120" rx="24" fill="#faf9f5"/>
+            <rect x="148" y="148" width="48" height="32" rx="10" fill="#faf9f5" opacity=".8"/>
+            <rect x="148" y="216" width="48" height="32" rx="10" fill="#faf9f5" opacity=".9"/>
+            <rect x="148" y="292" width="48" height="32" rx="10" fill="#1b365d"/>
+            <rect x="216" y="300" width="140" height="16" rx="8" fill="#1b365d" opacity=".88"/>
+            <rect x="216" y="332" width="108" height="16" rx="8" fill="#1b365d" opacity=".38"/>
+          </svg>
+          <b>Anchorline</b>
+        </a>
+        <p>本機優先的開發專案工作台。前身為 SpecForge / PM-SPEC+SCVB，舊的 <span class="mono">sf:</span> 錨點仍可讀取。</p>
+      </div>
+      <div class="foot-cols">
+        <div class="foot-col">
+          <h4>文件</h4>
+          <a href="docs/BRIDGE.md">BRIDGE — 12 個 action 的契約</a>
+          <a href="docs/SECURITY.md">SECURITY — 安全模型</a>
+          <a href="docs/DATA.md">DATA — 資料落在哪</a>
+          <a href="SCOPE.md">SCOPE — 開發範圍</a>
+        </div>
+        <div class="foot-col">
+          <h4>專案</h4>
+          <a href="https://github.com/ShiGaChenTW/anchorline" rel="noopener">GitHub</a>
+          <a href="CONTRIBUTING.md">貢獻指南</a>
+          <a href="LICENSE">MIT 授權</a>
+          <a href="https://github.com/Fission-AI/OpenSpec" rel="noopener">OpenSpec ↗</a>
+        </div>
+      </div>
+    </div>
+    <div class="foot-end">
+      <span>MIT © 2026 ShiGaChenTW</span>
+      <span>主題 · warp 終端 / kami 紙 / github — 可切換</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ── Theme ──────────────────────────────────────────────── */
+  var THEMES = ["warp", "kami", "github"];
+  var KEY = "anchorline:theme";
+  var btns = Array.prototype.slice.call(document.querySelectorAll("[data-theme-btn]"));
+
+  /* persist=true 只在使用者真的按了切換時傳入。載入時不寫回，
+     否則第一次造訪就把預設值釘死，之後改預設對回訪者永遠不生效。 */
+  function applyTheme(t, persist) {
+    if (THEMES.indexOf(t) < 0) t = document.documentElement.getAttribute("data-theme") || "warp";
+    document.documentElement.setAttribute("data-theme", t);
+    document.documentElement.style.colorScheme = t === "kami" ? "light" : "dark";
+    btns.forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-theme-btn") === t));
+    });
+    if (persist) { try { localStorage.setItem(KEY, t); } catch (e) {} }
+  }
+  btns.forEach(function (b) {
+    b.addEventListener("click", function () { applyTheme(b.getAttribute("data-theme-btn"), true); });
+  });
+  /* head 的 inline script 已經套好主題，這裡只補上按鈕的 aria 狀態 */
+  applyTheme(document.documentElement.getAttribute("data-theme"), false);
+
+  /* ── Sticky chrome shadow ───────────────────────────────── */
+  var chrome = document.getElementById("chrome");
+  function onScrollChrome() {
+    chrome.setAttribute("data-stuck", String(window.scrollY > 8));
+  }
+  onScrollChrome();
+  window.addEventListener("scroll", onScrollChrome, { passive: true });
+
+  /* ── Reveal ─────────────────────────────────────────────── */
+  var revealables = document.querySelectorAll(".rv");
+  if (reduce || !("IntersectionObserver" in window)) {
+    Array.prototype.forEach.call(revealables, function (el) { el.classList.add("in"); });
+  } else {
+    var ro = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add("in"); ro.unobserve(e.target); }
+      });
+    }, { rootMargin: "0px 0px -12% 0px", threshold: 0.08 });
+    Array.prototype.forEach.call(revealables, function (el) { ro.observe(el); });
+  }
+
+  /* ── Section rail ───────────────────────────────────────── */
+  var railLinks = Array.prototype.slice.call(document.querySelectorAll("[data-rail]"));
+  var sections = railLinks
+    .map(function (a) { return document.getElementById(a.getAttribute("data-rail")); })
+    .filter(Boolean);
+
+  function updateRail() {
+    var mid = window.scrollY + window.innerHeight * 0.35;
+    var current = sections[0];
+    sections.forEach(function (s) { if (s.offsetTop <= mid) current = s; });
+    railLinks.forEach(function (a) {
+      a.setAttribute("aria-current", String(a.getAttribute("data-rail") === current.id));
+    });
+  }
+  updateRail();
+  window.addEventListener("scroll", updateRail, { passive: true });
+  window.addEventListener("resize", updateRail);
+
+  /* ── Governance chain ───────────────────────────────────── */
+  var CHAIN = [
+    {
+      t: "PRD 撰寫", d: "引導式編輯台，章節大綱 + 即時預覽",
+      kind: "doc.draft", actor: '{ "kind": "agent", "family": "claude" }',
+      payload: '{ "title": "2FA 雙重驗證", "sections": 7 }',
+      cap: "每一次編輯都掛在同一個 subject 上。稽核軌跡不記錄內容，只記錄「誰在什麼時候動了哪一個工作單元」。"
+    },
+    {
+      t: "結構 gate", d: "章節齊全度檢查，未過擋核准",
+      kind: "gate.pass", actor: '{ "kind": "human", "name": "scott" }',
+      payload: '{ "missing": [], "score": 1.0 }',
+      cap: "gate 是結構檢查不是內容審查——它只問「該有的章節在不在」。內容好不好是下一關人的事。"
+    },
+    {
+      t: "簽核", d: "角色核准，同族系不得自核",
+      kind: "review.approve", actor: '{ "kind": "human", "name": "scott" }',
+      payload: '{ "role": "owner", "authorFamily": "claude" }',
+      cap: "authorAgentFamily 在這裡生效：payload 記下撰寫者族系，replay 時比對核准者。同族系會被標成違規。"
+    },
+    {
+      t: "openspec change", d: "呼叫官方 CLI，不自建 parser",
+      kind: "spec.change", actor: '{ "kind": "agent", "family": "claude" }',
+      payload: '{ "change": "add-2fa", "artifacts": 4 }',
+      cap: "只呼叫 openspec 的 --json 輸出。change 名稱來自 list --json 自己的結果，不經過前端——那是注入防線。"
+    },
+    {
+      t: "commits", d: "唯讀 git 子指令，寫入永不執行",
+      kind: "commit", actor: '{ "kind": "agent", "family": "claude" }',
+      payload: '{ "sha": "a3f19c2", "files": 6 }',
+      cap: "event_id 就是 commit hash，所以 bun run backfill 可以把既有 git 歷史回填成事件，重跑幾次都一樣。"
+    },
+    {
+      t: "PR", d: "跨 repo 雷達，只讀不寫",
+      kind: "pr.open", actor: '{ "kind": "human", "name": "scott" }',
+      payload: '{ "repo": "o/r", "number": 128, "state": "open" }',
+      cap: "gh search prs 的旗標寫死在 Rust 常數裡。永遠不包含 pr review / pr merge / pr comment。"
+    },
+    {
+      t: "release", d: "鏈的終點，也是下一條的起點",
+      kind: "release.tag", actor: '{ "kind": "human", "name": "scott" }',
+      payload: '{ "tag": "v1.1.0", "chain": "complete" }',
+      cap: "到這裡，anc:t=HNTPRY5R 這一條線串起 7 個事件、4 份來源。replay 一次就知道哪一關是誰過的。"
+    }
+  ];
+
+  var stationsEl = document.getElementById("stations");
+  var evtCode = document.getElementById("evtCode");
+  var evtCap = document.getElementById("evtCap");
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function render(i) {
+    var c = CHAIN[i];
+    evtCode.innerHTML =
+      '{\n' +
+      '  <span class="k">"ts"</span>:      "2026-08-09T' + ["09:12:04","09:31:22","10:02:47","10:14:03","10:41:55","11:08:30","11:52:19"][i] + 'Z",\n' +
+      '  <span class="k">"actor"</span>:   <span class="n">' + esc(c.actor) + '</span>,\n' +
+      '  <span class="k">"kind"</span>:    "' + esc(c.kind) + '",\n' +
+      '  <span class="k">"subject"</span>: <span class="s">"anc:t=HNTPRY5R"</span>,\n' +
+      '  <span class="k">"payload"</span>: ' + esc(c.payload) + '\n' +
+      '}';
+    evtCap.textContent = c.cap;
+    if (!reduce) {
+      evtCode.classList.remove("fade-swap");
+      void evtCode.offsetWidth;
+      evtCode.classList.add("fade-swap");
+    }
+    Array.prototype.forEach.call(stationsEl.children, function (b, j) {
+      b.setAttribute("aria-selected", String(j === i));
+      b.tabIndex = j === i ? 0 : -1;
+    });
+    var pct = CHAIN.length > 1 ? i / (CHAIN.length - 1) : 0;
+    stationsEl.style.setProperty("--fill", (stationsEl.clientHeight - 28) * pct + "px");
+  }
+
+  CHAIN.forEach(function (c, i) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "station";
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", "false");
+    b.setAttribute("aria-controls", "evtCode");
+    b.innerHTML =
+      '<span class="st-n">' + String(i + 1).padStart(2, "0") + '</span>' +
+      '<span class="st-t">' + c.t + '</span>' +
+      '<span class="st-d">' + c.d + '</span>';
+    b.addEventListener("click", function () { render(i); });
+    b.addEventListener("keydown", function (e) {
+      var d = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1
+            : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
+      if (!d) return;
+      e.preventDefault();
+      var next = (i + d + CHAIN.length) % CHAIN.length;
+      render(next);
+      stationsEl.children[next].focus();
+    });
+    stationsEl.appendChild(b);
+  });
+  render(0);
+  window.addEventListener("resize", function () {
+    var sel = Array.prototype.findIndex.call(stationsEl.children, function (b) {
+      return b.getAttribute("aria-selected") === "true";
+    });
+    if (sel >= 0) render(sel);
+  });
+
+  /* ── Copy buttons ───────────────────────────────────────── */
+  Array.prototype.forEach.call(document.querySelectorAll(".copy"), function (btn) {
+    btn.addEventListener("click", function () {
+      var text = btn.getAttribute("data-copy");
+      var done = function () {
+        var prev = btn.textContent;
+        btn.textContent = "已複製";
+        btn.setAttribute("data-done", "true");
+        setTimeout(function () {
+          btn.textContent = prev;
+          btn.removeAttribute("data-done");
+        }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () {});
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); done(); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>
