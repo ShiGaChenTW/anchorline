@@ -193,6 +193,16 @@ export type Template = {
 
 export type Comment = {
   id: string;
+  /**
+   * 這則留言屬於哪一個專案。
+   *
+   * 原本沒有這個欄位 —— 留言是全域的，每個專案的審閱頁都看得到別人的留言，
+   * hub 的未解決計數與匯出也一併混在一起。`resolveComment` 因此無從判斷
+   * 「這則留言的文件作者是誰」，只好用 `p1` 硬編當代打。
+   *
+   * 舊資料沒有這個欄位，載入時會補上（見 store 的 migration）。
+   */
+  projectId: string;
   author: string;
   authorId?: string;
   avatar: string;

@@ -427,6 +427,17 @@ window.APPROVAL_FLOWS = {
           code: "permissions.canPeerReview",
         },
         {
+          id: "scope",
+          name: "找得到留言所屬的專案？",
+          kind: "decision",
+          actor: "系統",
+          purpose:
+            "自審檢查要拿「這則留言所在專案」的作者去比對。比錯專案的話，該擋的不擋、不該擋的被擋，而且不會有任何錯誤訊息。",
+          pass: ["comment.projectId 對應得到現存專案"],
+          fail: ["對不到 → 找不到這則留言所屬的專案（不退回猜一個來用）"],
+          code: "comment-scope.projectOfComment",
+        },
+        {
           id: "own",
           name: "是自己的文件嗎？",
           kind: "decision",
@@ -434,7 +445,7 @@ window.APPROVAL_FLOWS = {
           purpose: "自己消化自己的問題等於沒有覆核。",
           pass: ["文件作者不是自己"],
           fail: ["editor 且 project.authorId = 自己 → 編輯人員不可覆核自己的檔案"],
-          code: "canPeerReview / resolveComment",
+          code: "comment-scope.canResolveComment",
         },
         {
           id: "resolve",
@@ -449,7 +460,8 @@ window.APPROVAL_FLOWS = {
       ],
       edges: [
         { from: "exists", to: "who2", label: "是" },
-        { from: "who2", to: "own", label: "有資格" },
+        { from: "who2", to: "scope", label: "有資格" },
+        { from: "scope", to: "own", label: "找得到" },
         { from: "own", to: "resolve", label: "不是自己的" },
       ],
     },

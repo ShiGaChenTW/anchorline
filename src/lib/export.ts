@@ -41,7 +41,10 @@ export function buildMarkdown(state: AppState, project?: Project | null): string
     if (!any) md += `_（本章尚無內容）_\n\n`;
   }
 
-  const openComments = state.comments.filter((c) => !c.resolved);
+  // 匯出的是「這一份 PRD」，別的專案的未解決留言不該混進來
+  const openComments = state.comments.filter(
+    (c) => c.projectId === state.activeProjectId && !c.resolved,
+  );
   if (openComments.length) {
     md += `## 開放留言\n\n`;
     for (const c of openComments) {

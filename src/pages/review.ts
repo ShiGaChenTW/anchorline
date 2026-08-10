@@ -393,7 +393,8 @@ function renderApprovals() {
     .join("");
 
   const signed = approvals.filter((a) => a.state === "approved").length;
-  const open = comments.filter((c) => !c.resolved).length;
+  // 只算這個專案的 —— 留言原本是全域的，別的專案的未解決數會混進來
+  const open = comments.filter((c) => c.projectId === activeProjectId && !c.resolved).length;
   strip.innerHTML =
     cards +
     `<div class="approval-meta" data-od-id="approval-meta">
@@ -478,7 +479,8 @@ function renderApprovals() {
 function renderComments() {
   const list = document.getElementById("comments-list");
   if (!list) return;
-  const comments = store.get().comments;
+  const pid = store.get().activeProjectId;
+  const comments = store.get().comments.filter((c) => c.projectId === pid);
   const visible = openOnly ? comments.filter((c) => !c.resolved) : comments;
   const project = activeProject();
   const peer = canPeerReview(store.get().currentUser, project);
@@ -719,6 +721,7 @@ document.getElementById("btn-post")?.addEventListener("click", () => {
   const u = store.get().currentUser;
   const c: Comment = {
     id: `c${Date.now()}`,
+    projectId: store.get().activeProjectId,
     author: u.name,
     authorId: u.id,
     avatar: u.avatar || u.name.slice(0, 1),

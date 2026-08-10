@@ -49,7 +49,9 @@ if (stats[0]) stats[0].textContent = String(open);
 if (stats[1]) stats[1].textContent = String(pending);
 if (stats[2]) stats[2].textContent = String(Math.max(approved, 11));
 
-const commentsOpen = st.comments.filter((c) => !c.resolved).length;
+const commentsOpen = st.comments.filter(
+  (c) => c.projectId === st.activeProjectId && !c.resolved,
+).length;
 const signed = st.approvals.filter((a) => a.state === "approved").length;
 const meta = document.querySelector(".continue-card .m");
 if (meta) {
