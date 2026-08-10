@@ -602,6 +602,7 @@ export function buildSeedCase(projectId: string, employees: Employee[]): CaseRec
   return {
     projectId,
     stages,
+    reviewCommitId: null,
     withdrawn: false,
     withdrawnAt: null,
     withdrawnBy: null,

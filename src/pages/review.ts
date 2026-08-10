@@ -206,14 +206,14 @@ function renderFocusBar() {
   const bar = document.getElementById("review-focus-bar");
   if (!bar) return;
   const st = store.get();
-  const openVals = st.sectionValues["open"] ?? {};
+  const openVals = reviewDocs()["open"] ?? {};
   const openText = Object.values(openVals).join("\n");
   const items = extractOpenItems(openText);
   // 也掃其他章節的待決
   if (items.length < 3) {
     for (const s of st.sections) {
       if (s.id === "open") continue;
-      const t = Object.values(st.sectionValues[s.id] ?? {}).join("\n");
+      const t = Object.values(reviewDocs()[s.id] ?? {}).join("\n");
       for (const it of extractOpenItems(t)) {
         if (!items.includes(it)) items.push(it);
         if (items.length >= 5) break;
@@ -262,7 +262,7 @@ function renderSecNav() {
   const pills = [
     `<button type="button" class="review-sec-pill${focusSectionId === "" ? " on" : ""}" data-sec="">全部</button>`,
     ...st.sections.map((s) => {
-      const vals = st.sectionValues[s.id] ?? {};
+      const vals = reviewDocs()[s.id] ?? {};
       const filled = sectionFilled(s, vals);
       const on = focusSectionId === s.id ? " on" : "";
       const empty = filled ? "" : " is-empty";
@@ -294,7 +294,7 @@ function renderDoc() {
   const metaEl = document.querySelector<HTMLElement>('[data-od-id="doc-meta"]');
   if (!body) return;
 
-  if (ledeEl) ledeEl.textContent = deriveLede(st.sectionValues);
+  if (ledeEl) ledeEl.textContent = deriveLede(reviewDocs());
 
   if (metaEl) {
     const items = deriveMeta();
@@ -322,7 +322,7 @@ function renderDoc() {
   let html = "";
   let filledN = 0;
   for (const s of st.sections) {
-    if (sectionFilled(s, st.sectionValues[s.id] ?? {})) filledN++;
+    if (sectionFilled(s, reviewDocs()[s.id] ?? {})) filledN++;
   }
 
   html += `<p class="review-doc-progress">${filledN} / ${st.sections.length} 章節有內容${
@@ -330,7 +330,7 @@ function renderDoc() {
   }</p>`;
 
   for (const s of sections) {
-    const values = st.sectionValues[s.id] ?? {};
+    const values = reviewDocs()[s.id] ?? {};
     const filled = sectionFilled(s, values);
     const md = fieldsToMarkdown(s, values);
     const statusClass =
@@ -584,10 +584,21 @@ function expandComments(open: boolean) {
  * 沒有主線（第一次送審）就整份都是新的，不畫 diff —— 全部標成新增等於
  * 沒有資訊，直接看正文比較快。
  */
+/**
+ * 審閱要看的那一份正文 = 個案綁定的送審快照。
+ *
+ * 沒有快照（舊資料、或從未送審）才退回當下已儲存的內容。
+ * 這支存在的理由：審閱頁原本直接讀 state.sectionValues，於是送審之後
+ * 作者再改一次，審閱者看到的是新的、核准合併的卻是舊的那一份快照。
+ */
+function reviewDocs(): Record<string, Record<string, string>> {
+  return store.prdReviewCommit()?.docs ?? store.get().sectionValues;
+}
+
 function renderVersionDiff() {
   const host = document.getElementById("rv-diff");
   if (!host) return;
-  const commit = store.prdLatestCommit();
+  const commit = store.prdReviewCommit();
   const base = store.prdBaseline();
   if (!commit || !base) {
     host.hidden = true;

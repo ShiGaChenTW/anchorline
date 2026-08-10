@@ -113,3 +113,25 @@ export function canCommit(opts: {
   }
   return { ok: true };
 }
+
+/**
+ * 版本線保留上限。
+ *
+ * 每份 commit／merge 都是整份 PRD 的快照，只增不刪會把 localStorage 撐爆 ——
+ * 而寫入失敗是靜默的：畫面看起來存好了，重新載入卻回到上一次成功的狀態。
+ *
+ * 保留最近 N 筆，但**最近一次 merge 永遠留著**：它是主線，是所有 diff 的
+ * 比較基準，掉了就永遠算不出「這一版改了什麼」。
+ */
+export const MAX_VERSIONS_PER_PROJECT = 30;
+
+export function capVersions(
+  versions: readonly PrdVersion[],
+  max = MAX_VERSIONS_PER_PROJECT,
+): PrdVersion[] {
+  if (versions.length <= max) return versions as PrdVersion[];
+  const kept = versions.slice(0, max);
+  if (kept.some((v) => v.kind === "merge")) return kept;
+  const baseline = versions.find((v) => v.kind === "merge");
+  return baseline ? [...kept.slice(0, max - 1), baseline] : kept;
+}
