@@ -7807,6 +7807,40 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 /* 其他專案／PR 雷達／更多統計都套同一層卡片。
    它們原本是裸在背景上的，跟上面的 tile 與焦點卡不同層級 —— 同一頁出現
    「有殼」與「沒殼」兩種區塊，掃視時會誤讀成兩個不同重要性的東西。 */
+/* 治理覆蓋率與專案清單並排。
+   1fr / 2.4fr：左邊是一個數字，右邊是十列清單 —— 等寬會讓左邊空一大片。 */
+.ov-pair {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2.4fr);
+  gap: 14px;
+  align-items: stretch;
+  margin-top: 18px;
+}
+/* 並排放不下就上下疊，不要擠成兩條 */
+@media (max-width: 900px) {
+  .ov-pair { grid-template-columns: minmax(0, 1fr); }
+}
+.ov-pair > .ov-others { margin-top: 0; }
+
+/* 治理卡：視覺對齊 .ov-others（同底色、同內距、同圓角）。
+   height: auto 是必要的 —— .d-card 帶著儀表板的固定卡高 var(--d-card-h)，
+   這張卡內容只有 141px 卻被撐成 458px，中間一大片空白。 */
+.ov-gov {
+  height: auto;
+  padding: 16px 18px;
+  background: var(--surface);
+  border-radius: var(--radius-lg, 12px);
+}
+.ov-gov .d-eyebrow {
+  /* 標題跟「其他 N 個專案」同一種：不大寫、不加字距，那是儀表板數字卡的語言 */
+  font-size: var(--fs-2);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--meta);
+  margin-bottom: 10px;
+}
+
 .ov-others {
   margin: 18px 0 0;
   padding: 16px 18px;
@@ -7825,7 +7859,10 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 7px 8px;
+  /* 垂直內距 7→5px：十列共省 40px，整張卡約 −10%。
+     用內距而不是 max-height，是因為後者會把最後一兩個專案藏起來 ——
+     這張卡的用途正是「其他還有什麼」，藏起來等於功能相反。 */
+  padding: 5px 8px;
   border: 0;
   border-radius: 6px;
   background: none;
@@ -8616,23 +8653,49 @@ p.gd-warn {
 
 /* 選中專案卡片下方的動作列。字級與圖示都比主導覽小一號 ——
    它是卡片的附屬動作，不該跟導覽搶視覺重量。 */
+/* 檔案樹的樹枝線。
+   原本是一條 2px 直線貫穿到底：它只說「這幾列是一組」，沒說「這是最後一個」。
+   樹線是每一列自己畫自己那一段 —— 最後一列的幹線只畫到中線，
+   跟橫枝接起來就是 └，不必為最後一項另外加 class 或改 markup。 */
 .rail-proj-actions {
   display: flex;
   flex-direction: column;
   gap: 1px;
   margin: 2px 0 4px;
-  padding: 3px 0 3px 10px;
-  border-left: 2px solid color-mix(in oklab, var(--accent) 45%, transparent);
+  padding: 0 0 3px 12px;
 }
 .rail-proj-action {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 5px 8px 5px 20px;
   border-radius: 6px;
   font-size: var(--fs-2);
   color: var(--fg-2);
   text-decoration: none;
+}
+/* 幹線 */
+.rail-proj-action::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in oklab, var(--accent) 30%, var(--border));
+}
+/* 最後一列只畫到中線 → 與橫枝相接成 └ */
+.rail-proj-action:last-child::before { bottom: 50%; }
+/* 橫枝 */
+.rail-proj-action::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 11px;
+  height: 1px;
+  background: color-mix(in oklab, var(--accent) 30%, var(--border));
 }
 .rail-proj-action:hover { background: var(--inset); color: var(--fg); }
 .rail-proj-action .ic { width: 13px; height: 13px; flex-shrink: 0; color: var(--muted); }

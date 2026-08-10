@@ -551,8 +551,10 @@ if (!requireAuth()) {
     root.innerHTML = `${warRoom(rows)}
       <div class="ov-focus">${hero(rows)}</div>
       ${prRadar()}
-      <section class="d-card ov-gov" id="${GOVERNANCE_ID}">${governanceInner(rows)}</section>
-      ${cardProjects(rows)}
+      <div class="ov-pair">
+        <section class="d-card ov-gov" id="${GOVERNANCE_ID}">${governanceInner(rows)}</section>
+        ${cardProjects(rows)}
+      </div>
       <details class="ov-more"${moreOpen() ? " open" : ""}>
         <summary>更多統計 ▸</summary>
         <div class="d-grid">${cardStatus(rows)}${cardStack(rows)}${cardUnbound(rows)}</div>
