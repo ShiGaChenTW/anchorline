@@ -231,23 +231,17 @@ export type Approval = {
 };
 
 /**
- * 一個「撰寫角色」。
+ * 某個領域包的 AI 撰寫設定。
  *
- * 欄位刻意跟 aiWriting 的頂層設定同名 —— 切換角色就是把這幾個值換掉，
- * 下游（generateAIDraft）只讀頂層，完全不必知道 profile 的存在。
+ * 欄位為 `undefined` 代表**沿用通用版本**；字串（含空字串）代表這個領域自訂。
+ * 用 undefined 而不是空字串當「沿用」，是因為「我要它空著」跟「我沒設定過」
+ * 是兩件不同的事 —— 用空字串表示會讓前者永遠被通用值蓋掉。
  */
-export type AiWriteProfile = {
-  id: string;
-  /** 顯示名稱，例如「對外產品規格」「內部技術設計」 */
-  name: string;
-  /** 一句話說明這個角色什麼時候用 —— 三個月後的自己看得懂 */
-  description: string;
-  globalInstruction: string;
-  styleSample: string;
-  sectionPrompts: Record<string, string>;
-  overwriteFilled: boolean;
-  /** AI 建議產生的角色標記，方便使用者知道哪些是自己寫的 */
-  aiSuggested?: boolean;
+export type DomainWriteConfig = {
+  globalInstruction?: string;
+  styleSample?: string;
+  /** key = sectionId。同樣 undefined = 沿用通用 */
+  sectionPrompts?: Record<string, string | undefined>;
 };
 
 export type AISettings = {
@@ -281,29 +275,15 @@ export type AISettings = {
    */
   aiWriting: {
     /**
-     * 撰寫角色（profile）。
+     * 依**領域包**分類的撰寫設定。key = 領域 id（generic / payment / lending …）。
      *
-     * 同一個工作區會有不同寫法需求 —— 對外的產品規格、對內的技術設計、
-     * 給法遵看的合規說明，語氣與側重完全不同。把設定綁死成一組，等於每次
-     * 換情境都要手動改一次全域指令，然後忘記改回來。
+     * 分類軸選領域而不是自訂角色：領域包本來就存在，且它已經決定了這份 PRD
+     * 有哪些章節。再開一套「角色」等於要使用者每次都想「這份該用哪個角色」，
+     * 而答案幾乎總是跟領域一樣。
      *
-     * 至少永遠有一個（`profiles[0]`）。刪到剩一個時不給刪。
+     * `generic`（通用）是基底，其餘領域逐欄位沿用或覆寫。
      */
-    profiles: AiWriteProfile[];
-    /** 目前生效的角色 id。找不到時退回 profiles[0]。 */
-    activeProfileId: string;
-    /** 併進每一節 prompt 的全域指令（產品脈絡、慣用語、禁用詞…） */
-    globalInstruction: string;
-    /**
-     * 每節的 prompt 覆寫。key = sectionId。
-     * 留空的章節用內建 prompt —— 覆寫是例外，不是預設。
-     */
-    sectionPrompts: Record<string, string>;
-    /**
-     * 風格範本：一份寫得好的 PRD 片段，讓 AI 模仿語氣與結構。
-     * ChatPRD 讓使用者上傳範本 PRD 是它最被稱讚的客製化方式。
-     */
-    styleSample: string;
+    byDomain: Record<string, DomainWriteConfig>;
     /** 已經有內容的章節要不要重寫。預設 false —— 覆蓋使用者寫好的東西是最不該預設發生的事 */
     overwriteFilled: boolean;
   };

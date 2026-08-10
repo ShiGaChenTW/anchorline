@@ -799,23 +799,9 @@ export const DEFAULT_SETTINGS: AISettings = {
   persona: "executive",
   language: "zh-TW",
   aiWriting: {
-    // 預設一個空白角色 —— 沒有它使用者第一次進來會看到一個空的下拉，
-    // 而「先建立角色才能用」是完全不必要的門檻。
-    profiles: [
-      {
-        id: "default",
-        name: "預設",
-        description: "沒有特別設定，用內建寫法",
-        globalInstruction: "",
-        styleSample: "",
-        sectionPrompts: {},
-        overwriteFilled: false,
-      },
-    ],
-    activeProfileId: "default",
-    globalInstruction: "",
-    sectionPrompts: {},
-    styleSample: "",
+    // generic（通用）是繼承基底，永遠存在。其餘領域只在使用者真的覆寫時才出現 ——
+    // 預先塞五個空領域只會讓「有沒有設定過」變得看不出來。
+    byDomain: { generic: { globalInstruction: "", styleSample: "", sectionPrompts: {} } },
     overwriteFilled: false,
   },
   enableLinters: {

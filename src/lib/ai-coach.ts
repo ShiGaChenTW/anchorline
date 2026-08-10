@@ -217,6 +217,8 @@ export async function generateAIDraft(
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
 
   const settings = store.get().settings;
+  // 依目前專案的領域包解析：領域自訂優先，沒設定就沿用通用
+  const writing = store.activeWriting();
   const fieldSpec = section.fields
     .map((f) => `- ${f.key}（${f.label}）：${f.hint || f.type}`)
     .join("\n");
@@ -231,8 +233,8 @@ Values are markdown-friendly plain text for each field.
 Do NOT invent unrelated SaaS/2FA demos unless the current content is about that.
 Stay on-topic with the section title and existing draft.
 JSON only, no markdown fences.${
-    settings.aiWriting?.styleSample?.trim()
-      ? `\n\nMatch the tone and structure of this sample the user provided:\n"""\n${settings.aiWriting.styleSample.trim().slice(0, 4000)}\n"""`
+    writing.styleSample.trim()
+      ? `\n\nMatch the tone and structure of this sample the user provided:\n"""\n${writing.styleSample.trim().slice(0, 4000)}\n"""`
       : ""
   }`;
 
@@ -246,7 +248,7 @@ ${fieldSpec}
 Current draft:
 ${current}
 
-${settings.aiWriting?.globalInstruction?.trim() ? `Workspace guidance (applies to every section):\n${settings.aiWriting.globalInstruction.trim()}\n\n` : ""}${prompt ? `User instruction:\n${prompt}\n` : "User instruction: improve and fill empty fields based on existing context.\n"}
+${writing.globalInstruction.trim() ? `Workspace guidance (applies to every section):\n${writing.globalInstruction.trim()}\n\n` : ""}${prompt ? `User instruction:\n${prompt}\n` : "User instruction: improve and fill empty fields based on existing context.\n"}
 Return JSON with keys: ${section.fields.map((f) => f.key).join(", ")}`;
 
   // 串流只影響「怎麼拿到文字」，不影響之後的解析 —— 模型輸出是一份 JSON，
@@ -410,7 +412,7 @@ export async function writeFullPrd(
     opts.onProgress?.({ ...base, phase: "start" });
     try {
       // 每節覆寫優先於本次的一次性指令；兩者都沒有就用內建 prompt
-      const perSection = store.get().settings.aiWriting?.sectionPrompts?.[section.id]?.trim();
+      const perSection = store.activeWriting().sectionPrompts[section.id]?.trim();
       const patch = await generateAIDraft(section, current, perSection || opts.instruction, {
         onDelta: opts.onDelta ? (c, f) => opts.onDelta!(c, f, section) : undefined,
         signal: opts.signal,
