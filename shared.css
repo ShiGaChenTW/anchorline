@@ -8893,8 +8893,13 @@ p.gd-warn {
    預設隱形、hover 或鍵盤聚焦才顯現：一排步驟每行都掛一顆常駐按鈕，會把
    「哪一步該做」這個唯一重點稀釋掉。 */
 .tk-step-handoff {
-  margin-left: auto;
+  /* 對齊步驟文字的第一行，不是整格的垂直置中 —— 步驟文字可能折成三行，
+     置中的話按鈕會飄到中間，看起來跟哪一行有關就說不清楚了。 */
+  align-self: start;
+  margin-top: 2px;
   padding: 2px 8px;
+  /* 兩個字不可拆行。第三欄是 auto 寬，少了這行會被壓成一欄字。 */
+  white-space: nowrap;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: none;
