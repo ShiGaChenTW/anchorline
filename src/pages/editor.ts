@@ -441,6 +441,13 @@ function renderOpenSpec() {
  * 孤兒提示是這裡的重點：換領域**不刪任何正文**，但不屬於新領域的章節
  * 會從清單上消失。沒有這行提示，那看起來就跟資料掉了一模一樣。
  */
+/** 目前專案的領域顯示名 —— AI 撰寫用哪一組設定，看這個 */
+function currentDomainLabel(): string {
+  const st = store.get();
+  const d = st.projects.find((p) => p.id === st.activeProjectId)?.domain ?? DEFAULT_DOMAIN;
+  return listDomains().find((o) => o.name === d)?.displayName ?? d;
+}
+
 function renderDomainBar() {
   const sel = document.getElementById("domain-select") as HTMLSelectElement | null;
   const orphanBox = document.getElementById("domain-orphans");
@@ -1366,7 +1373,7 @@ function renderCoach() {
     </div>
 
     <div class="card ai-write-card" data-od-id="ai-write-card">
-      <p class="adhd-coach-kicker">AI 撰寫<span class="ai-write-profile">${escapeHtml(store.activeWriteProfile().name)}</span></p>
+      <p class="adhd-coach-kicker">AI 撰寫<span class="ai-write-profile">${escapeHtml(currentDomainLabel())}</span></p>
       <div class="ai-write-actions">
         <button type="button" class="btn btn-sm btn-primary" id="btn-ai-write-all"
                 ${aiReadyNow ? "" : "disabled"}>撰寫初版（全部章節）</button>

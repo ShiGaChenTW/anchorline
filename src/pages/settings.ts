@@ -7,6 +7,14 @@ import { canManageUsers } from "../lib/permissions";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 import { BUILTIN_PACKS, listDomains } from "../data/domains";
+import {
+  BASE_DOMAIN,
+  baseSectionValue,
+  baseValue,
+  isInherited,
+  isSectionInherited,
+  type InheritableField,
+} from "../lib/ai-writing-config";
 import { authorDomainPack, validate as validatePack } from "../lib/domain-pack-author";
 import { chatCompletion, isAiConfigured } from "../lib/ai-client";
 import { suggestWriteProfile } from "../lib/ai-coach";
@@ -36,140 +44,215 @@ function syncUser() {
   updateUserRailFooter(toRailUser(u));
 }
 
+/**
+ * 目前正在編輯哪個領域的設定。只存在畫面上 —— 它是「我現在在看什麼」，
+ * 不是使用者的偏好，寫進 settings 只會讓兩台機器互相打架。
+ */
+let awDomain = BASE_DOMAIN;
+
+function awByDomain() {
+  return store.get().settings.aiWriting.byDomain;
+}
+
 /** 從 AI 撰寫頁籤讀回設定。找不到欄位時保留原值 —— 頁籤可能還沒渲染。 */
 function readAiWriting(): AISettings["aiWriting"] {
   const cur = store.get().settings.aiWriting;
-  const g = document.getElementById("aw-global") as HTMLTextAreaElement | null;
-  const st = document.getElementById("aw-style") as HTMLTextAreaElement | null;
   const ov = document.getElementById("aw-overwrite") as HTMLInputElement | null;
-
-  const sectionPrompts: Record<string, string> = {};
-  document
-    .querySelectorAll<HTMLTextAreaElement>("#aw-sections textarea[data-aw-section]")
-    .forEach((ta) => {
-      const v = ta.value.trim();
-      // 只存有內容的 —— 空字串跟「沒設定」是同一件事，不必佔位
-      if (v) sectionPrompts[ta.dataset.awSection!] = v;
-    });
-
-  const next = {
-    globalInstruction: g ? g.value : cur.globalInstruction,
-    styleSample: st ? st.value : cur.styleSample,
-    overwriteFilled: ov ? ov.checked : cur.overwriteFilled,
-    sectionPrompts: document.getElementById("aw-sections") ? sectionPrompts : cur.sectionPrompts,
-  };
-  // 頂層值同時寫回目前的角色 —— 否則切走再切回來就白改了
-  const profiles = cur.profiles.map((p) =>
-    p.id === cur.activeProfileId ? { ...p, ...next } : p,
-  );
-  return { ...cur, ...next, profiles };
+  return { ...cur, overwriteFilled: ov ? ov.checked : cur.overwriteFilled };
 }
 
 /**
- * 各章節的 prompt 覆寫。章節清單來自目前的領域包，所以換領域後這裡也會跟著換 ——
- * 舊領域留下的覆寫仍存在 settings 裡，只是不顯示（跟章節正文的孤兒處理一致，不刪）。
+ * 一顆繼承按鈕。通用領域本身不顯示 —— 它是基底，沒有上游可沿用。
+ */
+function inheritButtonHtml(inherited: boolean, hasBase: boolean): string {
+  if (awDomain === BASE_DOMAIN) return "";
+  if (inherited) {
+    return `<button type="button" class="aw-inherit is-on" data-act="custom">沿用通用版本${hasBase ? "" : "（通用為空）"}<span class="aw-inherit-x">改成自訂</span></button>`;
+  }
+  return `<button type="button" class="aw-inherit" data-act="inherit">改為沿用通用版本</button>`;
+}
+
+/** 領域下拉 + 兩個可繼承欄位的狀態 */
+function renderAiWritingDomain() {
+  const sel = document.getElementById("aw-domain") as HTMLSelectElement | null;
+  if (!sel) return;
+  const opts = listDomains();
+  sel.innerHTML = opts
+    .map(
+      (o) =>
+        `<option value="${escapeHtml(o.name)}" ${o.name === awDomain ? "selected" : ""}>${escapeHtml(o.displayName)}${o.name === BASE_DOMAIN ? "（基底）" : ""}</option>`,
+    )
+    .join("");
+
+  const desc = document.getElementById("aw-domain-desc");
+  if (desc) {
+    desc.textContent =
+      awDomain === BASE_DOMAIN
+        ? "通用是所有領域的基底。這裡改的東西，其他領域只要沒自訂就會跟著變。"
+        : "沒有自訂的欄位會沿用通用版本。按欄位旁的按鈕可以切換。";
+  }
+
+  const byDomain = awByDomain();
+  for (const field of ["globalInstruction", "styleSample"] as InheritableField[]) {
+    const slot = document.querySelector(`.aw-inherit-slot[data-inherit="${field}"]`);
+    const preview = document.querySelector(`.aw-base-preview[data-base="${field}"]`) as HTMLElement | null;
+    const box = document.getElementById(
+      field === "globalInstruction" ? "aw-global" : "aw-style",
+    ) as HTMLTextAreaElement | null;
+    const inherited = isInherited(byDomain, awDomain, field);
+    const baseText = baseValue(byDomain, field);
+
+    if (slot) slot.innerHTML = inheritButtonHtml(inherited, !!baseText.trim());
+    if (box) {
+      // 沿用中就唯讀：可以打字但存不進去的欄位比不能打字更糟
+      box.readOnly = inherited;
+      box.classList.toggle("is-inherited", inherited);
+      box.value = inherited ? "" : (byDomain[awDomain]?.[field as keyof typeof byDomain[string]] as string | undefined ?? "");
+      box.placeholder = inherited ? "沿用通用版本（見下方）" : box.dataset.ph || box.placeholder;
+    }
+    if (preview) {
+      preview.hidden = !inherited;
+      preview.innerHTML = inherited
+        ? `<span class="aw-base-tag">通用版本</span><pre>${escapeHtml(baseText || "（通用也是空的，等於不設定）")}</pre>`
+        : "";
+    }
+  }
+}
+
+/**
+ * 各章節的 prompt 覆寫。章節清單來自**目前選的領域包**（不是目前專案），
+ * 所以在設定頁選支付就會看到支付的 08–10。
+ *
+ * 領域限定章節（通用沒有的那些）不顯示沿用按鈕 —— 沒有通用版可繼承。
  */
 function renderAiWritingSections() {
   const host = document.getElementById("aw-sections");
   if (!host) return;
-  const { sections, settings } = store.get();
-  const saved = settings.aiWriting.sectionPrompts ?? {};
+  const byDomain = awByDomain();
+  const sections = store.sectionsForDomain(awDomain);
+  const genericIds = new Set(store.sectionsForDomain(BASE_DOMAIN).map((x) => x.id));
 
   host.innerHTML = sections
-    .map(
-      (sec) => `<div class="aw-section">
-        <label for="aw-sec-${escapeHtml(sec.id)}">
-          ${escapeHtml(sec.n)} · ${escapeHtml(sec.title)}
-          ${saved[sec.id] ? '<span class="aw-badge">已覆寫</span>' : ""}
-        </label>
+    .map((sec) => {
+      const inherited = isSectionInherited(byDomain, awDomain, sec.id);
+      const own = byDomain[awDomain]?.sectionPrompts?.[sec.id] ?? "";
+      const baseText = baseSectionValue(byDomain, sec.id);
+      const inheritable = awDomain !== BASE_DOMAIN && genericIds.has(sec.id);
+      const btn = inheritable
+        ? inherited
+          ? `<button type="button" class="aw-inherit is-on" data-sec-act="custom" data-sec="${escapeHtml(sec.id)}">沿用通用<span class="aw-inherit-x">改成自訂</span></button>`
+          : `<button type="button" class="aw-inherit" data-sec-act="inherit" data-sec="${escapeHtml(sec.id)}">改為沿用通用</button>`
+        : awDomain === BASE_DOMAIN
+          ? ""
+          : '<span class="aw-badge aw-badge-only">領域限定章節</span>';
+      const shown = inheritable && inherited ? "" : own;
+      return `<div class="aw-section">
+        <div class="aw-field-head">
+          <label for="aw-sec-${escapeHtml(sec.id)}">
+            ${escapeHtml(sec.n)} · ${escapeHtml(sec.title)}
+            ${shown ? '<span class="aw-badge">已覆寫</span>' : ""}
+          </label>
+          ${btn}
+        </div>
         <textarea id="aw-sec-${escapeHtml(sec.id)}" data-aw-section="${escapeHtml(sec.id)}" rows="2"
-          placeholder="留空＝用內建 prompt">${escapeHtml(saved[sec.id] ?? "")}</textarea>
-      </div>`,
-    )
+          ${inheritable && inherited ? "readonly" : ""}
+          class="${inheritable && inherited ? "is-inherited" : ""}"
+          placeholder="${inheritable && inherited ? "沿用通用版本（見下方）" : "留空＝用內建 prompt"}">${escapeHtml(shown)}</textarea>
+        ${
+          inheritable && inherited
+            ? `<div class="aw-base-preview"><span class="aw-base-tag">通用版本</span><pre>${escapeHtml(baseText || "（通用沒設定，等於用內建 prompt）")}</pre></div>`
+            : ""
+        }
+      </div>`;
+    })
     .join("");
-}
-
-/** 角色下拉與說明列 */
-function renderWriteProfiles() {
-  const sel = document.getElementById("aw-profile") as HTMLSelectElement | null;
-  const desc = document.getElementById("aw-profile-desc");
-  if (!sel) return;
-  const aw = store.get().settings.aiWriting;
-  sel.innerHTML = aw.profiles
-    .map(
-      (p) =>
-        `<option value="${escapeHtml(p.id)}" ${p.id === aw.activeProfileId ? "selected" : ""}>${escapeHtml(p.name)}${p.aiSuggested ? "（AI 建議）" : ""}</option>`,
-    )
-    .join("");
-  const cur = store.activeWriteProfile();
-  if (desc) desc.textContent = cur.description || "（沒有說明）";
-}
-
-function bindWriteProfiles() {
-  const sel = document.getElementById("aw-profile") as HTMLSelectElement | null;
-  if (!sel || sel.dataset.bound === "1") return;
-  sel.dataset.bound = "1";
-
-  sel.addEventListener("change", () => {
-    // **先把目標 id 抓下來**。下一行的 updateSettings 會 emit，訂閱者立刻
-    // 重跑 populateSettings → renderWriteProfiles 用「目前的 active」重建
-    // <option selected>，把剛剛設好的 sel.value 打回原值。之後再讀 sel.value
-    // 就會讀到舊的那個，等於切到自己 —— 畫面看起來完全沒反應。
-    const targetId = sel.value;
-
-    // 切走之前先把畫面上的值存回原角色，否則改到一半切走就沒了
-    store.updateSettings({ aiWriting: readAiWriting() });
-    store.setActiveWriteProfile(targetId);
-    populateSettings();
-    toast(`已切換為「${store.activeWriteProfile().name}」`);
-  });
-
-  document.getElementById("btn-aw-new")?.addEventListener("click", () => {
-    const name = window.prompt("新角色名稱", "新角色");
-    if (name === null) return;
-    store.addWriteProfile({
-      name: name.trim() || "新角色",
-      description: "",
-      globalInstruction: "",
-      styleSample: "",
-      sectionPrompts: {},
-      overwriteFilled: false,
-    });
-    populateSettings();
-    toast("已新增並切換過去");
-  });
-
-  document.getElementById("btn-aw-rename")?.addEventListener("click", () => {
-    const cur = store.activeWriteProfile();
-    const name = window.prompt("角色名稱", cur.name);
-    if (name === null) return;
-    store.renameWriteProfile(cur.id, name);
-    renderWriteProfiles();
-  });
-
-  document.getElementById("btn-aw-delete")?.addEventListener("click", () => {
-    const cur = store.activeWriteProfile();
-    if (!window.confirm(`刪除角色「${cur.name}」？它的指令與範本會一起消失。`)) return;
-    const r = store.deleteWriteProfile(cur.id);
-    if (!r.ok) return void toast(r.reason ?? "無法刪除");
-    populateSettings();
-    toast("已刪除");
-  });
-
-  document.getElementById("btn-aw-suggest")?.addEventListener("click", () => {
-    void runProfileSuggestion();
-  });
 }
 
 /**
- * AI 角色塑造。結果**填進表單讓使用者改**，不直接套用 ——
- * 這是建議不是決定，而且模型不見得抓得到團隊的實際慣例。
+ * 綁定領域頁籤的互動。全部走事件委派 —— 這幾塊會整個 innerHTML 重畫，
+ * 直接綁在按鈕上的 listener 每次重畫都會消失。
+ *
+ * 一律不用 window.prompt：Tauri 的 WKWebView 沒有實作 text input panel，
+ * prompt 直接回 null，按鈕看起來就像壞掉（上一版的「新增角色」就是這樣）。
+ */
+function bindAiWritingDomain() {
+  const root = document.querySelector('.settings-section[data-cat="aiwrite"]') as HTMLElement | null;
+  if (!root || root.dataset.bound === "1") return;
+  root.dataset.bound = "1";
+
+  const sel = document.getElementById("aw-domain") as HTMLSelectElement | null;
+  sel?.addEventListener("change", () => {
+    // 先抓值：下面的存檔會 emit，訂閱者重畫 <option selected> 會把 sel.value 打回原值
+    const target = sel.value;
+    saveCurrentDomainFields();
+    awDomain = target;
+    populateSettings();
+  });
+
+  root.addEventListener("click", (ev) => {
+    const target = ev.target as HTMLElement | null;
+    if (target?.closest("#btn-aw-suggest")) {
+      void runProfileSuggestion();
+      return;
+    }
+    const el = target?.closest<HTMLElement>("[data-act],[data-sec-act]");
+    if (!el) return;
+
+    if (el.dataset.act) {
+      const field = el.closest(".form-group")?.querySelector<HTMLElement>("[data-inherit]")?.dataset
+        .inherit as InheritableField | undefined;
+      if (!field) return;
+      // 改成自訂時，用通用值當起點 —— 從空白開始等於逼使用者重打一次
+      store.setDomainWriteField(
+        awDomain,
+        field,
+        el.dataset.act === "inherit" ? undefined : baseValue(awByDomain(), field),
+      );
+      populateSettings();
+      return;
+    }
+
+    const secId = el.dataset.sec!;
+    store.setDomainSectionPrompt(
+      awDomain,
+      secId,
+      el.dataset.secAct === "inherit" ? undefined : baseSectionValue(awByDomain(), secId),
+    );
+    populateSettings();
+  });
+}
+
+/** 把畫面上的可編輯欄位寫回目前領域（沿用中的欄位不寫，否則會意外變成自訂） */
+function saveCurrentDomainFields() {
+  const byDomain = awByDomain();
+  const g = document.getElementById("aw-global") as HTMLTextAreaElement | null;
+  const st = document.getElementById("aw-style") as HTMLTextAreaElement | null;
+  if (g && !isInherited(byDomain, awDomain, "globalInstruction")) {
+    store.setDomainWriteField(awDomain, "globalInstruction", g.value);
+  }
+  if (st && !isInherited(byDomain, awDomain, "styleSample")) {
+    store.setDomainWriteField(awDomain, "styleSample", st.value);
+  }
+  document
+    .querySelectorAll<HTMLTextAreaElement>("#aw-sections textarea[data-aw-section]")
+    .forEach((ta) => {
+      const id = ta.dataset.awSection!;
+      if (ta.readOnly) return;
+      const v = ta.value.trim();
+      // 空字串在通用等於「沒設定」，直接刪掉不佔位；在其他領域則是明確的「我要它空著」
+      store.setDomainSectionPrompt(awDomain, id, awDomain === BASE_DOMAIN && !v ? undefined : v);
+    });
+}
+
+/**
+ * 讓 AI 產生這個領域的全域指令。
+ * 結果**填進欄位讓使用者改**，不直接生效 —— 這是建議不是決定。
  */
 async function runProfileSuggestion() {
   const briefEl = document.getElementById("aw-brief") as HTMLInputElement | null;
   const btn = document.getElementById("btn-aw-suggest") as HTMLButtonElement | null;
   const brief = briefEl?.value.trim();
-  if (!brief) return void toast("先用一句話說這個角色是誰、寫給誰看");
+  if (!brief) return void toast("先用一句話說這個領域的 PRD 寫給誰看");
   if (!isAiConfigured()) return void toast("尚未設定 AI 金鑰（設定 → AI 工具）");
 
   if (btn) {
@@ -178,18 +261,13 @@ async function runProfileSuggestion() {
   }
   try {
     const sug = await suggestWriteProfile(brief);
-    // 建成一個新角色再填 —— 覆蓋掉使用者目前正在用的那個是最糟的做法
-    store.addWriteProfile({
-      name: sug.name,
-      description: sug.description,
-      globalInstruction: sug.globalInstruction,
-      styleSample: sug.styleSample,
-      sectionPrompts: {},
-      overwriteFilled: false,
-      aiSuggested: true,
-    });
+    // 寫進目前領域（自動從「沿用」轉成「自訂」）—— 建議要有落點才有用
+    store.setDomainWriteField(awDomain, "globalInstruction", sug.globalInstruction);
+    if (sug.styleSample.trim()) {
+      store.setDomainWriteField(awDomain, "styleSample", sug.styleSample);
+    }
     populateSettings();
-    toast(`已建立角色「${sug.name}」—— 內容可以直接改`);
+    toast("已填入建議 —— 內容可以直接改");
   } catch (e) {
     toast(e instanceof Error ? e.message : "產生失敗");
   } finally {
@@ -203,15 +281,11 @@ async function runProfileSuggestion() {
 function populateSettings() {
   const s = store.get().settings;
 
-  const awG = document.getElementById("aw-global") as HTMLTextAreaElement | null;
-  const awS = document.getElementById("aw-style") as HTMLTextAreaElement | null;
   const awO = document.getElementById("aw-overwrite") as HTMLInputElement | null;
-  if (awG) awG.value = s.aiWriting.globalInstruction;
-  if (awS) awS.value = s.aiWriting.styleSample;
   if (awO) awO.checked = s.aiWriting.overwriteFilled;
-  renderWriteProfiles();
-  bindWriteProfiles();
+  renderAiWritingDomain();
   renderAiWritingSections();
+  bindAiWritingDomain();
   const modelEl = document.getElementById("ai-model") as HTMLInputElement | null;
   const tempEl = document.getElementById("ai-temp") as HTMLInputElement | null;
   const tempValEl = document.getElementById("temp-val");
@@ -479,6 +553,9 @@ document.getElementById("ai-model")?.addEventListener("input", () => {
 });
 
 function saveSettings() {
+  // **必須在 updateSettings 之前**：updateSettings 會 emit，訂閱者立刻重跑
+  // populateSettings 把 textarea 用「已存的舊值」重畫，之後再讀就讀到被清空的框。
+  saveCurrentDomainFields();
   const model = (document.getElementById("ai-model") as HTMLInputElement).value as AISettings["model"];
   const temperature = Number((document.getElementById("ai-temp") as HTMLInputElement).value);
   const apiKey = (document.getElementById("ai-key") as HTMLInputElement).value.trim();
