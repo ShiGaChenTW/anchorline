@@ -353,10 +353,14 @@ if (!requireAuth()) {
     // 「尚未開始治理」與「零未治理」必須看得出差別 —— 兩者都顯示 0 的話，
     // 什麼都沒做會看起來像做得很乾淨。
     const figure = c.startedIso === null ? "尚未開始" : String(c.ungoverned);
+    // 「尚未開始治理」自己不夠用 —— 它沒說下一步是什麼。分成兩種：
+    // plan 還沒鑄錨點（去鑄），或錨點有了但沒有工作掛上去（去按交接）。
     const notes = [
-      c.startedIso === null
-        ? "這個專案還沒有任何帶錨點的事件"
-        : `自 ${new Date(c.startedIso).toLocaleDateString("zh-TW")} 起算　已治理 ${c.governed} 件`,
+      c.startedIso !== null
+        ? `自 ${new Date(c.startedIso).toLocaleDateString("zh-TW")} 起算　已治理 ${c.governed} 件`
+        : r.knownAnchors > 0
+          ? `plans 有 ${r.knownAnchors} 個錨點，但還沒有工作掛上去 —— 用步驟上的「交接」派工就會開始累積`
+          : "plans 裡還沒有任何錨點　勾選或編輯步驟時會自動鑄一個",
       r.truncated ? "只讀了最近的分片，實際數量可能更多" : "",
       r.skipped ? `跳過 ${r.skipped} 行讀不懂的資料` : "",
     ].filter(Boolean);

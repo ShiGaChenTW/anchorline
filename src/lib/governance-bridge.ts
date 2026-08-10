@@ -7,6 +7,7 @@
 import { dedupe, parseLog } from "./event-log";
 import { governanceCoverage, EMPTY_COVERAGE, type GovernanceCoverage } from "./governance";
 import { isNative, native } from "./native";
+import { anchorsOf } from "./plan-writer";
 
 export type CoverageResult = {
   coverage: GovernanceCoverage;
@@ -14,12 +15,15 @@ export type CoverageResult = {
   truncated: boolean;
   /** 壞掉而被跳過的行數。JSONL 壞一行只影響一行，這是它相對 SQLite 的優點。 */
   skipped: number;
+  /** plan 檔裡真實存在的錨點數。0 代表沒有任何步驟鑄過錨點。 */
+  knownAnchors: number;
 };
 
 export const EMPTY_RESULT: CoverageResult = {
   coverage: EMPTY_COVERAGE,
   truncated: false,
   skipped: 0,
+  knownAnchors: 0,
 };
 
 /** 只有桌面版讀得到磁碟上的稽核軌跡。 */
@@ -36,10 +40,39 @@ export function canReadCoverage(): boolean {
 export async function requestCoverage(projectRoot: string): Promise<CoverageResult> {
   if (!canReadCoverage() || !projectRoot) return EMPTY_RESULT;
   try {
-    const { text, truncated } = await native.readLog(projectRoot);
-    const { events, skipped } = parseLog(text);
-    return { coverage: governanceCoverage(dedupe(events)), truncated, skipped };
+    const [log, anchors] = await Promise.all([
+      native.readLog(projectRoot),
+      knownAnchorsOf(projectRoot),
+    ]);
+    const { events, skipped } = parseLog(log.text);
+    return {
+      coverage: governanceCoverage(dedupe(events), anchors),
+      truncated: log.truncated,
+      skipped,
+      knownAnchors: anchors.size,
+    };
   } catch {
     return EMPTY_RESULT;
+  }
+}
+
+/**
+ * 這個專案的 `plans/` 裡真的存在哪些錨點。
+ *
+ * 判定「已治理」的第二層。沒有它，`anc:t=XXXXXXXX` 這種寫在文件裡的佔位字串
+ * 會被算成一個真任務 —— 實測 Anchorline 自己的歷史就有兩筆。
+ *
+ * 讀不到就回空集合，於是所有事件都算未治理。那個方向是對的：**不確定的時候
+ * 要往「還沒治理」倒，不要往「已經治理」倒** —— 前者促使人去看，後者讓人安心
+ * 而其實什麼都沒發生。
+ */
+async function knownAnchorsOf(projectRoot: string): Promise<ReadonlySet<string>> {
+  try {
+    const scan = await native.trackingScan([`${projectRoot.replace(/\/+$/, "")}/plans`]);
+    const ids = new Set<string>();
+    for (const f of scan.files ?? []) for (const id of anchorsOf(f.text ?? "")) ids.add(id);
+    return ids;
+  } catch {
+    return new Set();
   }
 }

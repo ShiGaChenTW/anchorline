@@ -11,22 +11,48 @@
  * 可以被繞過。這個判準的另一個好處是它自己就在資料裡，不必額外存一個啟用日，
  * 也就沒有「啟用日檔案被刪掉」這種失效模式。
  *
- * ## 為什麼用前綴判定而不是字元集
+ * ## 判定分兩層，兩層都必要
  *
- * 錨點的 subject 長成 `anc:t=HNTPRY5R`（`sf:` 是舊前綴，仍讀）。
- * 曾考慮直接比對 Crockford 字元集，但 **七位全數字的 commit hash 也會通過** ——
- * 約 3.7% 的 commit 會被錯算成已治理。前綴是精確的，字元集是近似的。
+ * 第一層是前綴（`anc:t=` / `sf:t=`）。曾考慮只比對 Crockford 字元集，但
+ * **七位全數字的 commit hash 也會通過** —— 約 3.7% 的 commit 會被錯算成已治理。
+ *
+ * 第二層是**去 plan 檔確認那個 id 真的存在**。前綴擋不住佔位字串：實測
+ * Anchorline 自己的歷史，`anc:t=XXXXXXXX`（寫文件時舉的例子）完全合法，
+ * 而 `X` 在字元集裡。只有第一層的話，那張卡會顯示兩筆根本不存在的「已治理」。
  *
  * 純函式、零 I/O。
  */
 import type { LogEvent } from "./event-log";
 
 /** 帶前綴的錨點 subject。與 `plan-parser` 的錨點同一套字元集。 */
-const ANCHORED_SUBJECT_RE = /^(?:anc|sf):t=[0-9A-HJKMNP-TV-Z]{4,32}$/;
+const ANCHORED_SUBJECT_RE = /^(?:anc|sf):t=([0-9A-HJKMNP-TV-Z]{4,32})$/;
 
-/** 這筆事件串得回某個 plan 步驟嗎。 */
-export function isGoverned(event: Pick<LogEvent, "subject">): boolean {
-  return ANCHORED_SUBJECT_RE.test(event.subject ?? "");
+/**
+ * 這筆事件串得回某個**真的存在**的 plan 步驟嗎。
+ *
+ * ## 為什麼光看形狀不夠
+ *
+ * 實測 Anchorline 自己的 175 個 commit，兩筆被判成「已治理」，而它們是
+ * `anc:t=XXXXXXXX` 與 `anc:t=XXXX` —— **寫文件時舉的例子**。`X` 在 Crockford
+ * 字元集裡，所以佔位字串完全通過形狀檢查。
+ *
+ * 那正是這整個模組要防的失效模式：事件掛在一個不存在的任務上，而畫面顯示
+ * 它已治理。形狀擋得住 `abc`，擋不住 `XXXXXXXX`。
+ *
+ * 唯一能分辨「真 id」與「長得像 id 的字串」的方法，是去問 plan 檔它在不在。
+ *
+ * ## 代價，說在前面
+ *
+ * plan 檔被刪掉之後，掛在它身上的舊事件會從「已治理」變成「未治理」。歷史
+ * 因此不是不可變的。接受這個代價是因為這張卡片回答的問題是「**現在**有多少
+ * 事情連得回一個活著的計劃步驟」—— 那是可行動的；「歷史上曾經有過」不是。
+ */
+export function isGoverned(
+  event: Pick<LogEvent, "subject">,
+  knownAnchors: ReadonlySet<string>
+): boolean {
+  const id = ANCHORED_SUBJECT_RE.exec(event.subject ?? "")?.[1];
+  return id !== undefined && knownAnchors.has(id);
 }
 
 export type GovernanceCoverage = {
@@ -49,16 +75,23 @@ export const EMPTY_COVERAGE: GovernanceCoverage = {
 };
 
 /**
- * 事件流 → 覆蓋率。
+ * 事件流 + 該專案 plan 檔裡真實存在的錨點 → 覆蓋率。
  *
- * 事件不保證有序（三類 writer 併發追加、月分片合併），所以基準線用掃描求最小值，
+ * 事件不保證有序（四類 writer 併發追加、月分片合併），所以基準線用掃描求最小值，
  * 不能假設第一筆就是最早的。
+ *
+ * `knownAnchors` 是必要參數而不是選填。給它一個「沒有就退回只看形狀」的預設值，
+ * 等於把佔位字串冒充錨點的那個 bug 留一條隨時會被走到的後路 —— 而那條路上
+ * 不會有任何錯誤訊息，只有一個看起來很漂亮的數字。
  */
-export function governanceCoverage(events: LogEvent[]): GovernanceCoverage {
+export function governanceCoverage(
+  events: LogEvent[],
+  knownAnchors: ReadonlySet<string>
+): GovernanceCoverage {
   let startedIso: string | null = null;
   let startedAt = Infinity;
   for (const e of events) {
-    if (!isGoverned(e)) continue;
+    if (!isGoverned(e, knownAnchors)) continue;
     const at = timeOf(e.ts);
     if (at < startedAt) {
       startedAt = at;
@@ -72,7 +105,7 @@ export function governanceCoverage(events: LogEvent[]): GovernanceCoverage {
   for (const e of events) {
     // 基準線那一刻之前的事件不計 —— 那時還沒有治理可以被繞過。
     if (timeOf(e.ts) < startedAt) continue;
-    if (isGoverned(e)) governed++;
+    if (isGoverned(e, knownAnchors)) governed++;
     else ungoverned++;
   }
   return { startedIso, governed, ungoverned };

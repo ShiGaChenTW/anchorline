@@ -8,6 +8,9 @@ import {
 } from "../src/lib/governance";
 import type { LogEvent } from "../src/lib/event-log";
 
+/** plans 裡真的存在的錨點。測試裡預設把用到的都當成存在。 */
+const KNOWN = new Set(["HNTPRY5R", "ABC12345", "KZ4M7QVT"]);
+
 function ev(subject: string, ts: string): LogEvent {
   return {
     v: 1,
@@ -22,32 +25,32 @@ function ev(subject: string, ts: string): LogEvent {
 
 describe("isGoverned", () => {
   test("帶前綴的錨點算治理過", () => {
-    expect(isGoverned({ subject: "anc:t=HNTPRY5R" })).toBe(true);
-    expect(isGoverned({ subject: "sf:t=ABC12345" })).toBe(true);
+    expect(isGoverned({ subject: "anc:t=HNTPRY5R" }, KNOWN)).toBe(true);
+    expect(isGoverned({ subject: "sf:t=ABC12345" }, KNOWN)).toBe(true);
   });
 
   test("commit hash 不算", () => {
-    expect(isGoverned({ subject: "a009563" })).toBe(false);
+    expect(isGoverned({ subject: "a009563" }, KNOWN)).toBe(false);
   });
 
   // 這條是這個模組選擇前綴而不是字元集的理由：七位全數字的 hash 完全符合
   // Crockford 的字元集，用字元集判定會把它錯算成已治理。
   test("全數字的 commit hash 不會被錯認成錨點", () => {
-    expect(isGoverned({ subject: "1234567" })).toBe(false);
+    expect(isGoverned({ subject: "1234567" }, KNOWN)).toBe(false);
   });
 
   test("branch name 當 subject 的未治理 task 不算", () => {
-    expect(isGoverned({ subject: "task/readme-md-commit" })).toBe(false);
+    expect(isGoverned({ subject: "task/readme-md-commit" }, KNOWN)).toBe(false);
   });
 
   test("裸 id 不算 —— 兩個 writer 必須寫同一種形狀", () => {
-    expect(isGoverned({ subject: "HNTPRY5R" })).toBe(false);
+    expect(isGoverned({ subject: "HNTPRY5R" }, KNOWN)).toBe(false);
   });
 });
 
 describe("governanceCoverage", () => {
   test("完全沒有錨點事件 = 尚未開始治理，不是零未治理", () => {
-    const c = governanceCoverage([ev("a009563", "2026-08-01T00:00:00Z")]);
+    const c = governanceCoverage([ev("a009563", "2026-08-01T00:00:00Z")], KNOWN);
     expect(c.startedIso).toBeNull();
     expect(c.ungoverned).toBe(0);
     expect(coverageLine(c)).toBe("尚未開始治理");
@@ -60,7 +63,7 @@ describe("governanceCoverage", () => {
       ev("old2", "2026-02-01T00:00:00Z"),
       ev("anc:t=HNTPRY5R", "2026-08-01T00:00:00Z"),
       ev("later", "2026-08-02T00:00:00Z"),
-    ]);
+    ], KNOWN);
     expect(c.startedIso).toBe("2026-08-01T00:00:00Z");
     expect(c.governed).toBe(1);
     expect(c.ungoverned).toBe(1);
@@ -73,14 +76,14 @@ describe("governanceCoverage", () => {
       ev("anc:t=HNTPRY5R", "2026-08-01T00:00:00Z"),
       ev("between", "2026-08-03T00:00:00Z"),
       ev("before", "2026-07-31T00:00:00Z"),
-    ]);
+    ], KNOWN);
     expect(c.startedIso).toBe("2026-08-01T00:00:00Z");
     expect(c.governed).toBe(2);
     expect(c.ungoverned).toBe(1);
   });
 
   test("全部都有錨點時說得出來", () => {
-    const c = governanceCoverage([ev("anc:t=HNTPRY5R", "2026-08-01T00:00:00Z")]);
+    const c = governanceCoverage([ev("anc:t=HNTPRY5R", "2026-08-01T00:00:00Z")], KNOWN);
     expect(coverageLine(c)).toBe("全部都經過治理");
   });
 
@@ -90,7 +93,7 @@ describe("governanceCoverage", () => {
       ev("x1", "2026-08-02T00:00:00Z"),
       ev("x2", "2026-08-03T00:00:00Z"),
       ev("x3", "2026-08-04T00:00:00Z"),
-    ]);
+    ], KNOWN);
     expect(coverageLine(c)).toBe("3 件未治理（占 75%）");
   });
 });
@@ -151,7 +154,7 @@ describe("時間戳格式混用（真實 log 的狀況）", () => {
     const c = governanceCoverage([
       at("cfbdb09", "2026-08-10T19:31:31+08:00"),
       at("anc:t=HNTPRY5R", "2026-08-10T15:22:33.599Z"),
-    ]);
+    ], KNOWN);
     expect(c.startedIso).toBe("2026-08-10T15:22:33.599Z");
     // 錨點事件是最晚的那一筆，所以它之前的 commit 不該計入。
     expect(c.ungoverned).toBe(0);
@@ -169,9 +172,47 @@ describe("時間戳格式混用（真實 log 的狀況）", () => {
     const c = governanceCoverage([
       at("anc:t=HNTPRY5R", "not a date"),
       at("cfbdb09", "2026-08-10T19:31:31+08:00"),
-    ]);
+    ], KNOWN);
     // 壞掉的那筆被當成最晚，所以它之前的 commit 不計入 —— 不會因為一筆爛
     // 資料就把整段歷史算成未治理。
     expect(c.ungoverned).toBe(0);
+  });
+});
+
+// 這組是這次改動存在的理由。實測 Anchorline 自己的 175 個 commit，兩筆被判成
+// 「已治理」，而它們是寫文件時舉的例子 —— `X` 在 Crockford 字元集裡，所以
+// 佔位字串完全通過形狀檢查。
+describe("佔位字串不是錨點", () => {
+  const ev2 = (subject: string, ts = "2026-08-01T00:00:00Z"): LogEvent => ({
+    v: 1,
+    event_id: subject,
+    ts,
+    project: "p",
+    actor: { kind: "human", family: null, name: "S" },
+    kind: "commit",
+    subject,
+  });
+
+  test("形狀合法但 plans 裡不存在的 id 不算已治理", () => {
+    const known = new Set(["HNTPRY5R"]);
+    expect(isGoverned({ subject: "anc:t=XXXXXXXX" }, known)).toBe(false);
+    expect(isGoverned({ subject: "anc:t=XXXX" }, known)).toBe(false);
+    expect(isGoverned({ subject: "anc:t=HNTPRY5R" }, known)).toBe(true);
+  });
+
+  test("整份 log 只有佔位字串時＝尚未開始治理，不是已治理", () => {
+    const c = governanceCoverage(
+      [ev2("anc:t=XXXXXXXX"), ev2("anc:t=XXXX"), ev2("a009563")],
+      new Set(["HNTPRY5R"])
+    );
+    expect(c.startedIso).toBeNull();
+    expect(c.governed).toBe(0);
+  });
+
+  // 不確定時要往「還沒治理」倒，不要往「已經治理」倒：前者促使人去看，
+  // 後者讓人安心而其實什麼都沒發生。
+  test("讀不到 plan 檔（空集合）時，全部算未治理", () => {
+    const c = governanceCoverage([ev2("anc:t=HNTPRY5R")], new Set());
+    expect(c.startedIso).toBeNull();
   });
 });
