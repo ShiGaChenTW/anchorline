@@ -57,7 +57,11 @@ const commits = RAW.split("\x1e")
   .map(([hash, subject, at, author, refs, body]) => ({
     hash: hash!,
     subject: subject!,
-    at: at!,
+    // `%cI` 給的是本地時間帶時區（`…+08:00`），但 DATA.md 的規定是
+    // 「ISO-8601 UTC，不存時區」。同一份 log 混兩種寫法時，字串比較會給出
+    // 跟時間順序相反的答案 —— 而讀取端本來就是字串比較。正規化在寫入端做，
+    // 因為那是唯一能讓磁碟上只有一種形狀的地方。
+    at: new Date(at!).toISOString(),
     author: author!,
     refs: refs ?? "",
     body: body ?? "",

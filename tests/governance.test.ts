@@ -131,3 +131,47 @@ describe("rollupCoverage", () => {
     expect(r.active.map((x) => x.projectName)).toEqual(["Zeta", "Alpha", "Beta"]);
   });
 });
+
+// 磁碟上真的混著兩種寫法：git 回填的 `…+08:00` 與 Border Loom 的 `…Z`。
+// 這兩個字串的字典序跟時間順序相反，而基準線原本是字串比較 —— 錯法是
+// 「抓到錯的那一筆當起點」，沒有任何錯誤訊息。
+describe("時間戳格式混用（真實 log 的狀況）", () => {
+  const at = (subject: string, ts: string): LogEvent => ({
+    v: 1,
+    event_id: ts,
+    ts,
+    project: "p",
+    actor: { kind: "human", family: null, name: "S" },
+    kind: "commit",
+    subject,
+  });
+
+  test("基準線用解析後的時間，不用字串", () => {
+    // 15:22Z 其實是 23:22+08:00 —— 比 19:31+08:00 晚，雖然字串比較說它比較早。
+    const c = governanceCoverage([
+      at("cfbdb09", "2026-08-10T19:31:31+08:00"),
+      at("anc:t=HNTPRY5R", "2026-08-10T15:22:33.599Z"),
+    ]);
+    expect(c.startedIso).toBe("2026-08-10T15:22:33.599Z");
+    // 錨點事件是最晚的那一筆，所以它之前的 commit 不該計入。
+    expect(c.ungoverned).toBe(0);
+    expect(c.governed).toBe(1);
+  });
+
+  test("字串比較會給出相反答案 —— 這條記錄下為什麼不能那樣寫", () => {
+    expect("2026-08-10T15:22:33.599Z" < "2026-08-10T19:31:31+08:00").toBe(true);
+    expect(Date.parse("2026-08-10T15:22:33.599Z") < Date.parse("2026-08-10T19:31:31+08:00")).toBe(
+      false
+    );
+  });
+
+  test("讀不出來的時間戳排到最後，不會把基準線往前拉", () => {
+    const c = governanceCoverage([
+      at("anc:t=HNTPRY5R", "not a date"),
+      at("cfbdb09", "2026-08-10T19:31:31+08:00"),
+    ]);
+    // 壞掉的那筆被當成最晚，所以它之前的 commit 不計入 —— 不會因為一筆爛
+    // 資料就把整段歷史算成未治理。
+    expect(c.ungoverned).toBe(0);
+  });
+});
