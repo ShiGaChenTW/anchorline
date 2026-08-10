@@ -87,15 +87,8 @@
     font-weight: var(--weight-em);
   }
   .admin-form input,
-  .admin-form select {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 8px 10px;
-    color: var(--fg);
-    font: inherit;
-    font-size: var(--fs-3);
-  }
+  /* 外觀交給 shared.css 的全域基底。這裡原本抄了一份，
+     而 background 簡寫會把 select 的自繪箭頭一起洗掉。 */
   .stage-list { display: flex; flex-direction: column; gap: 8px; }
   .stage-item {
     display: grid;

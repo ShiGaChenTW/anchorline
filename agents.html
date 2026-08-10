@@ -89,17 +89,8 @@
   }
   .field-block textarea,
   .field-block input,
-  .field-block select {
-    width: 100%;
-    box-sizing: border-box;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--fg);
-    font: inherit;
-    font-size: var(--fs-3);
-    padding: 8px 10px;
-  }
+  /* 只留這一頁真正需要的寬度；外觀走 shared.css 的全域基底 */
+  .field-block select { width: 100%; }
   .field-block textarea { min-height: 120px; resize: vertical; font-family: var(--mono); line-height: 1.45; }
   .field-block textarea.role { min-height: 90px; font-family: inherit; }
   .toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 16px; }
