@@ -81,14 +81,23 @@ const RUNNER: Record<AgentFamilyId, (prompt: string) => string> = {
 export function buildPrompt(input: HandoffInput): string {
   const parts = [input.task.trim()];
   if (input.change) parts.push(`openspec change：${input.change}`);
-  if (input.nextArtifact) parts.push(`下一個要寫的 artifact：${input.nextArtifact}`);
+  if (input.nextArtifact)
+    parts.push(`下一個要寫的 artifact：${input.nextArtifact}`);
   const line = parts.join("。");
 
   // 錨點放在最後而且自成一句。埋在句子中間的話，agent 很容易把它當成敘述的一
   // 部分改寫掉；而錨點被改一個字元就等於沒有錨點，且不會有任何錯誤。
   const anchor = validAnchor(input.anchor);
   if (!anchor) return line;
-  return `${line}\n\n完成後 commit 時，請在訊息內文獨立一行寫上 ${ANCHOR_PREFIX}:t=${anchor}（原樣照抄，不要改動）。`;
+  return (
+    `${line}\n\n完成後 commit 時，請在訊息內文獨立一行寫上 ${ANCHOR_PREFIX}:t=${anchor}` +
+    `（原樣照抄，不要改動）。\n\n` +
+    // 漂移最便宜的偵測器：讓做事的人自己說。實測兩輪派工，兩個 agent 都在
+    // 沒有被要求的情況下主動舉報了「我做的跟步驟描述不一樣」——既然它本來
+    // 就會講，就把它寫進 prompt，讓它講在會被記錄的地方。
+    `如果你實際做的事跟上面的描述不同（範圍變了、發現真正該做的是別的），` +
+    `在 commit 訊息裡用一行說明差在哪。不必徵求同意，把它說出來就好。`
+  );
 }
 
 /**
@@ -134,7 +143,9 @@ export function buildPayload(input: HandoffInput): HandoffPayload {
  */
 export function buildHandoff(input: HandoffInput): Handoff {
   const blocked =
-    input.isApproval && input.authorFamily && input.authorFamily === input.family
+    input.isApproval &&
+    input.authorFamily &&
+    input.authorFamily === input.family
       ? `撰寫者與審查者同為 ${input.family} 族系，依職務分離規則不能由它核准。換一個族系的 agent，或由人核准。`
       : null;
 

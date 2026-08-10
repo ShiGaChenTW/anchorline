@@ -22,8 +22,12 @@ describe("指令組裝", () => {
   });
 
   test("三個 family 各自的 runner", () => {
-    expect(buildHandoff({ ...base, family: "codex" }).command).toContain("codex exec ");
-    expect(buildHandoff({ ...base, family: "gemini" }).command).toContain("gemini -p ");
+    expect(buildHandoff({ ...base, family: "codex" }).command).toContain(
+      "codex exec ",
+    );
+    expect(buildHandoff({ ...base, family: "gemini" }).command).toContain(
+      "gemini -p ",
+    );
   });
 
   test("other：不組 shell 指令，只給 prompt 讓人自己貼", () => {
@@ -33,7 +37,11 @@ describe("指令組裝", () => {
   });
 
   test("openspec 脈絡進 prompt —— 「寫 design.md」比「繼續」有用", () => {
-    const p = buildPrompt({ ...base, change: "add-dark-mode", nextArtifact: "design.md" });
+    const p = buildPrompt({
+      ...base,
+      change: "add-dark-mode",
+      nextArtifact: "design.md",
+    });
     expect(p).toContain("add-dark-mode");
     expect(p).toContain("design.md");
   });
@@ -55,22 +63,41 @@ describe("shell 跳脫 —— prompt 裡有中文引號和 markdown", () => {
 
 describe("職務分離也在這裡生效", () => {
   test("同族 agent 要核准同族寫的文件 → 擋下", () => {
-    const h = buildHandoff({ ...base, family: "claude", authorFamily: "claude", isApproval: true });
+    const h = buildHandoff({
+      ...base,
+      family: "claude",
+      authorFamily: "claude",
+      isApproval: true,
+    });
     expect(h.blocked).toContain("職務分離");
   });
 
   test("不同族系核准 → 放行", () => {
-    const h = buildHandoff({ ...base, family: "codex", authorFamily: "claude", isApproval: true });
+    const h = buildHandoff({
+      ...base,
+      family: "codex",
+      authorFamily: "claude",
+      isApproval: true,
+    });
     expect(h.blocked).toBeNull();
   });
 
   test("同族但不是核准（叫它寫東西）→ 放行", () => {
-    const h = buildHandoff({ ...base, family: "claude", authorFamily: "claude" });
+    const h = buildHandoff({
+      ...base,
+      family: "claude",
+      authorFamily: "claude",
+    });
     expect(h.blocked).toBeNull();
   });
 
   test("人寫的文件 → 不檢查", () => {
-    const h = buildHandoff({ ...base, family: "claude", authorFamily: null, isApproval: true });
+    const h = buildHandoff({
+      ...base,
+      family: "claude",
+      authorFamily: null,
+      isApproval: true,
+    });
     expect(h.blocked).toBeNull();
   });
 });
@@ -129,7 +156,9 @@ describe("錨點交接（L2）", () => {
   });
 
   test("payload 帶著撰寫者族系 —— 執行端要靠它記 actor 與擋同族核准", () => {
-    expect(buildPayload({ ...base, authorFamily: "codex" }).authorFamily).toBe("codex");
+    expect(buildPayload({ ...base, authorFamily: "codex" }).authorFamily).toBe(
+      "codex",
+    );
     expect(buildPayload(base).authorFamily).toBeNull();
   });
 
@@ -141,5 +170,33 @@ describe("錨點交接（L2）", () => {
       authorFamily: "claude",
     });
     expect(h.blocked).not.toBeNull();
+  });
+});
+
+describe("漂移自述（L2 補強）", () => {
+  const base = {
+    projectRoot: "/repo",
+    task: "在 README 加安裝說明",
+    family: "claude" as const,
+  };
+
+  // 最便宜的偵測器是做事的人自己。實測兩輪派工，兩個 agent 都在沒被要求的
+  // 情況下主動舉報了「我做的跟步驟描述不一樣」—— 那就把它寫進 prompt，
+  // 讓它講在會被記錄下來的地方。
+  test("帶錨點時要求 agent 說明實際做的事與描述的差異", () => {
+    const p = buildPrompt({ ...base, anchor: "HNTPRY5R" });
+    expect(p).toContain("不同");
+    expect(p).toContain("commit 訊息");
+  });
+
+  // 沒有錨點就沒有步驟可以對照，那句話會變成沒有指涉對象的雜訊。
+  test("沒有錨點時不加那句話", () => {
+    expect(buildPrompt(base)).not.toContain("實際做的事跟上面的描述不同");
+  });
+
+  test("錨點那一行仍然獨立成段且原樣", () => {
+    const p = buildPrompt({ ...base, anchor: "HNTPRY5R" });
+    expect(p).toContain("anc:t=HNTPRY5R");
+    expect(p.split("\n\n").length).toBeGreaterThanOrEqual(3);
   });
 });
