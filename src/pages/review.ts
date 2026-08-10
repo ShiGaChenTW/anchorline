@@ -424,7 +424,13 @@ function renderApprovals() {
     }
   }
 
-  const prdGate = evaluatePrdGates(store.get(), store.activeGateSpec());
+  // gate 要對**即將被核准的那一份快照**跑。
+  // 讀 store.get() 等於檢查「當下已儲存的內容」—— 送審後作者又改過的話，
+  // 擋不擋得住跟審閱者看到的東西無關。
+  const prdGate = evaluatePrdGates(
+    { ...store.get(), sectionValues: reviewDocs() },
+    store.activeGateSpec(),
+  );
   const approveBtn = document.getElementById("btn-approve") as HTMLButtonElement | null;
   if (approveBtn) {
     const blocked = locked || withdrawn || !gate.ok || !prdGate.canApprove;
@@ -767,10 +773,20 @@ document.getElementById("btn-approve")?.addEventListener("click", () => {
   // 核准 = merge：把**送審時那一份快照**併進主線，成為下一輪比較的基準。
   // 合併的不是「現在的內容」—— 審閱者核准的是他看過的那一份；送審之後
   // 作者又改的東西留在 working copy，等下一次送審。
+  // **只有全部關卡完成才合併。**
+  // approveAndLock 在「只簽了自己那一關」時同樣回 ok（案件仍停在 review），
+  // 先前這裡無條件接著 merge —— 等於第一個關卡簽名就把整份併進主線，
+  // 其他關卡的人根本還沒看。多關卡簽核形同虛設。
+  if (!r.allDone) {
+    toast("已簽核你負責的關卡 —— 其餘關卡完成後才會併入主線");
+    render();
+    return;
+  }
+
   const merged = store.mergeApproved();
   toast(
     merged.ok
-      ? "已核准並合併進主線 —— 之後的修改會以這一版為基準"
+      ? "全部關卡完成，已併入主線 —— 之後的修改會以這一版為基準"
       : `已核准（${merged.reason ?? "沒有可合併的送審版本"}）`,
   );
   render();
