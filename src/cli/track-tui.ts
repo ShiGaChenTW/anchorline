@@ -14,20 +14,25 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  asStatusWord,
   mintMissingIds,
   parsePlanMeta,
+  planProgress,
   planProgressPct,
   type PlanMeta,
+  type StatusWord,
+  type StepState,
 } from "../lib/plan-parser";
 import { sortByRecency, trackingTarget, type TrackingSignal } from "../lib/tracking";
 import {
   c,
   enterAlt,
+  ESC,
   hline,
   leaveAlt,
-  moveHome,
   pad,
   pal,
+  syncFrame,
   termSize,
 } from "./ansi";
 
@@ -91,12 +96,31 @@ function bar(pct: number, width: number): string {
   return `${pal.accent}${"█".repeat(filled)}${pal.muted}${"░".repeat(empty)}${c.reset}`;
 }
 
-function statusColor(status: string): string {
-  if (status.includes("完成")) return pal.success;
-  if (status.includes("阻塞")) return pal.danger;
-  if (status.includes("暫停") || status.includes("放棄")) return pal.warn;
-  return pal.accent;
+/**
+ * 狀態 → 圖示 + 顏色。Record<StatusWord,…> 讓新增狀態詞時這裡編不過，
+ * 而不是靜默套用預設值畫錯。§2.2：一個意思一個字形。
+ */
+const STATUS_UI: Record<StatusWord, { icon: string; color: string }> = {
+  進行中: { icon: "◐", color: pal.accent },
+  已完成: { icon: "✔", color: pal.success },
+  已暫停: { icon: "⏸", color: pal.warn },
+  已放棄: { icon: "✗", color: pal.muted },
+  阻塞: { icon: "⚠", color: pal.danger },
+};
+const STATUS_UNKNOWN = { icon: "?", color: pal.muted };
+
+/** 完全比對，不做子字串。對不上回未知——不猜。 */
+function statusUi(status: string) {
+  const w = asStatusWord(status);
+  return w ? STATUS_UI[w] : STATUS_UNKNOWN;
 }
+
+/** 步驟圖示同樣收成 Record——加 StepState 忘了處理的那一側編不過。 */
+const STEP_UI: Record<StepState, { icon: string; color: string; textColor: string }> = {
+  done: { icon: "✔", color: pal.success, textColor: pal.muted },
+  skipped: { icon: "✗", color: pal.muted, textColor: pal.muted },
+  pending: { icon: "○", color: pal.accent, textColor: pal.text },
+};
 
 type UiState = {
   plans: PlanEntry[];
@@ -163,15 +187,18 @@ function render(state: UiState): string[] {
   }
 
   const cur = state.plans[state.idx]!;
-  const pct = planProgressPct(cur.meta);
-  const stc = statusColor(cur.meta.status);
+  const prog = planProgress(cur.meta);
+  const pct = prog.pct;
+  const st = statusUi(cur.meta.status);
 
   // Summary block
   push(
     ` ${c.bold}${pal.title}${pad(cur.meta.title, Math.min(W - 4, 70))}${c.reset}`,
   );
+  // 分子走 planProgress().closed，與 pct 同源。印 done_steps 就是 `100% … 21/28` 的來源。
+  const skipNote = cur.meta.skipped_steps ? `（含略過 ${cur.meta.skipped_steps}）` : "";
   push(
-    ` ${stc}${cur.meta.status}${c.reset}${pal.muted}  ·  ${cur.meta.done_steps}/${cur.meta.total_steps} done  ·  ${pct}%  ·  ${cur.name}${c.reset}`,
+    ` ${st.color}${st.icon} ${cur.meta.status}${c.reset}${pal.muted}  ·  ${prog.closed}/${prog.total} 已結${skipNote}  ·  ${pct}%  ·  ${cur.name}${c.reset}`,
   );
   push(` ${bar(pct, Math.min(40, W - 6))}`);
   push(
@@ -209,18 +236,9 @@ function render(state: UiState): string[] {
   const scroll = Math.min(state.stepScroll, maxScroll);
   for (let i = scroll; i < steps.length && stepLines.length < maxStepsVisible; i++) {
     const s = steps[i]!;
-    const icon =
-      s.state === "done"
-        ? `${pal.success}✔${c.reset}`
-        : s.state === "skipped"
-          ? `${pal.muted}—${c.reset}`
-          : `${pal.accent}○${c.reset}`;
-    const txt =
-      s.state === "skipped"
-        ? `${pal.muted}${s.text}${c.reset}`
-        : s.state === "done"
-          ? `${pal.muted}${s.text}${c.reset}`
-          : `${pal.text}${s.text}${c.reset}`;
+    const ui = STEP_UI[s.state];
+    const icon = `${ui.color}${ui.icon}${c.reset}`;
+    const txt = `${ui.textColor}${s.text}${c.reset}`;
     // 錨點 id 佔固定 9 欄。沒有 id 的步驟留 · —— 一眼看得出哪些接不上事件流
     const tag = s.id
       ? `${pal.muted}${s.id}${c.reset}`
@@ -248,8 +266,9 @@ function render(state: UiState): string[] {
       const mi = row - (stepLines.length + 2);
       right = metaExtra[mi] ?? "";
     }
-    const leftPad = pad(left, leftW);
-    push(`${leftPad}${pal.border}│${c.reset}${right}`);
+    // 兩側都無條件過 pad()——它保證 dw() 等於欄寬。不信任上游算對了寬度，
+    // 因為算錯的症狀是邊框歪掉而不是例外，沒有封口就沒人會發現。
+    push(`${pad(left, leftW)}${pal.border}│${c.reset}${pad(right, rightW)}`);
   }
 
   push(`${pal.border}${hline(W, "─")}${c.reset}`);
@@ -286,12 +305,9 @@ function draw(state: UiState) {
   const frame = out.slice(0, rows).join("\n");
   if (frame === lastFrame) return;
   lastFrame = frame;
-  moveHome();
-  process.stdout.write(frame + clearDownSeq());
-}
-
-function clearDownSeq() {
-  return "\x1b[J";
+  // 清行序列必須跟在內容之後、包在同步輸出之內；moveHome 也要一起包進去，
+  // 否則游標移動與內容分屬兩幀，同步輸出就白做了。
+  process.stdout.write(syncFrame(`${ESC}[H${frame}${ESC}[J`));
 }
 
 function printOnce(plans: PlanEntry[], dir: string, tracking: string | null) {
@@ -302,13 +318,14 @@ function printOnce(plans: PlanEntry[], dir: string, tracking: string | null) {
     return;
   }
   for (const p of plans) {
-    const pct = planProgressPct(p.meta);
+    const prog = planProgress(p.meta);
+    const ui = statusUi(p.meta.status);
     const dot = p.path === tracking ? ` ${pal.accent}•${c.reset}` : "";
     console.log(
-      `${statusColor(p.meta.status)}${pad(p.meta.status, 8)}${c.reset} ${bar(pct, 12)} ${String(pct).padStart(3)}%  ${c.bold}${p.meta.title}${c.reset}${dot}`,
+      `${ui.color}${ui.icon} ${pad(p.meta.status, 8)}${c.reset} ${bar(prog.pct, 12)} ${String(prog.pct).padStart(3)}%  ${c.bold}${p.meta.title}${c.reset}${dot}`,
     );
     console.log(
-      `  ${pal.muted}${p.meta.done_steps}/${p.meta.total_steps}${c.reset}  next: ${pal.accent}${p.meta.next_step}${c.reset}`,
+      `  ${pal.muted}${prog.closed}/${prog.total} 已結${c.reset}  next: ${pal.accent}${p.meta.next_step}${c.reset}`,
     );
     console.log(`  ${pal.muted}${p.name}${c.reset}`);
     console.log("");
