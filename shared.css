@@ -8611,9 +8611,11 @@ p.gd-warn {
 .aw-seg-track,
 .aw-seg-static {
   box-sizing: border-box;
-  width: 152px;
-  height: 26px;
-  border-radius: 999px;
+  /* 比上一版大 50%（152×26 → 228×39）。圓角 10px 而非 999px —— 要的是
+     長型圓角矩形，不是兩端全圓的膠囊。 */
+  width: 228px;
+  height: 39px;
+  border-radius: 10px;
   border: 1px solid var(--border-muted);
   background: var(--inset);
 }
@@ -8621,15 +8623,16 @@ p.gd-warn {
   position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  padding: 2px;
+  padding: 3px;
 }
 .aw-seg-thumb {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: calc(50% - 2px);
-  height: calc(100% - 4px);
-  border-radius: 999px;
+  top: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  height: calc(100% - 6px);
+  /* 內圓角比外框小一級，兩層圓角才會同心 */
+  border-radius: 7px;
   background: var(--surface);
   border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--border));
   transition: transform 0.16s ease;
@@ -8639,8 +8642,8 @@ p.gd-warn {
   position: relative;
   z-index: 1;
   text-align: center;
-  font-size: 11px;
-  line-height: 20px;
+  font-size: 13px;
+  line-height: 31px;
   color: var(--meta);
   transition: color 0.16s ease;
 }
@@ -8659,7 +8662,7 @@ p.gd-warn {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--meta);
   opacity: 0.7;
 }
