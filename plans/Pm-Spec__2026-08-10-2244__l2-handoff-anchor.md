@@ -1,8 +1,8 @@
 # L2 派工鏈 — 交接時把錨點一起交出去
 
 **建立時間：** 2026-08-10 22:44
-**最後更新：** 2026-08-10 23:00
-**狀態：** 進行中（等實機驗證）
+**最後更新：** 2026-08-10 23:10
+**狀態：** 已完成
 
 ## 目標
 
@@ -45,7 +45,11 @@ Border Loom **沒有** deep-link / single-instance plugin，也沒有註冊任�
 
 ## 阻塞 / 待決議
 
-**傳輸方式三選一，需要 Scott 決定：**
+無。傳輸已定為 a（貼指令），並由 Scott 實機驗證通過（2026-08-10 23:10）。
+
+<details>
+<summary>當初的三選一（保留供日後升級參考）</summary>
+
 
 | 方案 | Border Loom 要做什麼 | 代價 |
 |---|---|---|
@@ -53,6 +57,34 @@ Border Loom **沒有** deep-link / single-instance plugin，也沒有註冊任�
 | **b. remote HTTP** | 什麼都不用做（已存在） | 使用者要先開「連線手機」並交換 token；還要解決 Anchorline 不知道 Border Loom 的 projectId（remote API 只回 id + name，沒有路徑） |
 | **c. URL scheme** | 加 deep-link + single-instance plugin、註冊 scheme、改 Info.plist | 零設定、app 沒開也能喚起；但動到打包，要重跑體積報告 |
 
+</details>
+
 ## 結束摘要
 
-（待補）
+**做完的**：`HandoffInput` 帶錨點、`validAnchor()` 擋掉不合法的、`buildPrompt()` 把錨點
+放成獨立一段並要求原樣照抄、`HandoffPayload` 抽成傳輸無關、Task Tracking 的未完成
+步驟加「交接」鍵（只複製不執行）。593 tests pass。
+
+**實機驗證（Scott，23:10）**：
+
+```
+cd '~/Documents/20_Projects/_l0-anchorline-probe' && claude -p '第一步：README 加安裝說明
+
+完成後 commit 時，請在訊息內文獨立一行寫上 anc:t=HNTPRY5R（原樣照抄，不要改動）。'
+```
+
+三件都對：專案路徑正確、步驟文字的 `<!-- anc:t= -->` 註解被 `stripAnchor` 拿掉、
+錨點只以指示的形式出現一次。
+
+**過程中修正的兩個誤判**：
+1. 我把方案 a 說成「今天的做法、Border Loom 什麼都不用做」。錯 —— `agent-handoff.ts`
+   從來沒被任何頁面 import 過，只有測試在用。這個 App 之前根本沒有交接 UI。
+2. 探針的 `plans/probe.md` 沒有 `## Plan Steps` 區段，`parsePlanMeta` 算出 0 個步驟，
+   所以交接鍵不出現。是探針檔的問題不是功能的問題，已補。
+
+**這條鏈現在通了**：plans 步驟（錨點誕生）→ 交接指令帶錨點 → agent 寫進 commit →
+backfill 讀出錨點當 subject → 治理覆蓋率算得出「被治理過」。全程沒有動任何一邊的
+安全模型。
+
+**還沒做的**：L1 寫入端（52h）。Border Loom 目前完全不發事件，所以合併前的時間軸
+依然是空的，`actor.family` 依然是 null。
