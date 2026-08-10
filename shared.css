@@ -8401,3 +8401,38 @@ p.gd-warn {
   word-break: break-word;
 }
 .rv-diff-body .fv-line { display: block; }
+
+/* ─── 未儲存的可見性 ───
+   Markdown 編輯器高度常超過 600px，而視窗只有 900 出頭。摘要與儲存列
+   掛在欄位／章節底下時，打字當下它們都在畫面外 —— 回饋做了卻看不到。 */
+
+/* 欄位標題旁的標記：視線在哪，提示就在哪 */
+.field-dirty-chip {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in oklab, var(--warn, #eab308) 45%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--warn, #eab308) 14%, transparent);
+  color: var(--warn, #eab308);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.field-dirty-chip:hover {
+  background: color-mix(in oklab, var(--warn, #eab308) 24%, transparent);
+}
+/* 有未儲存變更的欄位，左緣留一條 —— 捲動時掃得到哪幾個動過 */
+.is-dirty-field {
+  box-shadow: inset 3px 0 0 color-mix(in oklab, var(--warn, #eab308) 70%, transparent);
+  padding-left: 10px;
+}
+
+/* 儲存列固定在編輯區底部：「現在存了沒」必須隨時答得出來 */
+.sec-save-bar.is-dirty {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  backdrop-filter: blur(8px);
+  background: color-mix(in oklab, var(--warn, #eab308) 12%, var(--surface));
+  box-shadow: 0 -6px 16px -8px rgb(0 0 0 / 0.5);
+}

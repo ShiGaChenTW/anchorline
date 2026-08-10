@@ -953,7 +953,30 @@ function renderFieldDiffs(s: Section): void {
   for (const f of s.fields) {
     const host = body.querySelector<HTMLElement>(`[data-od-id="field-${f.key}"]`);
     if (!host) continue;
-    renderDiffSummary(host, saved[f.key] ?? "", shown[f.key] ?? "");
+    const before = saved[f.key] ?? "";
+    const after = shown[f.key] ?? "";
+    renderDiffSummary(host, before, after);
+
+    // 標記掛在欄位「標題」旁，不是只掛在底下的摘要。
+    // 雙欄 Markdown 編輯器有 600px 以上高，打字時視線在上緣，底下的摘要
+    // 整個在畫面外 —— 做了回饋卻看不到，等於沒做。
+    host.classList.toggle("is-dirty-field", before !== after);
+    const head = host.querySelector<HTMLElement>(".mdv-field-head, label");
+    if (head) {
+      head.querySelector(".field-dirty-chip")?.remove();
+      if (before !== after) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "field-dirty-chip";
+        chip.textContent = "未儲存 · 看變更";
+        chip.title = "捲到這個欄位的變更摘要";
+        chip.addEventListener("click", (e) => {
+          e.preventDefault();
+          host.querySelector(".field-diff")?.scrollIntoView({ block: "center", behavior: "smooth" });
+        });
+        head.appendChild(chip);
+      }
+    }
   }
 }
 
