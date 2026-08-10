@@ -18,6 +18,136 @@
   --fs-7: calc(23px * var(--fs-scale));
   --fs-8: calc(29px * var(--fs-scale));
   --fs-9: calc(34px * var(--fs-scale));
+
+  /* 控制項高度：三段，所有控制項共用。
+     值刻意貼近改動前的現況（按鈕 28→32、欄位 38→40），把版面風險壓到最低。 */
+  --ctl-h-sm: 26px;
+  --ctl-h-md: 32px;
+  --ctl-h-lg: 40px;
+  /* 下拉箭頭：自繪的，因為 appearance:none 之後原生箭頭也一起消失。
+     兩種顏色由主題切換（見 html[data-theme="kami"]）。 */
+  --ctl-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b949e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* ── 控制項基底 ───────────────────────────────────────────────
+   盤點時全 App 沒有任何全域表單基底：input / select / textarea 從未被當作
+   元素選擇器設定樣式，只有 .field input[type=text] 這類特定包裝 ——
+   沒被包住的控制項就直接吃瀏覽器原生外觀。設定頁一頁就量到 select 三種高度、
+   checkbox 完全原生（appearance: auto）。
+
+   appearance: none 是關鍵：select 與 checkbox 原本走 macOS 原生繪製，
+   跟其他自繪控制項不可能一致，那不是調參數能解決的。 */
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="search"],
+input[type="email"],
+input[type="url"],
+input[type="date"],
+select,
+textarea {
+  /* 淺色主題：箭頭要換深色，%238b949e 在白底上幾乎看不見 */
+  --ctl-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235c5346' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
+  box-sizing: border-box;
+  min-height: var(--ctl-h-lg);
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: var(--fs-3);
+  line-height: 1.5;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+textarea {
+  /* 多行不能鎖高度，只鎖起始高度 */
+  padding: 8px 10px;
+  min-height: calc(var(--ctl-h-lg) * 1.8);
+  resize: vertical;
+}
+input[type="text"]:hover,
+input[type="password"]:hover,
+input[type="number"]:hover,
+input[type="search"]:hover,
+select:hover,
+textarea:hover {
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+input[disabled],
+select[disabled],
+textarea[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  /* 右側留給自繪箭頭；不留的話最長的選項會壓在箭頭底下 */
+  padding-right: 30px;
+  background-image: var(--ctl-caret);
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  cursor: pointer;
+}
+
+/* 勾選框／單選鈕自繪。
+   原本只有一條規則，而且限定在 #set-pane 裡 —— 其餘畫面全是原生外觀。 */
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-content: center;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]::before,
+input[type="radio"]::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  transform: scale(0);
+  transition: transform var(--motion-fast) var(--ease-standard);
+  background: var(--accent-on);
+  /* 打勾用 clip-path 畫，不用字元 —— 字元會跟著字型變形 */
+  clip-path: polygon(14% 44%, 0 65%, 40% 100%, 100% 16%, 82% 0, 37% 62%);
+}
+input[type="radio"]::before { clip-path: none; border-radius: 50%; width: 7px; height: 7px; }
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+input[type="checkbox"]:checked::before,
+input[type="radio"]:checked::before { transform: scale(1); }
+input[type="checkbox"]:hover:not([disabled]),
+input[type="radio"]:hover:not([disabled]) {
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
+}
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 /* Default tokens ≈ GitHub Dark；kami / github 以 data-theme 覆寫 */
@@ -1020,7 +1150,10 @@ html.adhd-calm .rail-context-project {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 14px;
+  /* 高度由 token 決定而不是由 padding 推出來 —— 用 padding 推的話，
+     字級一改高度就跟著跑，兩顆字數不同的按鈕也會不等高。 */
+  min-height: var(--ctl-h-md);
+  padding: 0 14px;
   font-size: var(--fs-3);
   font-weight: var(--weight-em);
   border-radius: var(--btn-radius);
@@ -1064,10 +1197,13 @@ html.adhd-calm .rail-context-project {
   border-color: var(--border-muted);
 }
 .btn-sm {
-  padding: 3px 10px;
+  min-height: var(--ctl-h-sm);
+  padding: 0 10px;
   font-size: var(--fs-2);
   border-radius: var(--radius-sm);
 }
+/* 跟表單欄位並排時用這個，才會對齊 */
+.btn-lg { min-height: var(--ctl-h-lg); padding: 0 18px; }
 .btn[disabled] { opacity: 0.45; pointer-events: none; }
 
 .pill {
@@ -1433,7 +1569,8 @@ table.data tbody tr.selected td.col-actions {
   font: inherit;
   font-size: var(--fs-4);
   color: var(--fg);
-  background: var(--bg);
+  /* background-color 而非簡寫：簡寫會把全域基底畫的下拉箭頭洗成 none */
+  background-color: var(--bg);
   outline: none;
   resize: vertical;
   transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
@@ -2800,10 +2937,13 @@ html .emp-card-controls .btn-del-emp:focus-visible {
 
 .emp-card select {
   max-width: 100%;
-  background: var(--surface);
+  min-height: var(--ctl-h-md);
+  /* background-color 而不是 background 簡寫：簡寫會把全域基底畫的下拉箭頭
+     一起洗成 none，結果既沒原生箭頭也沒自繪箭頭，完全看不出可以展開。 */
+  background-color: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  padding: 0 30px 0 8px;
   color: var(--fg);
   font: inherit;
   font-size: var(--fs-2);
@@ -6321,9 +6461,13 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   border-radius: var(--radius-sm);
 }
 .ask-input::placeholder { color: var(--muted); }
-.ask-input:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
+/* focus 統一走 --focus-ring：原本這裡自訂 outline，
+   跟其他所有控制項的 focus 長相不同 —— 鍵盤使用者每換一個欄位就要重新認一次。
+   字級刻意保留 --fs-5：它是主要輸入框，大一級是有意的層級，不是漂移。 */
+.ask-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
   border-color: transparent;
 }
 .ask-input-area { resize: vertical; min-height: 78px; }
@@ -8394,10 +8538,11 @@ p.gd-warn {
 .domain-bar select {
   flex: 1 1 auto;
   min-width: 0;
+  min-height: var(--ctl-h-md);
   font-size: var(--fs-2);
-  padding: 4px 6px;
+  padding: 0 30px 0 8px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--fg);
 }

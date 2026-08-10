@@ -35,11 +35,9 @@
   .rl-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
   .rl-field label { font-size: var(--fs-3); font-weight: 600; color: var(--fg); }
   .rl-field .hint { font-size: var(--fs-1); line-height: 1.5; color: var(--muted); }
-  .rl-field input[type="text"], .rl-field textarea {
-    box-sizing: border-box; width: 100%; padding: 9px 12px;
-    border: 1px solid var(--border); border-radius: 8px;
-    background: var(--bg); color: var(--fg); font: inherit; font-size: var(--fs-3);
-  }
+  /* 只留寬度；外觀（邊框／圓角／背景／字級）走 shared.css 的全域基底。
+     原本這裡自訂 8px 圓角，系統其他地方都是 --radius-sm。 */
+  .rl-field input[type="text"], .rl-field textarea { width: 100%; }
   .rl-field input.bad { border-color: var(--danger, #f85149); }
   .rl-field .err { font-size: var(--fs-2); color: var(--danger, #f85149); }
   #rl-version { font-family: var(--mono); font-size: var(--fs-5); letter-spacing: 0.01em; }

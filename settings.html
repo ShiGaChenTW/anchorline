@@ -60,25 +60,9 @@
   /* 所有單列控制項共用同一個高度，欄位才會對齊成一條線。
      掃視一個設定頁時，高低差本身就是雜訊。 */
   .form-grid { --field-h: 40px; }
-  .form-group input[type="text"],
-  .form-group input[type="password"],
-  .form-group select {
-    box-sizing: border-box;
-    height: var(--field-h);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 0 12px;
-    color: var(--fg);
-    font-size: var(--fs-3);
-    font-family: inherit;
-  }
-  .form-group input:focus,
-  .form-group select:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: var(--focus-ring);
-  }
+  /* 欄位外觀交給 shared.css 的全域基底。
+     這裡原本抄了一份，而且用 background 簡寫把 select 的自繪箭頭洗掉 ——
+     結果下拉既沒有原生箭頭也沒有自繪箭頭，完全看不出可以展開。 */
   /* 勾選框在列首：眼睛沿左緣往下掃就能讀出「哪些開著」，
      不必在每一列末端重新對焦一次。 */
   .switch-group {
@@ -94,13 +78,7 @@
     cursor: pointer;
   }
   .switch-group:hover { border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); }
-  .switch-group input[type="checkbox"] {
-    flex: 0 0 auto;
-    width: 15px;
-    height: 15px;
-    margin: 0;
-    accent-color: var(--accent);
-  }
+  /* 尺寸與外觀交給 shared.css 的全域基底 —— 這裡再定一次就是第二套 */
   .switch-group span {
     font-size: var(--fs-3);
     line-height: 1.45;
