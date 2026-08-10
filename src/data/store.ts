@@ -55,6 +55,7 @@ import {
   migrateAiWriting,
   resolveWriting,
   setField,
+  setInherit,
   setSectionPrompt,
   type InheritableField,
   type ResolvedWriting,
@@ -1026,8 +1027,21 @@ export const store = {
     return domainSections(domain);
   },
 
-  /** 設一個可繼承欄位。value 傳 undefined = 改回沿用通用 */
-  setDomainWriteField(domain: string, field: InheritableField, value: string | undefined) {
+  /** 切換某欄位／章節是否沿用通用（key 見 ai-writing-config） */
+  setDomainInherit(domain: string, key: string, on: boolean) {
+    const aw = state.settings.aiWriting;
+    state = {
+      ...state,
+      settings: {
+        ...state.settings,
+        aiWriting: { ...aw, byDomain: setInherit(aw.byDomain, domain, key, on) },
+      },
+    };
+    emit();
+  },
+
+  /** 寫入某領域的自訂值 */
+  setDomainWriteField(domain: string, field: InheritableField, value: string) {
     const aw = state.settings.aiWriting;
     state = {
       ...state,
@@ -1039,8 +1053,8 @@ export const store = {
     emit();
   },
 
-  /** 設某章節的提示詞。value 傳 undefined = 改回沿用通用 */
-  setDomainSectionPrompt(domain: string, sectionId: string, value: string | undefined) {
+  /** 寫入某章節的提示詞 */
+  setDomainSectionPrompt(domain: string, sectionId: string, value: string) {
     const aw = state.settings.aiWriting;
     state = {
       ...state,

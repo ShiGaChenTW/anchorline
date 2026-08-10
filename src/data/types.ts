@@ -233,15 +233,21 @@ export type Approval = {
 /**
  * 某個領域包的 AI 撰寫設定。
  *
- * 欄位為 `undefined` 代表**沿用通用版本**；字串（含空字串）代表這個領域自訂。
- * 用 undefined 而不是空字串當「沿用」，是因為「我要它空著」跟「我沒設定過」
- * 是兩件不同的事 —— 用空字串表示會讓前者永遠被通用值蓋掉。
+ * **預設是自訂且空白**，沿用通用必須明示 —— 所以沿用狀態用 `inherit` 清單記，
+ * 不能用「欄位是不是 undefined」來推斷（那樣沒設定過的領域會自動繼承）。
+ *
+ * 分開存還有一個好處：切成沿用時不必刪掉自訂內容，切回來原本寫的東西還在。
  */
 export type DomainWriteConfig = {
   globalInstruction?: string;
   styleSample?: string;
-  /** key = sectionId。同樣 undefined = 沿用通用 */
+  /** key = sectionId */
   sectionPrompts?: Record<string, string | undefined>;
+  /**
+   * 明確標記為「沿用通用」的欄位。
+   * 值為 `globalInstruction` / `styleSample` / `sec:{sectionId}`。
+   */
+  inherit?: string[];
 };
 
 export type AISettings = {
