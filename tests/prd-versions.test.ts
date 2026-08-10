@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { inlineDiff } from "../src/lib/file-history";
+import { capVersions } from "../src/lib/prd-versions";
 import {
   applyDrafts,
   canCommit,
@@ -130,5 +131,39 @@ describe("送審把關", () => {
 describe("changedFieldCount", () => {
   test("數的是欄位數不是章節數", () => {
     expect(changedFieldCount({ s: { a: "1", b: "2" } }, { s: { a: "X", b: "Y" } })).toBe(2);
+  });
+});
+
+describe("版本線上限（防 localStorage 撐爆 → 靜默掉資料）", () => {
+  const mk = (i: number, kind: PrdVersion["kind"] = "commit"): PrdVersion => ({
+    id: `v${i}`, kind, at: "", byId: "u", byName: "u", message: "", docs: {},
+  });
+
+  test("未超過上限時原樣回傳", () => {
+    const list = [mk(1), mk(2)];
+    expect(capVersions(list, 5)).toBe(list as PrdVersion[]);
+  });
+
+  test("超過上限時只留最近 N 筆", () => {
+    const list = [mk(1), mk(2), mk(3), mk(4)];
+    expect(capVersions(list, 2).map((v) => v.id)).toEqual(["v1", "v2"]);
+  });
+
+  test("主線（最近一次 merge）永遠留著 —— 掉了就算不出這一版改了什麼", () => {
+    // 前面塞滿 commit，merge 被擠到尾端
+    const list = [mk(1), mk(2), mk(3), mk(9, "merge")];
+    const out = capVersions(list, 2);
+    expect(out.some((v) => v.kind === "merge")).toBe(true);
+    expect(out).toHaveLength(2);
+  });
+
+  test("留下來的那批本來就有 merge 時不額外處理", () => {
+    const list = [mk(1, "merge"), mk(2), mk(3)];
+    expect(capVersions(list, 2).map((v) => v.id)).toEqual(["v1", "v2"]);
+  });
+
+  test("完全沒有 merge 時就是單純截斷", () => {
+    const list = [mk(1), mk(2), mk(3)];
+    expect(capVersions(list, 2).map((v) => v.id)).toEqual(["v1", "v2"]);
   });
 });

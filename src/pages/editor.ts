@@ -1683,7 +1683,8 @@ document.getElementById("btn-submit")?.addEventListener("click", () => {
     return;
   }
 
-  store.submitForReview();
+  // 把這一份 commit 綁進個案 —— 審閱者看的、核准合併的都必須是它
+  store.submitForReview(undefined, commit.version!.id);
   const base = store.prdBaseline();
   const changed = base ? changedFieldCount(base.docs, commit.version!.docs) : null;
   toast(

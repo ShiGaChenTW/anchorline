@@ -129,6 +129,16 @@ export type CaseStage = {
 /** 個案簽核狀態（含抽單） */
 export type CaseRecord = {
   projectId: string;
+  /**
+   * 這次審閱對應的 commit id。
+   *
+   * 沒有這個欄位時，審閱頁顯示「當下已儲存的內容」、diff 比「最新 commit」、
+   * 核准又合併「最新 commit」—— 三者各講各的。送審後再改一次並重新 commit，
+   * 審閱者看到的、核准的、被合併的可能是三份不同的東西，而且不會有任何提示。
+   *
+   * 送審時寫入；核准合併只接受這一份。抽單或重建個案時清空。
+   */
+  reviewCommitId: string | null;
   stages: CaseStage[];
   withdrawn: boolean;
   withdrawnAt: string | null;

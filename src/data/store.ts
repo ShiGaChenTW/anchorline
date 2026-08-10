@@ -37,7 +37,7 @@ import type {
   WorkflowStageDef,
 } from "./types";
 import { emptySectionValues } from "../lib/export";
-import { pickBaseline, pickLatestCommit } from "../lib/prd-versions";
+import { capVersions, pickBaseline, pickLatestCommit } from "../lib/prd-versions";
 import { canResolveComment, migrateComments, projectOfComment } from "../lib/comment-scope";
 import { applyMeta, metaFromSections, orphanSectionIds, pickDomain } from "../lib/section-meta";
 import { DEFAULT_DOMAIN, domainPacks, reloadUserPacks } from "./domains";
@@ -148,6 +148,7 @@ function caseFromWorkflow(
   return {
     projectId,
     stages,
+    reviewCommitId: null,
     withdrawn: false,
     withdrawnAt: null,
     withdrawnBy: null,
@@ -886,6 +887,12 @@ export const store = {
     delete bag[id];
     const cases = { ...state.cases };
     delete cases[id];
+    // 專案移除了，它的草稿與整條版本線也要跟著走 —— 留著就是永遠不會再被
+    // 讀到的孤兒資料，而每份 commit 是整份 PRD 快照，佔的空間不小。
+    const drafts = { ...state.prdDrafts };
+    delete drafts[id];
+    const versions = { ...state.prdVersions };
+    delete versions[id];
     const projects = state.projects.filter((p) => p.id !== id);
     let activeProjectId = state.activeProjectId;
     let sectionValues = state.sectionValues;
@@ -900,6 +907,8 @@ export const store = {
       ...state,
       projects,
       projectSectionValues: bag,
+      prdDrafts: drafts,
+      prdVersions: versions,
       cases,
       activeProjectId,
       sectionValues,
@@ -1083,6 +1092,21 @@ export const store = {
     return pickBaseline(this.prdVersionsOf(projectId));
   },
 
+  /**
+   * 審閱中要看的那一份快照。
+   *
+   * 優先用個案綁定的 commit；沒有綁定（舊資料）才退回最新的一份。
+   * 審閱頁的正文、diff 與核准合併都必須用同一個來源，否則使用者看到的、
+   * 核准的、被合併的會是三份不同的東西。
+   */
+  prdReviewCommit(projectId?: string): PrdVersion | null {
+    const pid = projectId ?? state.activeProjectId;
+    const pinned = state.cases[pid]?.reviewCommitId;
+    const versions = this.prdVersionsOf(pid);
+    if (pinned) return versions.find((v) => v.id === pinned && v.kind === "commit") ?? null;
+    return pickLatestCommit(versions);
+  },
+
   /** 最近一次送審的快照 —— 審閱者看的就是這一份 */
   prdLatestCommit(projectId?: string): PrdVersion | null {
     return pickLatestCommit(this.prdVersionsOf(projectId));
@@ -1112,7 +1136,7 @@ export const store = {
     };
     state = {
       ...state,
-      prdVersions: { ...state.prdVersions, [pid]: [version, ...(state.prdVersions[pid] ?? [])] },
+      prdVersions: { ...state.prdVersions, [pid]: capVersions([version, ...(state.prdVersions[pid] ?? [])]) },
     };
     emit();
     return { ok: true, version };
@@ -1127,8 +1151,22 @@ export const store = {
   mergeApproved(message = ""): { ok: boolean; reason?: string; version?: PrdVersion } {
     const pid = state.activeProjectId;
     if (!pid) return { ok: false, reason: "沒有選擇專案" };
-    const commit = this.prdLatestCommit(pid);
-    if (!commit) return { ok: false, reason: "還沒有送審過的版本可以合併" };
+    // 合併「這次審閱綁定的那一份」，不是「最新的那一份」。
+    // 送審後又 commit 一次的話，最新的那份沒有人審過 —— 合併它等於把
+    // 沒被看過的內容當成已核准，而畫面上不會有任何提示。
+    const pinnedId = state.cases[pid]?.reviewCommitId ?? null;
+    const versions = this.prdVersionsOf(pid);
+    const commit = pinnedId
+      ? (versions.find((v) => v.id === pinnedId && v.kind === "commit") ?? null)
+      : pickLatestCommit(versions);
+    if (!commit) {
+      return {
+        ok: false,
+        reason: pinnedId
+          ? "找不到這次審閱綁定的送審版本（可能已被清理）"
+          : "還沒有送審過的版本可以合併",
+      };
+    }
     const u = state.currentUser;
     const version: PrdVersion = {
       id: `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
@@ -1524,7 +1562,7 @@ export const store = {
     return { ok: true };
   },
 
-  submitForReview(projectId?: string) {
+  submitForReview(projectId?: string, commitId?: string) {
     const id = projectId ?? state.activeProjectId ?? "p1";
     const existing = state.cases[id];
     const c =
@@ -1538,6 +1576,8 @@ export const store = {
         ...state.cases,
         [id]: {
           ...c,
+          // 綁定這次審閱要看／要合併的那一份快照
+          reviewCommitId: commitId ?? c.reviewCommitId ?? null,
           withdrawn: false,
           withdrawnAt: null,
           withdrawnBy: null,
@@ -1749,10 +1789,17 @@ export const store = {
   },
 
   importState(newState: Partial<AppState>) {
-    state = {
+    const merged = {
       ...seedState(),
       ...newState,
       settings: { ...DEFAULT_SETTINGS, ...(newState.settings ?? {}) },
+    };
+    // 匯入的備份可能是 Comment 還沒有 projectId 的年代產生的。
+    // 載入路徑有跑 migration，匯入路徑原本沒有 —— 於是舊備份匯進來之後
+    // 所有留言都被專案過濾掉，看起來像是留言全部消失。
+    state = {
+      ...merged,
+      comments: migrateComments(merged.comments ?? [], merged.activeProjectId ?? ""),
     };
     emit();
   },
