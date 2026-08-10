@@ -3,7 +3,14 @@ import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { deriveFlowLayers } from "../lib/flow-layers";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
-import { ANCHOR_PREFIX, parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
+import {
+  ANCHOR_PREFIX,
+  parsePlanMeta,
+  planProgressPct,
+  stripAnchor,
+  type PlanMeta,
+} from "../lib/plan-parser";
+import { buildHandoff, type AgentFamilyId } from "../lib/agent-handoff";
 import { initTheme } from "../lib/theme";
 import { sortByRecency, trackingTarget } from "../lib/tracking";
 import { canScanPlans, plansDirsOf, requestTrackingScan } from "../lib/tracking-bridge";
@@ -300,15 +307,26 @@ if (__authed) {
             const mark = can
               ? `<button type="button" class="tk-step-mark tk-step-toggle" data-step="${escapeHtml(s.id!)}" data-done="${s.state === "done" ? "1" : "0"}" aria-label="${s.state === "done" ? "取消勾選" : "標記完成"}"></button>`
               : `<span class="tk-step-mark" aria-hidden="true"></span>`;
+            // 交接鍵只出現在還沒做完、而且有錨點的步驟上。沒有錨點的話交出去
+            // 也串不回來，給一個做不到事的按鈕比不給更糟。
+            const handoff =
+              s.id && s.state === "pending"
+                ? `<button type="button" class="tk-step-handoff" data-handoff="${escapeHtml(s.id)}"
+                     title="複製交接指令（含錨點 ${escapeHtml(s.id)}）">交接</button>`
+                : "";
             return `<div class="tk-step ${s.state}">
               ${mark}
               <span class="tk-step-t">${escapeHtml(s.text)}</span>
+              ${handoff}
             </div>`;
           })
           .join("");
 
         steps.querySelectorAll<HTMLButtonElement>(".tk-step-toggle").forEach((btn) => {
           btn.onclick = () => void onToggleStep(btn.dataset.step!, btn.dataset.done !== "1");
+        });
+        steps.querySelectorAll<HTMLButtonElement>(".tk-step-handoff").forEach((btn) => {
+          btn.onclick = () => void onHandoffStep(btn.dataset.handoff!);
         });
       }
     }
@@ -492,6 +510,51 @@ if (__authed) {
    * **每一次都重讀磁碟再比對**（`safeApply`）。agent 可能正在重寫同一份 plan，
    * 而整檔覆寫吃掉它剛寫的東西是不會有錯誤訊息的 —— 那比功能沒做更糟。
    */
+  /**
+   * 把一個步驟交接給 agent。**只複製指令，不執行。**
+   *
+   * 這是 `agent-handoff.ts` 檔頭那條界線的實作：要從 App 派工，就得讓原生端
+   * 執行前端傳來的任意字串，而 `exec.rs` 全檔的安全模型建立在相反的前提上。
+   * 成本是多一次貼上，換來的是攻擊面為零。
+   *
+   * 錨點跟著指令一起走 —— 那是這顆按鈕存在的理由。agent 把它寫進 commit
+   * 訊息之後，回填的事件才掛得回這一行 plan 步驟。
+   */
+  async function onHandoffStep(id: string) {
+    const p = plans[idx];
+    const step = p?.meta.steps.find((s) => s.id === id);
+    const st = store.get();
+    const proj = st.projects.find((x) => x.id === st.activeProjectId);
+    const root = proj?.importSummary?.rootPath;
+    if (!step || !root) {
+      toast("這個專案還沒綁定資料夾，交接指令需要專案路徑");
+      return;
+    }
+
+    const { command, blocked } = buildHandoff({
+      projectRoot: root,
+      task: stripAnchor(step.text),
+      // 交給誰由使用者的預設族系決定；擋同族核准的規則在 buildHandoff 裡。
+      family: (proj.authorAgentFamily as AgentFamilyId) ?? "claude",
+      authorFamily: proj.authorAgentFamily ?? null,
+      anchor: id,
+    });
+    if (blocked) {
+      toast(blocked);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(command);
+      toast(`交接指令已複製（錨點 ${id}）。貼進終端前先看一眼。`);
+    } catch {
+      // 剪貼簿被拒是常見的（權限、非安全來源）。不要吞掉 —— 使用者會以為
+      // 複製成功然後貼到一個空的東西。
+      toast("複製失敗，請手動從主控台取得指令");
+      console.log(command);
+    }
+  }
+
   async function onToggleStep(id: string, done: boolean) {
     const p = plans[idx];
     if (!p) return;
