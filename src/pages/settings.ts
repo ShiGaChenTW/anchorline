@@ -62,14 +62,18 @@ function readAiWriting(): AISettings["aiWriting"] {
 }
 
 /**
- * 一顆繼承按鈕。通用領域本身不顯示 —— 它是基底，沒有上游可沿用。
+ * 沿用／自訂的滑動開關。通用領域本身不顯示 —— 它是基底，沒有上游可沿用。
+ *
+ * 開 = 沿用通用。用開關而不是按鈕：這是一個持續存在的**狀態**，
+ * 按鈕只表達動作，看一眼分不出「現在是沿用」還是「按了會變沿用」。
  */
-function inheritButtonHtml(inherited: boolean, hasBase: boolean): string {
+function inheritToggleHtml(inherited: boolean, attr: string): string {
   if (awDomain === BASE_DOMAIN) return "";
-  if (inherited) {
-    return `<button type="button" class="aw-inherit is-on" data-act="custom">沿用通用版本${hasBase ? "" : "（通用為空）"}<span class="aw-inherit-x">改成自訂</span></button>`;
-  }
-  return `<button type="button" class="aw-inherit" data-act="inherit">改為沿用通用版本</button>`;
+  return `<label class="aw-toggle" title="開＝沿用通用版本，關＝這個領域自訂">
+    <input type="checkbox" ${attr} ${inherited ? "checked" : ""} />
+    <span class="aw-toggle-track"><span class="aw-toggle-thumb"></span></span>
+    <span class="aw-toggle-text">${inherited ? "沿用通用" : "自訂"}</span>
+  </label>`;
 }
 
 /** 領域下拉 + 兩個可繼承欄位的狀態 */
@@ -89,7 +93,7 @@ function renderAiWritingDomain() {
     desc.textContent =
       awDomain === BASE_DOMAIN
         ? "通用是所有領域的基底。這裡改的東西，其他領域只要沒自訂就會跟著變。"
-        : "沒有自訂的欄位會沿用通用版本。按欄位旁的按鈕可以切換。";
+        : "沒有自訂的欄位會沿用通用版本。用欄位旁的開關切換。";
   }
 
   const byDomain = awByDomain();
@@ -102,7 +106,7 @@ function renderAiWritingDomain() {
     const inherited = isInherited(byDomain, awDomain, field);
     const baseText = baseValue(byDomain, field);
 
-    if (slot) slot.innerHTML = inheritButtonHtml(inherited, !!baseText.trim());
+    if (slot) slot.innerHTML = inheritToggleHtml(inherited, `data-inherit-toggle="${field}"`);
     if (box) {
       // 沿用中就唯讀：可以打字但存不進去的欄位比不能打字更糟
       box.readOnly = inherited;
@@ -139,9 +143,7 @@ function renderAiWritingSections() {
       const baseText = baseSectionValue(byDomain, sec.id);
       const inheritable = awDomain !== BASE_DOMAIN && genericIds.has(sec.id);
       const btn = inheritable
-        ? inherited
-          ? `<button type="button" class="aw-inherit is-on" data-sec-act="custom" data-sec="${escapeHtml(sec.id)}">沿用通用<span class="aw-inherit-x">改成自訂</span></button>`
-          : `<button type="button" class="aw-inherit" data-sec-act="inherit" data-sec="${escapeHtml(sec.id)}">改為沿用通用</button>`
+        ? inheritToggleHtml(inherited, `data-sec-toggle="${escapeHtml(sec.id)}"`)
         : awDomain === BASE_DOMAIN
           ? ""
           : '<span class="aw-badge aw-badge-only">領域限定章節</span>';
@@ -190,33 +192,32 @@ function bindAiWritingDomain() {
   });
 
   root.addEventListener("click", (ev) => {
-    const target = ev.target as HTMLElement | null;
-    if (target?.closest("#btn-aw-suggest")) {
-      void runProfileSuggestion();
-      return;
-    }
-    const el = target?.closest<HTMLElement>("[data-act],[data-sec-act]");
+    if ((ev.target as HTMLElement | null)?.closest("#btn-aw-suggest")) void runProfileSuggestion();
+  });
+
+  // 開關走 change。勾起來 = 沿用通用；取消 = 改成自訂（以通用值當起點，
+  // 從空白開始等於逼使用者把同樣的話重打一次）。
+  root.addEventListener("change", (ev) => {
+    const el = ev.target as HTMLInputElement | null;
     if (!el) return;
 
-    if (el.dataset.act) {
-      const field = el.closest(".form-group")?.querySelector<HTMLElement>("[data-inherit]")?.dataset
-        .inherit as InheritableField | undefined;
-      if (!field) return;
-      // 改成自訂時，用通用值當起點 —— 從空白開始等於逼使用者重打一次
+    const field = el.dataset.inheritToggle as InheritableField | undefined;
+    if (field) {
       store.setDomainWriteField(
         awDomain,
         field,
-        el.dataset.act === "inherit" ? undefined : baseValue(awByDomain(), field),
+        el.checked ? undefined : baseValue(awByDomain(), field),
       );
       populateSettings();
       return;
     }
 
-    const secId = el.dataset.sec!;
+    const secId = el.dataset.secToggle;
+    if (!secId) return;
     store.setDomainSectionPrompt(
       awDomain,
       secId,
-      el.dataset.secAct === "inherit" ? undefined : baseSectionValue(awByDomain(), secId),
+      el.checked ? undefined : baseSectionValue(awByDomain(), secId),
     );
     populateSettings();
   });
