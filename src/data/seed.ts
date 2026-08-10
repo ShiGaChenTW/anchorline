@@ -792,6 +792,7 @@ export function buildStarterAgents(adminPassword: string): Employee[] {
 
 export const DEFAULT_SETTINGS: AISettings = {
   model: "gemini-2.5-flash",
+  provider: "auto",
   apiKey: "",
   endpoint: "https://generativelanguage.googleapis.com/v1beta",
   localModelName: "llama3.2",
