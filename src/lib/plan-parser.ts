@@ -54,6 +54,24 @@ export const ANCHOR_PREFIX = "anc";
  */
 export const ANCHOR_RE = /<!--\s*(?:anc|sf):t=([0-9A-HJKMNP-TV-Z]{4,32})\s*-->/;
 
+/**
+ * 同一個錨點，但**不要求 HTML 註解外框**。給 commit 訊息、PR 內文這類
+ * 「錨點是寫給人看的」場合用。
+ *
+ * plan 檔堅持註解形式是因為渲染後不該看到 join key；commit 訊息沒有渲染，
+ * 硬要求 `<!-- -->` 只會讓所有人手寫的 `anc:t=XXXX` 全部讀不到 —— 而且
+ * 讀不到不會報錯，只會安靜地退回用 commit hash 當 subject。
+ */
+export const LOOSE_ANCHOR_RE = /(?:^|[^\w-])(?:anc|sf):t=([0-9A-HJKMNP-TV-Z]{4,32})\b/;
+
+/**
+ * 從任意文字取出第一個錨點；先找嚴格形式再找寬鬆形式。
+ * 兩種都沒有就回 undefined。
+ */
+export function anchorInText(text: string): string | undefined {
+  return text.match(ANCHOR_RE)?.[1] ?? text.match(LOOSE_ANCHOR_RE)?.[1];
+}
+
 const ID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const ID_LEN = 8;
 
