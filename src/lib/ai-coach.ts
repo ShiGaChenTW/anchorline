@@ -12,6 +12,7 @@ import {
   extractJsonObject,
   getAiReadiness,
   isAiConfigured,
+  chatCompletionStream,
 } from "./ai-client";
 
 export type AICritique = {
@@ -200,10 +201,17 @@ No markdown fences. Be specific to the given content; never invent unrelated pro
  * 依章節欄位生成／改寫內容。
  * 必須有 API Key；禁止硬編碼 demo 文案。
  */
+export type DraftStreamOpts = {
+  /** 逐字回吐。給了就走串流；沒給就走原本的一次性請求。 */
+  onDelta?: (chunk: string, full: string) => void;
+  signal?: AbortSignal;
+};
+
 export async function generateAIDraft(
   section: Section,
   currentValues: Record<string, string>,
   prompt?: string,
+  stream?: DraftStreamOpts,
 ): Promise<Record<string, string>> {
   const ready = getAiReadiness();
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
@@ -241,7 +249,11 @@ ${current}
 ${settings.aiWriting?.globalInstruction?.trim() ? `Workspace guidance (applies to every section):\n${settings.aiWriting.globalInstruction.trim()}\n\n` : ""}${prompt ? `User instruction:\n${prompt}\n` : "User instruction: improve and fill empty fields based on existing context.\n"}
 Return JSON with keys: ${section.fields.map((f) => f.key).join(", ")}`;
 
-  const raw = await chatCompletion(withDomain(system), user);
+  // 串流只影響「怎麼拿到文字」，不影響之後的解析 —— 模型輸出是一份 JSON，
+  // 逐字時還不是合法 JSON，所以邊收邊顯示、收完才 parse。
+  const raw = stream?.onDelta
+    ? await chatCompletionStream(withDomain(system), user, stream.onDelta, stream.signal)
+    : await chatCompletion(withDomain(system), user);
   const obj = extractJsonObject(raw);
   if (!obj) {
     // 若模型只回一段文字且只有單一主欄位，塞進第一個 textarea
@@ -345,6 +357,8 @@ export type WriteFullOptions = {
   /** 額外指令，會併進每一節的 prompt */
   instruction?: string;
   onProgress?: (p: WriteProgress) => void;
+  /** 逐字回吐目前這一節的原始輸出（尚未解析的 JSON 文字） */
+  onDelta?: (chunk: string, full: string, section: Section) => void;
   signal?: AbortSignal;
 };
 
@@ -397,7 +411,10 @@ export async function writeFullPrd(
     try {
       // 每節覆寫優先於本次的一次性指令；兩者都沒有就用內建 prompt
       const perSection = store.get().settings.aiWriting?.sectionPrompts?.[section.id]?.trim();
-      const patch = await generateAIDraft(section, current, perSection || opts.instruction);
+      const patch = await generateAIDraft(section, current, perSection || opts.instruction, {
+        onDelta: opts.onDelta ? (c, f) => opts.onDelta!(c, f, section) : undefined,
+        signal: opts.signal,
+      });
       if (opts.signal?.aborted) break;
       written++;
       opts.onProgress?.({ ...base, phase: "done", patch });
@@ -413,4 +430,62 @@ export async function writeFullPrd(
   }
 
   return { written, failed, skipped };
+}
+
+// ── AI 角色塑造建議 ────────────────────────────────────────────
+
+export type SuggestedProfile = {
+  name: string;
+  description: string;
+  globalInstruction: string;
+  styleSample: string;
+};
+
+/**
+ * 讓 AI 幫忙塑造一個撰寫角色。
+ *
+ * 為什麼值得做：「全域指令要寫什麼」是空白頁問題 —— 使用者知道自己想要
+ * 什麼調性，但要把它寫成一段對模型有效的指令是另一回事。給一句話（「寫給
+ * 法遵看的」），讓模型把它展開成可用的指令與範例，再由使用者修改，比
+ * 從零開始寫容易得多。
+ *
+ * 產出**一定要讓使用者能改** —— 這是建議不是決定，所以呼叫端會把結果填進
+ * 表單而不是直接套用。
+ */
+export async function suggestWriteProfile(brief: string): Promise<SuggestedProfile> {
+  const ready = getAiReadiness();
+  if (!ready.ok) throw new AiError(ready.reason, "not_configured");
+  const settings = store.get().settings;
+
+  const system = `You design "writing personas" for a PRD authoring tool.
+Write in ${langHint(settings)}.
+Given a short brief about who the document is for and what tone is wanted,
+produce a reusable persona.
+
+Return ONLY a JSON object with these keys:
+- name: short label, 2-8 characters, no punctuation
+- description: one sentence on when to use this persona
+- globalInstruction: 3-6 concrete directives the model should follow every time.
+  Be specific and testable ("每個主張要指到一份資料來源"), never vague ("寫得專業一點").
+  Include at least one thing to AVOID.
+- styleSample: a 60-120 word excerpt of PRD prose written IN this persona,
+  so the model can imitate tone and structure.
+JSON only, no markdown fences.`;
+
+  const user = `Brief: ${brief.trim()}`;
+  const raw = await chatCompletion(system, user);
+  const obj = extractJsonObject(raw);
+  if (!obj) throw new AiError("模型沒有回傳可用的角色 JSON，請換個說法再試", "parse");
+
+  const pick = (k: string) => String(obj[k] ?? "").trim();
+  const name = pick("name") || "新角色";
+  const globalInstruction = pick("globalInstruction");
+  if (!globalInstruction) throw new AiError("模型回傳的角色缺少指令內容", "empty");
+
+  return {
+    name: name.slice(0, 24),
+    description: pick("description").slice(0, 120),
+    globalInstruction,
+    styleSample: pick("styleSample"),
+  };
 }

@@ -9,6 +9,7 @@ import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/u
 import { BUILTIN_PACKS, listDomains } from "../data/domains";
 import { authorDomainPack, validate as validatePack } from "../lib/domain-pack-author";
 import { chatCompletion, isAiConfigured } from "../lib/ai-client";
+import { suggestWriteProfile } from "../lib/ai-coach";
 import TEMPLATE_MD from "../data/domains/_template.md?raw";
 import {
   addUserPack,
@@ -51,12 +52,17 @@ function readAiWriting(): AISettings["aiWriting"] {
       if (v) sectionPrompts[ta.dataset.awSection!] = v;
     });
 
-  return {
+  const next = {
     globalInstruction: g ? g.value : cur.globalInstruction,
     styleSample: st ? st.value : cur.styleSample,
     overwriteFilled: ov ? ov.checked : cur.overwriteFilled,
     sectionPrompts: document.getElementById("aw-sections") ? sectionPrompts : cur.sectionPrompts,
   };
+  // 頂層值同時寫回目前的角色 —— 否則切走再切回來就白改了
+  const profiles = cur.profiles.map((p) =>
+    p.id === cur.activeProfileId ? { ...p, ...next } : p,
+  );
+  return { ...cur, ...next, profiles };
 }
 
 /**
@@ -83,6 +89,117 @@ function renderAiWritingSections() {
     .join("");
 }
 
+/** 角色下拉與說明列 */
+function renderWriteProfiles() {
+  const sel = document.getElementById("aw-profile") as HTMLSelectElement | null;
+  const desc = document.getElementById("aw-profile-desc");
+  if (!sel) return;
+  const aw = store.get().settings.aiWriting;
+  sel.innerHTML = aw.profiles
+    .map(
+      (p) =>
+        `<option value="${escapeHtml(p.id)}" ${p.id === aw.activeProfileId ? "selected" : ""}>${escapeHtml(p.name)}${p.aiSuggested ? "（AI 建議）" : ""}</option>`,
+    )
+    .join("");
+  const cur = store.activeWriteProfile();
+  if (desc) desc.textContent = cur.description || "（沒有說明）";
+}
+
+function bindWriteProfiles() {
+  const sel = document.getElementById("aw-profile") as HTMLSelectElement | null;
+  if (!sel || sel.dataset.bound === "1") return;
+  sel.dataset.bound = "1";
+
+  sel.addEventListener("change", () => {
+    // **先把目標 id 抓下來**。下一行的 updateSettings 會 emit，訂閱者立刻
+    // 重跑 populateSettings → renderWriteProfiles 用「目前的 active」重建
+    // <option selected>，把剛剛設好的 sel.value 打回原值。之後再讀 sel.value
+    // 就會讀到舊的那個，等於切到自己 —— 畫面看起來完全沒反應。
+    const targetId = sel.value;
+
+    // 切走之前先把畫面上的值存回原角色，否則改到一半切走就沒了
+    store.updateSettings({ aiWriting: readAiWriting() });
+    store.setActiveWriteProfile(targetId);
+    populateSettings();
+    toast(`已切換為「${store.activeWriteProfile().name}」`);
+  });
+
+  document.getElementById("btn-aw-new")?.addEventListener("click", () => {
+    const name = window.prompt("新角色名稱", "新角色");
+    if (name === null) return;
+    store.addWriteProfile({
+      name: name.trim() || "新角色",
+      description: "",
+      globalInstruction: "",
+      styleSample: "",
+      sectionPrompts: {},
+      overwriteFilled: false,
+    });
+    populateSettings();
+    toast("已新增並切換過去");
+  });
+
+  document.getElementById("btn-aw-rename")?.addEventListener("click", () => {
+    const cur = store.activeWriteProfile();
+    const name = window.prompt("角色名稱", cur.name);
+    if (name === null) return;
+    store.renameWriteProfile(cur.id, name);
+    renderWriteProfiles();
+  });
+
+  document.getElementById("btn-aw-delete")?.addEventListener("click", () => {
+    const cur = store.activeWriteProfile();
+    if (!window.confirm(`刪除角色「${cur.name}」？它的指令與範本會一起消失。`)) return;
+    const r = store.deleteWriteProfile(cur.id);
+    if (!r.ok) return void toast(r.reason ?? "無法刪除");
+    populateSettings();
+    toast("已刪除");
+  });
+
+  document.getElementById("btn-aw-suggest")?.addEventListener("click", () => {
+    void runProfileSuggestion();
+  });
+}
+
+/**
+ * AI 角色塑造。結果**填進表單讓使用者改**，不直接套用 ——
+ * 這是建議不是決定，而且模型不見得抓得到團隊的實際慣例。
+ */
+async function runProfileSuggestion() {
+  const briefEl = document.getElementById("aw-brief") as HTMLInputElement | null;
+  const btn = document.getElementById("btn-aw-suggest") as HTMLButtonElement | null;
+  const brief = briefEl?.value.trim();
+  if (!brief) return void toast("先用一句話說這個角色是誰、寫給誰看");
+  if (!isAiConfigured()) return void toast("尚未設定 AI 金鑰（設定 → AI 工具）");
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "產生中…";
+  }
+  try {
+    const sug = await suggestWriteProfile(brief);
+    // 建成一個新角色再填 —— 覆蓋掉使用者目前正在用的那個是最糟的做法
+    store.addWriteProfile({
+      name: sug.name,
+      description: sug.description,
+      globalInstruction: sug.globalInstruction,
+      styleSample: sug.styleSample,
+      sectionPrompts: {},
+      overwriteFilled: false,
+      aiSuggested: true,
+    });
+    populateSettings();
+    toast(`已建立角色「${sug.name}」—— 內容可以直接改`);
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "產生失敗");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "產生建議";
+    }
+  }
+}
+
 function populateSettings() {
   const s = store.get().settings;
 
@@ -92,6 +209,8 @@ function populateSettings() {
   if (awG) awG.value = s.aiWriting.globalInstruction;
   if (awS) awS.value = s.aiWriting.styleSample;
   if (awO) awO.checked = s.aiWriting.overwriteFilled;
+  renderWriteProfiles();
+  bindWriteProfiles();
   renderAiWritingSections();
   const modelEl = document.getElementById("ai-model") as HTMLInputElement | null;
   const tempEl = document.getElementById("ai-temp") as HTMLInputElement | null;
