@@ -8601,25 +8601,59 @@ p.gd-warn {
   justify-content: space-between;
   gap: 10px;
 }
-.aw-inherit {
+/* 沿用／自訂：滑動開關。flex:0 0 auto —— 這是狀態指示，
+   不該跟著標題列撐滿整行（前一版用按鈕就是這樣被拉寬的）。 */
+.aw-toggle {
   flex: 0 0 auto;
-  font-size: 11px;
-  padding: 2px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--border-muted);
-  background: var(--inset);
-  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   cursor: pointer;
+  user-select: none;
 }
-.aw-inherit:hover { border-color: var(--accent); color: var(--accent); }
-/* 沿用中：把狀態畫出來，並在 hover 時才顯示「改成自訂」—— 常態下是狀態，不是動作 */
-.aw-inherit.is-on {
-  color: var(--accent);
-  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+.aw-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.aw-toggle-track {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--inset);
+  border: 1px solid var(--border-muted);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.aw-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.aw-toggle input:checked + .aw-toggle-track {
   background: var(--accent-soft);
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
 }
-.aw-inherit-x { margin-left: 6px; opacity: 0; color: var(--muted); }
-.aw-inherit.is-on:hover .aw-inherit-x { opacity: 1; }
+.aw-toggle input:checked + .aw-toggle-track .aw-toggle-thumb {
+  transform: translateX(13px);
+  background: var(--accent);
+}
+.aw-toggle input:focus-visible + .aw-toggle-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.aw-toggle-text {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 4em;
+}
+.aw-toggle input:checked ~ .aw-toggle-text { color: var(--accent); }
 
 /* 繼承來的內容：唯讀展示，視覺上明顯不是你能改的東西 */
 .aw-base-preview {
