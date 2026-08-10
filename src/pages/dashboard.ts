@@ -34,6 +34,8 @@ import {
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 import { attachDiffSummary } from "../lib/diff-summary";
+import { coverageLine } from "../lib/governance";
+import { canReadCoverage, requestCoverage, type CoverageResult } from "../lib/governance-bridge";
 
 if (!requireAuth()) {
   /* redirected */
@@ -333,6 +335,49 @@ if (!requireAuth()) {
    * 工作區狀態：worktree、branch、專案階段、由誰起的。
    * 這四件事的共同問題是「散在四個地方，沒人一起看」。
    */
+  /** 治理覆蓋率。資料是非同步來的，先出骨架，讀完再換掉這張卡的內容。 */
+  const GOVERNANCE_CARD_ID = "card-governance";
+
+  function governanceInner(r: CoverageResult | null): string {
+    if (!canReadCoverage()) {
+      return `<p class="d-eyebrow">治理覆蓋率</p>
+        <p class="d-figure">—</p>
+        <p class="d-figure-sub">桌面版才讀得到稽核軌跡</p>`;
+    }
+    if (!r) {
+      return `<p class="d-eyebrow">治理覆蓋率</p>
+        <p class="d-figure">讀取中…</p>
+        <p class="d-figure-sub">正在讀 .anchorline/log/</p>`;
+    }
+    const { coverage: c } = r;
+    // 「尚未開始治理」與「零未治理」必須看得出差別 —— 兩者都顯示 0 的話，
+    // 什麼都沒做會看起來像做得很乾淨。
+    const figure = c.startedIso === null ? "尚未開始" : String(c.ungoverned);
+    const notes = [
+      c.startedIso === null
+        ? "這個專案還沒有任何帶錨點的事件"
+        : `自 ${new Date(c.startedIso).toLocaleDateString("zh-TW")} 起算　已治理 ${c.governed} 件`,
+      r.truncated ? "只讀了最近的分片，實際數量可能更多" : "",
+      r.skipped ? `跳過 ${r.skipped} 行讀不懂的資料` : "",
+    ].filter(Boolean);
+
+    return `<p class="d-eyebrow">治理覆蓋率</p>
+      <p class="d-figure">${escapeHtml(figure)}</p>
+      <p class="d-figure-sub">${escapeHtml(coverageLine(c))}</p>
+      ${notes.map((n) => `<p class="d-note">${escapeHtml(n)}</p>`).join("")}`;
+  }
+
+  function cardGovernance(r: CoverageResult | null): string {
+    return `<section class="d-card" id="${GOVERNANCE_CARD_ID}">${governanceInner(r)}</section>`;
+  }
+
+  /** 讀完就只換這張卡，不重畫整頁 —— 重畫會把使用者的捲動位置扔掉。 */
+  async function loadGovernance(folderPath: string): Promise<void> {
+    const r = await requestCoverage(folderPath);
+    const host = document.getElementById(GOVERNANCE_CARD_ID);
+    if (host) host.innerHTML = governanceInner(r);
+  }
+
   function cardWorkspace(s: ProjectStats): string {
     const g = s.git;
     const p = activeProject();
@@ -405,13 +450,14 @@ if (!requireAuth()) {
   function renderStats(s: ProjectStats) {
     renderState(
       `<div class="d-top">${heroGit(s)}${cardTags(s)}</div>
-       <div class="d-grid">${cardCommits(s)}${cardStack(s)}${cardSize(s)}${cardWorkspace(s)}</div>
+       <div class="d-grid">${cardCommits(s)}${cardGovernance(null)}${cardStack(s)}${cardSize(s)}${cardWorkspace(s)}</div>
        <p class="d-measured">量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")}　<span class="mono">${escapeHtml(s.folderPath)}</span></p>`,
     );
     bindIdentEditing();
     document.getElementById("btn-git-doctor")?.addEventListener("click", () => {
       openGitDoctor(s.git);
     });
+    void loadGovernance(s.folderPath);
   }
 
   async function load(force = false) {

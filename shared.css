@@ -7524,6 +7524,9 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 .d-tags li.is-current .d-tag-note { color: var(--fg-2); }
 .d-note-empty { margin: 4px 0 0; font-size: var(--fs-3); line-height: 1.55; color: var(--muted); }
+/* 卡片底部的補充句。與 .d-note-empty 同樣式但語意不同 —— 空狀態與
+   「有資料，但有件事要講」不該共用一個名字，下一個讀的人會誤解。 */
+.d-note { margin: 4px 0 0; font-size: var(--fs-3); line-height: 1.55; color: var(--muted); }
 /* 提交紀錄要讀得到訊息 —— 在四欄網格裡擠成一欄會把主旨截光 */
 .d-grid > .d-tall { grid-column: span 2; }
 @media (max-width: 1100px) { .d-grid > .d-tall { grid-column: span 1; } }
@@ -8726,6 +8729,20 @@ p.gd-warn {
   user-select: none;
 }
 .ov-more > summary::-webkit-details-marker { display: none; }
+/* 治理覆蓋率的各專案明細。與 .ov-more 同一套摺疊語彙，但它住在卡片裡，
+   所以不重複卡片自己的外框與內距。 */
+.ov-gov-detail { margin-top: 12px; }
+.ov-gov-detail > summary {
+  cursor: pointer;
+  padding: 6px 0;
+  color: var(--muted);
+  font-size: var(--fs-3);
+  list-style: none;
+  user-select: none;
+}
+.ov-gov-detail > summary::-webkit-details-marker { display: none; }
+.ov-gov-detail > summary:hover { color: var(--fg-2); }
+.ov-gov-detail[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: 6px; }
 .ov-more > summary:hover { color: var(--fg-2); }
 .ov-more[open] > summary { margin-bottom: 6px; border-bottom: 1px solid var(--border-muted, var(--border)); }
 .ov-more[open] { padding-bottom: 16px; }

@@ -501,6 +501,82 @@ pub fn write_domain_pack(
     })
 }
 
+/// 稽核軌跡的讀取端回傳值。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogRead {
+    /// 所有分片串起來的原文。壞行由前端的 `parseLog` 跳過。
+    pub text: String,
+    /// 實際讀了哪些分片（檔名，舊到新）。前端要標「資料到哪為止」。
+    pub shards: Vec<String>,
+    /// 有沒有因為上限而少讀。**不是錯誤，是一個必須說出來的狀態** ——
+    /// 少讀的統計會偏低，而畫面若不講，看的人會以為那就是全部。
+    pub truncated: bool,
+}
+
+/// 一次讀多少個月分片。一年份，足夠所有統計，也讓最壞情況有界。
+const MAX_LOG_SHARDS: usize = 12;
+/// 總位元組上限。量級推估是每專案每年 20–70 MB，8 MB 涵蓋數個月的高活動期。
+const MAX_LOG_BYTES: usize = 8 * 1024 * 1024;
+
+/// 稽核軌跡的讀取端。**唯讀、只認 `<已註冊根>/.anchorline/log/`。**
+///
+/// 前端傳的是專案根目錄，不是檔案路徑 —— 它不能指定要讀哪個檔。
+/// 目錄不存在時回空結果而不是 Err：**沒有開通治理不是錯誤，是一個狀態**，
+/// 用 Err 表達會讓畫面跳紅字。
+#[tauri::command]
+pub async fn read_log(project_root: String, roots: State<'_, RegisteredRoots>) -> R<LogRead> {
+    let Some(dir) = paths::log_dir_of(&PathBuf::from(&project_root), &roots) else {
+        return Err("這個資料夾沒有被授權過，請用「專案匯入」重新選一次".into());
+    };
+    let Ok(entries) = fs::read_dir(&dir) else {
+        // 還沒有任何事件（或還沒開通治理）。
+        return Ok(LogRead {
+            text: String::new(),
+            shards: Vec::new(),
+            truncated: false,
+        });
+    };
+
+    let mut names: Vec<String> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
+        .filter_map(|e| e.file_name().to_str().map(|s| s.to_string()))
+        .collect();
+    // 檔名是 `YYYY-MM.jsonl`，字典序等於時間序。
+    names.sort();
+
+    // 取最新的 N 個，但回傳時仍照舊到新 —— 事件的時間順序是前端的預期。
+    let truncated_by_count = names.len() > MAX_LOG_SHARDS;
+    if truncated_by_count {
+        names = names.split_off(names.len() - MAX_LOG_SHARDS);
+    }
+
+    let mut text = String::new();
+    let mut read: Vec<String> = Vec::new();
+    let mut truncated = truncated_by_count;
+    for name in names {
+        let Ok(chunk) = fs::read_to_string(dir.join(&name)) else {
+            continue;
+        };
+        if text.len() + chunk.len() > MAX_LOG_BYTES {
+            truncated = true;
+            break;
+        }
+        text.push_str(&chunk);
+        if !text.ends_with('\n') {
+            text.push('\n');
+        }
+        read.push(name);
+    }
+
+    Ok(LogRead {
+        text,
+        shards: read,
+        truncated,
+    })
+}
+
 /// 稽核軌跡的寫入端。**真 O_APPEND**，不是 read-modify-write。
 ///
 /// 三類 writer（App 內動作 / Claude Code hook / git 回填）會併發，
@@ -730,6 +806,7 @@ pub fn ping() -> R<Pong> {
             "readFile",
             "writeFile",
             "appendFile",
+            "readLog",
             "openPath",
             "openspecStatus",
             "ghStatus",

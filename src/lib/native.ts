@@ -160,6 +160,15 @@ export const native = {
   writeDomainPack: (dir: string, name: string, text: string) =>
     call<{ path: string }>("write_domain_pack", { dir, name, text }),
   appendFile: (path: string, line: string) => call<{ path: string }>("append_file", { path, line }),
+  /**
+   * 稽核軌跡的讀取端。傳的是**專案根目錄**，不是檔案路徑 —— 前端不能指定
+   * 要讀哪個檔，Rust 只會給 `<root>/.anchorline/log/` 底下的分片。
+   *
+   * `truncated` 為 true 代表因為分片數或位元組上限而少讀了。那不是錯誤，
+   * 但統計會偏低，畫面必須講出來。
+   */
+  readLog: (projectRoot: string) =>
+    call<{ text: string; shards: string[]; truncated: boolean }>("read_log", { projectRoot }),
   openPath: (path: string) => call<{ path: string }>("open_path", { path }),
 
   openspecStatus: (folderPath: string) =>

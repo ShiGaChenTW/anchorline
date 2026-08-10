@@ -261,6 +261,28 @@ pub fn append_allowed(p: &Path, roots: &RegisteredRoots) -> bool {
     })
 }
 
+/// 稽核軌跡讀取的界線。**唯讀，而且只認一個目錄。**
+///
+/// 刻意不共用 [`editable`]：那條的白名單沒有 `jsonl`，而把 `jsonl` 加進去會
+/// 連 `writeFile` 與 `openPath` 一起開放 —— append-only 的檔就變成可整檔覆寫，
+/// 那正是 [`append_allowed`] 存在的理由。這條只回一個目錄路徑，呼叫端只能讀
+/// 它底下的分片，不能指定檔案。
+///
+/// 回 `None` 代表這個根目錄沒被使用者親手選過。前端傳來的路徑只能被檢查，
+/// 不能被信任成根目錄。
+pub fn log_dir_of(project_root: &Path, roots: &RegisteredRoots) -> Option<PathBuf> {
+    let root = canonical(project_root);
+    let Ok(set) = roots.set.lock() else {
+        return None;
+    };
+    // 必須「就是」某個已註冊根目錄，不是「在它底下」——後者會讓
+    // `<root>/node_modules/evil` 這種路徑也拿得到一個 log 目錄。
+    if !set.iter().any(|r| r == &root) {
+        return None;
+    }
+    Some(root.join(".anchorline").join("log"))
+}
+
 /// 單行上限。保住 O_APPEND 的原子性。
 pub const MAX_LINE_BYTES: usize = 4096;
 
@@ -303,6 +325,30 @@ mod tests {
         let s = normalize_line(&"中".repeat(4000));
         assert!(s.len() <= MAX_LINE_BYTES + 1);
         assert!(std::str::from_utf8(s.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn log_dir_rejects_unregistered_root() {
+        let roots = RegisteredRoots::default();
+        assert!(log_dir_of(Path::new("/tmp/whatever"), &roots).is_none());
+    }
+
+    #[test]
+    fn log_dir_only_accepts_the_root_itself() {
+        let dir = std::env::temp_dir().join("anc-logdir-test");
+        std::fs::create_dir_all(dir.join("node_modules")).unwrap();
+        let roots = RegisteredRoots::default();
+        roots.register(&dir);
+
+        assert_eq!(
+            log_dir_of(&dir, &roots),
+            Some(canonical(&dir).join(".anchorline").join("log"))
+        );
+        // 「在已註冊根目錄底下」不夠 —— 否則任何子目錄都能換到一個 log 路徑，
+        // 而使用者授權的是那個專案，不是它底下的每一個資料夾。
+        assert!(log_dir_of(&dir.join("node_modules"), &roots).is_none());
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

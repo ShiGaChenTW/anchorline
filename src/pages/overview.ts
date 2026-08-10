@@ -26,6 +26,8 @@ import { buildFocusCard, type FocusCard } from "../lib/focus-card";
 import { fetchStaleLabel, GH_REFRESH_MS, prRadarLine, type GhResult } from "../lib/gh-status";
 import { canQueryStatus, getGhStatusCached, requestOpenspecStatus } from "../lib/status-bridge";
 import { openspecProgressPct } from "../lib/openspec-status";
+import { coverageLine, rollupCoverage } from "../lib/governance";
+import { canReadCoverage, requestCoverage, type CoverageResult } from "../lib/governance-bridge";
 
 if (!requireAuth()) {
   /* redirected */
@@ -447,6 +449,81 @@ if (!requireAuth()) {
 
   // ── 版面 ────────────────────────────────────────────────────
 
+  // ── 治理覆蓋率（跨專案）────────────────────────────────────
+  //
+  // 讀磁碟的稽核軌跡，所以是非同步的：先出骨架，讀完再換掉這一區。
+  // 快取只留記憶體 —— 跟其他量測一樣，存起來只會顯示過期數字。
+  const GOVERNANCE_ID = "ov-governance";
+  const coverageCache = new Map<string, CoverageResult>();
+
+  function governanceInner(rows: Row[]): string {
+    if (!canReadCoverage()) {
+      return `<p class="d-eyebrow">治理覆蓋率</p>
+        <p class="d-figure">—</p>
+        <p class="d-figure-sub">桌面版才讀得到稽核軌跡</p>`;
+    }
+    const bound = rows.filter((r) => r.p.importSummary?.rootPath);
+    const loaded = bound.filter((r) => coverageCache.has(r.p.importSummary!.rootPath!));
+    if (!bound.length) {
+      return `<p class="d-eyebrow">治理覆蓋率</p>
+        <p class="d-figure">—</p>
+        <p class="d-figure-sub">還沒有專案綁定資料夾</p>`;
+    }
+    if (loaded.length < bound.length) {
+      return `<p class="d-eyebrow">治理覆蓋率</p>
+        <p class="d-figure">讀取中…</p>
+        <p class="d-figure-sub">${loaded.length} / ${bound.length} 個專案</p>`;
+    }
+
+    const roll = rollupCoverage(
+      loaded.map((r) => ({
+        ...coverageCache.get(r.p.importSummary!.rootPath!)!.coverage,
+        projectId: r.p.id,
+        projectName: projectDisplayName(r.p),
+      })),
+    );
+    const truncated = loaded.some((r) => coverageCache.get(r.p.importSummary!.rootPath!)!.truncated);
+
+    // 尚未開始治理的專案不進總數也不進明細 —— 把它們算成 0 會讓「還沒導入」
+    // 看起來跟「導入得很乾淨」一樣，那是獎勵什麼都沒做。
+    const sub = roll.active.length
+      ? `橫跨 ${roll.active.length} 個已開通治理的專案　已治理 ${roll.governed} 件`
+      : "還沒有任何專案開始治理";
+
+    return `<p class="d-eyebrow">治理覆蓋率</p>
+      <p class="d-figure">${roll.ungoverned} 件未治理</p>
+      <p class="d-figure-sub">${escapeHtml(sub)}</p>
+      ${roll.notStarted ? `<p class="d-note">另有 ${roll.notStarted} 個專案尚未開始治理，不列入計算</p>` : ""}
+      ${truncated ? `<p class="d-note">部分專案只讀了最近的分片，實際數量可能更多</p>` : ""}
+      ${
+        roll.active.length
+          ? `<details class="ov-gov-detail">
+              <summary>看各專案 ▸</summary>
+              <ul class="d-rows">${roll.active
+                .map(
+                  (r) => `<li>
+                    <span class="d-rows-label">${escapeHtml(r.projectName)}</span>
+                    <span class="d-rows-value">${r.ungoverned}</span>
+                    <span class="d-rows-sub">${escapeHtml(coverageLine(r))}</span>
+                  </li>`,
+                )
+                .join("")}</ul>
+            </details>`
+          : ""
+      }`;
+  }
+
+  /** 逐專案讀，每讀完一個就重畫這一區 —— 十三個專案不該等最慢的那個。 */
+  async function loadGovernance(rows: Row[]): Promise<void> {
+    for (const r of rows) {
+      const root = r.p.importSummary?.rootPath;
+      if (!root || coverageCache.has(root)) continue;
+      coverageCache.set(root, await requestCoverage(root));
+      const host = document.getElementById(GOVERNANCE_ID);
+      if (host) host.innerHTML = governanceInner(rows);
+    }
+  }
+
   function render() {
     const rows = buildRows();
     updateUserRailFooter(toRailUser(store.get().currentUser));
@@ -474,11 +551,14 @@ if (!requireAuth()) {
     root.innerHTML = `${warRoom(rows)}
       <div class="ov-focus">${hero(rows)}</div>
       ${prRadar()}
+      <section class="d-card ov-gov" id="${GOVERNANCE_ID}">${governanceInner(rows)}</section>
       ${cardProjects(rows)}
       <details class="ov-more"${moreOpen() ? " open" : ""}>
         <summary>更多統計 ▸</summary>
         <div class="d-grid">${cardStatus(rows)}${cardStack(rows)}${cardUnbound(rows)}</div>
       </details>`;
+
+    void loadGovernance(rows);
 
     root.querySelector<HTMLDetailsElement>(".ov-more")?.addEventListener("toggle", (e) => {
       try {

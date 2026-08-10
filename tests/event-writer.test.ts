@@ -71,7 +71,7 @@ describe("Writer C —— git 回填", () => {
       ],
       "p"
     );
-    expect(ev!.subject).toBe("HNTPRY5R");
+    expect(ev!.subject).toBe("anc:t=HNTPRY5R");
     // hash 不能因此遺失，否則回填不再冪等。
     expect(ev!.event_id).toBe("a009563");
   });
@@ -81,13 +81,14 @@ describe("Writer C —— git 回填", () => {
       [{ hash: "h1", subject: "fix: 修 rollup anc:t=ABCD1234", at: "2026-08-10T12:00:00Z", author: "S", refs: "" }],
       "p"
     );
-    expect(subjectAnchor[0]!.subject).toBe("ABCD1234");
+    expect(subjectAnchor[0]!.subject).toBe("anc:t=ABCD1234");
 
     const legacy = commitsToEvents(
       [{ hash: "h2", subject: "chore", at: "2026-08-10T12:00:00Z", author: "S", refs: "", body: "sf:t=ABC12345" }],
       "p"
     );
-    expect(legacy[0]!.subject).toBe("ABC12345");
+    // 舊的 sf: 錨點讀得到，但寫出來一律正規化成當前前綴。
+    expect(legacy[0]!.subject).toBe("anc:t=ABC12345");
   });
 
   test("像錨點但不合法的字串不當成錨點 —— 誤判會把事件掛到不存在的任務上", () => {
