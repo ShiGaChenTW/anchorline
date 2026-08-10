@@ -56,9 +56,14 @@ export const EMPTY_COVERAGE: GovernanceCoverage = {
  */
 export function governanceCoverage(events: LogEvent[]): GovernanceCoverage {
   let startedIso: string | null = null;
+  let startedAt = Infinity;
   for (const e of events) {
     if (!isGoverned(e)) continue;
-    if (startedIso === null || e.ts < startedIso) startedIso = e.ts;
+    const at = timeOf(e.ts);
+    if (at < startedAt) {
+      startedAt = at;
+      startedIso = e.ts;
+    }
   }
   if (startedIso === null) return EMPTY_COVERAGE;
 
@@ -66,11 +71,28 @@ export function governanceCoverage(events: LogEvent[]): GovernanceCoverage {
   let ungoverned = 0;
   for (const e of events) {
     // 基準線那一刻之前的事件不計 —— 那時還沒有治理可以被繞過。
-    if (e.ts < startedIso) continue;
+    if (timeOf(e.ts) < startedAt) continue;
     if (isGoverned(e)) governed++;
     else ungoverned++;
   }
   return { startedIso, governed, ungoverned };
+}
+
+/**
+ * 時間一律**解析後**再比，不比字串。
+ *
+ * 磁碟上的 log 混著兩種寫法：`2026-08-10T20:16:56+08:00`（git 回填，帶時區）
+ * 與 `2026-08-10T15:22:33.599Z`（UTC）。這兩個字串的字典序跟時間順序**相反** ——
+ * `"15:…Z" < "19:…+08:00"` 為真，但 15:22Z 其實是 23:22+08:00，比較晚。
+ *
+ * 字串比較在單一 writer 的年代一直是對的，多一個 writer 的那天才會錯，
+ * 而且錯法是「基準線抓到錯的那一筆」，不會有任何錯誤訊息。
+ *
+ * 讀不出來的時間戳排到最後：壞資料不該把基準線往前拉，把整段歷史算進統計。
+ */
+function timeOf(ts: string): number {
+  const t = Date.parse(ts);
+  return Number.isNaN(t) ? Infinity : t;
 }
 
 /** 跨專案彙總用的一列。 */
