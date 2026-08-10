@@ -22,7 +22,7 @@ function migrateLegacy(theme: string | null | undefined): ThemeId | null {
 }
 
 function normalize(theme: string | null | undefined): ThemeId {
-  return migrateLegacy(theme) ?? "terminal";
+  return migrateLegacy(theme) ?? "github";
 }
 
 export function applyTheme(theme: string | null | undefined) {

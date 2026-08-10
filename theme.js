@@ -15,7 +15,7 @@
   }
 
   function normalize(theme) {
-    return migrate(theme) || "terminal";
+    return migrate(theme) || "github";
   }
 
   function apply(theme) {
