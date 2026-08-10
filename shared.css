@@ -3766,19 +3766,22 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   grid-template-columns: minmax(0, 1fr);
   gap: 2px 4px;
   align-items: stretch;
-  border: 1px solid var(--border);
+  /* 未選中＝普通列，跟工作區的 .nav-item 同一套語言：
+     邊框保留但透明。留著它是為了佔位 —— 選中時才上色，卡片不會突然變寬 1px
+     把整張清單推歪。背景與陰影同理，只在 .on 才出現。 */
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--elev-flat);
+  background: transparent;
   overflow: hidden;
   transition: border-color var(--motion-fast) var(--ease-standard),
     background var(--motion-fast) var(--ease-standard),
     box-shadow var(--motion-fast) var(--ease-standard);
 }
 .rail-proj-card:hover {
-  border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
-  background: color-mix(in oklab, var(--accent) 6%, var(--surface));
+  border-color: var(--border-muted);
+  background: var(--inset);
 }
+/* 只有正在進行的那一個是卡片 —— 清單上同時只會有一張 */
 .rail-proj-card.on {
   border-color: color-mix(in oklab, var(--accent) 50%, var(--border));
   background: color-mix(in oklab, var(--accent) 12%, var(--surface));
