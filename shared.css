@@ -2817,6 +2817,19 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   background: var(--surface);
   font-size: 11px;
 }
+.flow-strip-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--meta);
+  font-weight: var(--weight-em);
+  margin-right: 2px;
+}
+.flow-strip-tip {
+  font-weight: 400;
+  font-size: 10px;
+  opacity: 0.75;
+}
 .flow-strip-step {
   display: inline-flex;
   align-items: center;
@@ -2826,6 +2839,90 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   border: 1px solid var(--border-muted);
   color: var(--muted);
   background: var(--inset);
+  font: inherit;
+  cursor: pointer;
+}
+.flow-strip-step:hover {
+  border-color: var(--accent);
+  filter: brightness(1.12);
+}
+.flow-strip-step:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.flow-strip-step[aria-expanded="true"] {
+  box-shadow: 0 0 0 2px var(--accent-soft);
+  border-color: var(--accent);
+}
+/* 說明卡佔整行，flex-basis:100% 讓它換行到流程列下方 */
+.flow-strip-detail {
+  flex: 1 0 100%;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--inset);
+  font-size: 12px;
+  line-height: 1.65;
+}
+.flow-strip-detail[hidden] {
+  display: none;
+}
+.fsd-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.fsd-code {
+  font-family: var(--mono);
+  font-weight: var(--weight-em);
+  color: var(--accent);
+}
+.fsd-status {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  color: var(--muted);
+}
+.fsd-status.is-done {
+  color: var(--success);
+  border-color: color-mix(in oklab, var(--success) 35%, var(--border));
+  background: var(--success-bg);
+}
+.fsd-status.is-active {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+  background: var(--accent-soft);
+}
+.fsd-what {
+  margin: 0 0 8px;
+  color: var(--text);
+}
+.fsd-dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 12px;
+  margin: 0;
+}
+.fsd-dl dt {
+  color: var(--meta);
+  white-space: nowrap;
+}
+.fsd-dl dd {
+  margin: 0;
+  color: var(--muted);
+}
+.fsd-go {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: var(--weight-em);
+}
+.fsd-go:hover {
+  text-decoration: underline;
 }
 .flow-strip-step .code {
   font-family: var(--mono);
