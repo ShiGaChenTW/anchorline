@@ -46,6 +46,7 @@ pub fn run() {
             commands::write_domain_pack,
             commands::is_root_registered,
             commands::append_file,
+            commands::read_log,
             commands::open_path,
             commands::openspec_status,
             commands::gh_status,

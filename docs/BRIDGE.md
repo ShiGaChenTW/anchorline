@@ -93,7 +93,7 @@ canonicalize(path) 仍位於某個「已註冊專案根目錄」之內   ← 擋
 
 ---
 
-## 4. 十二個 action
+## 4. 十三個 action
 
 ### 4.1 `pickFolder` / `pickProjectFolder`
 
@@ -162,6 +162,27 @@ canonicalize(path) 仍位於某個「已註冊專案根目錄」之內   ← 擋
 - 自動建立 `.anchorline/log/` 目錄
 - 缺 `.anchorline/.gitattributes` 時種下 `*.jsonl merge=union`（**只在缺檔時，不覆寫**）
 
+### 4.5b `readLog`
+
+稽核軌跡的**讀取**端。與 `appendFile` 刻意分開的那條線在這裡收口。
+
+| | |
+|---|---|
+| 輸入 | `{ projectRoot }` — **專案根目錄，不是檔案路徑** |
+| 成功 | `{ text, shards: string[], truncated: boolean }` |
+| 失敗 | reject（只有一種：這個根目錄沒被使用者親手選過） |
+| 沒有 log 目錄 | `{ text: "", shards: [], truncated: false }`（**不是錯誤，是還沒開通治理**） |
+
+為什麼不是把 `jsonl` 加進 `editable` 的白名單：那會連 `writeFile` 與 `openPath`
+一起開放，append-only 的檔就變成可整檔覆寫 —— 而那正是 `appendAllowed` 存在的理由。
+這個 action 只吃根目錄，前端無法指定要讀哪個檔。
+
+謂詞 `logDirOf(root)`：**必須「就是」某個已註冊根目錄**，不是「在它底下」。
+後者會讓 `<root>/node_modules/evil` 也換得到一個 log 路徑。
+
+上限：最新 12 個月分片、總計 8 MB。命中上限時 `truncated: true` —— **那不是錯誤，
+但統計會偏低，畫面必須講出來**。
+
 ### 4.6 `openPath`
 
 | | |
@@ -217,7 +238,7 @@ gh search prs --author=@me --state=open --limit 30 --json repository,number,titl
 | 輸入 | 無 |
 | 成功 | `{ native: true, capabilities: string[] }` |
 
-`capabilities` 是**這個版本實際實作了哪些 action**。前端靠它做功能偵測，而不是靠版本號猜。移植期間特別有用：Rust 端還沒補完的 action 不要列進去。
+`capabilities` 現含 `readLog`。它是**這個版本實際實作了哪些 action**。前端靠它做功能偵測，而不是靠版本號猜。移植期間特別有用：Rust 端還沒補完的 action 不要列進去。
 
 ---
 

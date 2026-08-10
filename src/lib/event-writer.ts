@@ -20,7 +20,7 @@ import {
   type LogEvent,
 } from "./event-log";
 import { isNative, native } from "./native";
-import { anchorInText } from "./plan-parser";
+import { ANCHOR_PREFIX, anchorInText } from "./plan-parser";
 
 export function canWriteLog(): boolean {
   return isNative();
@@ -105,6 +105,12 @@ type GitCommit = {
  * 這一步順帶解掉 `GitStats.commits` 的 40 筆上限：那個上限是「每次量測抓多少」，
  * 回填之後歷史留在 log 裡，不再受單次查詢的視窗限制。
  */
+/** commit 的 join key：訊息裡的錨點（帶前綴），沒有就退回 hash。 */
+function subjectFor(c: GitCommit): string {
+  const anchor = anchorInText(`${c.subject}\n${c.body ?? ""}`);
+  return anchor ? `${ANCHOR_PREFIX}:t=${anchor}` : c.hash;
+}
+
 export function commitsToEvents(
   commits: GitCommit[],
   project: string,
@@ -120,7 +126,12 @@ export function commitsToEvents(
         kind: "commit",
         // 訊息裡寫了錨點就用錨點當 join key —— 那正是有人特地寫它的理由。
         // 沒寫才退回 commit hash。hash 不會因此遺失：`event_id` 就是它。
-        subject: anchorInText(`${c.subject}\n${c.body ?? ""}`) ?? c.hash,
+        //
+        // **帶前綴**（`anc:t=XXXX`），與 App 內動作寫出的 subject 同一種形狀
+        // （見 tracking.ts 的 task.done、docs/DATA.md 的範例）。裸 id 會讓兩個
+        // writer 對同一個任務產生兩種 subject —— join key 就接不起來了，
+        // 而且不會有任何錯誤，只會顯示成兩條各自獨立的軌跡。
+        subject: subjectFor(c),
         ts: c.at,
         ...(remoteUrl ? { ref: commitUrl(remoteUrl, c.hash) } : {}),
         payload: { title: c.subject },
