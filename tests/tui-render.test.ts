@@ -22,9 +22,12 @@ describe("dw — 顯示寬度", () => {
     expect(dw("字級系統")).toBe(8);
   });
 
-  test("East Asian Ambiguous 按 macOS 中文終端釘死為 2", () => {
-    expect(dw("—")).toBe(2);
-    expect(dw("…")).toBe(2);
+  // 舊名是「按 macOS 中文終端釘死為 2」——名字本身在保護那個假設。
+  // Ghostty 實測：8 個 em dash 與 8 個半形的跨距同為 73px（格寬 8.11px），
+  // 每字 1.00 格；ellipsis 1.02 格。與 Unicode EAW 的 Ambiguous=窄 一致。
+  test("East Asian Ambiguous 算 1 格（Ghostty 實測，非推論）", () => {
+    expect(dw("—")).toBe(1);
+    expect(dw("…")).toBe(1);
   });
 
   test("組合附加符號佔 0 格", () => {

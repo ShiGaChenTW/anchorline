@@ -38,6 +38,20 @@ export function stripAnsi(s: string): string {
  * 舊規則是「碼點 > 0xFF 就算 2」。中文碰巧對，但框線 │ ─、圖示 ▶ • ✔ ⚠、
  * spinner 全部被誤判成 2 格，垂直分隔線因此在 31–34 欄之間飄。
  * 症狀是邊框歪掉而不是錯誤訊息，所以很難歸因回這個函式——別再換回近似規則。
+ *
+ * East Asian Ambiguous（— U+2014、… U+2026 等）一律算 1 格，跟 Unicode EAW 一致。
+ * 這裡曾經把這兩個字元釘死成 2，理由寫「macOS 中文終端實測 2 格」。
+ * 在 Ghostty 實際量過，不成立：
+ *
+ *   |--------|  8 個半形     跨距 73px  →  10.0 格  →  每字 1.00（量測法自我檢核）
+ *   |————————|  8 個 em dash 跨距 73px  →  10.0 格  →  每字 1.00
+ *   |………|      3 個 ellipsis 跨距 33px  →   5.1 格  →  每字 1.02
+ *
+ *   格寬 8.11px。參考線推回 1.00 證明量法本身沒有偏差。
+ *
+ * 後果不是理論的：track-tui 的錨點警告列含 2 個 em dash，右邊界會左移 2 格；
+ * 等待訊息含 1 個 ellipsis，左移 1 格 —— 正是這個函式要根除的飄移。
+ * 要改回 2 之前請先量，不要憑「看起來比較寬」。
  */
 function charWidth(cp: number): number {
   if (cp === 0) return 0;
@@ -53,8 +67,6 @@ function charWidth(cp: number): number {
   }
   if (
     (cp >= 0x1100 && cp <= 0x115f) || // Hangul Jamo
-    cp === 0x2014 || // em dash —— East Asian Ambiguous，macOS 中文終端實測 2 格
-    cp === 0x2026 || // ellipsis 同上。Ambiguous 類不能靠通用 wcwidth，只能按目標終端釘死
     (cp >= 0x2e80 && cp <= 0x303e) ||
     (cp >= 0x3041 && cp <= 0x33ff) ||
     (cp >= 0x3400 && cp <= 0x4dbf) ||
