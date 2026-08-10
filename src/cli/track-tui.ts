@@ -14,20 +14,27 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  asStatusWord,
   mintMissingIds,
   parsePlanMeta,
+  planProgress,
   planProgressPct,
   type PlanMeta,
+  type StatusWord,
+  type StepState,
 } from "../lib/plan-parser";
 import { sortByRecency, trackingTarget, type TrackingSignal } from "../lib/tracking";
+import { sinceLabel } from "../lib/time-format";
 import {
   c,
+  dw,
   enterAlt,
+  ESC,
   hline,
   leaveAlt,
-  moveHome,
   pad,
   pal,
+  syncFrame,
   termSize,
 } from "./ansi";
 
@@ -85,18 +92,55 @@ function loadPlans(dir: string): PlanEntry[] {
   return sortByRecency(entries);
 }
 
-function bar(pct: number, width: number): string {
+/**
+ * 進度條刻意用 ASCII `=` / `.`，不用 █ ░。
+ * 某些等寬字型會把相鄰的 block glyph 反鋸齒黏成一整條實色，刻度就看不出來了；
+ * `=` 之間永遠有間隙。ASCII 也讓輸出貼進 issue 或 CI log 時不依賴字型。
+ */
+export function bar(pct: number, width: number): string {
   const filled = Math.round((Math.max(0, Math.min(100, pct)) / 100) * width);
   const empty = Math.max(0, width - filled);
-  return `${pal.accent}${"█".repeat(filled)}${pal.muted}${"░".repeat(empty)}${c.reset}`;
+  return `${pal.accent}${"=".repeat(filled)}${pal.muted}${".".repeat(empty)}${c.reset}`;
 }
 
-function statusColor(status: string): string {
-  if (status.includes("完成")) return pal.success;
-  if (status.includes("阻塞")) return pal.danger;
-  if (status.includes("暫停") || status.includes("放棄")) return pal.warn;
-  return pal.accent;
+/**
+ * 更新時間顯示成「多久以前」。plan 檔寫的是絕對時間戳，但「看一眼」要問的是
+ * 「這份還熱嗎」——絕對時間得自己心算。解析不了就原樣吐回，不假裝知道。
+ */
+export function relTime(raw: string, nowMs: number): string {
+  if (!raw || raw === "—") return "—";
+  const rel = sinceLabel(raw.replace(" ", "T"), nowMs);
+  return rel === "從未" ? raw : rel;
 }
+
+/** braille spinner：只在有 agent 在寫時轉。不轉 = 沒東西在動，那本身就是資訊。 */
+const SPIN = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+/**
+ * 狀態 → 圖示 + 顏色。Record<StatusWord,…> 讓新增狀態詞時這裡編不過，
+ * 而不是靜默套用預設值畫錯。§2.2：一個意思一個字形。
+ */
+const STATUS_UI: Record<StatusWord, { icon: string; color: string }> = {
+  進行中: { icon: "◐", color: pal.accent },
+  已完成: { icon: "✔", color: pal.success },
+  已暫停: { icon: "⏸", color: pal.warn },
+  已放棄: { icon: "✗", color: pal.muted },
+  阻塞: { icon: "⚠", color: pal.danger },
+};
+const STATUS_UNKNOWN = { icon: "?", color: pal.muted };
+
+/** 完全比對，不做子字串。對不上回未知——不猜。 */
+function statusUi(status: string) {
+  const w = asStatusWord(status);
+  return w ? STATUS_UI[w] : STATUS_UNKNOWN;
+}
+
+/** 步驟圖示同樣收成 Record——加 StepState 忘了處理的那一側編不過。 */
+const STEP_UI: Record<StepState, { icon: string; color: string; textColor: string }> = {
+  done: { icon: "✔", color: pal.success, textColor: pal.muted },
+  skipped: { icon: "✗", color: pal.muted, textColor: pal.muted },
+  pending: { icon: "○", color: pal.accent, textColor: pal.text },
+};
 
 type UiState = {
   plans: PlanEntry[];
@@ -108,6 +152,8 @@ type UiState = {
   showHelp: boolean;
   plansDir: string;
   message: string;
+  /** spinner 相位。只在有追蹤目標時前進，所以靜止畫面會被整幀去重擋掉。 */
+  tick: number;
 };
 
 /** 每次重繪重算，不快取。純函式 + 幾個 stat，比一次終端重繪便宜得多。 */
@@ -117,10 +163,42 @@ function refresh(state: UiState) {
   state.idx = Math.min(state.idx, Math.max(0, state.plans.length - 1));
 }
 
+/** 完整雙欄的下限。低於這個就砍側欄，不是把版面壓扁。 */
+const FULL_COLS = 100;
+const FULL_ROWS = 28;
+/** 版面引擎本身的下限。低於這個連單欄都排不出來。 */
+const MIN_COLS = 50;
+const MIN_ROWS = 12;
+
+/**
+ * 太小就不畫，只印一行字。
+ *
+ * 舊寫法是 `Math.max(60, cols)`：40 欄的終端照樣按 60 欄排版，內容比終端寬，
+ * 每一列都被終端自動換行推歪。夾住數字不會讓版面變得排得下——版面引擎正是在
+ * 這個尺寸失效的東西，所以正解是不啟動它。
+ */
+export function tooSmall(cols: number, rows: number): string[] | null {
+  if (cols >= MIN_COLS && rows >= MIN_ROWS) return null;
+  const msg = `終端太小 ${cols}×${rows}`;
+  const need = `需要至少 ${MIN_COLS}×${MIN_ROWS}`;
+  const out: string[] = [];
+  for (let i = 0; i < Math.max(0, Math.floor(rows / 2) - 1); i++) out.push("");
+  for (const s of [msg, need]) {
+    const indent = Math.max(0, Math.floor((cols - dw(s)) / 2));
+    out.push(" ".repeat(indent) + s);
+  }
+  return out.slice(0, Math.max(1, rows));
+}
+
 function render(state: UiState): string[] {
   const { cols, rows } = termSize();
-  const W = Math.max(60, cols);
-  const H = Math.max(16, rows);
+  const small = tooSmall(cols, rows);
+  if (small) return small;
+
+  // 真實尺寸，不夾。側欄在窄視窗直接不畫——壓扁的側欄比沒有側欄更難讀。
+  const W = cols;
+  const H = rows;
+  const compact = cols < FULL_COLS || rows < FULL_ROWS;
   const lines: string[] = [];
 
   const push = (s: string) => lines.push(s.slice(0, 4000));
@@ -163,15 +241,19 @@ function render(state: UiState): string[] {
   }
 
   const cur = state.plans[state.idx]!;
-  const pct = planProgressPct(cur.meta);
-  const stc = statusColor(cur.meta.status);
+  const prog = planProgress(cur.meta);
+  const pct = prog.pct;
+  const st = statusUi(cur.meta.status);
+  const now = Date.now();
 
   // Summary block
   push(
     ` ${c.bold}${pal.title}${pad(cur.meta.title, Math.min(W - 4, 70))}${c.reset}`,
   );
+  // 分子走 planProgress().closed，與 pct 同源。印 done_steps 就是 `100% … 21/28` 的來源。
+  const skipNote = cur.meta.skipped_steps ? `（含略過 ${cur.meta.skipped_steps}）` : "";
   push(
-    ` ${stc}${cur.meta.status}${c.reset}${pal.muted}  ·  ${cur.meta.done_steps}/${cur.meta.total_steps} done  ·  ${pct}%  ·  ${cur.name}${c.reset}`,
+    ` ${st.color}${st.icon} ${cur.meta.status}${c.reset}${pal.muted}  ·  ${prog.closed}/${prog.total} 已結${skipNote}  ·  ${pct}%  ·  ${cur.name}${c.reset}`,
   );
   push(` ${bar(pct, Math.min(40, W - 6))}`);
   push(
@@ -186,13 +268,13 @@ function render(state: UiState): string[] {
   }
   push(`${pal.border}${hline(W, "─")}${c.reset}`);
 
-  // Two-column-ish: plan list (left width) + steps
-  const leftW = Math.min(34, Math.floor(W * 0.34));
-  const rightW = W - leftW - 1;
+  // 雙欄：plan 清單 + 步驟。compact 砍掉側欄，步驟吃滿整寬。
+  const leftW = compact ? 0 : Math.min(34, Math.floor(W * 0.34));
+  const rightW = compact ? W : W - leftW - 1;
   const bodyRows = H - lines.length - 3; // footer
 
   const listLines: string[] = [];
-  for (let i = 0; i < state.plans.length; i++) {
+  for (let i = 0; !compact && i < state.plans.length; i++) {
     const p = state.plans[i]!;
     const mark = i === state.idx ? `${pal.accent}▶${c.reset}` : " ";
     // 追蹤圓點與選取箭頭刻意分屬兩欄 —— 同一列可以同時是「我在看的」和「agent 在寫的」
@@ -209,18 +291,9 @@ function render(state: UiState): string[] {
   const scroll = Math.min(state.stepScroll, maxScroll);
   for (let i = scroll; i < steps.length && stepLines.length < maxStepsVisible; i++) {
     const s = steps[i]!;
-    const icon =
-      s.state === "done"
-        ? `${pal.success}✔${c.reset}`
-        : s.state === "skipped"
-          ? `${pal.muted}—${c.reset}`
-          : `${pal.accent}○${c.reset}`;
-    const txt =
-      s.state === "skipped"
-        ? `${pal.muted}${s.text}${c.reset}`
-        : s.state === "done"
-          ? `${pal.muted}${s.text}${c.reset}`
-          : `${pal.text}${s.text}${c.reset}`;
+    const ui = STEP_UI[s.state];
+    const icon = `${ui.color}${ui.icon}${c.reset}`;
+    const txt = `${ui.textColor}${s.text}${c.reset}`;
     // 錨點 id 佔固定 9 欄。沒有 id 的步驟留 · —— 一眼看得出哪些接不上事件流
     const tag = s.id
       ? `${pal.muted}${s.id}${c.reset}`
@@ -236,7 +309,7 @@ function render(state: UiState): string[] {
   const metaExtra = [
     `${pal.muted}目標${c.reset}  ${pad(cur.meta.goal, rightW - 8)}`,
     `${pal.muted}決策${c.reset}  ${pad(cur.meta.last_decision, rightW - 8)}`,
-    `${pal.muted}阻塞${c.reset}  ${cur.meta.blockers}  ·  建立 ${cur.meta.created}  ·  更新 ${cur.meta.updated}`,
+    `${pal.muted}阻塞${c.reset}  ${cur.meta.blockers}  ·  建立 ${relTime(cur.meta.created, now)}  ·  更新 ${relTime(cur.meta.updated, now)}`,
   ];
 
   for (let row = 0; row < bodyRows; row++) {
@@ -248,8 +321,13 @@ function render(state: UiState): string[] {
       const mi = row - (stepLines.length + 2);
       right = metaExtra[mi] ?? "";
     }
-    const leftPad = pad(left, leftW);
-    push(`${leftPad}${pal.border}│${c.reset}${right}`);
+    // 兩側都無條件過 pad()——它保證 dw() 等於欄寬。不信任上游算對了寬度，
+    // 因為算錯的症狀是邊框歪掉而不是例外，沒有封口就沒人會發現。
+    push(
+      compact
+        ? pad(right, rightW)
+        : `${pad(left, leftW)}${pal.border}│${c.reset}${pad(right, rightW)}`,
+    );
   }
 
   push(`${pal.border}${hline(W, "─")}${c.reset}`);
@@ -257,11 +335,13 @@ function render(state: UiState): string[] {
   const tracked = state.plans.find((p) => p.path === state.tracking);
   // 空狀態不暴露判定細節（訊號過期？退回段 2？）—— 內部機制對使用者無意義
   const live = tracked
-    ? `${pal.muted}追蹤中 ${c.reset}${pal.accent}•${c.reset} ${pal.text}${tracked.name}${c.reset}`
+    ? `${pal.accent}${SPIN[state.tick % SPIN.length]}${c.reset} ${pal.muted}追蹤中 ${c.reset}${pal.text}${tracked.name}${c.reset}`
     : `${pal.muted}等待 agent 開始執行…${c.reset}`;
-  push(
-    `${pal.muted} j/k plan · J/K 捲動 · ? 說明 · q 離開 · ${state.idx + 1}/${state.plans.length}${msg}${c.reset}  ${live}`,
-  );
+  // compact 下鍵位提示會擠掉 live，而 live 才是「看一眼」要看的東西
+  const hint = compact
+    ? `${state.idx + 1}/${state.plans.length}${msg}`
+    : ` j/k plan · J/K 捲動 · ? 說明 · q 離開 · ${state.idx + 1}/${state.plans.length}${msg}`;
+  push(`${pal.muted}${hint}${c.reset}  ${live}`);
 
   return lines.slice(0, H);
 }
@@ -286,12 +366,9 @@ function draw(state: UiState) {
   const frame = out.slice(0, rows).join("\n");
   if (frame === lastFrame) return;
   lastFrame = frame;
-  moveHome();
-  process.stdout.write(frame + clearDownSeq());
-}
-
-function clearDownSeq() {
-  return "\x1b[J";
+  // 清行序列必須跟在內容之後、包在同步輸出之內；moveHome 也要一起包進去，
+  // 否則游標移動與內容分屬兩幀，同步輸出就白做了。
+  process.stdout.write(syncFrame(`${ESC}[H${frame}${ESC}[J`));
 }
 
 function printOnce(plans: PlanEntry[], dir: string, tracking: string | null) {
@@ -302,13 +379,14 @@ function printOnce(plans: PlanEntry[], dir: string, tracking: string | null) {
     return;
   }
   for (const p of plans) {
-    const pct = planProgressPct(p.meta);
+    const prog = planProgress(p.meta);
+    const ui = statusUi(p.meta.status);
     const dot = p.path === tracking ? ` ${pal.accent}•${c.reset}` : "";
     console.log(
-      `${statusColor(p.meta.status)}${pad(p.meta.status, 8)}${c.reset} ${bar(pct, 12)} ${String(pct).padStart(3)}%  ${c.bold}${p.meta.title}${c.reset}${dot}`,
+      `${ui.color}${ui.icon} ${pad(p.meta.status, 8)}${c.reset} ${bar(prog.pct, 12)} ${String(prog.pct).padStart(3)}%  ${c.bold}${p.meta.title}${c.reset}${dot}`,
     );
     console.log(
-      `  ${pal.muted}${p.meta.done_steps}/${p.meta.total_steps}${c.reset}  next: ${pal.accent}${p.meta.next_step}${c.reset}`,
+      `  ${pal.muted}${prog.closed}/${prog.total} 已結${c.reset}  next: ${pal.accent}${p.meta.next_step}${c.reset}`,
     );
     console.log(`  ${pal.muted}${p.name}${c.reset}`);
     console.log("");
@@ -329,6 +407,7 @@ async function interactive(plansDir: string) {
     showHelp: false,
     plansDir,
     message: "",
+    tick: 0,
   };
   refresh(state);
 
@@ -337,11 +416,17 @@ async function interactive(plansDir: string) {
 
   // ponytail: 只做週期輪詢，不掛 fs watcher。mtime 重比較本來就得每秒做一次，
   // 加 watch() 只省下 ≤1s 的延遲，卻多一組 debounce 與清理路徑要顧。
+  // 125ms 讓 spinner 轉得像在動，但資料每 8 拍才重讀一次 —— 還是 1 秒，
+  // 沒有多做檔案 I/O。tick 只在有追蹤目標時前進，所以沒 agent 在寫的時候
+  // 整幀完全不變，去重直接擋掉重畫，閒置成本仍然是零。
+  let beat = 0;
   const timer = setInterval(() => {
     if (state.showHelp) return;
-    refresh(state);
+    if (beat % 8 === 0) refresh(state);
+    beat++;
+    if (state.tracking) state.tick++;
     draw(state);
-  }, 1000);
+  }, 125);
 
   const cleanup = () => {
     clearInterval(timer);
@@ -493,6 +578,7 @@ function frame(plansDir: string) {
     showHelp: false,
     plansDir,
     message: "",
+    tick: 0,
   };
   refresh(state);
   // 追蹤中的那一份就是要看的那一份 —— 截圖不該還要人先按 t
@@ -521,4 +607,6 @@ function main() {
   void interactive(plansDir);
 }
 
-main();
+// 只有被當成程式跑才啟動。測試 import 這個檔是為了拿 bar/relTime/tooSmall，
+// 不該順便畫一張畫面出來。
+if (import.meta.main) main();

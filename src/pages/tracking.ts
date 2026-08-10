@@ -6,7 +6,7 @@ import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import {
   ANCHOR_PREFIX,
   parsePlanMeta,
-  planProgressPct,
+  planProgress,
   stripAnchor,
   type PlanMeta,
 } from "../lib/plan-parser";
@@ -93,8 +93,8 @@ if (__authed) {
     const st = store.get();
     const dirs = plansDirsOf(st.projects, st.activeProjectId);
     // 選取的專案沒綁資料夾 —— 清單就該是空的，不是退回全部專案。
-    // 回 false 會讓呼叫端落到靜態快照，那是「本 repo 自己的 plans」，
-    // 一樣不屬於當前專案，所以這裡自己把清單清乾淨並直接收工。
+    // 這裡回 true（不是 false）：清空就是正確結果，已經收工了。回 false 會讓
+    // `loadPlans()` 再跑一次 `loadEmpty()`，白做一輪。
     if (!dirs.length) {
       plans = [];
       live = false;
@@ -106,7 +106,9 @@ if (__authed) {
     try {
       scan = await requestTrackingScan(dirs);
     } catch {
-      return false; // 橋壞了／逾時 —— 不是錯誤，退回靜態快照
+      // 橋壞了／逾時。呼叫端會 `loadEmpty()` —— 沒有靜態快照可退，本 repo 自己的
+      // plans/ 不屬於當前專案，拿來墊只會顯示別人的進度。空清單才是誠實的。
+      return false;
     }
     if (!scan.files.length) return false;
 
@@ -172,26 +174,30 @@ if (__authed) {
       const entry = { p, i };
       if (live && p.path === trackingPath) tracked.push(entry);
       else if (p.meta.total_steps === 0) noSteps.push(entry);
-      else if (p.meta.done_steps >= p.meta.total_steps) done.push(entry);
+      // 分桶要跟進度條同源。用 done_steps 的話，有放棄步驟的 plan 進度條到 100%
+      // 卻永遠留在「進行中」——同一張卡上兩個地方說反話。
+      else if (planProgress(p.meta).closed >= p.meta.total_steps) done.push(entry);
       else active.push(entry);
     });
     return [
       { key: "tracked", label: "agent 正在寫", items: tracked, open: true },
       { key: "active", label: "進行中", items: active, open: true },
-      { key: "done", label: "已完成", items: done, open: done.length <= 4 },
+      // 「已結束」而非「已完成」：這桶也收全部放棄的 plan，說完成就是在騙人
+      { key: "done", label: "已結束", items: done, open: done.length <= 4 },
       { key: "none", label: "沒有步驟的檔案", items: noSteps, open: false },
     ].filter((g) => g.items.length);
   }
 
   function planRow({ p, i }: { p: PlanEntry; i: number }): string {
-    const pct = planProgressPct(p.meta);
+    const prog = planProgress(p.meta);
+    const pct = prog.pct;
     const isTracked = live && p.path === trackingPath;
     return `<button type="button" class="tk-row${i === idx ? " on" : ""}${isTracked ? " tracked" : ""}" data-i="${i}">
       <span class="tk-row-t">${escapeHtml(p.meta.title)}</span>
       <span class="tk-row-m">
         ${
           p.meta.total_steps
-            ? `<span class="tk-mini"><i style="width:${pct}%"></i></span><span class="tk-num">${p.meta.done_steps}/${p.meta.total_steps}</span>`
+            ? `<span class="tk-mini"><i style="width:${pct}%"></i></span><span class="tk-num">${prog.closed}/${prog.total}</span>`
             : `<span class="tk-num tk-num--none">沒有步驟</span>`
         }
       </span>
@@ -263,7 +269,8 @@ if (__authed) {
       if (steps) steps.innerHTML = `<div class="tk-empty"><p>從左邊挑一份計劃。</p></div>`;
       return;
     }
-    const pct = planProgressPct(p.meta);
+    const prog = planProgress(p.meta);
+    const pct = prog.pct;
     if (hd) hd.innerHTML = `<span class="mono">${escapeHtml(p.name)}</span>`;
 
     if (sum) {
@@ -276,8 +283,8 @@ if (__authed) {
         <div class="tk-prog">
           <div class="tk-bar"><i style="width:${pct}%"></i></div>
           <p class="tk-prog-m">
-            <strong>${p.meta.done_steps}/${p.meta.total_steps}</strong> 完成
-            ${p.meta.skipped_steps ? ` · 跳過 ${p.meta.skipped_steps}` : ""}
+            <strong>${prog.closed}/${prog.total}</strong> 已結
+            ${p.meta.skipped_steps ? ` · 其中跳過 ${p.meta.skipped_steps}` : ""}
             · 更新 ${escapeHtml(p.meta.updated)}
           </p>
         </div>
