@@ -16,7 +16,7 @@ PRD 撰寫 → 結構 gate → 簽核 → openspec change → commits → PR →
 **怎麼證明這些 agent 做的事是被治理過的。**
 
 > ⚠️ **早期階段。** 目前產物**未簽章**，macOS 會被 Gatekeeper 擋、Windows 會被
-> SmartScreen 擋。簽章與 notarization 尚未做（見 `SCOPE.md` W4）。
+> SmartScreen 擋。簽章與 notarization 尚未做（見 `docs/SCOPE.md` W4）。
 
 ---
 
@@ -137,9 +137,9 @@ Requirement / Scenario / delta 的語法是 OpenSpec 上游的活規格，自己
 | [`docs/BRIDGE.md`](docs/BRIDGE.md) | 12 個 action 的契約 |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | 安全模型 · 為什麼沒有 shell plugin · 已知弱點 |
 | [`docs/DATA.md`](docs/DATA.md) | 資料落在哪、進不進 git、事件長什麼樣 |
-| [`SCOPE.md`](SCOPE.md) | 開發範圍與工作線 |
-| [`SPEC-live-tracking.md`](SPEC-live-tracking.md) | 「哪一份是 agent 此刻正在寫的」判定規格 |
-| [`GUIDE-github-pr.md`](GUIDE-github-pr.md) | PR 機制說明（給 PM 與 AI 開發者） |
+| [`docs/SCOPE.md`](docs/SCOPE.md) | 開發範圍與工作線 |
+| [`docs/SPEC-live-tracking.md`](docs/SPEC-live-tracking.md) | 「哪一份是 agent 此刻正在寫的」判定規格 |
+| [`docs/GUIDE-github-pr.md`](docs/GUIDE-github-pr.md) | PR 機制說明（給 PM 與 AI 開發者） |
 
 ---
 

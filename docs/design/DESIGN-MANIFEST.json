@@ -4,9 +4,9 @@
   "entryFile": "index.html",
   "sourceFiles": {
     "all": [
-      "brand-spec.md",
-      "CleanShot-2026-08-05-at-00.56.02.png",
-      "critique.json",
+      "docs/design/brand-spec.md",
+      "docs/design/CleanShot-2026-08-05-at-00.56.02.png",
+      "docs/design/critique.json",
       "editor.html",
       "index.html",
       "projects.html",
@@ -29,9 +29,9 @@
       "theme.js"
     ],
     "assets": [
-      "brand-spec.md",
-      "CleanShot-2026-08-05-at-00.56.02.png",
-      "critique.json"
+      "docs/design/brand-spec.md",
+      "docs/design/CleanShot-2026-08-05-at-00.56.02.png",
+      "docs/design/critique.json"
     ]
   },
   "screens": [

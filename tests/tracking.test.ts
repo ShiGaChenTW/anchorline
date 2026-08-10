@@ -1,5 +1,5 @@
 /**
- * SPEC-live-tracking.md §8 的 11 個必要案例。
+ * docs/SPEC-live-tracking.md §8 的 11 個必要案例。
  *
  * 原 repo 對這個函式有 0 個測試；spec 明說移植時該表是待補清單而非既有成果。
  * 全部只碰記憶體裡的 snapshot —— 沒有臨時目錄、沒有系統時鐘、碰不到使用者真實檔案。
