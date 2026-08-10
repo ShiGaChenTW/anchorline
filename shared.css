@@ -8468,3 +8468,49 @@ p.gd-warn {
 .aw-section textarea:focus, #aw-global:focus, #aw-style:focus {
   outline: none; border-color: var(--accent); box-shadow: var(--focus-ring);
 }
+
+/* 逐字視窗：顯示模型正在吐的原始文字尾段。
+   內容是尚未解析的 JSON —— 目的不是讓人讀，是證明它在動、而且動得對不對。 */
+.ai-write-live {
+  margin: 0;
+  max-height: 92px;
+  overflow: auto;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--meta);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.ai-write-live[hidden] { display: none; }
+.ai-write-profile {
+  margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  color: var(--accent); font-size: 10px; font-weight: 600;
+}
+
+/* 設定：角色列與 AI 建議 */
+.aw-profile-bar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 6px; }
+.aw-profile-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+#aw-profile {
+  height: 40px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px); padding: 0 12px; color: var(--fg); font: inherit; font-size: 13px;
+}
+.aw-suggest {
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 0 0 18px; padding: 12px 14px;
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, var(--border));
+  border-radius: var(--radius-sm, 6px);
+}
+.aw-suggest > label { font-size: 13px; font-weight: 600; color: var(--fg); }
+.aw-suggest-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.aw-suggest-row input {
+  flex: 1 1 320px; height: 38px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: var(--radius-sm, 6px);
+  padding: 0 12px; color: var(--fg); font: inherit; font-size: 13px;
+}

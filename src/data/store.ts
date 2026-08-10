@@ -28,6 +28,7 @@ import type {
   CaseStage,
   Comment,
   Employee,
+  AiWriteProfile,
   PrdVersion,
   Project,
   ProjectImportSummary,
@@ -1003,6 +1004,85 @@ export const store = {
   // 但它不是「已儲存」，異動高亮就是拿它跟 projectSectionValues 比。
 
   /** 使用者打字的落點。與已儲存值相同時自動清掉草稿 —— 改回原樣就不算 dirty。 */
+  // ── AI 撰寫角色 ─────────────────────────────────────────────
+
+  /** 目前生效的角色。找不到就退回第一個 —— 永遠有一個可用。 */
+  activeWriteProfile(): AiWriteProfile {
+    const aw = state.settings.aiWriting;
+    return aw.profiles.find((p) => p.id === aw.activeProfileId) ?? aw.profiles[0]!;
+  },
+
+  /**
+   * 切換角色：把該角色的值搬到 aiWriting 頂層。
+   *
+   * 下游（generateAIDraft）只讀頂層，完全不必知道 profile 的存在 ——
+   * 讓「有幾個角色」這件事不外洩到產生 prompt 的程式裡。
+   */
+  setActiveWriteProfile(id: string) {
+    const aw = state.settings.aiWriting;
+    const p = aw.profiles.find((x) => x.id === id);
+    if (!p) return;
+    state = {
+      ...state,
+      settings: {
+        ...state.settings,
+        aiWriting: {
+          ...aw,
+          activeProfileId: id,
+          globalInstruction: p.globalInstruction,
+          styleSample: p.styleSample,
+          sectionPrompts: structuredClone(p.sectionPrompts),
+          overwriteFilled: p.overwriteFilled,
+        },
+      },
+    };
+    emit();
+  },
+
+  /** 新增角色並立刻切過去 —— 建了卻沒切過去是多一個沒必要的步驟 */
+  addWriteProfile(p: Omit<AiWriteProfile, "id">): string {
+    const id = `wp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const aw = state.settings.aiWriting;
+    state = {
+      ...state,
+      settings: {
+        ...state.settings,
+        aiWriting: { ...aw, profiles: [...aw.profiles, { ...p, id }] },
+      },
+    };
+    this.setActiveWriteProfile(id);
+    return id;
+  },
+
+  renameWriteProfile(id: string, name: string) {
+    const aw = state.settings.aiWriting;
+    state = {
+      ...state,
+      settings: {
+        ...state.settings,
+        aiWriting: {
+          ...aw,
+          profiles: aw.profiles.map((p) => (p.id === id ? { ...p, name: name.trim() || p.name } : p)),
+        },
+      },
+    };
+    emit();
+  },
+
+  /** 刪除角色。剩最後一個時不給刪 —— 沒有角色可用的狀態沒有意義。 */
+  deleteWriteProfile(id: string): { ok: boolean; reason?: string } {
+    const aw = state.settings.aiWriting;
+    if (aw.profiles.length <= 1) return { ok: false, reason: "至少要保留一個角色" };
+    const profiles = aw.profiles.filter((p) => p.id !== id);
+    state = {
+      ...state,
+      settings: { ...state.settings, aiWriting: { ...aw, profiles } },
+    };
+    if (aw.activeProfileId === id) this.setActiveWriteProfile(profiles[0]!.id);
+    else emit();
+    return { ok: true };
+  },
+
   setSectionDraft(sectionId: string, key: string, value: string) {
     const pid = state.activeProjectId;
     if (!pid) return;

@@ -1182,6 +1182,8 @@ let aiWriteAbort: AbortController | null = null;
 /** 進度列。逐節顯示，讓人看得到它在寫、寫到哪 —— 也才知道停止鈕停掉了什麼。 */
 function setAiWriteProgress(html: string, running: boolean) {
   const box = document.getElementById("ai-write-progress");
+  const live = document.getElementById("ai-write-live");
+  if (live) live.hidden = !running;
   const stop = document.getElementById("btn-ai-write-stop");
   const all = document.getElementById("btn-ai-write-all") as HTMLButtonElement | null;
   const one = document.getElementById("btn-ai-write-one") as HTMLButtonElement | null;
@@ -1212,6 +1214,15 @@ async function runAiWrite(sectionIds?: string[]) {
     const res = await writeFullPrd(list, (sec) => valuesFor(sec), {
       sectionIds,
       signal: aiWriteAbort.signal,
+      // 逐字：模型輸出的是一份 JSON，逐字時還不是合法 JSON，所以這裡顯示的是
+      // 原始文字的尾段（看得到它在動就夠了），解析與落地仍在整節收完之後。
+      onDelta: (_c, full) => {
+        const live = document.getElementById("ai-write-live");
+        if (live) {
+          live.textContent = full.slice(-220);
+          live.scrollTop = live.scrollHeight;
+        }
+      },
       onProgress: (p) => {
         if (p.phase === "start") {
           lines.push(
@@ -1275,6 +1286,13 @@ async function runAiWriteOne(sectionId: string) {
       sectionIds: [sectionId],
       overwriteFilled: true,
       signal: aiWriteAbort.signal,
+      onDelta: (_c, full) => {
+        const live = document.getElementById("ai-write-live");
+        if (live) {
+          live.textContent = full.slice(-220);
+          live.scrollTop = live.scrollHeight;
+        }
+      },
       onProgress: (p) => {
         if (p.phase === "start") {
           setAiWriteProgress(
@@ -1348,7 +1366,7 @@ function renderCoach() {
     </div>
 
     <div class="card ai-write-card" data-od-id="ai-write-card">
-      <p class="adhd-coach-kicker">AI 撰寫</p>
+      <p class="adhd-coach-kicker">AI 撰寫<span class="ai-write-profile">${escapeHtml(store.activeWriteProfile().name)}</span></p>
       <div class="ai-write-actions">
         <button type="button" class="btn btn-sm btn-primary" id="btn-ai-write-all"
                 ${aiReadyNow ? "" : "disabled"}>撰寫初版（全部章節）</button>
@@ -1357,6 +1375,7 @@ function renderCoach() {
         <button type="button" class="btn btn-sm btn-ghost" id="btn-ai-write-stop" hidden>停止</button>
       </div>
       <div class="ai-write-progress" id="ai-write-progress" hidden></div>
+      <pre class="ai-write-live" id="ai-write-live" aria-live="polite" aria-label="AI 正在寫的內容"></pre>
       <p class="ai-write-note">${
         aiReadyNow
           ? "產出進<strong>草稿</strong>，不會直接存檔 —— 改了哪幾個字會標成藍字新增／紅字刪除線，你決定要不要留。"

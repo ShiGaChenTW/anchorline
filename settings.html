@@ -268,6 +268,35 @@
               留空就用內建的寫法，不會比較差，只是比較通用。
             </p>
 
+            <!-- 角色（profile）：同一個工作區的不同寫作情境需要不同語氣，
+                 綁死成一組等於每次換情境都要手改再改回去。 -->
+            <div class="aw-profile-bar">
+              <div class="form-group" style="flex:1 1 220px">
+                <label for="aw-profile">撰寫角色</label>
+                <select id="aw-profile"></select>
+              </div>
+              <div class="aw-profile-actions">
+                <button type="button" class="btn btn-sm" id="btn-aw-new">新增角色</button>
+                <button type="button" class="btn btn-sm" id="btn-aw-rename">改名</button>
+                <button type="button" class="btn btn-sm btn-ghost" id="btn-aw-delete">刪除</button>
+              </div>
+            </div>
+            <p class="hint" id="aw-profile-desc" style="margin:-4px 0 14px"></p>
+
+            <!-- AI 角色塑造：「全域指令要寫什麼」是空白頁問題。
+                 給一句話讓模型展開成可用的指令與範例，再由使用者改。 -->
+            <div class="aw-suggest">
+              <label for="aw-brief">讓 AI 幫你塑造角色</label>
+              <div class="aw-suggest-row">
+                <input type="text" id="aw-brief"
+                       placeholder="用一句話說這個角色是誰、寫給誰看。例如：寫給法遵團隊看，每個主張都要能指到法規條文" />
+                <button type="button" class="btn btn-sm btn-primary" id="btn-aw-suggest">產生建議</button>
+              </div>
+              <span class="hint">
+                產生的內容會**填進下面的欄位讓你改**，不會直接套用 —— 這是建議，不是決定。
+              </span>
+            </div>
+
             <div class="form-grid full">
               <div class="form-group">
                 <label for="aw-global">全域指令</label>

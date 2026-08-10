@@ -230,6 +230,26 @@ export type Approval = {
   state: "approved" | "pending" | "empty";
 };
 
+/**
+ * 一個「撰寫角色」。
+ *
+ * 欄位刻意跟 aiWriting 的頂層設定同名 —— 切換角色就是把這幾個值換掉，
+ * 下游（generateAIDraft）只讀頂層，完全不必知道 profile 的存在。
+ */
+export type AiWriteProfile = {
+  id: string;
+  /** 顯示名稱，例如「對外產品規格」「內部技術設計」 */
+  name: string;
+  /** 一句話說明這個角色什麼時候用 —— 三個月後的自己看得懂 */
+  description: string;
+  globalInstruction: string;
+  styleSample: string;
+  sectionPrompts: Record<string, string>;
+  overwriteFilled: boolean;
+  /** AI 建議產生的角色標記，方便使用者知道哪些是自己寫的 */
+  aiSuggested?: boolean;
+};
+
 export type AISettings = {
   /**
    * 模型名稱自由填。寫死聯集只會在下一次模型改版時過期，
@@ -260,6 +280,18 @@ export type AISettings = {
    * 三者都留空時行為與內建完全相同。
    */
   aiWriting: {
+    /**
+     * 撰寫角色（profile）。
+     *
+     * 同一個工作區會有不同寫法需求 —— 對外的產品規格、對內的技術設計、
+     * 給法遵看的合規說明，語氣與側重完全不同。把設定綁死成一組，等於每次
+     * 換情境都要手動改一次全域指令，然後忘記改回來。
+     *
+     * 至少永遠有一個（`profiles[0]`）。刪到剩一個時不給刪。
+     */
+    profiles: AiWriteProfile[];
+    /** 目前生效的角色 id。找不到時退回 profiles[0]。 */
+    activeProfileId: string;
     /** 併進每一節 prompt 的全域指令（產品脈絡、慣用語、禁用詞…） */
     globalInstruction: string;
     /**
