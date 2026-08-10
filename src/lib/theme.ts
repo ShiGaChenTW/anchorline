@@ -64,8 +64,38 @@ export function currentTheme(): ThemeId {
   return normalize(document.documentElement.getAttribute("data-theme"));
 }
 
+/**
+ * 介面字級倍率。
+ *
+ * 跟主題一樣走自己的 localStorage key，不進 settings 物件：
+ * 它必須在**任何**頁面第一次繪製前就套上，而 initTheme 是 14 個頁面唯一的共同入口。
+ * 放進 settings 會多一條「等 store 水合完再套」的路徑，那一瞬間的字級跳動看得出來。
+ */
+const FS_KEY = "anchorline:font-scale";
+
+export const FONT_SCALES = [
+  { id: "compact", label: "緊湊", value: 0.92 },
+  { id: "standard", label: "標準", value: 1 },
+  { id: "comfy", label: "舒適", value: 1.09 },
+  { id: "large", label: "大", value: 1.18 },
+] as const;
+
+export type FontScaleId = (typeof FONT_SCALES)[number]["id"];
+
+export function currentFontScale(): FontScaleId {
+  const raw = localStorage.getItem(FS_KEY);
+  return FONT_SCALES.some((s) => s.id === raw) ? (raw as FontScaleId) : "standard";
+}
+
+export function applyFontScale(id: string | null | undefined) {
+  const hit = FONT_SCALES.find((s) => s.id === id) ?? FONT_SCALES[1];
+  document.documentElement.style.setProperty("--fs-scale", String(hit.value));
+  localStorage.setItem(FS_KEY, hit.id);
+}
+
 export function initTheme() {
   applyTheme(currentTheme());
+  applyFontScale(currentFontScale());
   document.addEventListener("click", (e) => {
     const t = e.target as HTMLElement | null;
     const btn = t?.closest?.("[data-theme-value]") as HTMLElement | null;

@@ -12,6 +12,7 @@ import {
   extractJsonObject,
   getAiReadiness,
   isAiConfigured,
+  chatCompletionStream,
 } from "./ai-client";
 
 export type AICritique = {
@@ -200,15 +201,24 @@ No markdown fences. Be specific to the given content; never invent unrelated pro
  * 依章節欄位生成／改寫內容。
  * 必須有 API Key；禁止硬編碼 demo 文案。
  */
+export type DraftStreamOpts = {
+  /** 逐字回吐。給了就走串流；沒給就走原本的一次性請求。 */
+  onDelta?: (chunk: string, full: string) => void;
+  signal?: AbortSignal;
+};
+
 export async function generateAIDraft(
   section: Section,
   currentValues: Record<string, string>,
   prompt?: string,
+  stream?: DraftStreamOpts,
 ): Promise<Record<string, string>> {
   const ready = getAiReadiness();
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
 
   const settings = store.get().settings;
+  // 依目前專案的領域包解析：領域自訂優先，沒設定就沿用通用
+  const writing = store.activeWriting();
   const fieldSpec = section.fields
     .map((f) => `- ${f.key}（${f.label}）：${f.hint || f.type}`)
     .join("\n");
@@ -222,7 +232,11 @@ Return ONLY a JSON object whose keys are exactly the field keys listed.
 Values are markdown-friendly plain text for each field.
 Do NOT invent unrelated SaaS/2FA demos unless the current content is about that.
 Stay on-topic with the section title and existing draft.
-JSON only, no markdown fences.`;
+JSON only, no markdown fences.${
+    writing.styleSample.trim()
+      ? `\n\nMatch the tone and structure of this sample the user provided:\n"""\n${writing.styleSample.trim().slice(0, 4000)}\n"""`
+      : ""
+  }`;
 
   const user = `Section ${section.n} ${section.title}
 Guide: ${section.guide}
@@ -234,10 +248,14 @@ ${fieldSpec}
 Current draft:
 ${current}
 
-${prompt ? `User instruction:\n${prompt}\n` : "User instruction: improve and fill empty fields based on existing context.\n"}
+${writing.globalInstruction.trim() ? `Workspace guidance (applies to every section):\n${writing.globalInstruction.trim()}\n\n` : ""}${prompt ? `User instruction:\n${prompt}\n` : "User instruction: improve and fill empty fields based on existing context.\n"}
 Return JSON with keys: ${section.fields.map((f) => f.key).join(", ")}`;
 
-  const raw = await chatCompletion(withDomain(system), user);
+  // 串流只影響「怎麼拿到文字」，不影響之後的解析 —— 模型輸出是一份 JSON，
+  // 逐字時還不是合法 JSON，所以邊收邊顯示、收完才 parse。
+  const raw = stream?.onDelta
+    ? await chatCompletionStream(withDomain(system), user, stream.onDelta, stream.signal)
+    : await chatCompletion(withDomain(system), user);
   const obj = extractJsonObject(raw);
   if (!obj) {
     // 若模型只回一段文字且只有單一主欄位，塞進第一個 textarea
@@ -316,3 +334,160 @@ Deliver a concise operational result for this agent job.`;
 }
 
 export { getAiReadiness, isAiConfigured, AiError };
+
+// ── AI 撰寫初版 PRD ────────────────────────────────────────────
+
+export type WriteProgress = {
+  /** 目前處理到第幾節（1-based） */
+  index: number;
+  total: number;
+  section: Section;
+  phase: "start" | "done" | "failed" | "skipped";
+  /** done 時帶回這一節寫出來的欄位 */
+  patch?: Record<string, string>;
+  error?: string;
+};
+
+export type WriteFullOptions = {
+  /** 只寫這幾節；不給就全部 */
+  sectionIds?: string[];
+  /**
+   * 已經有內容的章節要不要重寫。
+   * 預設 false —— 覆蓋使用者已經寫好的東西是最不該預設發生的事。
+   */
+  overwriteFilled?: boolean;
+  /** 額外指令，會併進每一節的 prompt */
+  instruction?: string;
+  onProgress?: (p: WriteProgress) => void;
+  /** 逐字回吐目前這一節的原始輸出（尚未解析的 JSON 文字） */
+  onDelta?: (chunk: string, full: string, section: Section) => void;
+  signal?: AbortSignal;
+};
+
+/** 這一節算不算「已經有內容」 */
+function sectionHasContent(values: Record<string, string>): boolean {
+  return Object.values(values).join("").trim().length >= 20;
+}
+
+/**
+ * 逐節撰寫初版 PRD。
+ *
+ * **刻意序列而非並行。** 三個理由：
+ * 1. 後面的章節要看得到前面寫了什麼（目標要呼應問題陳述），並行就各寫各的。
+ * 2. 使用者要看得到「正在寫哪一節」—— 並行只會得到一個轉圈圈。
+ * 3. 免費／低階 API 金鑰幾乎都有併發限制，並行第一個撞上的就是 429。
+ *
+ * 每寫完一節就立刻回報並落地，中途取消會保留已完成的部分 —— 寫了五節被
+ * 取消卻整批丟掉，比不做這個功能還糟。
+ */
+export async function writeFullPrd(
+  sections: Section[],
+  valuesOf: (s: Section) => Record<string, string>,
+  opts: WriteFullOptions = {},
+): Promise<{ written: number; failed: number; skipped: number }> {
+  const ready = getAiReadiness();
+  if (!ready.ok) throw new AiError(ready.reason, "not_configured");
+
+  const targets = opts.sectionIds?.length
+    ? sections.filter((s) => opts.sectionIds!.includes(s.id))
+    : sections;
+
+  let written = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (let i = 0; i < targets.length; i++) {
+    if (opts.signal?.aborted) break;
+    const section = targets[i]!;
+    const base = { index: i + 1, total: targets.length, section };
+
+    const current = valuesOf(section);
+    const overwrite = opts.overwriteFilled ?? store.get().settings.aiWriting?.overwriteFilled ?? false;
+    if (!overwrite && sectionHasContent(current)) {
+      skipped++;
+      opts.onProgress?.({ ...base, phase: "skipped" });
+      continue;
+    }
+
+    opts.onProgress?.({ ...base, phase: "start" });
+    try {
+      // 每節覆寫優先於本次的一次性指令；兩者都沒有就用內建 prompt
+      const perSection = store.activeWriting().sectionPrompts[section.id]?.trim();
+      const patch = await generateAIDraft(section, current, perSection || opts.instruction, {
+        onDelta: opts.onDelta ? (c, f) => opts.onDelta!(c, f, section) : undefined,
+        signal: opts.signal,
+      });
+      if (opts.signal?.aborted) break;
+      written++;
+      opts.onProgress?.({ ...base, phase: "done", patch });
+    } catch (e) {
+      // 單節失敗不中斷整批 —— 一個章節寫壞不該讓另外六節也沒得寫
+      failed++;
+      opts.onProgress?.({
+        ...base,
+        phase: "failed",
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  return { written, failed, skipped };
+}
+
+// ── AI 角色塑造建議 ────────────────────────────────────────────
+
+export type SuggestedProfile = {
+  name: string;
+  description: string;
+  globalInstruction: string;
+  styleSample: string;
+};
+
+/**
+ * 讓 AI 幫忙塑造一個撰寫角色。
+ *
+ * 為什麼值得做：「全域指令要寫什麼」是空白頁問題 —— 使用者知道自己想要
+ * 什麼調性，但要把它寫成一段對模型有效的指令是另一回事。給一句話（「寫給
+ * 法遵看的」），讓模型把它展開成可用的指令與範例，再由使用者修改，比
+ * 從零開始寫容易得多。
+ *
+ * 產出**一定要讓使用者能改** —— 這是建議不是決定，所以呼叫端會把結果填進
+ * 表單而不是直接套用。
+ */
+export async function suggestWriteProfile(brief: string): Promise<SuggestedProfile> {
+  const ready = getAiReadiness();
+  if (!ready.ok) throw new AiError(ready.reason, "not_configured");
+  const settings = store.get().settings;
+
+  const system = `You design "writing personas" for a PRD authoring tool.
+Write in ${langHint(settings)}.
+Given a short brief about who the document is for and what tone is wanted,
+produce a reusable persona.
+
+Return ONLY a JSON object with these keys:
+- name: short label, 2-8 characters, no punctuation
+- description: one sentence on when to use this persona
+- globalInstruction: 3-6 concrete directives the model should follow every time.
+  Be specific and testable ("每個主張要指到一份資料來源"), never vague ("寫得專業一點").
+  Include at least one thing to AVOID.
+- styleSample: a 60-120 word excerpt of PRD prose written IN this persona,
+  so the model can imitate tone and structure.
+JSON only, no markdown fences.`;
+
+  const user = `Brief: ${brief.trim()}`;
+  const raw = await chatCompletion(system, user);
+  const obj = extractJsonObject(raw);
+  if (!obj) throw new AiError("模型沒有回傳可用的角色 JSON，請換個說法再試", "parse");
+
+  const pick = (k: string) => String(obj[k] ?? "").trim();
+  const name = pick("name") || "新角色";
+  const globalInstruction = pick("globalInstruction");
+  if (!globalInstruction) throw new AiError("模型回傳的角色缺少指令內容", "empty");
+
+  return {
+    name: name.slice(0, 24),
+    description: pick("description").slice(0, 120),
+    globalInstruction,
+    styleSample: pick("styleSample"),
+  };
+}

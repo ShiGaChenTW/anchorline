@@ -38,17 +38,17 @@
   }
   .login-brand h1 {
     margin: 0;
-    font-size: 18px;
+    font-size: var(--fs-6);
     font-weight: var(--weight-em);
   }
   .login-brand p {
     margin: 2px 0 0;
-    font-size: 12px;
+    font-size: var(--fs-2);
     color: var(--muted);
   }
   .login-card label {
     display: block;
-    font-size: 12px;
+    font-size: var(--fs-2);
     font-weight: var(--weight-em);
     color: var(--muted);
     margin: 14px 0 6px;
@@ -56,15 +56,9 @@
   .login-card select,
   .login-card input[type="password"],
   .login-card input[type="text"] {
+    /* 只留這一頁需要的寬度與字級；邊框／圓角／背景走 shared.css 的全域基底 */
     width: 100%;
-    box-sizing: border-box;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 10px 12px;
-    color: var(--fg);
-    font: inherit;
-    font-size: 14px;
+    font-size: var(--fs-4);
   }
   .login-card select:focus,
   .login-card input:focus {
@@ -75,7 +69,7 @@
   .role-chip {
     display: inline-flex;
     margin-top: 8px;
-    font-size: 11px;
+    font-size: var(--fs-1);
     padding: 3px 8px;
     border-radius: var(--radius-pill);
     border: 1px solid var(--border);
@@ -95,7 +89,7 @@
   }
   .login-hint {
     margin-top: 16px;
-    font-size: 12px;
+    font-size: var(--fs-2);
     color: var(--muted);
     line-height: 1.5;
     border-top: 1px solid var(--border);
@@ -103,14 +97,14 @@
   }
   .login-hint code {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--fs-1);
     background: var(--inset);
     padding: 1px 5px;
     border-radius: 4px;
   }
   .login-error {
     margin-top: 10px;
-    font-size: 13px;
+    font-size: var(--fs-3);
     color: var(--danger);
     min-height: 1.2em;
   }
@@ -121,7 +115,7 @@
     margin-top: 10px;
   }
   .quick-roles button {
-    font-size: 11px;
+    font-size: var(--fs-1);
     padding: 6px 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);

@@ -1,3 +1,155 @@
+/* ── 字級階梯 ─────────────────────────────────────────────────
+   盤點時全檔有 447 個硬編 px 字級、21 種數值（含 6 種半像素），
+   而既有的 --text-xs~xl token 只有 7 處在用 —— 有規範，然後所有人繞過它。
+
+   這一組是唯一的字級來源。刻意**不定義在各主題的 :root 裡**：字級跟配色無關，
+   放進主題等於每加一個主題就要重抄一次，然後其中一份會忘記改。
+
+   用 calc(px * var(--fs-scale)) 而不是 rem：rem 依賴 html font-size，
+   而本檔已有 11 個 rem 字級在用，改根字級會同時動到它們，變成兩套互相干擾的縮放。 */
+:root {
+  --fs-scale: 1;
+  --fs-1: calc(12px * var(--fs-scale));
+  --fs-2: calc(13px * var(--fs-scale));
+  --fs-3: calc(14px * var(--fs-scale));
+  --fs-4: calc(15px * var(--fs-scale));
+  --fs-5: calc(17px * var(--fs-scale));
+  --fs-6: calc(19px * var(--fs-scale));
+  --fs-7: calc(23px * var(--fs-scale));
+  --fs-8: calc(29px * var(--fs-scale));
+  --fs-9: calc(34px * var(--fs-scale));
+
+  /* 控制項高度：三段，所有控制項共用。
+     值刻意貼近改動前的現況（按鈕 28→32、欄位 38→40），把版面風險壓到最低。 */
+  --ctl-h-sm: 26px;
+  --ctl-h-md: 32px;
+  --ctl-h-lg: 40px;
+  /* 下拉箭頭：自繪的，因為 appearance:none 之後原生箭頭也一起消失。
+     兩種顏色由主題切換（見 html[data-theme="kami"]）。 */
+  --ctl-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b949e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* ── 控制項基底 ───────────────────────────────────────────────
+   盤點時全 App 沒有任何全域表單基底：input / select / textarea 從未被當作
+   元素選擇器設定樣式，只有 .field input[type=text] 這類特定包裝 ——
+   沒被包住的控制項就直接吃瀏覽器原生外觀。設定頁一頁就量到 select 三種高度、
+   checkbox 完全原生（appearance: auto）。
+
+   appearance: none 是關鍵：select 與 checkbox 原本走 macOS 原生繪製，
+   跟其他自繪控制項不可能一致，那不是調參數能解決的。 */
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="search"],
+input[type="email"],
+input[type="url"],
+input[type="date"],
+select,
+textarea {
+  /* 淺色主題：箭頭要換深色，%238b949e 在白底上幾乎看不見 */
+  --ctl-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235c5346' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
+  box-sizing: border-box;
+  min-height: var(--ctl-h-lg);
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: var(--fs-3);
+  line-height: 1.5;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+textarea {
+  /* 多行不能鎖高度，只鎖起始高度 */
+  padding: 8px 10px;
+  min-height: calc(var(--ctl-h-lg) * 1.8);
+  resize: vertical;
+}
+input[type="text"]:hover,
+input[type="password"]:hover,
+input[type="number"]:hover,
+input[type="search"]:hover,
+select:hover,
+textarea:hover {
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+input[disabled],
+select[disabled],
+textarea[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  /* 右側留給自繪箭頭；不留的話最長的選項會壓在箭頭底下 */
+  padding-right: 30px;
+  background-image: var(--ctl-caret);
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  cursor: pointer;
+}
+
+/* 勾選框／單選鈕自繪。
+   原本只有一條規則，而且限定在 #set-pane 裡 —— 其餘畫面全是原生外觀。 */
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-content: center;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]::before,
+input[type="radio"]::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  transform: scale(0);
+  transition: transform var(--motion-fast) var(--ease-standard);
+  background: var(--accent-on);
+  /* 打勾用 clip-path 畫，不用字元 —— 字元會跟著字型變形 */
+  clip-path: polygon(14% 44%, 0 65%, 40% 100%, 100% 16%, 82% 0, 37% 62%);
+}
+input[type="radio"]::before { clip-path: none; border-radius: 50%; width: 7px; height: 7px; }
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+input[type="checkbox"]:checked::before,
+input[type="radio"]:checked::before { transform: scale(1); }
+input[type="checkbox"]:hover:not([disabled]),
+input[type="radio"]:hover:not([disabled]) {
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
+}
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 /* Default tokens ≈ GitHub Dark；kami / github 以 data-theme 覆寫 */
 :root {
   /* App 圖示（logos/export/logo.svg）。
@@ -281,6 +433,25 @@
   --leading-tight: 1.25;
   /* 等寬字不吃負字距 */
   --tracking-display: 0.01em;
+
+  /* --fs-* 階梯的密集覆寫。
+     這裡明知故犯了檔頭那條「字級不定義在主題裡」——理由：終端介面的密度
+     不是配色偏好，是這套主題的定義本身（等寬字比 sans 寬約 15%，照標準
+     字級走會比 DARK 佔更多空間，跟「終端」的意思相反）。而 --text-* 只
+     剩少數地方在用，565 個位置已經搬到 --fs-*，只改 --text-* 等於半殘。
+     代價是這 9 個值會跟基準漂移，所以把基準抄在右邊，改基準時 diff 看得到。
+     kami / github 不覆寫，沿用基準——「每加一個主題重抄一次」的疑慮只落在
+     這一個主題上。
+     必須保留 var(--fs-scale)：使用者的緊湊／標準／舒適／大設定仍要生效。 */
+  --fs-1: calc(11px * var(--fs-scale)); /* 基準 12 */
+  --fs-2: calc(12px * var(--fs-scale)); /* 基準 13 */
+  --fs-3: calc(13px * var(--fs-scale)); /* 基準 14 */
+  --fs-4: calc(14px * var(--fs-scale)); /* 基準 15 */
+  --fs-5: calc(15px * var(--fs-scale)); /* 基準 17 */
+  --fs-6: calc(17px * var(--fs-scale)); /* 基準 19 */
+  --fs-7: calc(20px * var(--fs-scale)); /* 基準 23 */
+  --fs-8: calc(24px * var(--fs-scale)); /* 基準 29 */
+  --fs-9: calc(28px * var(--fs-scale)); /* 基準 34 */
   /* 矩形是唯一形狀。--radius-pill 一併歸零，否則 .count 之類還是藥丸 */
   --radius-sm: 0;
   --radius-md: 0;
@@ -328,7 +499,7 @@ html, body { height: 100%; }
 body {
   margin: 0;
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: var(--fs-4);
   font-weight: var(--weight-ui);
   line-height: 1.5;
   color: var(--fg);
@@ -377,7 +548,7 @@ html[data-theme="terminal"] body {
   padding: 4px 12px;
   border-top: 1px solid var(--border);
   background: color-mix(in oklab, var(--surface) 92%, var(--bg));
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   line-height: 1.3;
   color: var(--fg-2);
   z-index: 25;
@@ -426,7 +597,7 @@ html[data-theme="terminal"] body {
 }
 .app-status-pill {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--fs-1);
   font-weight: 650;
   padding: 1px 7px;
   border-radius: 999px;
@@ -470,14 +641,14 @@ html[data-theme="terminal"] body {
 }
 .app-status-clock {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--meta);
   font-variant-numeric: tabular-nums;
 }
 html.adhd-calm .app-status-bar {
   min-height: 30px;
   padding: 5px 14px;
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 @media (max-width: 900px) {
   .app-status-bar {
@@ -500,7 +671,7 @@ html.adhd-calm .app-status-bar {
 }
 .kbd {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   padding: 1px 5px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -605,7 +776,7 @@ html.adhd-calm .app-status-bar {
 .panel-expand-label {
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-weight: 600;
   letter-spacing: 0.12em;
   line-height: 1;
@@ -723,7 +894,7 @@ body.is-resizing .main {
 .rail-brand strong,
 .rail-brand-text strong {
   display: block;
-  font-size: 13px;
+  font-size: var(--fs-3);
   font-weight: 650;
   color: var(--fg);
   letter-spacing: -0.02em;
@@ -732,7 +903,7 @@ body.is-resizing .main {
 }
 .rail-brand span,
 .rail-brand-text span {
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   font-family: var(--mono);
 }
@@ -759,7 +930,7 @@ body.is-resizing .main {
   min-width: 0;
 }
 .rail-context-kicker {
-  font-size: 10px;
+  font-size: var(--fs-1);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -767,13 +938,13 @@ body.is-resizing .main {
   margin-bottom: 2px;
 }
 .rail-context-mode {
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   font-weight: 600;
   color: var(--accent);
   margin-bottom: 4px;
 }
 .rail-context-project {
-  font-size: 13.5px;
+  font-size: var(--fs-4);
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.3;
@@ -784,7 +955,7 @@ body.is-resizing .main {
 .rail-context-status {
   display: inline-block;
   margin-top: 6px;
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-weight: 650;
   padding: 2px 8px;
   border-radius: 999px;
@@ -811,7 +982,7 @@ body.is-resizing .main {
 }
 .rail-context-meta {
   margin-top: 5px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   line-height: 1.35;
   overflow: hidden;
@@ -823,7 +994,7 @@ html.adhd-calm .rail-context {
   padding: 12px;
 }
 html.adhd-calm .rail-context-project {
-  font-size: 14px;
+  font-size: var(--fs-4);
 }
 
 .rail-nav {
@@ -836,7 +1007,7 @@ html.adhd-calm .rail-context-project {
 }
 .nav-label {
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: var(--fs-1);
   text-transform: uppercase;
   letter-spacing: 2.4px;
   color: var(--muted);
@@ -851,7 +1022,7 @@ html.adhd-calm .rail-context-project {
   border-radius: var(--radius-sm);
   color: var(--fg-2);
   text-decoration: none;
-  font-size: 13.5px;
+  font-size: var(--fs-4);
   font-weight: 400;
   border: 1px solid transparent;
   cursor: pointer;
@@ -877,7 +1048,7 @@ html.adhd-calm .rail-context-project {
 .nav-item .count {
   margin-left: auto;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   background: var(--inset);
   padding: 0 6px;
@@ -891,7 +1062,7 @@ html.adhd-calm .rail-context-project {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
 }
 /* 目前使用者 + 權限面板（側欄底部） */
@@ -911,7 +1082,7 @@ html.adhd-calm .rail-context-project {
   width: 28px;
   height: 28px;
   margin-top: 1px;
-  font-size: 11px;
+  font-size: var(--fs-1);
 }
 .rail-user-body {
   flex: 1;
@@ -932,7 +1103,7 @@ html.adhd-calm .rail-context-project {
 .rail-foot-name {
   font-weight: 600;
   color: var(--fg);
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
@@ -940,7 +1111,7 @@ html.adhd-calm .rail-context-project {
 }
 .rail-foot-title,
 .rail-foot-role {
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   line-height: 1.3;
   white-space: nowrap;
@@ -951,7 +1122,7 @@ html.adhd-calm .rail-context-project {
 .rail-user-top .btn-logout {
   flex-shrink: 0;
   padding: 2px 6px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   margin-left: auto;
   margin-top: -1px;
 }
@@ -964,7 +1135,7 @@ html.adhd-calm .rail-context-project {
 .role-badge {
   display: inline-flex;
   align-items: center;
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-weight: 500;
   letter-spacing: 0.02em;
   padding: 1px 7px;
@@ -990,7 +1161,7 @@ html.adhd-calm .rail-context-project {
   background: var(--done-bg);
 }
 .rail-user-kind {
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   color: var(--meta);
   font-family: var(--mono);
 }
@@ -1000,7 +1171,7 @@ html.adhd-calm .rail-context-project {
   gap: 4px;
 }
 .perm-chip {
-  font-size: 10px;
+  font-size: var(--fs-1);
   font-family: var(--mono);
   color: var(--fg-2);
   background: var(--inset);
@@ -1015,7 +1186,7 @@ html.adhd-calm .rail-context-project {
   border-radius: 50%;
   background: var(--accent);
   color: var(--fg);
-  font-size: 10px;
+  font-size: var(--fs-1);
   font-weight: 500;
   display: grid;
   place-items: center;
@@ -1051,13 +1222,13 @@ html.adhd-calm .rail-context-project {
 }
 .toolbar h1 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--fs-5);
   font-weight: 400;
   letter-spacing: -0.01em;
   color: var(--fg);
 }
 .toolbar .sub {
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
   font-family: var(--mono);
 }
@@ -1077,7 +1248,7 @@ html.adhd-calm .rail-context-project {
   background: transparent;
   outline: none;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-3);
   width: 100%;
   color: var(--fg);
 }
@@ -1089,8 +1260,11 @@ html.adhd-calm .rail-context-project {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 14px;
-  font-size: 13px;
+  /* 高度由 token 決定而不是由 padding 推出來 —— 用 padding 推的話，
+     字級一改高度就跟著跑，兩顆字數不同的按鈕也會不等高。 */
+  min-height: var(--ctl-h-md);
+  padding: 0 14px;
+  font-size: var(--fs-3);
   font-weight: var(--weight-em);
   border-radius: var(--btn-radius);
   border: 1px solid var(--border);
@@ -1133,10 +1307,13 @@ html.adhd-calm .rail-context-project {
   border-color: var(--border-muted);
 }
 .btn-sm {
-  padding: 3px 10px;
-  font-size: 12px;
+  min-height: var(--ctl-h-sm);
+  padding: 0 10px;
+  font-size: var(--fs-2);
   border-radius: var(--radius-sm);
 }
+/* 跟表單欄位並排時用這個，才會對齊 */
+.btn-lg { min-height: var(--ctl-h-lg); padding: 0 18px; }
 .btn[disabled] { opacity: 0.45; pointer-events: none; }
 
 .pill {
@@ -1146,7 +1323,7 @@ html.adhd-calm .rail-context-project {
   padding: 2px 8px;
   border-radius: var(--radius-pill);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-weight: 400;
   letter-spacing: 0.02em;
   border: 1px solid var(--border);
@@ -1188,13 +1365,13 @@ table.data td {
   text-align: left;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border-muted);
-  font-size: 13.5px;
+  font-size: var(--fs-4);
   vertical-align: middle;
   color: var(--fg-2);
 }
 table.data th {
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: var(--fs-1);
   text-transform: uppercase;
   letter-spacing: 1.4px;
   color: var(--muted);
@@ -1257,7 +1434,7 @@ table.data tbody tr.selected td.col-actions {
   background: var(--danger-bg);
   border-color: color-mix(in oklab, var(--danger) 28%, transparent);
 }
-.mono { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.mono { font-family: var(--mono); font-size: var(--fs-2); color: var(--muted); }
 .progress {
   display: flex;
   align-items: center;
@@ -1280,7 +1457,7 @@ table.data tbody tr.selected td.col-actions {
   opacity: 0.85;
 }
 .progress-bar.ok > i { background: var(--success); opacity: 1; }
-.progress span { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 32px; }
+.progress span { font-family: var(--mono); font-size: var(--fs-1); color: var(--muted); width: 32px; }
 
 /* Filters */
 .filters {
@@ -1298,7 +1475,7 @@ table.data tbody tr.selected td.col-actions {
   border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   background: transparent;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   color: var(--muted);
   cursor: pointer;
   font-family: inherit;
@@ -1368,7 +1545,7 @@ table.data tbody tr.selected td.col-actions {
 }
 .wb-head h2 {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-family: var(--font-body);
   text-transform: uppercase;
   letter-spacing: 2px;
@@ -1399,13 +1576,13 @@ table.data tbody tr.selected td.col-actions {
   background: var(--inset);
   border-color: var(--border);
 }
-.sec .n { font-family: var(--mono); font-size: 11px; color: var(--muted); padding-top: 2px; }
+.sec .n { font-family: var(--mono); font-size: var(--fs-1); color: var(--muted); padding-top: 2px; }
 .sec.active .n { color: var(--fg-2); }
-.sec .t { font-size: 13px; font-weight: 400; line-height: 1.3; color: var(--fg); }
-.sec .d { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.sec .t { font-size: var(--fs-3); font-weight: 400; line-height: 1.3; color: var(--fg); }
+.sec .d { font-size: var(--fs-2); color: var(--muted); margin-top: 2px; }
 .sec .st {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-1);
   padding: 1px 6px;
   border-radius: var(--radius-pill);
   background: var(--inset);
@@ -1437,24 +1614,24 @@ table.data tbody tr.selected td.col-actions {
 }
 .editor-body h3 {
   margin: 0 0 4px;
-  font-size: 22px;
+  font-size: var(--fs-7);
   font-weight: 400;
   letter-spacing: -0.02em;
   color: var(--fg);
 }
-.editor-body .lead { color: var(--muted); font-size: 13.5px; margin: 0 0 18px; }
+.editor-body .lead { color: var(--muted); font-size: var(--fs-4); margin: 0 0 18px; }
 .guide {
   background: var(--inset);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 12px 14px;
   margin-bottom: 18px;
-  font-size: 13px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
 }
 .guide strong {
   display: block;
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-family: var(--font-body);
   text-transform: uppercase;
   letter-spacing: 1.6px;
@@ -1473,7 +1650,7 @@ table.data tbody tr.selected td.col-actions {
   justify-content: space-between;
   align-items: baseline;
   gap: 10px;
-  font-size: 15px;
+  font-size: var(--fs-5);
   font-weight: 600;
   letter-spacing: -0.01em;
   margin: 22px 0 8px;
@@ -1483,7 +1660,7 @@ table.data tbody tr.selected td.col-actions {
   font-weight: 400;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-2);
   white-space: nowrap;
 }
 .field:first-of-type label { margin-top: 8px; }
@@ -1500,9 +1677,10 @@ table.data tbody tr.selected td.col-actions {
   border-radius: var(--radius-sm);
   padding: 10px 12px;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--fs-4);
   color: var(--fg);
-  background: var(--bg);
+  /* background-color 而非簡寫：簡寫會把全域基底畫的下拉箭頭洗成 none */
+  background-color: var(--bg);
   outline: none;
   resize: vertical;
   transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
@@ -1515,12 +1693,12 @@ table.data tbody tr.selected td.col-actions {
 }
 .field textarea { min-height: 120px; line-height: 1.55; color: var(--fg-2); }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.hint { font-size: var(--fs-2); color: var(--muted); margin-top: 6px; }
 .hint.err { color: color-mix(in oklab, var(--danger) 75%, var(--fg)); }
 .quality { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .q-tag {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   padding: 3px 8px;
   border-radius: var(--radius-pill);
   background: var(--inset);
@@ -1548,19 +1726,19 @@ table.data tbody tr.selected td.col-actions {
 }
 .card h4 {
   margin: 0 0 8px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-family: var(--font-body);
   text-transform: uppercase;
   letter-spacing: 1.6px;
   color: var(--muted);
   font-weight: 400;
 }
-.card p { margin: 0; font-size: 13px; color: var(--fg-2); }
-.card ol, .card ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--fg-2); }
+.card p { margin: 0; font-size: var(--fs-3); color: var(--fg-2); }
+.card ol, .card ul { margin: 0; padding-left: 18px; font-size: var(--fs-3); color: var(--fg-2); }
 .card li { margin: 4px 0; }
 .card a { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
 .example {
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   background: var(--bg);
   border-left: 2px solid var(--border);
   padding: 8px 10px;
@@ -1586,7 +1764,7 @@ table.data tbody tr.selected td.col-actions {
   display: grid;
   place-items: center;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: var(--fs-3);
   font-weight: 500;
   color: var(--fg);
 }
@@ -1595,7 +1773,7 @@ table.data tbody tr.selected td.col-actions {
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  font-size: 13px;
+  font-size: var(--fs-3);
   cursor: pointer;
   color: var(--fg-2);
 }
@@ -1623,14 +1801,14 @@ table.data tbody tr.selected td.col-actions {
   color: inherit;
 }
 .t-card:hover { border-color: rgba(226, 226, 226, 0.55); }
-.t-card h3 { margin: 0; font-size: 14.5px; font-weight: 400; color: var(--fg); }
-.t-card p { margin: 0; font-size: 12.5px; color: var(--muted); flex: 1; }
+.t-card h3 { margin: 0; font-size: var(--fs-5); font-weight: 400; color: var(--fg); }
+.t-card p { margin: 0; font-size: var(--fs-3); color: var(--muted); flex: 1; }
 .t-card .meta {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   padding-top: 6px;
   border-top: 1px solid var(--border-muted);
@@ -1641,7 +1819,7 @@ table.data tbody tr.selected td.col-actions {
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid var(--border-muted);
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--fg-2);
   font-family: var(--mono);
 }
@@ -1679,7 +1857,7 @@ table.data tbody tr.selected td.col-actions {
 .approval-card:hover { border-color: rgba(226, 226, 226, 0.5); }
 .approval-card .role {
   grid-column: 2;
-  font-size: 11px;
+  font-size: var(--fs-1);
   text-transform: uppercase;
   letter-spacing: 1.4px;
   color: var(--muted);
@@ -1687,7 +1865,7 @@ table.data tbody tr.selected td.col-actions {
 }
 .approval-card .name {
   grid-column: 2;
-  font-size: 13px;
+  font-size: var(--fs-3);
   color: var(--fg);
   font-weight: 400;
 }
@@ -1720,7 +1898,7 @@ table.data tbody tr.selected td.col-actions {
   align-items: center;
   gap: 12px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   padding: 4px 0;
 }
@@ -1751,7 +1929,7 @@ table.data tbody tr.selected td.col-actions {
 }
 .review-doc h1 {
   margin: 0 0 10px;
-  font-size: 28px;
+  font-size: var(--fs-8);
   font-weight: 400;
   letter-spacing: -0.025em;
   line-height: 1.15;
@@ -1760,7 +1938,7 @@ table.data tbody tr.selected td.col-actions {
 }
 .review-doc .lede {
   color: var(--doc-muted);
-  font-size: 15px;
+  font-size: var(--fs-5);
   line-height: 1.55;
   max-width: 58ch;
   margin: 0 0 20px;
@@ -1769,7 +1947,7 @@ table.data tbody tr.selected td.col-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 14px 22px;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
   margin-bottom: 28px;
   padding: 14px 0 18px;
@@ -1779,7 +1957,7 @@ table.data tbody tr.selected td.col-actions {
 .review-doc .meta-line strong {
   display: block;
   font-family: var(--font-body);
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   text-transform: uppercase;
   letter-spacing: 1.6px;
   font-weight: 400;
@@ -1791,7 +1969,7 @@ table.data tbody tr.selected td.col-actions {
   scroll-margin-top: 24px;
 }
 .review-doc h2 {
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-weight: 400;
   margin: 0 0 12px;
   padding-bottom: 8px;
@@ -1802,14 +1980,14 @@ table.data tbody tr.selected td.col-actions {
 }
 .review-doc p {
   margin: 0 0 10px;
-  font-size: 14.5px;
+  font-size: var(--fs-5);
   line-height: 1.6;
   color: var(--fg-2);
   max-width: 62ch;
 }
 .review-doc p strong { color: var(--fg); font-weight: 500; }
 .quote-block {
-  font-size: 15px;
+  font-size: var(--fs-5);
   line-height: 1.55;
   border-left: 2px solid var(--border);
   padding: 12px 16px;
@@ -1823,7 +2001,7 @@ table.data tbody tr.selected td.col-actions {
   display: block;
   margin-top: 10px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
 }
 
@@ -1898,17 +2076,17 @@ table.data tbody tr.selected td.col-actions {
   gap: 8px;
   margin-bottom: 6px;
 }
-.comment-hd strong { font-size: 13px; font-weight: 500; color: var(--fg); }
+.comment-hd strong { font-size: var(--fs-3); font-weight: 500; color: var(--fg); }
 .comment-hd time {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   margin-left: auto;
 }
-.comment p { margin: 0; font-size: 13px; color: var(--fg-2); line-height: 1.5; }
+.comment p { margin: 0; font-size: var(--fs-3); color: var(--fg-2); line-height: 1.5; }
 .comment .anchor {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--meta);
   margin-bottom: 6px;
   text-decoration: underline;
@@ -1929,7 +2107,7 @@ table.data tbody tr.selected td.col-actions {
   border-radius: var(--radius-sm);
   padding: 8px 10px;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-3);
   resize: vertical;
   outline: none;
   background: var(--bg);
@@ -1960,12 +2138,12 @@ table.data tbody tr.selected td.col-actions {
 .launcher header { margin-bottom: 28px; }
 .launcher h1 {
   margin: 0 0 8px;
-  font-size: 32px;
+  font-size: var(--fs-9);
   font-weight: 400;
   letter-spacing: -0.025em;
   color: var(--fg);
 }
-.launcher .lede { color: var(--fg-2); margin: 0; max-width: 52ch; font-size: 15px; }
+.launcher .lede { color: var(--fg-2); margin: 0; max-width: 52ch; font-size: var(--fs-5); }
 .screen-list { display: grid; gap: 10px; }
 .screen-link {
   display: grid;
@@ -1983,7 +2161,7 @@ table.data tbody tr.selected td.col-actions {
 .screen-link:hover { border-color: rgba(226, 226, 226, 0.55); }
 .screen-link .num {
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: var(--fs-4);
   font-weight: 400;
   color: var(--fg);
   background: var(--inset);
@@ -1994,9 +2172,9 @@ table.data tbody tr.selected td.col-actions {
   display: grid;
   place-items: center;
 }
-.screen-link h2 { margin: 0 0 2px; font-size: 15px; font-weight: 400; color: var(--fg); }
-.screen-link p { margin: 0; font-size: 13px; color: var(--muted); }
-.screen-link .go { color: var(--fg-2); font-weight: 400; font-size: 13px; }
+.screen-link h2 { margin: 0 0 2px; font-size: var(--fs-5); font-weight: 400; color: var(--fg); }
+.screen-link p { margin: 0; font-size: var(--fs-3); color: var(--muted); }
+.screen-link .go { color: var(--fg-2); font-weight: 400; font-size: var(--fs-3); }
 
 .toast {
   position: fixed;
@@ -2007,7 +2185,7 @@ table.data tbody tr.selected td.col-actions {
   border: 1px solid var(--border);
   padding: 10px 14px;
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: var(--fs-3);
   box-shadow: var(--elev-raised);
   opacity: 0;
   transform: translateY(8px);
@@ -2044,7 +2222,7 @@ table.data tbody tr.selected td.col-actions {
   align-items: center;
   justify-content: space-between;
 }
-.modal header h3 { margin: 0; font-size: 15px; font-weight: 400; }
+.modal header h3 { margin: 0; font-size: var(--fs-5); font-weight: 400; }
 .modal .body { padding: 16px; }
 .modal footer {
   padding: 12px 16px;
@@ -2061,7 +2239,7 @@ table.data tbody tr.selected td.col-actions {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-2);
   white-space: pre-wrap;
   line-height: 1.5;
   max-height: 280px;
@@ -2078,7 +2256,7 @@ table.data tbody tr.selected td.col-actions {
 }
 .tab {
   padding: 10px 14px;
-  font-size: 13px;
+  font-size: var(--fs-3);
   font-weight: 400;
   color: var(--muted);
   border: 0;
@@ -2109,20 +2287,20 @@ table.data tbody tr.selected td.col-actions {
 }
 .stat .k {
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 1.4px;
 }
 .stat .v {
-  font-size: 22px;
+  font-size: var(--fs-7);
   font-weight: 400;
   letter-spacing: -0.02em;
   margin-top: 2px;
   font-variant-numeric: tabular-nums;
   color: var(--fg);
 }
-.stat .v small { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 4px; }
+.stat .v small { font-size: var(--fs-2); color: var(--muted); font-weight: 400; margin-left: 4px; }
 
 
 /* ─── Fluid / responsive (window resize) ─── */
@@ -2212,7 +2390,7 @@ html, body {
   .mobile-bar { display: grid; }
   .toolbar { padding: 10px 12px; }
   .content { padding-left: 12px; padding-right: 12px; }
-  .export-menu .btn { padding: 6px 10px; font-size: 12px; }
+  .export-menu .btn { padding: 6px 10px; font-size: var(--fs-2); }
 }
 
 @media (max-width: 720px) {
@@ -2220,10 +2398,10 @@ html, body {
   .titlebar-meta {
     max-width: min(420px, 70vw);
   }
-  .titlebar-meta .theme-switch button { padding: 4px 5px; font-size: 10px; }
+  .titlebar-meta .theme-switch button { padding: 4px 5px; font-size: var(--fs-1); }
   .titlebar-meta > span:not(.pill):not(.kbd) { display: none; }
   .titlebar-title { display: none; }
-  .toolbar h1 { font-size: 16px; }
+  .toolbar h1 { font-size: var(--fs-5); }
   .search { min-width: 0; flex: 1 1 140px; }
   .grid-cards { grid-template-columns: 1fr; }
   .approval-strip { flex-wrap: wrap; }
@@ -2233,7 +2411,7 @@ html, body {
 
 @media (max-width: 480px) {
   .stats { grid-template-columns: 1fr; }
-  .toolbar .btn, .toolbar a.btn { font-size: 12px; }
+  .toolbar .btn, .toolbar a.btn { font-size: var(--fs-2); }
 }
 
 
@@ -2255,7 +2433,7 @@ html, body {
   border-radius: var(--radius-sm);
   color: var(--muted);
   text-decoration: none;
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-weight: var(--weight-em);
   transition: color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard);
 }
@@ -2394,7 +2572,7 @@ html.reduce-motion .attn-expand-enter {
 .adhd-page-chrome-title .sub,
 .adhd-editor-chrome-title .sub {
   margin-top: 2px;
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   color: var(--meta);
   font-family: var(--font-body) !important;
 }
@@ -2411,14 +2589,14 @@ html.reduce-motion .attn-expand-enter {
 }
 .adhd-toolbar-focus-kicker {
   flex-shrink: 0;
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--accent);
 }
 .adhd-toolbar-focus-detail {
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   font-weight: 500;
   color: var(--fg-2);
   line-height: 1.4;
@@ -2443,7 +2621,7 @@ html.reduce-motion .attn-expand-enter {
   min-height: 36px;
   height: 36px;
   padding: 0 14px;
-  font-size: 13px;
+  font-size: var(--fs-3);
   font-weight: 600;
   line-height: 1;
   border-radius: var(--btn-radius, 8px);
@@ -2455,7 +2633,7 @@ html.reduce-motion .attn-expand-enter {
   min-height: 36px;
   height: 36px;
   padding: 0 14px;
-  font-size: 13px;
+  font-size: var(--fs-3);
   border-radius: var(--btn-radius, 8px);
 }
 html.adhd-calm .adhd-page-chrome-actions .btn-primary,
@@ -2469,7 +2647,7 @@ html.adhd-calm .adhd-toolbar .adhd-editor-chrome-actions .btn-accent {
   min-height: 36px;
   height: 36px;
   padding: 0 14px;
-  font-size: 13px;
+  font-size: var(--fs-3);
 }
 .adhd-page-chrome-actions .adhd-more,
 .adhd-editor-chrome-actions .adhd-more {
@@ -2490,7 +2668,7 @@ html.adhd-calm .adhd-editor-chrome-title h1 {
   font-size: 1.2rem;
 }
 html.adhd-calm .adhd-toolbar-focus-detail {
-  font-size: 13px;
+  font-size: var(--fs-3);
 }
 /* 已整合 chrome 的頁面：隱藏舊的獨立焦點條（若殘留） */
 .main:has(.toolbar.adhd-page-chrome) > #adhd-focus-strip,
@@ -2546,7 +2724,7 @@ html.adhd-calm .adhd-toolbar-focus-detail {
   background: transparent;
   color: var(--muted);
   font-family: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-weight: var(--weight-em);
   letter-spacing: 0.02em;
   padding: 4px 7px;
@@ -2982,7 +3160,7 @@ a.is-disabled {
   grid-area: avatar;
   width: 32px;
   height: 32px;
-  font-size: 13px;
+  font-size: var(--fs-3);
 }
 
 .emp-card-name {
@@ -2991,7 +3169,7 @@ a.is-disabled {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  font-size: 13.5px;
+  font-size: var(--fs-4);
   font-weight: 600;
   line-height: 1.35;
   color: var(--fg);
@@ -2999,7 +3177,7 @@ a.is-disabled {
 
 .emp-card-meta {
   grid-area: meta;
-  font-size: 12px;
+  font-size: var(--fs-2);
   line-height: 1.45;
   color: var(--meta);
   /* 長 email 不該撐破格線 */
@@ -3031,20 +3209,23 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
   white-space: nowrap;
 }
 
 .emp-card select {
   max-width: 100%;
-  background: var(--surface);
+  min-height: var(--ctl-h-md);
+  /* background-color 而不是 background 簡寫：簡寫會把全域基底畫的下拉箭頭
+     一起洗成 none，結果既沒原生箭頭也沒自繪箭頭，完全看不出可以展開。 */
+  background-color: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  padding: 0 30px 0 8px;
   color: var(--fg);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 
 /* 窄容器：控制項整條移到第二列，身分那一組保持頭像在左、文字在右。
@@ -3075,7 +3256,20 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   padding: 8px 16px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
-  font-size: 11px;
+  font-size: var(--fs-1);
+}
+.flow-strip-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--meta);
+  font-weight: var(--weight-em);
+  margin-right: 2px;
+}
+.flow-strip-tip {
+  font-weight: 400;
+  font-size: var(--fs-1);
+  opacity: 0.75;
 }
 .flow-strip-step {
   display: inline-flex;
@@ -3086,6 +3280,90 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   border: 1px solid var(--border-muted);
   color: var(--muted);
   background: var(--inset);
+  font: inherit;
+  cursor: pointer;
+}
+.flow-strip-step:hover {
+  border-color: var(--accent);
+  filter: brightness(1.12);
+}
+.flow-strip-step:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.flow-strip-step[aria-expanded="true"] {
+  box-shadow: 0 0 0 2px var(--accent-soft);
+  border-color: var(--accent);
+}
+/* 說明卡佔整行，flex-basis:100% 讓它換行到流程列下方 */
+.flow-strip-detail {
+  flex: 1 0 100%;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--inset);
+  font-size: var(--fs-2);
+  line-height: 1.65;
+}
+.flow-strip-detail[hidden] {
+  display: none;
+}
+.fsd-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.fsd-code {
+  font-family: var(--mono);
+  font-weight: var(--weight-em);
+  color: var(--accent);
+}
+.fsd-status {
+  font-size: var(--fs-1);
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  color: var(--muted);
+}
+.fsd-status.is-done {
+  color: var(--success);
+  border-color: color-mix(in oklab, var(--success) 35%, var(--border));
+  background: var(--success-bg);
+}
+.fsd-status.is-active {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+  background: var(--accent-soft);
+}
+.fsd-what {
+  margin: 0 0 8px;
+  color: var(--text);
+}
+.fsd-dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 12px;
+  margin: 0;
+}
+.fsd-dl dt {
+  color: var(--meta);
+  white-space: nowrap;
+}
+.fsd-dl dd {
+  margin: 0;
+  color: var(--muted);
+}
+.fsd-go {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: var(--weight-em);
+}
+.fsd-go:hover {
+  text-decoration: underline;
 }
 .flow-strip-step .code {
   font-family: var(--mono);
@@ -3104,7 +3382,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
 }
 .flow-strip-sep {
   color: var(--meta);
-  font-size: 10px;
+  font-size: var(--fs-1);
   padding: 0 2px;
 }
 
@@ -3125,7 +3403,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   border-bottom: 1px solid var(--border-muted);
 }
 .wizard-steps span {
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   padding: 4px 8px;
   border-radius: var(--radius-pill);
@@ -3161,31 +3439,31 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   background: color-mix(in oklab, var(--inset) 90%, var(--accent-soft));
 }
 .wiz-coach-title {
-  font-size: 13px;
+  font-size: var(--fs-3);
   font-weight: 600;
   color: var(--fg);
   margin-bottom: 4px;
 }
 .wiz-coach-body {
   margin: 0 0 6px;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   line-height: 1.45;
   color: var(--fg-2);
 }
 .wiz-coach-tips {
   margin: 0;
   padding-left: 1.1em;
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   color: var(--muted);
   line-height: 1.4;
 }
 .wiz-coach-tips li { margin-bottom: 2px; }
-.beginner-intro p { margin: 0 0 8px; color: var(--fg-2); font-size: 13px; line-height: 1.45; }
+.beginner-intro p { margin: 0 0 8px; color: var(--fg-2); font-size: var(--fs-3); line-height: 1.45; }
 .beginner-checklist {
   margin: 0 0 10px;
   padding-left: 1.2em;
   color: var(--fg-2);
-  font-size: 13px;
+  font-size: var(--fs-3);
   line-height: 1.5;
 }
 .wiz-confirm-dl { margin: 0; }
@@ -3195,7 +3473,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   gap: 8px;
   padding: 8px 0;
   border-bottom: 1px solid var(--border-muted);
-  font-size: 12.5px;
+  font-size: var(--fs-3);
 }
 .wiz-confirm-row:last-child { border-bottom: 0; }
 .wiz-confirm-row dt {
@@ -3228,12 +3506,12 @@ html .emp-card-controls .btn-del-emp:focus-visible {
 .beginner-cta-body strong {
   display: block;
   color: var(--fg);
-  font-size: 14px;
+  font-size: var(--fs-4);
   margin-bottom: 4px;
 }
 .beginner-cta-body p {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
   line-height: 1.4;
 }
@@ -3258,8 +3536,8 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   margin-bottom: 8px;
   flex-wrap: wrap;
 }
-.beginner-coach-head strong { color: var(--fg); font-size: 13px; }
-.beginner-coach-head .mono { color: var(--muted); font-size: 11px; margin-right: auto; }
+.beginner-coach-head strong { color: var(--fg); font-size: var(--fs-3); }
+.beginner-coach-head .mono { color: var(--muted); font-size: var(--fs-1); margin-right: auto; }
 .beginner-coach-track {
   display: flex;
   flex-wrap: wrap;
@@ -3275,7 +3553,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-family: inherit;
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
@@ -3293,12 +3571,12 @@ html .emp-card-controls .btn-del-emp:focus-visible {
 }
 .beginner-step-mark {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   opacity: 0.85;
 }
 .beginner-coach-hint {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
   line-height: 1.4;
 }
@@ -3344,7 +3622,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
 }
 .help-overlay-body h4 {
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -3359,11 +3637,11 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   gap: 10px;
   align-items: baseline;
   margin-bottom: 6px;
-  font-size: 13px;
+  font-size: var(--fs-3);
 }
 .help-overlay-body kbd {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   padding: 2px 6px;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -3376,7 +3654,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   padding: 10px 16px 14px;
   border-top: 1px solid var(--border);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-1);
 }
 
 /* Plan progress on projects list */
@@ -3384,7 +3662,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   padding: 8px 16px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--fg-2);
 }
 .plan-workspace-bar strong { color: var(--fg); font-weight: var(--weight-em); }
@@ -3394,7 +3672,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   gap: 2px;
   text-decoration: none;
   color: var(--fg);
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 .plan-link:hover { color: var(--accent); }
 .plan-pct { font-variant-numeric: tabular-nums; font-weight: var(--weight-em); }
@@ -3420,10 +3698,16 @@ html .emp-card-controls .btn-del-emp:focus-visible {
 }
 
 /* ─── 側邊欄專案清單 ─── */
+/* 專案清單是側欄下半唯一的東西 —— 讓它吃掉全部剩餘空間。
+   原本清單被 max-height 卡在 320px 而底下閒置三百多 px：空間浪費了，
+   清單還被迫捲動。「其他功能」搬走之後就沒有東西要跟它搶了。 */
 .rail-projects-block {
   margin: 0 0 8px;
-  padding: 0 0 8px;
-  border-bottom: 1px solid var(--border-muted);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .rail-projects-block .nav-label {
   display: flex;
@@ -3431,13 +3715,13 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   gap: 6px;
 }
 .rail-proj-count {
-  font-size: 10px;
+  font-size: var(--fs-1);
   color: var(--meta);
   font-weight: 500;
 }
 .rail-projects-empty {
   padding: 8px 12px;
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   color: var(--muted);
   line-height: 1.4;
 }
@@ -3445,7 +3729,11 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: min(40vh, 320px);
+  /* 縮到內容大小，但最多吃滿可用空間。
+     用 1 1 auto 的話容器會比內容高，底下就多出一塊「看起來像區塊、
+     但沒有內容也不能點」的空容器 —— 那正是使用者回報的東西。 */
+  flex: 0 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 4px 8px 10px;
 }
@@ -3515,7 +3803,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: var(--fs-3);
   font-weight: 600;
   color: var(--fg);
   /* 1.25 會把底線與下伸部切掉（Fork_WTF、Project_sysapp-tui 這種名字很常見） */
@@ -3527,7 +3815,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   gap: 6px;
   /* 右邊留給改名鍵，避免 hover 時蓋到時間字 */
   padding: 0 28px 0 14px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   line-height: 1.3;
   color: var(--meta);
   font-weight: 400;
@@ -3546,7 +3834,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--meta);
-  font-size: 12px;
+  font-size: var(--fs-2);
   cursor: pointer;
   transition: opacity var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard);
 }
@@ -3572,7 +3860,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   padding: 2px 2px 4px;
 }
 .rail-proj-rename-label {
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-weight: 650;
   color: var(--muted);
   letter-spacing: 0.04em;
@@ -3583,7 +3871,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   align-items: baseline;
 }
 .rail-proj-rename-hint {
-  font-size: 10px;
+  font-size: var(--fs-1);
   font-weight: 500;
   text-transform: none;
   letter-spacing: 0;
@@ -3597,7 +3885,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   width: 100%;
   box-sizing: border-box;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-3);
   font-weight: 600;
   padding: 7px 9px;
   border-radius: var(--radius-sm);
@@ -3621,7 +3909,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   border: 1px solid var(--border);
   background: var(--inset);
   color: var(--meta);
-  font-size: 10px;
+  font-size: var(--fs-1);
   font-weight: 500;
   line-height: 1.5;
 }
@@ -3665,7 +3953,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   text-align: center;
   padding: 28px 16px;
   color: var(--fg-2);
-  font-size: 13.5px;
+  font-size: var(--fs-4);
   line-height: 1.5;
 }
 .import-empty .hint { margin: 8px 0 16px; }
@@ -3678,7 +3966,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 14px;
-  font-size: 13px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
   align-items: center;
 }
@@ -3728,7 +4016,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--fg);
-  font-size: 14px;
+  font-size: var(--fs-4);
   min-width: 0;
 }
 .import-scores {
@@ -3739,7 +4027,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
 }
 .import-cov,
 .import-pct {
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--meta);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -3753,7 +4041,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   border-radius: var(--radius-pill);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: var(--fs-3);
 }
 .score-tone-good { color: var(--success); background: var(--success-bg); }
 .score-tone-mid { color: var(--warn); background: var(--warn-bg); }
@@ -3763,7 +4051,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   min-width: 0;
 }
@@ -3784,7 +4072,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   border-radius: inherit;
 }
 .import-section-label {
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-weight: 600;
   color: var(--meta);
   margin: 0 0 6px;
@@ -3806,7 +4094,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-muted);
   background: var(--surface);
-  font-size: 12px;
+  font-size: var(--fs-2);
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
@@ -3844,18 +4132,18 @@ html .emp-card-controls .btn-del-emp:focus-visible {
 .import-slot-label {
   color: var(--fg);
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   line-height: 1.3;
 }
 .import-slot-label em {
   font-style: normal;
   font-weight: 400;
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--meta);
 }
 .import-slot-file {
   color: var(--meta);
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3866,7 +4154,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
 .import-optional,
 .import-unmapped {
   margin-top: 10px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
   min-width: 0;
 }
@@ -3908,7 +4196,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   white-space: nowrap;
   max-width: 100%;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   margin-bottom: 3px;
 }
 .import-unmapped li { margin-bottom: 2px; }
@@ -3969,7 +4257,7 @@ body.onboard-body {
   padding-bottom: 12px;
 }
 .onboard-steps span {
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   padding: 4px 10px;
   border-radius: var(--radius-pill);
@@ -3991,20 +4279,20 @@ body.onboard-body {
 }
 .onboard-pane h2 {
   margin: 0 0 8px;
-  font-size: 17px;
+  font-size: var(--fs-6);
   font-weight: 600;
   color: var(--fg);
 }
 .onboard-lead {
   margin: 0 0 16px;
-  font-size: 13px;
+  font-size: var(--fs-3);
   line-height: 1.5;
   color: var(--fg-2);
 }
 .onboard-pane .field { margin-bottom: 12px; }
 .onboard-pane label {
   display: block;
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-weight: 500;
   color: var(--muted);
   margin-bottom: 6px;
@@ -4021,7 +4309,7 @@ body.onboard-body {
   padding: 10px 12px;
   color: var(--fg);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--fs-4);
 }
 .onboard-pane input:focus {
   outline: none;
@@ -4051,17 +4339,17 @@ body.onboard-body {
 }
 .onboard-choice input { margin-top: 3px; flex-shrink: 0; }
 .onboard-choice-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.onboard-choice-body strong { font-size: 13.5px; color: var(--fg); font-weight: 600; }
+.onboard-choice-body strong { font-size: var(--fs-4); color: var(--fg); font-weight: 600; }
 .onboard-choice-body em {
   font-style: normal;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
   line-height: 1.4;
 }
 .onboard-list {
   margin: 0 0 14px;
   padding-left: 1.2em;
-  font-size: 13px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
   line-height: 1.55;
 }
@@ -4071,7 +4359,7 @@ body.onboard-body {
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  font-size: 13px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
   cursor: pointer;
   margin-bottom: 6px;
@@ -4101,7 +4389,7 @@ html.adhd-calm .titlebar-meta .kbd {
   display: none !important;
 }
 html.adhd-calm .titlebar-title {
-  font-size: 13px;
+  font-size: var(--fs-3);
   font-weight: 500;
   color: var(--fg-2);
 }
@@ -4109,7 +4397,7 @@ html.adhd-calm .toolbar .sub {
   display: none;
 }
 html.adhd-calm .toolbar h1 {
-  font-size: 18px;
+  font-size: var(--fs-6);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -4133,20 +4421,20 @@ html.adhd-calm .toolbar h1 {
   gap: 2px;
 }
 .adhd-focus-label {
-  font-size: 15px;
+  font-size: var(--fs-5);
   font-weight: 700;
   color: var(--fg);
   letter-spacing: -0.01em;
 }
 .adhd-focus-detail {
-  font-size: 13px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
   line-height: 1.4;
   max-width: 52ch;
 }
 .adhd-focus-cta {
   flex-shrink: 0;
-  font-size: 14px !important;
+  font-size: var(--fs-4) !important;
   font-weight: 600 !important;
   padding: 10px 18px !important;
   min-height: 42px;
@@ -4169,7 +4457,7 @@ html.adhd-calm .adhd-toolbar > a.btn-accent {
   padding: 0 14px;
   min-height: 36px;
   height: 36px;
-  font-size: 13px;
+  font-size: var(--fs-3);
 }
 html.adhd-calm .search {
   min-width: 140px;
@@ -4223,7 +4511,7 @@ html.adhd-calm .search {
   list-style: none;
   cursor: pointer;
   padding: 8px 18px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-weight: 500;
   color: var(--meta);
   user-select: none;
@@ -4250,7 +4538,7 @@ html.adhd-calm .adhd-filters {
   gap: 6px;
 }
 html.adhd-calm .adhd-filters .chip {
-  font-size: 12px;
+  font-size: var(--fs-2);
   padding: 5px 12px;
 }
 
@@ -4259,7 +4547,7 @@ html.adhd-calm .table-wrap {
   padding: 8px 18px 24px;
 }
 html.adhd-calm table.data th {
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--meta);
   font-weight: 500;
 }
@@ -4272,7 +4560,7 @@ html.adhd-calm .row-action-main {
   min-height: 34px;
 }
 html.adhd-calm .btn-untrack {
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 
 /* 空狀態大引導 */
@@ -4293,19 +4581,19 @@ html.adhd-calm .btn-untrack {
   display: grid;
   place-items: center;
   font-weight: 700;
-  font-size: 16px;
+  font-size: var(--fs-5);
   background: var(--accent);
   color: var(--accent-on);
 }
 .adhd-empty-hero h2 {
   margin: 0 0 8px;
-  font-size: 20px;
+  font-size: var(--fs-7);
   font-weight: 700;
   color: var(--fg);
 }
 .adhd-empty-hero p {
   margin: 0 0 18px;
-  font-size: 14px;
+  font-size: var(--fs-4);
   color: var(--fg-2);
   line-height: 1.45;
 }
@@ -4317,7 +4605,7 @@ html.adhd-calm .btn-untrack {
 }
 .btn-lg {
   padding: 12px 20px !important;
-  font-size: 14px !important;
+  font-size: var(--fs-4) !important;
   font-weight: 600 !important;
   min-height: 46px;
 }
@@ -4328,7 +4616,7 @@ html.adhd-calm .rail-nav {
 }
 html.adhd-calm .adhd-nav-primary {
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--fs-4);
   padding: 10px 12px;
   min-height: 42px;
 }
@@ -4372,7 +4660,6 @@ html.adhd-calm .adhd-nav-primary.active {
 html.rail-ws-collapsed .rail-wsnav,
 html.rail-projects-collapsed .rail-projects,
 html.rail-projects-collapsed .rail-projects-empty,
-html.rail-projects-collapsed .rail-proj-resize,
 html.rail-projects-collapsed .rail-proj-actions {
   display: none;
 }
@@ -4382,15 +4669,14 @@ html.adhd-calm .rail-proj-card {
   border-radius: 10px;
 }
 html.adhd-calm .rail-proj-card-title {
-  font-size: 13.5px;
+  font-size: var(--fs-4);
 }
 html.adhd-calm .rail-proj-card-sub {
-  font-size: 11px;
+  font-size: var(--fs-1);
   opacity: 0.9;
 }
 html.adhd-calm .rail-projects {
   gap: 10px;
-  max-height: min(36vh, 280px);
 }
 
 /* 權限 chips 收斂 */
@@ -4414,7 +4700,7 @@ html.adhd-calm .editor-pane {
 }
 html.adhd-calm .wb-head h2 {
   letter-spacing: 0.04em;
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-weight: 600;
   text-transform: none;
   color: var(--fg-2);
@@ -4432,7 +4718,7 @@ html.adhd-calm .login-card {
 
 /* flow strip 預設較安靜 */
 html.adhd-calm .flow-strip {
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   padding: 6px 14px;
   opacity: 0.85;
 }
@@ -4474,7 +4760,7 @@ html.adhd-calm .beginner-cta {
   border-radius: var(--radius-sm);
   border: 1px solid color-mix(in oklab, var(--accent) 25%, var(--border));
   background: color-mix(in oklab, var(--accent) 7%, var(--surface));
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--fg-2);
 }
 .mdv-banner strong {
@@ -4512,7 +4798,7 @@ html.adhd-calm .beginner-cta {
   background: transparent;
   color: var(--meta);
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   font-weight: 500;
   padding: 4px 10px;
   border-radius: calc(var(--radius-sm) - 1px);
@@ -4573,7 +4859,7 @@ html.adhd-calm .beginner-cta {
   background: transparent;
   color: var(--fg-2);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-weight: 600;
   font-family: var(--mono);
   padding: 4px 8px;
@@ -4618,7 +4904,7 @@ html.adhd-calm .beginner-cta {
   padding: 14px 0 14px 8px;
   text-align: right;
   font-family: var(--mono);
-  font-size: 13px; /* 與 textarea 同字級，利於對齊 */
+  font-size: var(--fs-3); /* 與 textarea 同字級，利於對齊 */
   line-height: 1.55;
   color: var(--meta);
   opacity: 0.42;
@@ -4672,7 +4958,7 @@ html.adhd-calm .beginner-cta {
   /* 有 gutter 時左側已由 5px margin 分隔，textarea 左側 padding 可小一點 */
   padding: 14px 16px 14px 0 !important;
   font-family: var(--mono) !important;
-  font-size: 13px !important;
+  font-size: var(--fs-3) !important;
   line-height: 1.55 !important;
   background: var(--bg) !important;
   color: var(--fg) !important;
@@ -4702,7 +4988,7 @@ html.adhd-calm .beginner-cta {
 .mdv-preview-label {
   flex-shrink: 0;
   padding: 6px 10px;
-  font-size: 10px;
+  font-size: var(--fs-1);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -4726,7 +5012,7 @@ html.adhd-calm .beginner-cta {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--fg-2);
   cursor: pointer;
   user-select: none;
@@ -4740,7 +5026,7 @@ html.adhd-calm .beginner-cta {
   border: 1px solid var(--border);
   background: transparent;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-weight: 600;
   padding: 2px 7px;
   border-radius: 999px;
@@ -4768,7 +5054,7 @@ html.adhd-calm .beginner-cta {
 
 /* Prose（改編自 markamd prose.css） */
 .mdv-prose {
-  font-size: 14px;
+  font-size: var(--fs-4);
   line-height: 1.6;
   color: var(--fg);
 }
@@ -4844,12 +5130,12 @@ html.adhd-calm .beginner-cta {
 .mdv-prose .task-list-item input { margin-right: 6px; }
 .mdv-empty {
   color: var(--meta);
-  font-size: 13px;
+  font-size: var(--fs-3);
   margin: 0;
 }
 .mdv-error {
   color: var(--danger);
-  font-size: 12px;
+  font-size: var(--fs-2);
   white-space: pre-wrap;
 }
 
@@ -4958,7 +5244,7 @@ html.adhd-calm .adhd-focus-cta {
 html.adhd-calm .adhd-flow-quiet .flow-strip,
 html.adhd-calm .flow-strip {
   padding: 6px var(--adhd-space);
-  font-size: 11px;
+  font-size: var(--fs-1);
   opacity: 0.72;
   border-bottom-color: var(--border-muted);
   background: transparent;
@@ -5007,7 +5293,7 @@ html.adhd-calm .stat {
   padding: 14px 16px;
 }
 html.adhd-calm .stat .k {
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: none;
@@ -5059,7 +5345,7 @@ html.adhd-calm .adhd-filters {
   align-items: center;
 }
 html.adhd-calm .adhd-filters .chip {
-  font-size: 13px;
+  font-size: var(--fs-3);
   font-weight: 500;
   padding: 7px 14px;
   border-radius: 999px;
@@ -5167,7 +5453,7 @@ html.adhd-calm .result-count {
   min-width: 0;
 }
 .project-card-pct {
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--fg-2);
@@ -5191,7 +5477,7 @@ html.adhd-calm .result-count {
   align-items: center;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-weight: 500;
   color: var(--meta);
   background: var(--inset);
@@ -5223,7 +5509,7 @@ html.adhd-calm .adhd-empty-hero {
 }
 html.adhd-calm .adhd-empty-kicker {
   margin: 0 0 8px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -5249,7 +5535,7 @@ html.adhd-calm .adhd-empty-actions {
 
 /* 側欄文字一致化 */
 html.adhd-calm .nav-label {
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--meta);
@@ -5257,17 +5543,17 @@ html.adhd-calm .nav-label {
   padding: 10px 12px 6px;
 }
 html.adhd-calm .adhd-nav-primary {
-  font-size: 14px;
+  font-size: var(--fs-4);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 html.adhd-calm .rail-proj-card-title {
-  font-size: 13.5px;
+  font-size: var(--fs-4);
   font-weight: 650;
   letter-spacing: -0.015em;
 }
 html.adhd-calm .rail-proj-card-sub {
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   color: var(--meta);
   opacity: 0.9;
 }
@@ -5321,12 +5607,12 @@ html.adhd-calm .sec.adhd-sec {
   min-height: 32px;
 }
 html.adhd-calm .sec.adhd-sec .t {
-  font-size: 13.5px;
+  font-size: var(--fs-4);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 html.adhd-calm .sec.adhd-sec .adhd-sec-hint {
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   color: var(--muted);
   margin-top: 2px;
   line-height: 1.35;
@@ -5339,7 +5625,7 @@ html.adhd-calm .sec.adhd-sec.active {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 html.adhd-calm .sec.adhd-sec .st {
-  font-size: 10px;
+  font-size: var(--fs-1);
   flex-shrink: 0;
 }
 
@@ -5376,7 +5662,7 @@ html.adhd-calm .adhd-sec-lead {
   cursor: pointer;
   list-style: none;
   padding: 10px 14px;
-  font-size: 13px;
+  font-size: var(--fs-3);
   font-weight: 600;
   color: var(--fg);
   display: flex;
@@ -5388,12 +5674,12 @@ html.adhd-calm .adhd-sec-lead {
 .adhd-guide > summary::before {
   content: "▸";
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-1);
 }
 .adhd-guide[open] > summary::before { content: "▾"; }
 .adhd-guide-meta {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-weight: 500;
   color: var(--muted);
 }
@@ -5407,7 +5693,7 @@ html.adhd-calm .adhd-sec-lead {
 }
 html.adhd-calm .adhd-editor-hint {
   margin-top: 16px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
   opacity: 0.9;
 }
@@ -5420,7 +5706,7 @@ html.adhd-calm .adhd-editor-hint {
 }
 .adhd-coach-kicker {
   margin: 0 0 6px;
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -5428,20 +5714,20 @@ html.adhd-calm .adhd-editor-hint {
 }
 .adhd-coach-now-title {
   margin: 0 0 6px !important;
-  font-size: 15px !important;
+  font-size: var(--fs-5) !important;
   font-weight: 700 !important;
   letter-spacing: -0.015em;
   line-height: 1.3;
 }
 .adhd-coach-now-detail {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
   line-height: 1.45;
 }
 .adhd-coach-more-count {
   margin: 8px 0 0;
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   color: var(--muted);
 }
 
@@ -5457,18 +5743,18 @@ html.adhd-calm .adhd-editor-hint {
 }
 .adhd-score-label {
   font-weight: 650;
-  font-size: 14px;
+  font-size: var(--fs-4);
   letter-spacing: -0.01em;
 }
 .adhd-score-pass {
   margin-top: 2px;
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   color: var(--muted);
 }
 .adhd-model-pill {
   display: inline-block;
   margin-top: 6px;
-  font-size: 10px !important;
+  font-size: var(--fs-1) !important;
   opacity: 0.85;
 }
 
@@ -5481,7 +5767,7 @@ html.adhd-calm .adhd-editor-hint {
   cursor: pointer;
   list-style: none;
   padding: 10px 12px;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -5491,13 +5777,13 @@ html.adhd-calm .adhd-editor-hint {
 .adhd-coach-details > summary::-webkit-details-marker { display: none; }
 .adhd-coach-details > summary::before {
   content: "▸";
-  font-size: 10px;
+  font-size: var(--fs-1);
   color: var(--muted);
 }
 .adhd-coach-details[open] > summary::before { content: "▾"; }
 .adhd-details-meta {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--fs-1);
   font-weight: 500;
   color: var(--muted);
   max-width: 55%;
@@ -5520,28 +5806,28 @@ html.adhd-calm .adhd-editor-hint {
   display: flex;
   gap: 8px;
   margin-bottom: 6px;
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 .adhd-gate-detail { color: var(--muted); }
 .adhd-gate-score {
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   margin: 0 0 8px;
   padding-top: 0 !important;
 }
 .adhd-gate-block {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--danger);
 }
 .adhd-gate-ok {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--success);
 }
 .adhd-coach-link {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 .adhd-coach-link a { color: var(--accent); }
 
@@ -5557,7 +5843,7 @@ html.adhd-calm .adhd-editor-hint {
 }
 .adhd-ai-prompt-row input {
   flex: 1;
-  font-size: 12px;
+  font-size: var(--fs-2);
   padding: 6px 10px;
   border-radius: var(--radius-sm, 6px);
   border: 1px solid var(--border);
@@ -5566,7 +5852,7 @@ html.adhd-calm .adhd-editor-hint {
 }
 .adhd-ai-feedback {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
   line-height: 1.4;
 }
@@ -5574,7 +5860,7 @@ html.adhd-calm .adhd-editor-hint {
   margin: 0 0 8px;
   padding: 6px 8px;
   border-radius: 6px;
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   line-height: 1.4;
   color: var(--fg-2);
   background: var(--inset);
@@ -5599,7 +5885,7 @@ html.adhd-calm .adhd-editor-hint {
   background: color-mix(in oklab, var(--danger) 12%, transparent);
   border: 1px solid color-mix(in oklab, var(--danger) 30%, var(--border));
   color: var(--fg);
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 .adhd-ai-ok-msg {
   padding: 6px 8px;
@@ -5615,7 +5901,7 @@ html.adhd-calm .adhd-editor-hint {
 }
 .adhd-ai-critique .adhd-ai-score {
   margin: 4px 0 6px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--meta);
 }
 .adhd-ai-critique ul {
@@ -5626,7 +5912,7 @@ html.adhd-calm .adhd-editor-hint {
 .adhd-ai-critique li.s { color: var(--accent); }
 .adhd-ai-hint {
   margin: 8px 0 0;
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
 }
 .adhd-ai-hint a { color: var(--accent); }
@@ -5634,7 +5920,7 @@ html.adhd-calm .adhd-editor-hint {
 /* 編輯欄本體（MarkaMD）維持，只略降周圍噪音 */
 html.adhd-calm .editor-body > .mdv-banner { display: none; }
 html.adhd-calm .coach .wb-head .pill {
-  font-size: 10px;
+  font-size: var(--fs-1);
   opacity: 0.8;
 }
 html.adhd-calm .wb-col.coach {
@@ -5736,7 +6022,7 @@ html.adhd-calm .coach-body {
 .review-approve-hint {
   margin: 0 !important;
   padding: 8px 16px !important;
-  font-size: 12.5px !important;
+  font-size: var(--fs-3) !important;
   color: var(--muted);
   border-bottom: 1px solid var(--border-muted, var(--border));
   background: color-mix(in oklab, var(--warn) 8%, var(--bg));
@@ -5751,7 +6037,7 @@ html.adhd-calm .coach-body {
   cursor: pointer;
   list-style: none;
   padding: 10px 16px;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   font-weight: 600;
   color: var(--fg-2);
   user-select: none;
@@ -5760,7 +6046,7 @@ html.adhd-calm .coach-body {
 .review-approvals-summary::before {
   content: "▸ ";
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-1);
 }
 .review-approvals-wrap[open] > .review-approvals-summary::before { content: "▾ "; }
 .review-approvals-wrap .approval-strip {
@@ -5780,28 +6066,28 @@ html.adhd-calm .coach-body {
   align-items: center;
   gap: 8px 14px;
   margin-bottom: 6px;
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 .review-focus-head strong {
-  font-size: 11px;
+  font-size: var(--fs-1);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: color-mix(in oklab, var(--warn) 40%, var(--fg));
 }
 .review-focus-block {
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--danger);
   font-weight: 600;
 }
 .review-focus-ok {
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--success);
   font-weight: 600;
 }
 .review-focus-list {
   margin: 0;
   padding-left: 1.15em;
-  font-size: 13px;
+  font-size: var(--fs-3);
   line-height: 1.45;
   color: var(--fg);
 }
@@ -5809,7 +6095,7 @@ html.adhd-calm .coach-body {
 .review-focus-more,
 .review-focus-empty {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
 }
 
@@ -5829,7 +6115,7 @@ html.adhd-calm .coach-body {
   border: 1px solid var(--border);
   background: transparent;
   color: var(--fg-2);
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   font-weight: 600;
   padding: 5px 10px;
   border-radius: 999px;
@@ -5886,7 +6172,7 @@ html.adhd-calm .coach-body {
   border: 0;
   background: transparent;
   color: var(--fg);
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-weight: 650;
   text-align: left;
   cursor: pointer;
@@ -5906,7 +6192,7 @@ html.adhd-calm .coach-body {
   letter-spacing: 0.04em;
 }
 .review-comments-chevron {
-  font-size: 10px;
+  font-size: var(--fs-1);
   color: var(--muted);
 }
 .review-comments-body {
@@ -5919,20 +6205,20 @@ html.adhd-calm .coach-body {
 .review-comments-empty {
   padding: 24px 16px;
   text-align: center;
-  font-size: 13px;
+  font-size: var(--fs-3);
   color: var(--muted);
   line-height: 1.5;
 }
 .review-comments-note {
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
   border-bottom: 1px solid var(--border-muted, var(--border));
 }
 
 .review-doc-progress {
   margin: 0 0 16px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
 }
 .review-sec {
@@ -5954,7 +6240,7 @@ html.adhd-calm .coach-body {
 }
 .review-sec-n {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   font-weight: 600;
 }
@@ -5966,7 +6252,7 @@ html.adhd-calm .coach-body {
   padding: 0 !important;
 }
 .review-sec-st {
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
@@ -5996,10 +6282,10 @@ html.adhd-calm .coach-body {
 .review-sec-empty p {
   margin: 0 !important;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-3);
 }
 .review-sec-md {
-  font-size: 14.5px;
+  font-size: var(--fs-5);
   line-height: 1.65;
   color: var(--fg);
   max-width: 68ch;
@@ -6015,7 +6301,7 @@ html.adhd-calm .coach-body {
 .review-sec-md pre,
 .review-sec-md .mdv-code {
   overflow-x: auto;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   padding: 10px 12px;
   border-radius: 8px;
   background: var(--inset, color-mix(in oklab, var(--fg) 5%, var(--bg)));
@@ -6024,7 +6310,7 @@ html.adhd-calm .coach-body {
 .review-sec-md table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--fs-3);
 }
 .review-sec-md th,
 .review-sec-md td {
@@ -6054,7 +6340,7 @@ html.adhd-calm .coach-body {
 .review-doc .meta-line:empty { display: none; }
 
 html.adhd-calm .review-sec-md {
-  font-size: 15px;
+  font-size: var(--fs-5);
   line-height: 1.7;
 }
 html.adhd-calm .review-sec-nav {
@@ -6089,7 +6375,7 @@ html.adhd-calm .review-focus-bar {
   background: var(--bg);
 }
 .focus-progress-text {
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   margin-bottom: 5px;
@@ -6176,7 +6462,7 @@ html.adhd-calm .review-focus-bar {
   border-radius: 8px;
   background: var(--bg);
 }
-.wa-starter-text { font-size: 13px; color: var(--muted); flex: 1 1 200px; }
+.wa-starter-text { font-size: var(--fs-3); color: var(--muted); flex: 1 1 200px; }
 
 /* ── Hyperfocus 提醒 ── */
 .wa-nudge {
@@ -6190,7 +6476,7 @@ html.adhd-calm .review-focus-bar {
   flex-wrap: wrap;
   max-width: 380px;
   padding: 12px 14px;
-  font-size: 13px;
+  font-size: var(--fs-3);
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--panel, var(--bg));
@@ -6200,11 +6486,11 @@ html.adhd-calm .review-focus-bar {
 .focus-mode .wa-nudge { display: flex; }
 
 /* ── tasks.md 回讀預覽 ── */
-.trb-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+.trb-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: var(--fs-3); }
 .trb-table th,
 .trb-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .trb-table th { color: var(--muted); font-weight: 500; }
-.trb-notes { margin: 12px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
+.trb-notes { margin: 12px 0 0; padding-left: 18px; font-size: var(--fs-3); color: var(--muted); }
 .trb-notes li { margin-bottom: 4px; }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -6284,7 +6570,7 @@ html.adhd-calm .review-focus-bar {
   border-radius: 6px;
   background: var(--inset, transparent);
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-3);
   line-height: 1;
   cursor: pointer;
   transition: transform 140ms ease, color 140ms ease;
@@ -6303,7 +6589,7 @@ html.adhd-calm .review-focus-bar {
 .ft-empty {
   margin: 0;
   padding: 10px 12px;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   line-height: 1.5;
   color: var(--muted);
 }
@@ -6318,7 +6604,7 @@ html.adhd-calm .review-focus-bar {
   background: none;
   text-align: left;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-2);
   line-height: 1.5;
   color: var(--fg-2);
   cursor: default;
@@ -6343,7 +6629,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   padding: 1px 6px;
   border-radius: 4px;
   font-family: var(--sans, inherit);
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -6372,13 +6658,13 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .sec-origin dt {
   flex-shrink: 0;
   width: 4.5em;
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-weight: 600;
   color: var(--muted);
 }
 .sec-origin dd {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--fg-2);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6390,7 +6676,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 
 /* 檔案樹空狀態：手動新建 PRD 的補綁出口 */
 .ft-empty { padding: 12px; display: grid; gap: 10px; justify-items: start; }
-.ft-empty p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+.ft-empty p { margin: 0; font-size: var(--fs-3); line-height: 1.55; color: var(--muted); }
 .pf-note { opacity: .8; }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -6402,7 +6688,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .modal-ask { width: min(560px, 92vw); }
 .modal-ask header .sub {
   margin: 3px 0 0;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   font-variant-numeric: tabular-nums;
 }
 
@@ -6428,7 +6714,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 /* 問句 = 標題。這是畫面上最大的字，因為它是唯一要回答的事。 */
 .ask-q {
   margin: 0 0 6px;
-  font-size: 21px;
+  font-size: var(--fs-7);
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.3;
@@ -6436,7 +6722,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 .ask-help {
   margin: 0 0 16px;
-  font-size: 13px;
+  font-size: var(--fs-3);
   line-height: 1.5;
   color: var(--muted);
   max-width: 46em;
@@ -6446,7 +6732,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   width: 100%;
   padding: 11px 13px;
   font: inherit;
-  font-size: 15px;
+  font-size: var(--fs-5);
   line-height: 1.5;
   color: var(--fg);
   background: var(--inset);
@@ -6454,9 +6740,13 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   border-radius: var(--radius-sm);
 }
 .ask-input::placeholder { color: var(--muted); }
-.ask-input:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
+/* focus 統一走 --focus-ring：原本這裡自訂 outline，
+   跟其他所有控制項的 focus 長相不同 —— 鍵盤使用者每換一個欄位就要重新認一次。
+   字級刻意保留 --fs-5：它是主要輸入框，大一級是有意的層級，不是漂移。 */
+.ask-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
   border-color: transparent;
 }
 .ask-input-area { resize: vertical; min-height: 78px; }
@@ -6469,13 +6759,13 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .ask-advanced { margin-top: 16px; }
 .ask-advanced > summary {
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-3);
   color: var(--muted);
   padding: 6px 0;
 }
 .ask-advanced-body { display: grid; gap: 6px; padding-top: 8px; }
 .ask-adv-label {
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   font-weight: 600;
   color: var(--fg-2);
   margin-top: 6px;
@@ -6484,7 +6774,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .ask-draft {
   margin: 0;
   padding: 0 16px 6px;
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   color: var(--muted);
 }
 
@@ -6530,26 +6820,26 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .tour-step {
   margin: 0 0 6px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 .tour-title {
   margin: 0 0 8px;
-  font-size: 16px;
+  font-size: var(--fs-5);
   font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--fg);
 }
 .tour-body {
   margin: 0 0 16px;
-  font-size: 13px;
+  font-size: var(--fs-3);
   line-height: 1.6;
   color: var(--fg-2);
 }
 .tour-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .help-overlay footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.help-foot-note { font-size: 11px; color: var(--muted); }
+.help-foot-note { font-size: var(--fs-1); color: var(--muted); }
 
 /* ═══════════════════════════════════════════════════════════════
    專案儀表板
@@ -6571,7 +6861,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 .dash-h {
   margin: 0 0 10px;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   font-weight: 600;
   letter-spacing: 0.03em;
   color: var(--muted);
@@ -6579,7 +6869,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 /* 卡片的結論句。這是整張卡唯一該先被讀到的東西。 */
 .dash-lead {
   margin: 0 0 14px;
-  font-size: 17px;
+  font-size: var(--fs-6);
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: -0.01em;
@@ -6590,23 +6880,23 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 
 .dash-dl { display: grid; gap: 7px; margin: 0; }
 .dash-dl > div { display: flex; gap: 12px; align-items: baseline; }
-.dash-dl dt { flex: 0 0 6.5em; font-size: 12px; color: var(--muted); }
+.dash-dl dt { flex: 0 0 6.5em; font-size: var(--fs-2); color: var(--muted); }
 .dash-dl dd {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.dash-note { margin: 10px 0 0; font-size: 12px; line-height: 1.55; color: var(--muted); }
-.dash-sub-h { margin: 16px 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.dash-note { margin: 10px 0 0; font-size: var(--fs-2); line-height: 1.55; color: var(--muted); }
+.dash-sub-h { margin: 16px 0 8px; font-size: var(--fs-2); font-weight: 600; color: var(--muted); }
 
 /* 語言佔比：一條比例條勝過一張表 */
 .dash-bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; margin-bottom: 12px; }
 .dash-bar-seg { height: 100%; }
 .dash-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
-.dash-legend li { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--fg-2); }
-.dash-legend-b { margin-left: auto; color: var(--muted); font-size: 11.5px; }
+.dash-legend li { display: flex; align-items: center; gap: 7px; font-size: var(--fs-3); color: var(--fg-2); }
+.dash-legend-b { margin-left: auto; color: var(--muted); font-size: var(--fs-2); }
 .dash-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
 .seg-0 { background: var(--accent); }
 .seg-1 { background: var(--success); }
@@ -6619,7 +6909,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .dash-chip {
   padding: 3px 9px;
   border-radius: 5px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--fg-2);
   background: var(--inset);
   border: 1px solid var(--border);
@@ -6635,7 +6925,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 .dash-reserved-label {
   margin: 0 0 4px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-weight: 600;
   color: var(--muted);
 }
@@ -6648,12 +6938,12 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   display: grid;
   gap: 12px;
   justify-items: start;
-  font-size: 14px;
+  font-size: var(--fs-4);
   line-height: 1.6;
   color: var(--fg-2);
 }
 .dash-empty p { margin: 0; }
-.dash-measured { margin: 16px 0 0; font-size: 11px; color: var(--muted); }
+.dash-measured { margin: 16px 0 0; font-size: var(--fs-1); color: var(--muted); }
 
 /* 專案卡片主體＝進儀表板。要看起來可點，但不能搶走「繼續寫」的主行動地位。 */
 .project-card-main[data-card-open] { cursor: pointer; border-radius: 6px; }
@@ -6678,20 +6968,20 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   text-indent: -999px;
 }
 .welcome-hello { flex: 1 1 auto; min-width: 0; }
-.welcome-hello h3 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
+.welcome-hello h3 { margin: 0; font-size: var(--fs-6); font-weight: 650; letter-spacing: -0.01em; }
 .welcome-appline {
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 3px 0 0;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
 }
 .welcome-ver {
   padding: 1px 7px;
   border-radius: 5px;
   background: var(--inset, transparent);
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--fg-2);
 }
 
@@ -6706,13 +6996,13 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 .welcome-count strong {
   display: block;
-  font-size: 26px;
+  font-size: var(--fs-8);
   font-weight: 650;
   line-height: 1.1;
   letter-spacing: -0.02em;
   color: var(--fg);
 }
-.welcome-count span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
+.welcome-count span { display: block; margin-top: 3px; font-size: var(--fs-2); color: var(--muted); }
 /* 靜音勾選放 footer 左邊，跟兩顆行動鈕拉開 ——
    它是「以後別再問我」，不是這次要做的動作。 */
 .welcome-foot { display: flex; align-items: center; gap: 10px; }
@@ -6721,13 +7011,13 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   color: var(--muted);
   cursor: pointer;
 }
 .welcome-mute input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
 .welcome-mute:hover { color: var(--fg-2); }
-.welcome-modal header .sub { margin: 3px 0 0; font-size: 11.5px; color: var(--muted); }
+.welcome-modal header .sub { margin: 3px 0 0; font-size: var(--fs-2); color: var(--muted); }
 .welcome-modal .body { padding: 18px 16px 12px; }
 .welcome-langs { margin-bottom: 16px; grid-template-columns: 1fr 1fr; display: grid; }
 .welcome-dl { border-top: 1px solid var(--border); padding-top: 14px; }
@@ -6753,7 +7043,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .view-list .project-card-main { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 14px; align-items: center; }
 .view-list .project-card-meta { display: none; }
 .view-list .project-card-progress { margin: 0; }
-.view-list .project-card-title { font-size: 14px; }
+.view-list .project-card-title { font-size: var(--fs-4); }
 
 /* ── 卡片：網格。寬螢幕一次看到 3–4 個，不用捲 ── */
 .project-board-list.view-card {
@@ -6783,18 +7073,18 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 /* .ic 本身沒帶尺寸（側欄另外給），這裡不寫死就會撐成 894×894 */
 .folder-group-head .ic { width: 14px; height: 14px; flex-shrink: 0; color: var(--muted); }
-.folder-group-name { font-size: 13.5px; font-weight: 600; color: var(--fg); }
+.folder-group-name { font-size: var(--fs-4); font-weight: 600; color: var(--fg); }
 .folder-group-count {
   padding: 0 6px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   background: var(--bg);
   border: 1px solid var(--border);
 }
 .folder-group-path {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6869,7 +7159,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 
 .d-eyebrow {
   margin: 0 0 10px;
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -6886,7 +7176,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 .d-hero-figure {
   margin: 0 0 8px;
-  font-size: 28px;
+  font-size: var(--fs-8);
   font-weight: 650;
   letter-spacing: -0.025em;
   line-height: 1.2;
@@ -6896,8 +7186,8 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 .d-hero.tone-warn .d-hero-figure { color: var(--warn); }
 .d-hero.tone-ok .d-hero-figure { color: var(--success); }
-.d-hero-sub { margin: 0 0 4px; font-size: 14px; line-height: 1.5; color: var(--fg-2); }
-.d-hero-meta { margin: 0 0 18px; font-size: 12.5px; color: var(--muted); }
+.d-hero-sub { margin: 0 0 4px; font-size: var(--fs-4); line-height: 1.5; color: var(--fg-2); }
+.d-hero-meta { margin: 0 0 18px; font-size: var(--fs-3); color: var(--muted); }
 .d-facts {
   display: flex;
   flex-wrap: wrap;
@@ -6906,10 +7196,10 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
-.d-facts dt { font-size: 11.5px; color: var(--muted); margin-bottom: 3px; }
+.d-facts dt { font-size: var(--fs-2); color: var(--muted); margin-bottom: 3px; }
 .d-facts dd {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--fs-4);
   color: var(--fg);
   font-variant-numeric: tabular-nums;
 }
@@ -6929,17 +7219,17 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 .d-figure {
   margin: 0 0 4px;
-  font-size: 22px;
+  font-size: var(--fs-7);
   font-weight: 620;
   letter-spacing: -0.02em;
   line-height: 1.25;
   font-variant-numeric: proportional-nums;
   color: var(--fg);
 }
-.d-figure-sub { margin: 0 0 16px; font-size: 12.5px; color: var(--muted); }
+.d-figure-sub { margin: 0 0 16px; font-size: var(--fs-3); color: var(--muted); }
 .d-sub-h {
   margin: 18px 0 8px;
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -6958,7 +7248,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   /* 不能用 baseline：色塊沒有文字，它的基線是底邊，會把整列撐到 70px 以上 */
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--fs-3);
 }
 .d-swatch { width: 8px; height: 8px; border-radius: 2px; align-self: center; }
 .d-rows-label { color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -6968,7 +7258,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   min-width: 5.5em;
   text-align: right;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-variant-numeric: tabular-nums;
 }
 .s0 { background: var(--cat-0); }
@@ -6982,7 +7272,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .d-chip {
   padding: 3px 9px;
   border-radius: 5px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--fg-2);
   background: var(--inset);
   border: 1px solid var(--border);
@@ -6999,16 +7289,16 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   margin-bottom: 6px;
   padding: 1px 7px;
   border-radius: 4px;
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-weight: 600;
   color: var(--muted);
   background: var(--inset);
 }
-.d-reserved p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+.d-reserved p { margin: 0; font-size: var(--fs-3); line-height: 1.55; color: var(--muted); }
 .d-reserved-row { display: flex; gap: 8px; margin-top: 10px; opacity: .55; }
 .d-reserved-row .ask-input { flex: 1; }
 
-.d-measured { margin: 20px 0 0; font-size: 11.5px; color: var(--muted); }
+.d-measured { margin: 20px 0 0; font-size: var(--fs-2); color: var(--muted); }
 
 /* ── 頂列：版本控制 + 版號/commit，兩張等高 ── */
 .d-top {
@@ -7031,7 +7321,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   gap: 8px;
   padding: 5px 8px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
 }
 /* 目前版本：底色 + 左緣 2px + 粗體。三個訊號疊起來才不用比對雜湊 */
@@ -7041,17 +7331,17 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   color: var(--fg);
 }
 .d-tag-name { font-weight: 600; }
-.d-tags li.is-current .d-tag-name { font-size: 14px; }
+.d-tags li.is-current .d-tag-name { font-size: var(--fs-4); }
 .d-tag-badge {
   padding: 1px 6px;
   border-radius: 4px;
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-weight: 600;
   color: var(--accent);
   background: color-mix(in oklab, var(--accent) 20%, transparent);
 }
-.d-tag-hash { font-size: 11.5px; color: var(--muted); }
-.d-tag-at { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.d-tag-hash { font-size: var(--fs-2); color: var(--muted); }
+.d-tag-at { font-size: var(--fs-2); color: var(--muted); font-variant-numeric: tabular-nums; }
 /* 版號說明縮排到與版號文字切齊，視覺上從屬於它 */
 .d-tag-note { padding-left: 2px; }
 
@@ -7070,7 +7360,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   align-items: baseline;
   gap: 8px;
   padding: 4px 0;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
 }
 .d-commit-rail {
@@ -7080,26 +7370,26 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 .d-commits li.is-head .d-commit-rail { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent); }
 .d-commits li.is-head { color: var(--fg); }
-.d-commit-hash { font-size: 11.5px; color: var(--muted); }
+.d-commit-hash { font-size: var(--fs-2); color: var(--muted); }
 .d-commit-subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .d-commit-flag,
 .d-commit-tag {
-  padding: 0 5px; border-radius: 4px; font-size: 10px; font-weight: 600;
+  padding: 0 5px; border-radius: 4px; font-size: var(--fs-1); font-weight: 600;
   color: var(--accent); background: color-mix(in oklab, var(--accent) 18%, transparent);
 }
 .d-commit-tag { color: var(--success); background: color-mix(in oklab, var(--success) 18%, transparent); }
-.d-commit-at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.d-commit-at { color: var(--muted); font-size: var(--fs-1); font-variant-numeric: tabular-nums; }
 
 /* ── 工作區狀態 ── */
 .d-facts--stack { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding-top: 0; border-top: 0; margin-bottom: 4px; }
-.d-kind { margin-left: 6px; font-size: 11px; color: var(--muted); }
+.d-kind { margin-left: 6px; font-size: var(--fs-1); color: var(--muted); }
 .d-rows--plain li { grid-template-columns: minmax(0, 1fr) auto auto; }
 .d-rows--plain li.is-primary { color: var(--fg); }
 .d-rows--plain li.is-primary .d-rows-label { font-weight: 600; }
 
 /* ── 檔案樹卡片：沿用編輯台那份樹，在卡片內捲 ── */
 .d-tree { overflow: auto; flex: 1; min-height: 0; margin: -4px -8px 0; }
-.d-tree .ft-row { font-size: 12px; }
+.d-tree .ft-row { font-size: var(--fs-2); }
 .d-card { display: flex; flex-direction: column; min-height: 0; }
 /* HEAD 那列多了徽章，日期欄被擠到換行成三段。日期永不折行。 */
 .d-commit-at { white-space: nowrap; }
@@ -7168,7 +7458,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 /* 名稱：比 git 狀態句小一階，讓「現在該做什麼」仍是卡片裡最大的字 */
 .d-ident-name {
-  font-size: 22px;
+  font-size: var(--fs-7);
   font-weight: 650;
   letter-spacing: -0.022em;
   line-height: 1.25;
@@ -7176,7 +7466,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 /* 說明行：與 .d-hero-sub 同級 */
 .d-ident-desc {
   margin-top: 6px;
-  font-size: 14px;
+  font-size: var(--fs-4);
   line-height: 1.5;
   color: var(--fg-2);
 }
@@ -7206,7 +7496,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .d-tags li:not(.is-current) .d-tag-name { min-width: 4.5em; }
 /* 版本說明：annotated tag 給 tag 訊息，lightweight 給它指向的 commit 主旨 */
 .d-tag-note {
-  font-size: 12px;
+  font-size: var(--fs-2);
   line-height: 1.45;
   color: var(--muted);
   overflow: hidden;
@@ -7214,7 +7504,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   white-space: nowrap;
 }
 .d-tags li.is-current .d-tag-note { color: var(--fg-2); }
-.d-note-empty { margin: 4px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+.d-note-empty { margin: 4px 0 0; font-size: var(--fs-3); line-height: 1.55; color: var(--muted); }
 /* 提交紀錄要讀得到訊息 —— 在四欄網格裡擠成一欄會把主旨截光 */
 .d-grid > .d-tall { grid-column: span 2; }
 @media (max-width: 1100px) { .d-grid > .d-tall { grid-column: span 1; } }
@@ -7225,7 +7515,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
    優化 Dashboard：選 agent → 看建議 → 逐項確認才寫入
    ═══════════════════════════════════════════════════════════════ */
 .opt-modal { width: min(620px, 94vw); }
-.opt-modal header .sub { margin: 3px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.opt-modal header .sub { margin: 3px 0 0; font-size: var(--fs-3); line-height: 1.5; color: var(--muted); }
 .opt-modal .body { padding: 18px 16px 8px; max-height: 62vh; overflow: auto; }
 
 .opt-agents { display: grid; gap: 8px; }
@@ -7241,11 +7531,11 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 .opt-agent:hover { background: var(--inset); border-color: var(--accent); }
 .opt-agent:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.opt-agent-name { font-size: 14px; font-weight: 600; color: var(--fg); }
-.opt-agent-brief { font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.opt-agent-name { font-size: var(--fs-4); font-weight: 600; color: var(--fg); }
+.opt-agent-brief { font-size: var(--fs-3); line-height: 1.5; color: var(--muted); }
 .opt-agent.is-local { border-style: dashed; }
 
-.opt-notes { margin: 0 0 14px; padding-left: 18px; font-size: 12.5px; line-height: 1.6; color: var(--warn); }
+.opt-notes { margin: 0 0 14px; padding-left: 18px; font-size: var(--fs-3); line-height: 1.6; color: var(--warn); }
 
 .opt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .opt-item {
@@ -7260,19 +7550,19 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .opt-item:hover { background: var(--inset); }
 .opt-item-body { display: grid; gap: 6px; min-width: 0; }
 .opt-item-head { display: flex; align-items: baseline; gap: 8px; }
-.opt-item-field { font-size: 13px; font-weight: 600; color: var(--fg); }
+.opt-item-field { font-size: var(--fs-3); font-weight: 600; color: var(--fg); }
 .opt-item-src {
   padding: 1px 6px; border-radius: 4px;
-  font-size: 10.5px; color: var(--muted); background: var(--inset);
+  font-size: var(--fs-1); color: var(--muted); background: var(--inset);
 }
-.opt-why { font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+.opt-why { font-size: var(--fs-3); line-height: 1.55; color: var(--muted); }
 
 /* 改動前後：紅刪綠增太像 code diff，這裡用「舊的變淡＋刪除線 → 新的正常」 */
-.opt-diff { display: grid; gap: 4px; font-size: 13px; line-height: 1.5; }
+.opt-diff { display: grid; gap: 4px; font-size: var(--fs-3); line-height: 1.5; }
 .opt-before { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
 .opt-after { color: var(--fg); }
 .opt-after::before { content: "→ "; color: var(--accent); }
-.opt-noop { font-size: 12.5px; color: var(--warn); }
+.opt-noop { font-size: var(--fs-3); color: var(--warn); }
 
 .opt-modal footer { display: flex; justify-content: flex-end; gap: 8px; }
 
@@ -7299,7 +7589,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .set-cat {
   padding: 9px 12px;
   text-align: left;
-  font-size: 13.5px;
+  font-size: var(--fs-4);
   color: var(--fg-2);
   background: none;
   border: 0;
@@ -7327,14 +7617,14 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 }
 #set-pane .settings-section h2 {
   margin: 0 0 6px;
-  font-size: 14px;
+  font-size: var(--fs-4);
   font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--accent);
 }
 #set-pane .settings-section > .sub {
   margin: 0 0 18px;
-  font-size: 13px;
+  font-size: var(--fs-3);
   line-height: 1.6;
   color: var(--muted);
   max-width: 56em;
@@ -7367,7 +7657,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   border-top: 1px solid var(--border);
   background: var(--panel, var(--bg));
 }
-.set-foot-note { font-size: 12.5px; color: var(--muted); transition: color 160ms ease; }
+.set-foot-note { font-size: var(--fs-3); color: var(--muted); transition: color 160ms ease; }
 .set-foot-note.is-saved { color: var(--success); }
 @media (prefers-reduced-motion: reduce) { .set-foot-note { transition: none; } }
 
@@ -7404,17 +7694,17 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 10px);
 }
-.ov-tile-label { margin: 0; font-size: 11.5px; color: var(--meta); }
+.ov-tile-label { margin: 0; font-size: var(--fs-2); color: var(--meta); }
 /* stat tile 的值用比例數字：tabular 在大字級會顯得鬆散，
    對齊需求只存在於「一整欄數字」，這裡是並排的獨立值 */
 .ov-tile-value {
   margin: 4px 0 2px;
-  font-size: 26px;
+  font-size: var(--fs-8);
   font-weight: 650;
   line-height: 1.1;
   color: var(--fg);
 }
-.ov-tile-hint { margin: 0; font-size: 11px; color: var(--meta); }
+.ov-tile-hint { margin: 0; font-size: var(--fs-1); color: var(--meta); }
 /* 只有最上游那一個掛狀態色。四個都響等於沒有優先序。
    邊框＋左緣一起變色，不是只換數字顏色 —— 顏色不能是唯一通道。 */
 .ov-tile.is-warn {
@@ -7434,7 +7724,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 12px);
 }
-.ov-hero-kicker { margin: 0; font-size: 11.5px; color: var(--meta); letter-spacing: 0.04em; }
+.ov-hero-kicker { margin: 0; font-size: var(--fs-2); color: var(--meta); letter-spacing: 0.04em; }
 /* 一個畫面只有一個 hero figure：專案名。它就是「哪一個」的答案。 */
 .ov-hero-name {
   margin: 6px 0 16px;
@@ -7468,17 +7758,17 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .ov-meter.meter-ok .ov-meter-track i { background: var(--success); }
 .ov-meter-value {
   flex: 0 0 auto;
-  font-size: 20px;
+  font-size: var(--fs-7);
   font-weight: 650;
   color: var(--fg);
 }
-.ov-meter-unit { font-size: 13px; font-weight: 500; color: var(--meta); margin-left: 1px; }
+.ov-meter-unit { font-size: var(--fs-3); font-weight: 500; color: var(--meta); margin-left: 1px; }
 
-.ov-hero-why { margin: 0 0 18px; font-size: 13.5px; line-height: 1.6; color: var(--fg-2, var(--fg)); }
+.ov-hero-why { margin: 0 0 18px; font-size: var(--fs-4); line-height: 1.6; color: var(--fg-2, var(--fg)); }
 /* 任務啟動困難是 ADHD 的核心障礙 —— CTA 要是畫面上最響的東西，
    不是角落一顆小按鈕。 */
 .ov-hero-cta { margin: 0 0 18px; }
-.ov-hero-cta .btn-lg { padding: 11px 22px; font-size: 14.5px; font-weight: 600; }
+.ov-hero-cta .btn-lg { padding: 11px 22px; font-size: var(--fs-5); font-weight: 600; }
 
 .ov-hero-facts {
   display: flex;
@@ -7489,8 +7779,8 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   border-top: 1px solid var(--border-muted, var(--border));
 }
 .ov-hero-facts div { margin: 0; }
-.ov-hero-facts dt { margin: 0 0 3px; font-size: 11px; color: var(--meta); }
-.ov-hero-facts dd { margin: 0; font-size: 13px; color: var(--fg); }
+.ov-hero-facts dt { margin: 0 0 3px; font-size: var(--fs-1); color: var(--meta); }
+.ov-hero-facts dd { margin: 0; font-size: var(--fs-3); color: var(--fg); }
 
 /* 其他專案／PR 雷達／更多統計都套同一層卡片。
    它們原本是裸在背景上的，跟上面的 tile 與焦點卡不同層級 —— 同一頁出現
@@ -7502,7 +7792,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 12px);
 }
-.ov-others-head { margin: 0 0 10px; font-size: 11.5px; color: var(--meta); }
+.ov-others-head { margin: 0 0 10px; font-size: var(--fs-2); color: var(--meta); }
 /* 卡片自帶內距，列就不必再縮排一層 */
 .ov-others .ov-row { padding-left: 6px; padding-right: 6px; }
 
@@ -7518,14 +7808,14 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   border-radius: 6px;
   background: none;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
   cursor: pointer;
 }
 .ov-row:hover { background: var(--inset); color: var(--fg); }
 .ov-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ov-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ov-row-state { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.ov-row-state { font-size: var(--fs-2); color: var(--muted); white-space: nowrap; }
 /* 狀態色（保留給狀態，不當類別色用）。「還沒開始」刻意保持中性 ——
    未起步不是錯誤，標紅只會觸發迴避。 */
 .ov-row-state.tone-review { color: var(--danger); }
@@ -7535,10 +7825,10 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
 .ov-bar { height: 4px; border-radius: 999px; background: var(--border); overflow: hidden; }
 .ov-bar i { display: block; height: 100%; background: var(--accent); }
 .ov-rows li.ready .ov-bar i { background: var(--success); }
-.ov-row-pct { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ov-row-pct { font-size: var(--fs-2); color: var(--muted); font-variant-numeric: tabular-nums; }
 .ov-row-flag {
   padding: 0 6px; border-radius: 4px;
-  font-size: 10.5px; color: var(--muted); background: var(--inset); white-space: nowrap;
+  font-size: var(--fs-1); color: var(--muted); background: var(--inset); white-space: nowrap;
 }
 
 /* 偏好設定入口：品牌列右側的齒輪，與收合鍵並排 */
@@ -7576,7 +7866,7 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   align-items: center;
   justify-content: center;
   border-radius: 5px;
-  font-size: 15px;
+  font-size: var(--fs-5);
   line-height: 1;
   color: var(--muted);
   text-decoration: none;
@@ -7617,13 +7907,13 @@ button.ft-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 
   background: var(--inset);
   outline: none;
 }
-.rail-add-item strong { display: block; font-size: 13.5px; font-weight: 600; color: var(--fg); }
+.rail-add-item strong { display: block; font-size: var(--fs-4); font-weight: 600; color: var(--fg); }
 /* 每個選項自帶一句說明 —— 三條路徑光看名字分不出差別 */
-.rail-add-item span { display: block; margin-top: 2px; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+.rail-add-item span { display: block; margin-top: 2px; font-size: var(--fs-2); line-height: 1.45; color: var(--muted); }
 /* TUI 提示放在計劃追蹤頁本身 —— 原本它是側欄一顆叫「開啟 TUI 追蹤」
    的按鈕，實際只是導到這一頁，而且延遲 400ms 才跳，按起來像壞的 */
 .tui-hint { color: var(--muted); }
-.tui-hint code { padding: 1px 5px; border-radius: 4px; background: var(--inset); font-size: 11.5px; }
+.tui-hint code { padding: 1px 5px; border-radius: 4px; background: var(--inset); font-size: var(--fs-2); }
 
 /* 引導列可收起。開關在工具列的「更多」裡 —— 偶爾調一次的偏好不該佔位置。
    收起時整條連同上下留白一起消失，不留空行。 */
@@ -7676,7 +7966,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
 .set-modal-titles { flex: 1 1 auto; min-width: 0; }
 .set-modal-eyebrow {
   margin: 0 0 6px;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -7684,7 +7974,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
 }
 .set-modal-head h2 {
   margin: 0 0 6px;
-  font-size: 26px;
+  font-size: var(--fs-8);
   font-weight: 650;
   letter-spacing: -0.02em;
   color: var(--fg);
@@ -7694,7 +7984,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13.5px;
+  font-size: var(--fs-4);
   color: var(--muted);
 }
 .set-modal-sub kbd {
@@ -7703,7 +7993,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   border-radius: 6px;
   background: var(--inset, var(--bg));
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
 }
 .set-modal-x {
@@ -7716,7 +8006,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   border-radius: 8px;
   background: none;
   color: var(--muted);
-  font-size: 15px;
+  font-size: var(--fs-5);
   line-height: 1;
   cursor: pointer;
 }
@@ -7740,8 +8030,8 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   padding: 16px 30px;
   border-top: 1px solid var(--border);
 }
-.set-modal-note { font-size: 13px; color: var(--muted); }
-.set-modal-foot .btn-primary { padding: 9px 26px; font-size: 13.5px; }
+.set-modal-note { font-size: var(--fs-3); color: var(--muted); }
+.set-modal-foot .btn-primary { padding: 9px 26px; font-size: var(--fs-4); }
 
 /* 縮放把手。CSS resize: both 在內含 iframe 的視窗裡是壞的 ——
    指標一進 iframe 就換它接事件，拖曳當場斷掉。所以自己畫、自己接。 */
@@ -7796,7 +8086,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   background: color-mix(in oklab, var(--accent) 12%, transparent);
 }
 .d-tag a {
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-weight: 500;
   color: var(--fg);
   text-decoration: none;
@@ -7811,7 +8101,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   border-radius: 50%;
   background: none;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-2);
   line-height: 1;
   cursor: pointer;
 }
@@ -7826,7 +8116,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   background: none;
   color: var(--fg);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 .d-tag-input::placeholder { color: var(--muted); }
 .d-tag-input:focus {
@@ -7845,7 +8135,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   padding: 0 0 12px;
 }
 .tag-bar[hidden] { display: none; }
-.tag-bar-label { margin-right: 2px; font-size: 11.5px; color: var(--muted); }
+.tag-bar-label { margin-right: 2px; font-size: var(--fs-2); color: var(--muted); }
 .tag-chip {
   display: inline-flex;
   align-items: center;
@@ -7857,10 +8147,10 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   background: none;
   color: var(--fg-2);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-2);
   cursor: pointer;
 }
-.tag-chip span { font-size: 10.5px; color: var(--muted); }
+.tag-chip span { font-size: var(--fs-1); color: var(--muted); }
 .tag-chip:hover { border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); color: var(--fg); }
 .tag-chip.on {
   border-color: var(--accent);
@@ -7877,7 +8167,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   background: none;
   color: var(--muted);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-2);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -7889,40 +8179,18 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   padding: 1px 7px;
   border-radius: 9px;
   background: color-mix(in oklab, var(--accent) 14%, transparent);
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   color: var(--fg-2);
 }
 
 /* 專案清單的上下拖曳把手。與檔案樹那條同一套手感。 */
-.rail-proj-resize {
-  height: 9px;
-  margin: 2px 8px 0;
-  cursor: row-resize;
-  touch-action: none;
-  position: relative;
-}
-.rail-proj-resize::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 4px;
-  width: 30px;
-  height: 2px;
-  border-radius: 2px;
-  transform: translateX(-50%);
-  background: var(--border);
-  transition: background 140ms ease;
-}
-.rail-proj-resize:hover::after,
-.rail-proj-resize.is-dragging::after { background: var(--accent); }
-@media (prefers-reduced-motion: reduce) { .rail-proj-resize::after { transition: none; } }
 
 /* ═══════════════════════════════════════════════════════════════
    編輯台大綱欄：OpenSpec 章節 + Task List
    兩個都是「從既有資料推出來的視圖」，不是另外要人維護的清單。
    ═══════════════════════════════════════════════════════════════ */
 .os-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.os-bar .mono { font-size: 11px; color: var(--muted); }
+.os-bar .mono { font-size: var(--fs-1); color: var(--muted); }
 
 .os-list {
   /* 展開時填滿章節與專案檔案之間的空間，而不是固定一小塊 */
@@ -7962,7 +8230,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
 .os-body { min-width: 0; flex: 1 1 auto; }
 .os-head {
   display: block;
-  font-size: 12px;
+  font-size: var(--fs-2);
   font-weight: 600;
   color: var(--fg);
   line-height: 1.4;
@@ -7972,7 +8240,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
 }
 .os-file {
   display: block;
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   color: var(--muted);
   line-height: 1.35;
   overflow: hidden;
@@ -7993,26 +8261,26 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   margin: 8px 0 2px;
   padding: 0 8px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-1);
   letter-spacing: 0.02em;
   color: var(--muted);
 }
 .os-group:first-child { margin-top: 2px; }
 .os-group { display: flex; align-items: center; gap: 6px; }
 /* change 是 OpenSpec 的工作單位，用 accent 讓它比 spec domain 重 */
-.os-group--change { color: var(--accent); font-weight: 600; font-size: 11px; }
+.os-group--change { color: var(--accent); font-weight: 600; font-size: var(--fs-1); }
 .os-group span {
   margin-left: auto;
   padding: 0 5px;
   border-radius: 4px;
   background: var(--inset);
-  font-size: 9.5px;
+  font-size: var(--fs-1);
   color: var(--muted);
 }
 .os-empty {
   margin: 0;
   padding: 10px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   line-height: 1.55;
   color: var(--muted);
 }
@@ -8020,7 +8288,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--inset);
-  font-size: 11px;
+  font-size: var(--fs-1);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -8053,7 +8321,7 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
   padding: 0 6px;
   border-radius: 8px;
   background: color-mix(in oklab, var(--warn) 24%, transparent);
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-weight: 700;
 }
 
@@ -8068,18 +8336,18 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
 .gd-warn { border-left-color: var(--warn); }
 .gd-info { border-left-color: var(--meta); }
 .gd-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; }
-.gd-head strong { font-size: 13.5px; color: var(--fg); }
+.gd-head strong { font-size: var(--fs-4); color: var(--fg); }
 .gd-tag {
   flex: 0 0 auto;
   padding: 1px 7px;
   border-radius: 5px;
   background: var(--inset);
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   color: var(--muted);
 }
 .gd-block .gd-tag { background: color-mix(in oklab, var(--danger, #f85149) 20%, transparent); color: var(--fg-2); }
 .gd-item.gd-warn .gd-tag { background: color-mix(in oklab, var(--warn) 22%, transparent); color: var(--fg-2); }
-.gd-why { margin: 0 0 9px; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.gd-why { margin: 0 0 9px; font-size: var(--fs-3); line-height: 1.6; color: var(--muted); }
 .gd-cmd {
   margin: 0 0 9px;
   padding: 9px 11px;
@@ -8089,15 +8357,15 @@ html.hide-focus-strip #adhd-focus-strip { display: none; }
 }
 .gd-cmd code {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-2);
   line-height: 1.7;
   color: var(--fg-2);
   white-space: pre;
 }
-.gd-copy { font-size: 11.5px; }
+.gd-copy { font-size: var(--fs-2); }
 .gd-note, .gd-none {
   margin: 0 0 10px;
-  font-size: 12.5px;
+  font-size: var(--fs-3);
   line-height: 1.6;
   color: var(--muted);
 }
@@ -8108,7 +8376,7 @@ p.gd-warn {
   padding: 9px 11px;
   border: 1px dashed var(--border);
   border-radius: 7px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   line-height: 1.6;
   color: var(--fg-2);
 }
@@ -8129,7 +8397,7 @@ p.gd-warn {
 .fv-path {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--fg-2);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -8140,7 +8408,7 @@ p.gd-warn {
   padding: 1px 8px;
   border-radius: 5px;
   background: var(--inset);
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--muted);
 }
 .fv-state.is-dirty {
@@ -8157,7 +8425,7 @@ p.gd-warn {
 .fv-review {
   padding: 14px 16px;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: var(--fs-3);
   line-height: 1.75;
   letter-spacing: 0;
   tab-size: 2;
@@ -8224,10 +8492,10 @@ p.gd-warn {
   margin: 0;
   padding: 7px 14px;
   border-bottom: 1px solid var(--border);
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   color: var(--muted);
 }
-.fv-diff-head .fv-add, .fv-diff-head .fv-del { font-size: 11.5px; }
+.fv-diff-head .fv-add, .fv-diff-head .fv-del { font-size: var(--fs-2); }
 .fv-diff-head button { margin-left: auto; }
 .fv-review {
   flex: 1 1 auto;
@@ -8268,25 +8536,25 @@ p.gd-warn {
   background: var(--panel, var(--bg));
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
 }
-.fv-tip-head { margin: 0 0 7px; font-size: 11px; color: var(--warn); font-weight: 600; }
+.fv-tip-head { margin: 0 0 7px; font-size: var(--fs-1); color: var(--warn); font-weight: 600; }
 .fv-tip-row { display: flex; gap: 7px; margin: 0 0 5px; align-items: baseline; }
 .fv-tip-tag {
   flex: 0 0 auto;
   padding: 0 6px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: var(--fs-1);
   font-weight: 600;
 }
 .fv-tip-tag.old { background: color-mix(in oklab, var(--muted) 26%, transparent); color: var(--muted); }
 .fv-tip-tag.new { background: color-mix(in oklab, var(--warn) 26%, transparent); color: var(--fg-2); }
 .fv-tip-row code, .fv-tip-row em {
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   line-height: 1.55;
   color: var(--fg-2);
   word-break: break-word;
 }
-.fv-tip-who { margin: 6px 0 0; font-size: 10.5px; color: var(--muted); }
+.fv-tip-who { margin: 6px 0 0; font-size: var(--fs-1); color: var(--muted); }
 
 /* 版本紀錄 */
 .fv-hist {
@@ -8297,7 +8565,7 @@ p.gd-warn {
   background: var(--panel, var(--bg));
 }
 .fv-hist[hidden] { display: none; }
-.fv-hist-empty { margin: 0; padding: 12px 14px; font-size: 12px; color: var(--muted); }
+.fv-hist-empty { margin: 0; padding: 12px 14px; font-size: var(--fs-2); color: var(--muted); }
 .fv-hist-list { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 1px; }
 .fv-hist-item {
   display: flex;
@@ -8308,15 +8576,15 @@ p.gd-warn {
 }
 .fv-hist-item:hover { background: var(--inset); }
 .fv-hist-meta { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
-.fv-hist-meta strong { font-size: 12.5px; color: var(--fg); }
-.fv-hist-meta span { font-size: 11px; color: var(--muted); }
-.fv-hist-meta time { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--meta); }
+.fv-hist-meta strong { font-size: var(--fs-3); color: var(--fg); }
+.fv-hist-meta span { font-size: var(--fs-1); color: var(--muted); }
+.fv-hist-meta time { margin-left: auto; font-family: var(--mono); font-size: var(--fs-1); color: var(--meta); }
 .fv-note {
   flex: 0 0 auto;
   margin: 0;
   padding: 8px 14px;
   border-top: 1px solid var(--border);
-  font-size: 11.5px;
+  font-size: var(--fs-2);
   color: var(--muted);
 }
 
@@ -8340,7 +8608,7 @@ p.gd-warn {
   gap: 8px;
   padding: 5px 8px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--fg-2);
   text-decoration: none;
 }
@@ -8372,7 +8640,7 @@ p.gd-warn {
   padding: 0 6px;
   border-radius: 5px;
   background: var(--inset);
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
@@ -8396,7 +8664,7 @@ p.gd-warn {
   border-radius: 8px;
   background: var(--warn-bg);
   color: var(--fg-2);
-  font-size: 13px;
+  font-size: var(--fs-3);
   line-height: 1.6;
 }
 .ov-warn code {
@@ -8413,12 +8681,12 @@ p.gd-warn {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 12px);
-  font-size: 13px;
+  font-size: var(--fs-3);
   color: var(--fg-2);
 }
 .ov-pr-radar .muted {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-2);
 }
 
 /* 其他資訊摺疊。預設收起 —— 工作記憶約 4 個開放迴圈，
@@ -8434,7 +8702,7 @@ p.gd-warn {
   cursor: pointer;
   padding: 12px 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-3);
   list-style: none;
   user-select: none;
 }
@@ -8456,13 +8724,13 @@ p.gd-warn {
   background: color-mix(in oklab, var(--fg) 4%, transparent);
 }
 .tk-resume p { margin: 0; line-height: 1.7; }
-.tk-resume-a { font-size: 12px; color: var(--muted); }
-.tk-resume-b { font-size: 13px; color: var(--fg-2); }
-.tk-resume-c { font-size: 13px; color: var(--fg); font-weight: 600; }
+.tk-resume-a { font-size: var(--fs-2); color: var(--muted); }
+.tk-resume-b { font-size: var(--fs-3); color: var(--fg-2); }
+.tk-resume-c { font-size: var(--fs-3); color: var(--fg); font-weight: 600; }
 
 .tk-audit-empty {
   margin: 10px 0 0;
-  font-size: 12px;
+  font-size: var(--fs-2);
   line-height: 1.7;
   color: var(--muted);
 }
@@ -8472,7 +8740,7 @@ p.gd-warn {
 .tk-audit-timeline > summary {
   cursor: pointer;
   padding: 8px 2px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   color: var(--muted);
   list-style: none;
   user-select: none;
@@ -8492,7 +8760,7 @@ p.gd-warn {
 }
 .tk-timeline li {
   padding: 4px 0;
-  font-size: 12px;
+  font-size: var(--fs-2);
   line-height: 1.5;
   border-bottom: 1px solid color-mix(in oklab, var(--fg) 6%, transparent);
 }
@@ -8541,7 +8809,7 @@ p.gd-warn {
   padding: 6px 12px 8px;
 }
 .domain-bar-label {
-  font-size: 11px;
+  font-size: var(--fs-1);
   letter-spacing: .04em;
   color: var(--muted);
   flex: 0 0 auto;
@@ -8549,10 +8817,11 @@ p.gd-warn {
 .domain-bar select {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 12px;
-  padding: 4px 6px;
+  min-height: var(--ctl-h-md);
+  font-size: var(--fs-2);
+  padding: 0 30px 0 8px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--fg);
 }
@@ -8561,7 +8830,7 @@ p.gd-warn {
 .domain-orphans {
   margin: 0 12px 8px;
   padding: 6px 8px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   line-height: 1.5;
   color: var(--muted);
   background: var(--surface);
@@ -8576,12 +8845,12 @@ p.gd-warn {
   align-items: center;
   gap: 10px;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--fs-2);
   border: 1px solid var(--border-soft);
   border-radius: 6px;
   background: var(--surface);
 }
-.domain-pack-row code { color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+.domain-pack-row code { color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-1); }
 .domain-pack-row .tag { margin-left: auto; }
 .domain-pack-row--err { border-color: var(--danger); color: var(--danger); }
 
@@ -8598,12 +8867,12 @@ p.gd-warn {
 }
 .field-diff-head {
   margin: 0 0 6px;
-  font-size: 11px;
+  font-size: var(--fs-1);
   color: var(--meta);
 }
 .field-diff-body {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-2);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -8645,17 +8914,17 @@ p.gd-warn {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 12px);
 }
-.rv-diff-head h2 { margin: 0 0 4px; font-size: 15px; color: var(--fg); }
-.rv-diff-sub { margin: 0 0 14px; font-size: 12px; color: var(--meta); }
+.rv-diff-head h2 { margin: 0 0 4px; font-size: var(--fs-5); color: var(--fg); }
+.rv-diff-sub { margin: 0 0 14px; font-size: var(--fs-2); color: var(--meta); }
 .rv-diff-item + .rv-diff-item {
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--border-muted, var(--border));
 }
-.rv-diff-where { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--fg-2, var(--fg)); }
+.rv-diff-where { margin: 0 0 6px; font-size: var(--fs-2); font-weight: 600; color: var(--fg-2, var(--fg)); }
 .rv-diff-body {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-2);
   line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
@@ -8674,7 +8943,7 @@ p.gd-warn {
   border-radius: 999px;
   background: color-mix(in oklab, var(--warn, #eab308) 14%, transparent);
   color: var(--warn, #eab308);
-  font-size: 10.5px;
+  font-size: var(--fs-1);
   font-weight: 600;
   cursor: pointer;
 }
@@ -8696,3 +8965,231 @@ p.gd-warn {
   background: color-mix(in oklab, var(--warn, #eab308) 12%, var(--surface));
   box-shadow: 0 -6px 16px -8px rgb(0 0 0 / 0.5);
 }
+
+/* ─── AI 撰寫（寫作教練面板）───
+   逐節進度而非轉圈圈：串流 UI 的價值不是快，是證明系統在動、
+   並且讓人能在看到方向不對時提早喊停。 */
+.ai-write-card { display: flex; flex-direction: column; gap: 10px; }
+.ai-write-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-write-progress {
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px 10px;
+  background: var(--inset, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+.ai-write-line { display: flex; align-items: center; gap: 6px; }
+.ai-write-count { margin-left: auto; color: var(--meta); font-variant-numeric: tabular-nums; }
+.ai-write-line.is-running { color: var(--accent); }
+.ai-write-line.is-done { color: var(--success); }
+.ai-write-line.is-skip { color: var(--meta); }
+.ai-write-line.is-fail { color: var(--danger, #f85149); }
+.ai-write-note { margin: 0; font-size: var(--fs-1); color: var(--meta); line-height: 1.5; }
+
+/* ─── 設定：各章節 prompt 覆寫 ─── */
+.aw-sections { display: flex; flex-direction: column; gap: 12px; }
+.aw-section { display: flex; flex-direction: column; gap: 5px; }
+.aw-section label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--fs-3); font-weight: 600; color: var(--fg);
+}
+.aw-badge {
+  padding: 1px 7px; border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+  color: var(--accent); font-size: var(--fs-1); font-weight: 600;
+}
+.aw-section textarea,
+#aw-global, #aw-style {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px); padding: 8px 10px;
+  color: var(--fg); font: inherit; font-size: var(--fs-3); line-height: 1.6;
+  resize: vertical;
+}
+.aw-section textarea:focus, #aw-global:focus, #aw-style:focus {
+  outline: none; border-color: var(--accent); box-shadow: var(--focus-ring);
+}
+
+/* 逐字視窗：顯示模型正在吐的原始文字尾段。
+   內容是尚未解析的 JSON —— 目的不是讓人讀，是證明它在動、而且動得對不對。 */
+.ai-write-live {
+  margin: 0;
+  max-height: 92px;
+  overflow: auto;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  font-family: var(--mono);
+  font-size: var(--fs-1);
+  line-height: 1.5;
+  color: var(--meta);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.ai-write-live[hidden] { display: none; }
+.ai-write-profile {
+  margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  color: var(--accent); font-size: var(--fs-1); font-weight: 600;
+}
+
+/* 設定：角色列與 AI 建議 */
+.aw-domain-bar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 14px; }
+.aw-domain-bar .hint { flex: 1 1 240px; margin: 0 0 6px; }
+
+/* 欄位標題列：標籤在左、繼承按鈕靠右 */
+.aw-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+/* 設定來源切換：選項名稱寫在滑塊內。flex:0 0 auto —— 這是狀態指示，
+   不該跟著標題列撐滿整行（用按鈕的那一版就是這樣被拉寬的）。 */
+.aw-seg { flex: 0 0 auto; display: inline-flex; cursor: pointer; user-select: none; }
+.aw-seg input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+/* 滑塊與「領域限定章節」共用同一組尺寸 —— 它們在同一欄對齊，
+   尺寸一有出入，那一欄看起來就是壞的。 */
+.aw-seg-track,
+.aw-seg-static {
+  box-sizing: border-box;
+  /* 比上一版大 50%（152×26 → 228×39）。圓角 10px 而非 999px —— 要的是
+     長型圓角矩形，不是兩端全圓的膠囊。 */
+  width: 228px;
+  height: 39px;
+  border-radius: 10px;
+  border: 1px solid var(--border-muted);
+  background: var(--inset);
+}
+.aw-seg-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+}
+.aw-seg-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  height: calc(100% - 6px);
+  /* 內圓角比外框小一級，兩層圓角才會同心 */
+  border-radius: 7px;
+  background: var(--surface);
+  border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--border));
+  transition: transform 0.16s ease;
+}
+.aw-seg input:checked + .aw-seg-track .aw-seg-thumb { transform: translateX(100%); }
+.aw-seg-opt {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  font-size: var(--fs-3);
+  line-height: 31px;
+  color: var(--meta);
+  transition: color 0.16s ease;
+}
+/* 滑塊停在哪邊，哪邊的字就亮起來 */
+.aw-seg input:not(:checked) + .aw-seg-track .aw-seg-opt:first-of-type,
+.aw-seg input:checked + .aw-seg-track .aw-seg-opt:last-of-type {
+  color: var(--accent);
+  font-weight: var(--weight-em);
+}
+.aw-seg input:focus-visible + .aw-seg-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.aw-seg:hover .aw-seg-track { border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); }
+
+/* 領域限定章節：同樣的長型圓角，但整塊反灰 —— 這一格沒有東西可以切換，
+   灰掉比虛線更直接說明「不是壞掉，是這裡沒有選項」。 */
+.aw-seg-static {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  font-size: var(--fs-3);
+  color: var(--meta);
+  opacity: 0.7;
+}
+
+/* 繼承來的內容：唯讀展示，視覺上明顯不是你能改的東西 */
+.aw-base-preview {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--inset);
+}
+.aw-base-preview[hidden] { display: none; }
+.aw-base-tag {
+  display: inline-block;
+  font-size: var(--fs-1);
+  color: var(--meta);
+  margin-bottom: 4px;
+}
+.aw-base-preview pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  font-size: var(--fs-2);
+  color: var(--muted);
+  max-height: 160px;
+  overflow: auto;
+}
+.aw-section textarea.is-inherited,
+#aw-global.is-inherited, #aw-style.is-inherited {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+#aw-profile {
+  height: 40px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px); padding: 0 12px; color: var(--fg); font: inherit; font-size: var(--fs-3);
+}
+.aw-suggest {
+  display: flex; flex-direction: column; gap: 6px;
+  margin: 0 0 18px; padding: 12px 14px;
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, var(--border));
+  border-radius: var(--radius-sm, 6px);
+}
+.aw-suggest > label { font-size: var(--fs-3); font-weight: 600; color: var(--fg); }
+.aw-suggest-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.aw-suggest-row input {
+  flex: 1 1 320px; height: 38px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: var(--radius-sm, 6px);
+  padding: 0 12px; color: var(--fg); font: inherit; font-size: var(--fs-3);
+}
+
+/* ── 介面字級選擇器 ───────────────────────────────────────── */
+.fs-picker {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+/* 每個選項用它自己代表的字級顯示；固定 min-height 讓四張卡等高，
+   否則「大」那張會比別人高一截，看起來像被選中了。 */
+.fs-opt {
+  flex: 1 1 110px;
+  min-height: 78px;
+  display: grid;
+  place-content: center;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--inset);
+  color: var(--muted);
+  cursor: pointer;
+  text-align: center;
+}
+.fs-opt:hover { border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); }
+.fs-opt.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.fs-sample { line-height: 1.2; font-weight: var(--weight-em); }
+.fs-name { font-size: var(--fs-2); }
+.fs-pct { font-size: var(--fs-1); opacity: 0.7; }

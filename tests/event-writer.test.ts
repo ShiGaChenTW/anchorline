@@ -53,8 +53,54 @@ describe("Writer C —— git 回填", () => {
     expect(events[0]!.actor).toEqual({ kind: "human", family: null, name: "Scott" });
   });
 
-  test("subject = hash，證據區才串得起來", () => {
+  test("訊息沒有錨點時，subject 退回 hash", () => {
     expect(events[0]!.subject).toBe("abc1234");
+  });
+
+  test("訊息內文寫了錨點就用錨點當 subject —— 那是 join key", () => {
+    const [ev] = commitsToEvents(
+      [
+        {
+          hash: "a009563",
+          subject: "docs: README 加入安裝說明",
+          at: "2026-08-10T12:16:56Z",
+          author: "ShiGa Chen",
+          refs: "",
+          body: "anc:t=HNTPRY5R\n",
+        },
+      ],
+      "p"
+    );
+    expect(ev!.subject).toBe("HNTPRY5R");
+    // hash 不能因此遺失，否則回填不再冪等。
+    expect(ev!.event_id).toBe("a009563");
+  });
+
+  test("錨點也讀得到標題行與舊的 sf: 前綴", () => {
+    const subjectAnchor = commitsToEvents(
+      [{ hash: "h1", subject: "fix: 修 rollup anc:t=ABCD1234", at: "2026-08-10T12:00:00Z", author: "S", refs: "" }],
+      "p"
+    );
+    expect(subjectAnchor[0]!.subject).toBe("ABCD1234");
+
+    const legacy = commitsToEvents(
+      [{ hash: "h2", subject: "chore", at: "2026-08-10T12:00:00Z", author: "S", refs: "", body: "sf:t=ABC12345" }],
+      "p"
+    );
+    expect(legacy[0]!.subject).toBe("ABC12345");
+  });
+
+  test("像錨點但不合法的字串不當成錨點 —— 誤判會把事件掛到不存在的任務上", () => {
+    const bad = (body: string) =>
+      commitsToEvents(
+        [{ hash: "h3", subject: "chore", at: "2026-08-10T12:00:00Z", author: "S", refs: "", body }],
+        "p"
+      )[0]!.subject;
+
+    expect(bad("anc:t=abc")).toBe("h3"); // 太短，且小寫不在字元集內
+    // Crockford base32 刻意排除 I / L / O / U（手抄時容易看錯）。手寫的錨點
+    // 很容易誤用它們 —— L0 探針用的 `L0PROBE1` 就同時踩到 L 和 O。
+    expect(bad("anc:t=L0PROBE1")).toBe("h3");
   });
 
   test("GitHub remote → commit 連結；認不得的 remote 不瞎拼", () => {

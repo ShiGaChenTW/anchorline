@@ -20,6 +20,7 @@ import {
   type LogEvent,
 } from "./event-log";
 import { isNative, native } from "./native";
+import { anchorInText } from "./plan-parser";
 
 export function canWriteLog(): boolean {
   return isNative();
@@ -88,7 +89,15 @@ export function logEvent(projectRoot: string, e: NewEvent): boolean {
 
 // ── Writer C：git 回填 ──────────────────────────────────────────
 
-type GitCommit = { hash: string; subject: string; at: string; author: string; refs: string };
+type GitCommit = {
+  hash: string;
+  subject: string;
+  at: string;
+  author: string;
+  refs: string;
+  /** commit 訊息的內文（`%b`）。錨點通常寫在這裡，不在標題行。 */
+  body?: string;
+};
 
 /**
  * commit → 事件。**`event_id` 直接用 commit hash**，所以重跑幾次都只會有一筆。
@@ -109,7 +118,9 @@ export function commitsToEvents(
         // 猜錯的族系會讓職務分離規則誤判，那比沒有資訊更糟。
         actor: { kind: "human", family: null, name: c.author || "unknown" },
         kind: "commit",
-        subject: c.hash,
+        // 訊息裡寫了錨點就用錨點當 join key —— 那正是有人特地寫它的理由。
+        // 沒寫才退回 commit hash。hash 不會因此遺失：`event_id` 就是它。
+        subject: anchorInText(`${c.subject}\n${c.body ?? ""}`) ?? c.hash,
         ts: c.at,
         ...(remoteUrl ? { ref: commitUrl(remoteUrl, c.hash) } : {}),
         payload: { title: c.subject },

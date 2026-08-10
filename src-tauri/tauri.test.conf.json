@@ -5,7 +5,7 @@
   "app": {
     "windows": [
       {
-        "title": "Anchorline 測試版 — 開發專案工作台",
+        "title": "Anchorline Test — 測試版（含示範資料）",
         "width": 1280,
         "height": 880,
         "minWidth": 900,

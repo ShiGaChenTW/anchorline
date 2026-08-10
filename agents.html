@@ -20,7 +20,7 @@
   }
   .agent-list h2 {
     margin: 4px 8px 10px;
-    font-size: 11px;
+    font-size: var(--fs-1);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--muted);
@@ -51,18 +51,18 @@
   }
   .agent-item .dot.on { background: var(--success); box-shadow: 0 0 0 3px color-mix(in oklab, var(--success) 25%, transparent); }
   .agent-item .dot.off { background: var(--danger); opacity: 0.7; }
-  .agent-item strong { display: block; font-size: 13px; font-weight: var(--weight-em); }
-  .agent-item span { font-size: 11px; color: var(--muted); }
+  .agent-item strong { display: block; font-size: var(--fs-3); font-weight: var(--weight-em); }
+  .agent-item span { font-size: var(--fs-1); color: var(--muted); }
   .agent-detail {
     overflow: auto;
     padding: 16px 18px 40px;
   }
   .agent-detail h1 {
     margin: 0 0 4px;
-    font-size: 18px;
+    font-size: var(--fs-6);
     font-weight: var(--weight-em);
   }
-  .agent-detail .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+  .agent-detail .sub { color: var(--muted); font-size: var(--fs-2); margin-bottom: 16px; }
   .agent-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -82,24 +82,15 @@
   }
   .field-block label {
     display: block;
-    font-size: 12px;
+    font-size: var(--fs-2);
     font-weight: var(--weight-em);
     color: var(--muted);
     margin-bottom: 6px;
   }
   .field-block textarea,
   .field-block input,
-  .field-block select {
-    width: 100%;
-    box-sizing: border-box;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--fg);
-    font: inherit;
-    font-size: 13px;
-    padding: 8px 10px;
-  }
+  /* 只留這一頁真正需要的寬度；外觀走 shared.css 的全域基底 */
+  .field-block select { width: 100%; }
   .field-block textarea { min-height: 120px; resize: vertical; font-family: var(--mono); line-height: 1.45; }
   .field-block textarea.role { min-height: 90px; font-family: inherit; }
   .toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 16px; }
@@ -110,7 +101,7 @@
     padding: 10px 12px;
     margin-bottom: 8px;
     background: var(--bg);
-    font-size: 12px;
+    font-size: var(--fs-2);
   }
   .job-card .hd { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
   .invoke-box {
@@ -120,7 +111,7 @@
     padding: 12px 14px;
     margin-bottom: 14px;
   }
-  .invoke-box h3 { margin: 0 0 8px; font-size: 14px; }
+  .invoke-box h3 { margin: 0 0 8px; font-size: var(--fs-4); }
   .empty-agent { padding: 40px; text-align: center; color: var(--muted); }
 </style>
 <script>(function(){try{var t=localStorage.getItem("anchorline:theme")||localStorage.getItem("specforge:theme");if(t==="warp")t="terminal";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"],terminal:["dark","#0d0b08"]};if(!m[t])t="terminal";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","terminal");}})();</script>

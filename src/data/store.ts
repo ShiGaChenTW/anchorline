@@ -51,6 +51,15 @@ import { applyMeta, metaFromSections, orphanSectionIds, pickDomain } from "../li
 import { DEFAULT_DOMAIN, domainPacks, reloadUserPacks } from "./domains";
 import { autoRescanUserDomains } from "../lib/user-domains";
 import { resolveDomain } from "../lib/domain-pack";
+import {
+  migrateAiWriting,
+  resolveWriting,
+  setField,
+  setInherit,
+  setSectionPrompt,
+  type InheritableField,
+  type ResolvedWriting,
+} from "../lib/ai-writing-config";
 import { BASE_GATE_SPEC } from "../lib/prd-gates";
 import type { GateSpec } from "../lib/gate-rules";
 import type { ProjectCandidate } from "../lib/folder-import";
@@ -455,6 +464,9 @@ function load(): AppState {
           ...base.settings.editor,
           ...((parsed.settings as AISettings | undefined)?.editor ?? {}),
         },
+        // 撰寫設定經歷過兩次改版（頂層 → 角色 → 領域），淺合併會留下混種物件。
+        // migrateAiWriting 認得三代格式，一律收斂成 byDomain。
+        aiWriting: migrateAiWriting((parsed.settings as AISettings | undefined)?.aiWriting),
       },
       showSamples: APP_VARIANT === "prod" ? false : parsed.showSamples !== false,
       agentJobs: Array.isArray(parsed.agentJobs) ? (parsed.agentJobs as AgentJob[]) : [],
@@ -998,6 +1010,65 @@ export const store = {
   // 但它不是「已儲存」，異動高亮就是拿它跟 projectSectionValues 比。
 
   /** 使用者打字的落點。與已儲存值相同時自動清掉草稿 —— 改回原樣就不算 dirty。 */
+  // ── AI 撰寫設定（依領域包） ─────────────────────────────────
+
+  /** 這個領域實際生效的撰寫設定（自訂值疊在通用值上） */
+  writingFor(domain: string): ResolvedWriting {
+    return resolveWriting(state.settings.aiWriting.byDomain, domain);
+  },
+
+  /** 目前作用中專案所屬領域的撰寫設定 —— 產生 prompt 時用這個 */
+  activeWriting(): ResolvedWriting {
+    return this.writingFor(domainOf(state.projects.find((p) => p.id === state.activeProjectId)));
+  },
+
+  /** 某領域下該有哪些章節（領域包會追加章節，設定頁要照著列） */
+  sectionsForDomain(domain: string): Section[] {
+    return domainSections(domain);
+  },
+
+  /** 切換某欄位／章節是否沿用通用（key 見 ai-writing-config） */
+  setDomainInherit(domain: string, key: string, on: boolean) {
+    const aw = state.settings.aiWriting;
+    state = {
+      ...state,
+      settings: {
+        ...state.settings,
+        aiWriting: { ...aw, byDomain: setInherit(aw.byDomain, domain, key, on) },
+      },
+    };
+    emit();
+  },
+
+  /** 寫入某領域的自訂值 */
+  setDomainWriteField(domain: string, field: InheritableField, value: string) {
+    const aw = state.settings.aiWriting;
+    state = {
+      ...state,
+      settings: {
+        ...state.settings,
+        aiWriting: { ...aw, byDomain: setField(aw.byDomain, domain, field, value) },
+      },
+    };
+    emit();
+  },
+
+  /** 寫入某章節的提示詞 */
+  setDomainSectionPrompt(domain: string, sectionId: string, value: string) {
+    const aw = state.settings.aiWriting;
+    state = {
+      ...state,
+      settings: {
+        ...state.settings,
+        aiWriting: {
+          ...aw,
+          byDomain: setSectionPrompt(aw.byDomain, domain, sectionId, value),
+        },
+      },
+    };
+    emit();
+  },
+
   setSectionDraft(sectionId: string, key: string, value: string) {
     const pid = state.activeProjectId;
     if (!pid) return;
@@ -1810,7 +1881,13 @@ export const store = {
     const merged = {
       ...seedState(),
       ...newState,
-      settings: { ...DEFAULT_SETTINGS, ...(newState.settings ?? {}) },
+      // aiWriting 是後加的巢狀物件，淺合併會讓舊存檔拿到 undefined
+      settings: {
+        ...DEFAULT_SETTINGS,
+        ...(newState.settings ?? {}),
+        // 匯入的備份可能是任何一代格式 —— 走同一條遷移，不要兩條路徑各修各的
+        aiWriting: migrateAiWriting(newState.settings?.aiWriting),
+      },
     };
     // 匯入的備份可能是 Comment 還沒有 projectId 的年代產生的。
     // 載入路徑有跑 migration，匯入路徑原本沒有 —— 於是舊備份匯進來之後

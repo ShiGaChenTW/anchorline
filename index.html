@@ -25,7 +25,7 @@
     background: var(--accent);
     color: var(--accent-on);
     border-radius: var(--radius-sm);
-    font-size: 13px;
+    font-size: var(--fs-3);
     font-weight: var(--weight-em);
     text-decoration: none;
     transform: translateY(-120%);
@@ -74,12 +74,12 @@
   }
   .hub-chrome .brand strong {
     font-weight: var(--weight-em);
-    font-size: 14px;
+    font-size: var(--fs-4);
     color: var(--fg);
   }
   .hub-chrome .brand span {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--fs-1);
     color: var(--muted);
   }
   .hub-chrome nav {
@@ -90,7 +90,7 @@
   .hub-chrome nav a {
     color: var(--muted);
     text-decoration: none;
-    font-size: 13px;
+    font-size: var(--fs-3);
     font-weight: var(--weight-em);
     padding: 10px 12px;
     min-height: 44px;
@@ -114,13 +114,13 @@
     max-width: 100%;
   }
   .hub-chrome .theme-switch button {
-    font-size: 11px;
+    font-size: var(--fs-1);
     letter-spacing: 0.02em;
     padding: 8px 10px;
     min-height: 36px;
   }
   .hub-chrome [data-theme-label] {
-    font-size: 11px;
+    font-size: var(--fs-1);
     letter-spacing: 0.04em;
   }
   .hub-chrome .btn {
@@ -146,7 +146,7 @@
     border-bottom: 1px solid var(--border);
   }
   .eyebrow {
-    font-size: 11px;
+    font-size: var(--fs-1);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--muted);
@@ -165,7 +165,7 @@
   }
   .hub-hero .lede {
     margin: 0;
-    font-size: 15px;
+    font-size: var(--fs-5);
     line-height: 1.55;
     color: var(--fg-2);
     max-width: 52ch;
@@ -197,7 +197,7 @@
   }
   .hub-side h2 {
     margin: 0 0 12px;
-    font-size: 11px;
+    font-size: var(--fs-1);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--muted);
@@ -224,14 +224,14 @@
     border-color: var(--accent);
   }
   .continue-card .t {
-    font-size: 15px;
+    font-size: var(--fs-5);
     color: var(--fg);
     margin: 0 0 8px;
     font-weight: var(--weight-em);
   }
   .continue-card .m {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--fs-1);
     color: var(--muted);
     display: flex;
     flex-wrap: wrap;
@@ -252,14 +252,14 @@
     min-width: 0;
   }
   .side-stats .k {
-    font-size: 11px;
+    font-size: var(--fs-1);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--muted);
     font-weight: var(--weight-em);
   }
   .side-stats .v {
-    font-size: 20px;
+    font-size: var(--fs-7);
     color: var(--fg);
     margin-top: 4px;
     font-variant-numeric: tabular-nums;
@@ -270,7 +270,7 @@
   .flow { margin-bottom: 28px; }
   .flow h2 {
     margin: 0 0 12px;
-    font-size: 11px;
+    font-size: var(--fs-1);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--muted);
@@ -304,19 +304,19 @@
   }
   .flow-step .n {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--fs-1);
     color: var(--muted);
     margin-bottom: 6px;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.04em;
   }
   .flow-step .t {
-    font-size: 14px;
+    font-size: var(--fs-4);
     color: var(--fg);
     font-weight: var(--weight-em);
   }
   .flow-step .d {
-    font-size: 12px;
+    font-size: var(--fs-2);
     color: var(--muted);
     margin-top: 4px;
     line-height: 1.4;
@@ -331,7 +331,7 @@
   }
   .screens-head h2 {
     margin: 0;
-    font-size: 11px;
+    font-size: var(--fs-1);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--muted);
@@ -339,7 +339,7 @@
   }
   .screens-head .hint {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--fs-1);
     color: var(--meta, var(--muted));
   }
   .screen-grid {
@@ -373,7 +373,7 @@
   }
   .screen-card .num {
     font-family: var(--mono);
-    font-size: 13px;
+    font-size: var(--fs-3);
     color: var(--accent);
     width: 36px;
     height: 36px;
@@ -386,13 +386,13 @@
   }
   .screen-card h3 {
     margin: 0 0 4px;
-    font-size: 15px;
+    font-size: var(--fs-5);
     font-weight: var(--weight-em);
     color: var(--fg);
   }
   .screen-card p {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--fs-3);
     color: var(--muted);
     line-height: 1.45;
     max-width: 42ch;
@@ -405,7 +405,7 @@
   }
   .screen-card .go {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--fs-1);
     color: var(--muted);
     padding-top: 4px;
     white-space: nowrap;
@@ -423,7 +423,7 @@
     gap: 10px 20px;
     justify-content: space-between;
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: var(--fs-1);
     color: var(--muted);
   }
   .sr-only {
@@ -447,7 +447,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     padding: 10px 14px;
-    font-size: 13px;
+    font-size: var(--fs-3);
     box-shadow: var(--elev-raised);
     opacity: 0;
     pointer-events: none;
