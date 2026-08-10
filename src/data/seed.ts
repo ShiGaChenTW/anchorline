@@ -798,6 +798,12 @@ export const DEFAULT_SETTINGS: AISettings = {
   temperature: 0.7,
   persona: "executive",
   language: "zh-TW",
+  aiWriting: {
+    // generic（通用）是繼承基底，永遠存在。其餘領域只在使用者真的覆寫時才出現 ——
+    // 預先塞五個空領域只會讓「有沒有設定過」變得看不出來。
+    byDomain: { generic: { globalInstruction: "", styleSample: "", sectionPrompts: {} } },
+    overwriteFilled: false,
+  },
   enableLinters: {
     requireNonGoals: true,
     requireMetrics: true,

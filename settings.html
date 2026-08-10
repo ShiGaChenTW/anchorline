@@ -22,7 +22,7 @@
     box-shadow: var(--elev-ring);
   }
   .settings-section h2 {
-    font-size: 16px;
+    font-size: var(--fs-5);
     font-weight: var(--weight-em);
     margin: 0 0 6px;
     color: var(--fg);
@@ -32,7 +32,7 @@
   }
   .settings-section p.sub {
     margin: 0 0 18px;
-    font-size: 13px;
+    font-size: var(--fs-3);
     color: var(--muted);
   }
   .form-grid {
@@ -49,36 +49,20 @@
     gap: 6px;
   }
   .form-group label {
-    font-size: 13px;
+    font-size: var(--fs-3);
     font-weight: var(--weight-em);
     color: var(--fg);
   }
   .form-group .hint {
-    font-size: 11px;
+    font-size: var(--fs-1);
     color: var(--muted);
   }
   /* 所有單列控制項共用同一個高度，欄位才會對齊成一條線。
      掃視一個設定頁時，高低差本身就是雜訊。 */
   .form-grid { --field-h: 40px; }
-  .form-group input[type="text"],
-  .form-group input[type="password"],
-  .form-group select {
-    box-sizing: border-box;
-    height: var(--field-h);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 0 12px;
-    color: var(--fg);
-    font-size: 13px;
-    font-family: inherit;
-  }
-  .form-group input:focus,
-  .form-group select:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: var(--focus-ring);
-  }
+  /* 欄位外觀交給 shared.css 的全域基底。
+     這裡原本抄了一份，而且用 background 簡寫把 select 的自繪箭頭洗掉 ——
+     結果下拉既沒有原生箭頭也沒有自繪箭頭，完全看不出可以展開。 */
   /* 勾選框在列首：眼睛沿左緣往下掃就能讀出「哪些開著」，
      不必在每一列末端重新對焦一次。 */
   .switch-group {
@@ -94,22 +78,16 @@
     cursor: pointer;
   }
   .switch-group:hover { border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); }
-  .switch-group input[type="checkbox"] {
-    flex: 0 0 auto;
-    width: 15px;
-    height: 15px;
-    margin: 0;
-    accent-color: var(--accent);
-  }
+  /* 尺寸與外觀交給 shared.css 的全域基底 —— 這裡再定一次就是第二套 */
   .switch-group span {
-    font-size: 13px;
+    font-size: var(--fs-3);
     line-height: 1.45;
     color: var(--fg);
     padding: 9px 0;
   }
   .range-val {
     font-family: var(--mono);
-    font-size: 12px;
+    font-size: var(--fs-2);
     color: var(--accent);
     margin-left: 8px;
   }
@@ -144,7 +122,7 @@
   html.in-modal .set-shell { grid-template-columns: 236px minmax(0, 1fr) !important; }
   html.in-modal .set-rail { padding: 20px 16px; gap: 4px; }
   /* 分類是這個視窗的主導覽，字級要撐得住 */
-  html.in-modal .set-cat { padding: 12px 16px; font-size: 15px; border-radius: 9px; }
+  html.in-modal .set-cat { padding: 12px 16px; font-size: var(--fs-5); border-radius: 9px; }
   html.in-modal .set-cat.on {
     background: color-mix(in oklab, var(--accent) 26%, transparent);
     font-weight: 600;
@@ -156,8 +134,8 @@
     margin-bottom: 18px;
     border-radius: 12px;
   }
-  html.in-modal #set-pane .settings-section h2 { font-size: 16px; margin-bottom: 8px; }
-  html.in-modal #set-pane .settings-section > .sub { font-size: 13.5px; margin-bottom: 20px; }
+  html.in-modal #set-pane .settings-section h2 { font-size: var(--fs-5); margin-bottom: 8px; }
+  html.in-modal #set-pane .settings-section > .sub { font-size: var(--fs-4); margin-bottom: 20px; }
   .actions-row {
     display: flex;
     gap: 12px;
@@ -252,10 +230,93 @@
             <button type="button" class="set-cat" data-set-cat="quality">品質檢查</button>
             <button type="button" class="set-cat" data-set-cat="domains">領域包</button>
             <button type="button" class="set-cat" data-set-cat="people">人員與權限</button>
+            <button type="button" class="set-cat" data-set-cat="aiwrite">AI 撰寫</button>
             <button type="button" class="set-cat" data-set-cat="workspace">工作區管理</button>
             <button type="button" class="set-cat" data-set-cat="data">資料</button>
           </nav>
           <div class="settings-container" id="set-pane">
+
+          <!-- AI 撰寫：讓 AI 產出貼近這個團隊的寫法。
+               設計參考 ChatPRD —— 內建 prompt 藏在後面（不必自己工程化），
+               只留三個真正值得調的旋鈕：全域指令、風格範本、每節覆寫。
+               三者全空時行為與內建完全相同，所以「什麼都不設」是安全的預設。 -->
+          <div class="settings-section" data-cat="aiwrite">
+            <h2>✍️ AI 撰寫</h2>
+            <p class="sub">
+              影響「AI 撰寫初版」與「一鍵生稿」的產出。三個欄位都可以留空 ——
+              留空就用內建的寫法，不會比較差，只是比較通用。
+            </p>
+
+            <!-- 分類軸 = 領域包。領域包本來就決定了這份 PRD 有哪些章節，
+                 再開一套「角色」等於要使用者每次都想「這份該用哪個角色」，
+                 而答案幾乎總是跟領域一樣。 -->
+            <div class="aw-domain-bar">
+              <div class="form-group" style="flex:1 1 240px">
+                <label for="aw-domain">領域包</label>
+                <select id="aw-domain"></select>
+              </div>
+              <p class="hint" id="aw-domain-desc"></p>
+            </div>
+
+            <!-- AI 塑造：「全域指令要寫什麼」是空白頁問題。
+                 給一句話讓模型展開成可用的指令，再由使用者改。 -->
+            <div class="aw-suggest">
+              <label for="aw-brief">讓 AI 幫你寫這個領域的全域指令</label>
+              <div class="aw-suggest-row">
+                <input type="text" id="aw-brief"
+                       placeholder="用一句話說這個領域的 PRD 寫給誰看。例如：寫給法遵團隊看，每個主張都要能指到法規條文" />
+                <button type="button" class="btn btn-sm btn-primary" id="btn-aw-suggest">產生建議</button>
+              </div>
+              <span class="hint">
+                產生的內容會**填進下面的欄位讓你改**，不會直接套用 —— 這是建議，不是決定。
+              </span>
+            </div>
+
+            <div class="form-grid full">
+              <div class="form-group">
+                <div class="aw-field-head">
+                  <label for="aw-global">全域指令</label>
+                  <span class="aw-inherit-slot" data-inherit="globalInstruction"></span>
+                </div>
+                <textarea id="aw-global" rows="4"
+                  placeholder="例如：我們是 B2B 金融科技，讀者是風控與法遵。避免行銷語言，每個主張都要能指到一份資料來源。"></textarea>
+                <span class="hint">會併進**每一節**的 prompt。放產品脈絡、慣用語、禁用詞這類全篇適用的東西。</span>
+                <div class="aw-base-preview" data-base="globalInstruction" hidden></div>
+              </div>
+
+              <div class="form-group">
+                <div class="aw-field-head">
+                  <label for="aw-style">風格範本</label>
+                  <span class="aw-inherit-slot" data-inherit="styleSample"></span>
+                </div>
+                <textarea id="aw-style" rows="6"
+                  placeholder="貼一段你覺得寫得好的 PRD 片段，AI 會模仿它的語氣與結構。"></textarea>
+                <span class="hint">
+                  比任何形容詞都有效 —— 與其寫「請簡潔專業」，不如直接給一段你認可的文字。
+                  超過 4000 字會截斷。
+                </span>
+                <div class="aw-base-preview" data-base="styleSample" hidden></div>
+              </div>
+
+              <div class="form-group">
+                <label class="switch-group" for="aw-overwrite">
+                  <input type="checkbox" id="aw-overwrite" />
+                  <span>已經有內容的章節也重寫（預設關閉）</span>
+                </label>
+                <span class="hint">
+                  關閉時 AI 只補空白章節。覆蓋你已經寫好的東西是最不該預設發生的事，
+                  所以這一項要自己打開。
+                </span>
+              </div>
+            </div>
+
+            <h4 style="margin:22px 0 6px;font-size: var(--fs-4);color:var(--fg)">各章節的 prompt 覆寫</h4>
+            <p class="sub" style="margin-bottom:12px">
+              留空 = 用內建 prompt。只有在某一節的產出一直不對時才需要動它 ——
+              覆寫是例外，不是預設。
+            </p>
+            <div id="aw-sections" class="aw-sections"></div>
+          </div>
 
           <!-- 工作區管理：從側欄搬過來的兩個系統功能。
                保持連結而不是把兩頁重寫進表單 —— 它們各有完整的表格與流程，
@@ -340,11 +401,11 @@
               </div>
             </div>
 
-            <h4 style="margin:16px 0 10px;font-size:14px;color:var(--fg)">人員與 Agent 列表</h4>
+            <h4 style="margin:16px 0 10px;font-size: var(--fs-4);color:var(--fg)">人員與 Agent 列表</h4>
             <div id="employee-list-container" class="emp-list"></div>
 
             <div id="add-employee-panel" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
-              <h4 style="margin:0 0 10px;font-size:14px;color:var(--fg)">➕ 新增人員 / Agent</h4>
+              <h4 style="margin:0 0 10px;font-size: var(--fs-4);color:var(--fg)">➕ 新增人員 / Agent</h4>
               <div class="form-grid">
                 <div class="form-group">
                   <label for="new-emp-name">姓名</label>
@@ -419,6 +480,17 @@
           </div>
 
           <!-- Section: Editor -->
+          <div class="settings-section" data-cat="appearance">
+            <h2>🔠 介面字級</h2>
+            <p class="sub">
+              一次調整整個 App 的文字大小。**只影響這台機器**，不會跟著備份或分享出去。
+            </p>
+            <div class="fs-picker" id="fs-picker" role="radiogroup" aria-label="介面字級"></div>
+            <p class="hint" style="margin-top:8px">
+              即時生效。放大之後如果哪一頁被擠壞了，告訴我 —— 那是版面的問題，不是你的字調太大。
+            </p>
+          </div>
+
           <div class="settings-section" data-cat="appearance">
             <h2>📝 編輯台顯示與工具</h2>
             <p class="sub">控制 Markdown 編輯器行號、工具列與預設檢視模式（僅影響本機）。</p>
@@ -511,7 +583,7 @@
                 <p class="sub" id="da-status" style="margin-top:8px"></p>
                 <div id="da-result" hidden>
                   <label class="ask-adv-label" for="da-raw">產出（可直接手改）</label>
-                  <textarea id="da-raw" class="ask-input" rows="18" spellcheck="false" style="font-family:var(--font-mono);font-size:12px"></textarea>
+                  <textarea id="da-raw" class="ask-input" rows="18" spellcheck="false" style="font-family:var(--font-mono);font-size: var(--fs-2)"></textarea>
                   <label class="ask-adv-label" for="da-instruction">要改哪裡？</label>
                   <input type="text" id="da-instruction" class="ask-input" placeholder="例：把 KYC 那條改成 warn，另外加一段費率揭露" />
                   <div class="actions-row" style="margin-top:8px">

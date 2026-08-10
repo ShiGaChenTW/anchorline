@@ -20,7 +20,7 @@
     background: transparent;
     color: var(--muted);
     font: inherit;
-    font-size: 13px;
+    font-size: var(--fs-3);
     font-weight: var(--weight-em);
     padding: 10px 14px;
     border-bottom: 2px solid transparent;
@@ -45,12 +45,12 @@
   }
   .admin-head h2 {
     margin: 0 0 4px;
-    font-size: 16px;
+    font-size: var(--fs-5);
     font-weight: var(--weight-em);
   }
   .admin-head p {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--fs-2);
     color: var(--muted);
   }
   .admin-card {
@@ -68,7 +68,7 @@
     justify-content: space-between;
   }
   .admin-card .meta {
-    font-size: 12px;
+    font-size: var(--fs-2);
     color: var(--muted);
     margin-top: 4px;
   }
@@ -82,20 +82,13 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    font-size: 12px;
+    font-size: var(--fs-2);
     color: var(--muted);
     font-weight: var(--weight-em);
   }
   .admin-form input,
-  .admin-form select {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 8px 10px;
-    color: var(--fg);
-    font: inherit;
-    font-size: 13px;
-  }
+  /* 外觀交給 shared.css 的全域基底。這裡原本抄了一份，
+     而 background 簡寫會把 select 的自繪箭頭一起洗掉。 */
   .stage-list { display: flex; flex-direction: column; gap: 8px; }
   .stage-item {
     display: grid;
@@ -109,7 +102,7 @@
   }
   .stage-item .ord {
     font-family: var(--mono);
-    font-size: 14px;
+    font-size: var(--fs-4);
     color: var(--accent);
     font-weight: var(--weight-em);
   }
@@ -137,7 +130,7 @@
     grid-template-columns: 28px 100px 1fr auto;
     gap: 8px;
     align-items: center;
-    font-size: 13px;
+    font-size: var(--fs-3);
   }
   .denied {
     max-width: 520px;
@@ -149,7 +142,7 @@
     background: var(--surface);
   }
   .denied h2 { margin: 0 0 8px; }
-  .denied p { color: var(--muted); font-size: 13px; }
+  .denied p { color: var(--muted); font-size: var(--fs-3); }
   @media (max-width: 720px) {
     .case-stage-row { grid-template-columns: 1fr; }
     .stage-item { grid-template-columns: 1fr; }
@@ -293,7 +286,7 @@
             <button type="button" class="btn btn-primary" id="btn-add-stage">＋ 新增關卡</button>
           </div>
           <div class="stage-list" id="workflow-list"></div>
-          <p style="font-size:12px;color:var(--muted);margin-top:12px">
+          <p style="font-size: var(--fs-2);color:var(--muted);margin-top:12px">
             提示：流程變更不會自動覆寫已在審閱中的個案，請在「個案調整」中手動「套用目前流程」。
           </p>
         </section>

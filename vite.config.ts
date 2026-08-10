@@ -53,5 +53,12 @@ export default defineConfig({
   server: {
     port: 5173,
     open: "/overview.html",
+    watch: {
+      // `tauri dev` 在 src-tauri/target 底下重建時會產生成千上萬個檔案，
+      // 其中 tauri-codegen 的產物是 .html —— vite 認得，於是每建一次就整批
+      // page reload，多跑幾輪 dev server 會被自己洗死。
+      // 這裡沒有任何原始碼，監看它沒有任何好處。
+      ignored: ["**/src-tauri/target/**", "**/dist/**"],
+    },
   },
 });

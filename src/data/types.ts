@@ -230,6 +230,26 @@ export type Approval = {
   state: "approved" | "pending" | "empty";
 };
 
+/**
+ * 某個領域包的 AI 撰寫設定。
+ *
+ * **預設是自訂且空白**，沿用通用必須明示 —— 所以沿用狀態用 `inherit` 清單記，
+ * 不能用「欄位是不是 undefined」來推斷（那樣沒設定過的領域會自動繼承）。
+ *
+ * 分開存還有一個好處：切成沿用時不必刪掉自訂內容，切回來原本寫的東西還在。
+ */
+export type DomainWriteConfig = {
+  globalInstruction?: string;
+  styleSample?: string;
+  /** key = sectionId */
+  sectionPrompts?: Record<string, string | undefined>;
+  /**
+   * 明確標記為「沿用通用」的欄位。
+   * 值為 `globalInstruction` / `styleSample` / `sec:{sectionId}`。
+   */
+  inherit?: string[];
+};
+
 export type AISettings = {
   /**
    * 模型名稱自由填。寫死聯集只會在下一次模型改版時過期，
@@ -251,6 +271,27 @@ export type AISettings = {
     requireMetrics: boolean;
     requireStoriesAC: boolean;
     warnVagueTerms: boolean;
+  };
+  /**
+   * AI 撰寫設定。
+   *
+   * 參考 ChatPRD 的做法：內建 prompt 藏在後面（使用者不必自己工程化），
+   * 但留出三個可調的旋鈕 —— 全域補充指令、每節覆寫、風格範本。
+   * 三者都留空時行為與內建完全相同。
+   */
+  aiWriting: {
+    /**
+     * 依**領域包**分類的撰寫設定。key = 領域 id（generic / payment / lending …）。
+     *
+     * 分類軸選領域而不是自訂角色：領域包本來就存在，且它已經決定了這份 PRD
+     * 有哪些章節。再開一套「角色」等於要使用者每次都想「這份該用哪個角色」，
+     * 而答案幾乎總是跟領域一樣。
+     *
+     * `generic`（通用）是基底，其餘領域逐欄位沿用或覆寫。
+     */
+    byDomain: Record<string, DomainWriteConfig>;
+    /** 已經有內容的章節要不要重寫。預設 false —— 覆蓋使用者寫好的東西是最不該預設發生的事 */
+    overwriteFilled: boolean;
   };
   /** 編輯台偏好 */
   editor: {

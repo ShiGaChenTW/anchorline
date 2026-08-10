@@ -4,11 +4,21 @@ import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
 import { canManageUsers } from "../lib/permissions";
-import { initTheme } from "../lib/theme";
+import { applyFontScale, currentFontScale, FONT_SCALES, initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 import { BUILTIN_PACKS, listDomains } from "../data/domains";
+import {
+  BASE_DOMAIN,
+  baseSectionValue,
+  baseValue,
+  isInherited,
+  isSectionInherited,
+  sectionKey,
+  type InheritableField,
+} from "../lib/ai-writing-config";
 import { authorDomainPack, validate as validatePack } from "../lib/domain-pack-author";
 import { chatCompletion, isAiConfigured } from "../lib/ai-client";
+import { suggestWriteProfile } from "../lib/ai-coach";
 import TEMPLATE_MD from "../data/domains/_template.md?raw";
 import {
   addUserPack,
@@ -35,8 +45,270 @@ function syncUser() {
   updateUserRailFooter(toRailUser(u));
 }
 
+/**
+ * 目前正在編輯哪個領域的設定。只存在畫面上 —— 它是「我現在在看什麼」，
+ * 不是使用者的偏好，寫進 settings 只會讓兩台機器互相打架。
+ */
+let awDomain = BASE_DOMAIN;
+
+function awByDomain() {
+  return store.get().settings.aiWriting.byDomain;
+}
+
+/** 從 AI 撰寫頁籤讀回設定。找不到欄位時保留原值 —— 頁籤可能還沒渲染。 */
+function readAiWriting(): AISettings["aiWriting"] {
+  const cur = store.get().settings.aiWriting;
+  const ov = document.getElementById("aw-overwrite") as HTMLInputElement | null;
+  return { ...cur, overwriteFilled: ov ? ov.checked : cur.overwriteFilled };
+}
+
+/**
+ * 沿用／自訂的滑動開關。通用領域本身不顯示 —— 它是基底，沒有上游可沿用。
+ *
+ * 開 = 沿用通用。用開關而不是按鈕：這是一個持續存在的**狀態**，
+ * 按鈕只表達動作，看一眼分不出「現在是沿用」還是「按了會變沿用」。
+ */
+function inheritToggleHtml(inherited: boolean, attr: string): string {
+  if (awDomain === BASE_DOMAIN) return "";
+  // 選項名稱寫在滑塊裡：外掛一段說明文字的話，使用者得先讀字才知道哪邊是哪邊。
+  // 左＝自訂、右＝通用，滑塊停在哪邊就是目前狀態。
+  return `<label class="aw-seg" title="左＝這個領域自訂，右＝沿用通用版本">
+    <input type="checkbox" ${attr} ${inherited ? "checked" : ""}
+      aria-label="設定來源：${inherited ? "沿用通用" : "自訂"}" />
+    <span class="aw-seg-track">
+      <span class="aw-seg-thumb"></span>
+      <span class="aw-seg-opt">自訂</span>
+      <span class="aw-seg-opt">通用</span>
+    </span>
+  </label>`;
+}
+
+/** 領域下拉 + 兩個可繼承欄位的狀態 */
+function renderAiWritingDomain() {
+  const sel = document.getElementById("aw-domain") as HTMLSelectElement | null;
+  if (!sel) return;
+  const opts = listDomains();
+  sel.innerHTML = opts
+    .map(
+      (o) =>
+        `<option value="${escapeHtml(o.name)}" ${o.name === awDomain ? "selected" : ""}>${escapeHtml(o.displayName)}${o.name === BASE_DOMAIN ? "（基底）" : ""}</option>`,
+    )
+    .join("");
+
+  const desc = document.getElementById("aw-domain-desc");
+  if (desc) {
+    desc.textContent =
+      awDomain === BASE_DOMAIN
+        ? "通用是所有領域的基底。這裡改的東西，其他領域只要沒自訂就會跟著變。"
+        : "每個欄位預設是這個領域自己的（空白）。滑到「通用」才會沿用通用版本。";
+  }
+
+  const byDomain = awByDomain();
+  for (const field of ["globalInstruction", "styleSample"] as InheritableField[]) {
+    const slot = document.querySelector(`.aw-inherit-slot[data-inherit="${field}"]`);
+    const preview = document.querySelector(`.aw-base-preview[data-base="${field}"]`) as HTMLElement | null;
+    const box = document.getElementById(
+      field === "globalInstruction" ? "aw-global" : "aw-style",
+    ) as HTMLTextAreaElement | null;
+    const inherited = isInherited(byDomain, awDomain, field);
+    const baseText = baseValue(byDomain, field);
+
+    if (slot) slot.innerHTML = inheritToggleHtml(inherited, `data-inherit-toggle="${field}"`);
+    if (box) {
+      // 沿用中就唯讀：可以打字但存不進去的欄位比不能打字更糟
+      box.readOnly = inherited;
+      box.classList.toggle("is-inherited", inherited);
+      box.value = inherited ? "" : (byDomain[awDomain]?.[field as keyof typeof byDomain[string]] as string | undefined ?? "");
+      box.placeholder = inherited ? "沿用通用版本（見下方）" : box.dataset.ph || box.placeholder;
+    }
+    if (preview) {
+      preview.hidden = !inherited;
+      preview.innerHTML = inherited
+        ? `<span class="aw-base-tag">通用版本</span><pre>${escapeHtml(baseText || "（通用也是空的，等於不設定）")}</pre>`
+        : "";
+    }
+  }
+}
+
+/**
+ * 各章節的 prompt 覆寫。章節清單來自**目前選的領域包**（不是目前專案），
+ * 所以在設定頁選支付就會看到支付的 08–10。
+ *
+ * 領域限定章節（通用沒有的那些）不顯示沿用按鈕 —— 沒有通用版可繼承。
+ */
+function renderAiWritingSections() {
+  const host = document.getElementById("aw-sections");
+  if (!host) return;
+  const byDomain = awByDomain();
+  const sections = store.sectionsForDomain(awDomain);
+  const genericIds = new Set(store.sectionsForDomain(BASE_DOMAIN).map((x) => x.id));
+
+  host.innerHTML = sections
+    .map((sec) => {
+      const inherited = isSectionInherited(byDomain, awDomain, sec.id);
+      const own = byDomain[awDomain]?.sectionPrompts?.[sec.id] ?? "";
+      const baseText = baseSectionValue(byDomain, sec.id);
+      const inheritable = awDomain !== BASE_DOMAIN && genericIds.has(sec.id);
+      const btn = inheritable
+        ? inheritToggleHtml(inherited, `data-sec-toggle="${escapeHtml(sec.id)}"`)
+        : awDomain === BASE_DOMAIN
+          ? ""
+          : '<span class="aw-seg-static" title="通用領域沒有這一節，所以沒有通用版本可沿用">領域限定章節</span>';
+      const shown = inheritable && inherited ? "" : own;
+      return `<div class="aw-section">
+        <div class="aw-field-head">
+          <label for="aw-sec-${escapeHtml(sec.id)}">
+            ${escapeHtml(sec.n)} · ${escapeHtml(sec.title)}
+            ${shown ? '<span class="aw-badge">已覆寫</span>' : ""}
+          </label>
+          ${btn}
+        </div>
+        <textarea id="aw-sec-${escapeHtml(sec.id)}" data-aw-section="${escapeHtml(sec.id)}" rows="2"
+          ${inheritable && inherited ? "readonly" : ""}
+          class="${inheritable && inherited ? "is-inherited" : ""}"
+          placeholder="${inheritable && inherited ? "沿用通用版本（見下方）" : "留空＝用內建 prompt"}">${escapeHtml(shown)}</textarea>
+        ${
+          inheritable && inherited
+            ? `<div class="aw-base-preview"><span class="aw-base-tag">通用版本</span><pre>${escapeHtml(baseText || "（通用沒設定，等於用內建 prompt）")}</pre></div>`
+            : ""
+        }
+      </div>`;
+    })
+    .join("");
+}
+
+/**
+ * 綁定領域頁籤的互動。全部走事件委派 —— 這幾塊會整個 innerHTML 重畫，
+ * 直接綁在按鈕上的 listener 每次重畫都會消失。
+ *
+ * 一律不用 window.prompt：Tauri 的 WKWebView 沒有實作 text input panel，
+ * prompt 直接回 null，按鈕看起來就像壞掉（上一版的「新增角色」就是這樣）。
+ */
+function bindAiWritingDomain() {
+  const root = document.querySelector('.settings-section[data-cat="aiwrite"]') as HTMLElement | null;
+  if (!root || root.dataset.bound === "1") return;
+  root.dataset.bound = "1";
+
+  const sel = document.getElementById("aw-domain") as HTMLSelectElement | null;
+  sel?.addEventListener("change", () => {
+    // 先抓值：下面的存檔會 emit，訂閱者重畫 <option selected> 會把 sel.value 打回原值
+    const target = sel.value;
+    saveCurrentDomainFields();
+    awDomain = target;
+    populateSettings();
+  });
+
+  root.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement | null)?.closest("#btn-aw-suggest")) void runProfileSuggestion();
+  });
+
+  // 滑塊走 change。右（checked）= 沿用通用，左 = 自訂。
+  // 切換只改來源標記，**不動已寫的自訂內容** —— 切過去再切回來，字還在。
+  root.addEventListener("change", (ev) => {
+    const el = ev.target as HTMLInputElement | null;
+    if (!el) return;
+
+    const field = el.dataset.inheritToggle;
+    const secId = el.dataset.secToggle;
+    if (!field && !secId) return;
+
+    // 切成沿用之前先把畫面上的字存起來，否則這一輪打的內容會被重畫蓋掉
+    saveCurrentDomainFields();
+    store.setDomainInherit(awDomain, field ?? sectionKey(secId!), el.checked);
+    populateSettings();
+  });
+}
+
+/** 把畫面上的可編輯欄位寫回目前領域（沿用中的欄位不寫，否則會意外變成自訂） */
+function saveCurrentDomainFields() {
+  const byDomain = awByDomain();
+  const g = document.getElementById("aw-global") as HTMLTextAreaElement | null;
+  const st = document.getElementById("aw-style") as HTMLTextAreaElement | null;
+  if (g && !isInherited(byDomain, awDomain, "globalInstruction")) {
+    store.setDomainWriteField(awDomain, "globalInstruction", g.value);
+  }
+  if (st && !isInherited(byDomain, awDomain, "styleSample")) {
+    store.setDomainWriteField(awDomain, "styleSample", st.value);
+  }
+  document
+    .querySelectorAll<HTMLTextAreaElement>("#aw-sections textarea[data-aw-section]")
+    .forEach((ta) => {
+      const id = ta.dataset.awSection!;
+      if (ta.readOnly) return;
+      store.setDomainSectionPrompt(awDomain, id, ta.value.trim());
+    });
+}
+
+/**
+ * 讓 AI 產生這個領域的全域指令。
+ * 結果**填進欄位讓使用者改**，不直接生效 —— 這是建議不是決定。
+ */
+async function runProfileSuggestion() {
+  const briefEl = document.getElementById("aw-brief") as HTMLInputElement | null;
+  const btn = document.getElementById("btn-aw-suggest") as HTMLButtonElement | null;
+  const brief = briefEl?.value.trim();
+  if (!brief) return void toast("先用一句話說這個領域的 PRD 寫給誰看");
+  if (!isAiConfigured()) return void toast("尚未設定 AI 金鑰（設定 → AI 工具）");
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "產生中…";
+  }
+  try {
+    const sug = await suggestWriteProfile(brief);
+    // 寫進目前領域（自動從「沿用」轉成「自訂」）—— 建議要有落點才有用
+    store.setDomainWriteField(awDomain, "globalInstruction", sug.globalInstruction);
+    if (sug.styleSample.trim()) {
+      store.setDomainWriteField(awDomain, "styleSample", sug.styleSample);
+    }
+    populateSettings();
+    toast("已填入建議 —— 內容可以直接改");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "產生失敗");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "產生建議";
+    }
+  }
+}
+
+/**
+ * 介面字級選擇器。每個選項用**自己代表的字級**顯示 ——
+ * 用同樣大小的字寫「大」「緊湊」等於要使用者先選了才知道結果。
+ */
+function renderFontScale() {
+  const host = document.getElementById("fs-picker");
+  if (!host) return;
+  const cur = currentFontScale();
+  host.innerHTML = FONT_SCALES.map(
+    (s) => `<button type="button" class="fs-opt ${s.id === cur ? "is-on" : ""}"
+      role="radio" aria-checked="${s.id === cur}" data-fs="${s.id}">
+      <span class="fs-sample" style="font-size:${Math.round(13 * s.value)}px">Aa</span>
+      <span class="fs-name">${s.label}</span>
+      <span class="fs-pct">${Math.round(s.value * 100)}%</span>
+    </button>`,
+  ).join("");
+
+  if (host.dataset.bound === "1") return;
+  host.dataset.bound = "1";
+  host.addEventListener("click", (ev) => {
+    const btn = (ev.target as HTMLElement | null)?.closest<HTMLElement>("[data-fs]");
+    if (!btn) return;
+    applyFontScale(btn.dataset.fs);
+    renderFontScale();
+  });
+}
+
 function populateSettings() {
   const s = store.get().settings;
+  renderFontScale();
+
+  const awO = document.getElementById("aw-overwrite") as HTMLInputElement | null;
+  if (awO) awO.checked = s.aiWriting.overwriteFilled;
+  renderAiWritingDomain();
+  renderAiWritingSections();
+  bindAiWritingDomain();
   const modelEl = document.getElementById("ai-model") as HTMLInputElement | null;
   const tempEl = document.getElementById("ai-temp") as HTMLInputElement | null;
   const tempValEl = document.getElementById("temp-val");
@@ -304,6 +576,9 @@ document.getElementById("ai-model")?.addEventListener("input", () => {
 });
 
 function saveSettings() {
+  // **必須在 updateSettings 之前**：updateSettings 會 emit，訂閱者立刻重跑
+  // populateSettings 把 textarea 用「已存的舊值」重畫，之後再讀就讀到被清空的框。
+  saveCurrentDomainFields();
   const model = (document.getElementById("ai-model") as HTMLInputElement).value as AISettings["model"];
   const temperature = Number((document.getElementById("ai-temp") as HTMLInputElement).value);
   const apiKey = (document.getElementById("ai-key") as HTMLInputElement).value.trim();
@@ -356,6 +631,7 @@ function saveSettings() {
       highlightIntensity,
       reduceMotion,
     },
+    aiWriting: readAiWriting(),
   });
 
   import("../lib/attention-motion")

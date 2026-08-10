@@ -30,7 +30,13 @@ const wantReport = args.includes("--report");
  *  而為了一支 CLI 加一個型別依賴不划算。 */
 function git(a: string[]): string {
   try {
-    return execFileSync("git", ["-C", root, ...a], { encoding: "utf8" }).trim();
+    // stderr 走 pipe 而不是繼承：`remote get-url origin` 在沒有 remote 的 repo
+    // 上一定失敗，那是預期內的缺席（回空字串就好），不該把 git 的紅字印在
+    // 使用者的回填報告中間。
+    return execFileSync("git", ["-C", root, ...a], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
   } catch {
     return "";
   }
@@ -41,17 +47,20 @@ if (!git(["rev-parse", "--git-dir"])) {
   process.exit(1);
 }
 
-// %x1f 是欄位分隔、%x1e 是紀錄分隔 —— commit 訊息本身可能含 | 或 tab
-const RAW = git(["log", "--pretty=format:%h%x1f%s%x1f%cI%x1f%an%x1f%D%x1e"]);
+// %x1f 是欄位分隔、%x1e 是紀錄分隔 —— commit 訊息本身可能含 | 或 tab。
+// %b（內文）擺最後：它是唯一可能含換行的欄位，放尾端就不必額外跳脫。
+// 沒有它就讀不到寫在內文的錨點，而那是 join key。
+const RAW = git(["log", "--pretty=format:%h%x1f%s%x1f%cI%x1f%an%x1f%D%x1f%b%x1e"]);
 const commits = RAW.split("\x1e")
   .map((r) => r.replace(/^\n/, "").split("\x1f"))
   .filter((f) => f.length >= 4 && f[0])
-  .map(([hash, subject, at, author, refs]) => ({
+  .map(([hash, subject, at, author, refs, body]) => ({
     hash: hash!,
     subject: subject!,
     at: at!,
     author: author!,
     refs: refs ?? "",
+    body: body ?? "",
   }));
 
 const project = basename(root);
