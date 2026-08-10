@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { inlineDiff } from "../src/lib/file-history";
-import { capVersions } from "../src/lib/prd-versions";
+import { allStagesSettled, capVersions, stagesAfterResubmit } from "../src/lib/prd-versions";
 import {
   applyDrafts,
   canCommit,
@@ -165,5 +165,36 @@ describe("版本線上限（防 localStorage 撐爆 → 靜默掉資料）", () 
   test("完全沒有 merge 時就是單純截斷", () => {
     const list = [mk(1), mk(2), mk(3)];
     expect(capVersions(list, 2).map((v) => v.id)).toEqual(["v1", "v2"]);
+  });
+});
+
+describe("簽核狀態機（Grok 稽核補上的規則）", () => {
+  test("只簽了一關時不算全部完成 —— 不得併入主線", () => {
+    // 先前呼叫端無條件 merge，第一個關卡簽名就把整份併進主線，
+    // 其餘關卡的人根本還沒看。
+    expect(allStagesSettled([{ state: "approved" }, { state: "pending" }])).toBe(false);
+  });
+
+  test("approved 與 skipped 都算完成", () => {
+    expect(allStagesSettled([{ state: "approved" }, { state: "skipped" }])).toBe(true);
+  });
+
+  test("空關卡（empty）不算完成", () => {
+    expect(allStagesSettled([{ state: "approved" }, { state: "empty" }])).toBe(false);
+  });
+
+  test("換了新快照 → 已簽的關卡要退回待簽", () => {
+    const stages = [{ state: "approved" as const }, { state: "pending" as const }];
+    expect(stagesAfterResubmit(stages, "c1", "c2").map((s) => s.state)).toEqual(["pending", "pending"]);
+  });
+
+  test("同一份快照重送 → 簽核保留", () => {
+    const stages = [{ state: "approved" as const }];
+    expect(stagesAfterResubmit(stages, "c1", "c1")).toBe(stages);
+  });
+
+  test("第一次送審（沒有前一份）→ 不動既有狀態", () => {
+    const stages = [{ state: "approved" as const }];
+    expect(stagesAfterResubmit(stages, null, "c1")).toBe(stages);
   });
 });

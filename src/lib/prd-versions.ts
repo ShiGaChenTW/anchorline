@@ -135,3 +135,32 @@ export function capVersions(
   const baseline = versions.find((v) => v.kind === "merge");
   return baseline ? [...kept.slice(0, max - 1), baseline] : kept;
 }
+
+/**
+ * 全部關卡完成了嗎 —— 決定核准動作要不要併入主線。
+ *
+ * `approveAndLock` 在「只簽了自己那一關」時同樣視為成功（案件仍停在 review）。
+ * 呼叫端若不看這個旗標就無條件 merge，等於第一個關卡簽名就把整份併進主線，
+ * 其餘關卡的人根本還沒看 —— 多關卡簽核形同虛設。
+ */
+export function allStagesSettled(
+  stages: readonly { state: "approved" | "pending" | "empty" | "skipped" }[],
+): boolean {
+  return stages.every((s) => s.state === "approved" || s.state === "skipped");
+}
+
+/**
+ * 重新送審時，哪些關卡的簽核要作廢。
+ *
+ * 換了一份新快照就要重新簽：沿用舊簽核等於把「工程看過 V1」當成
+ * 「工程看過 V2」，簽核軌跡顯示已過關，但那一關的人沒看過現在要合併的內容。
+ */
+export function stagesAfterResubmit<T extends { state: "approved" | "pending" | "empty" | "skipped" }>(
+  stages: readonly T[],
+  prevCommitId: string | null,
+  nextCommitId: string | null,
+): T[] {
+  const changed = Boolean(nextCommitId && prevCommitId && nextCommitId !== prevCommitId);
+  if (!changed) return stages as T[];
+  return stages.map((s) => (s.state === "approved" ? { ...s, state: "pending" as const } : s));
+}

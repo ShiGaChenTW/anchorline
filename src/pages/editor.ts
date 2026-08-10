@@ -1151,9 +1151,18 @@ function renderEditor() {
   renderProgress(idx, list.length);
 
   // ADHD 寫作輔助：空白章節給起手骨架；游標記錄與中斷復原
+  // 起手骨架／AI 生稿／AI 潤色／AI 指令／範本插入 —— 全部寫進**草稿**，
+  // 不直接寫已儲存。
+  //
+  // 兩個理由。一是取消自動存檔之後，「已儲存」必須是使用者明確做過的動作，
+  // AI 產出的東西沒有理由跳過這道關。二是先前 AI 走 setSectionField 而手動
+  // 輸入走 setSectionDraft，兩層會分岔：畫面顯示舊草稿、已儲存層卻已是 AI
+  // 的版本，捨棄草稿會得到自己沒按過儲存的內容。
+  //
+  // 走草稿還有一個好處：異動高亮會直接把「AI 改了哪幾個字」畫出來。
   ensureStarter(s, values, (key, value) => {
     if (!editable()) return;
-    store.setSectionField(s.id, key, value);
+    store.setSectionDraft(s.id, key, value);
     store.updateSection(s.id, { status: "warn" });
     render();
   });
@@ -1339,7 +1348,7 @@ function renderCoach() {
     try {
       const draft = await generateAIDraft(s, valuesFor(s));
       for (const key in draft) {
-        store.setSectionField(s.id, key, draft[key]!);
+        store.setSectionDraft(s.id, key, draft[key]!);
       }
       toast("AI 生稿已套用");
       if (feedbackEl)
@@ -1377,7 +1386,7 @@ function renderCoach() {
         const v = current[key];
         if (!v?.trim()) continue;
         const polished = await polishTextWithAI(v, mode);
-        store.setSectionField(s.id, key, polished);
+        store.setSectionDraft(s.id, key, polished);
         n++;
       }
       if (!n) {
@@ -1449,7 +1458,7 @@ function renderCoach() {
     try {
       const patch = await generateAIDraft(s, valuesFor(s), promptText);
       for (const key in patch) {
-        store.setSectionField(s.id, key, patch[key]!);
+        store.setSectionDraft(s.id, key, patch[key]!);
       }
       toast("AI 已依指令更新內容");
       if (input) input.value = "";
@@ -1604,7 +1613,7 @@ if (pending && editable()) {
   if (s?.fields[0]) {
     const cur = valuesFor(s)[s.fields[0].key] ?? "";
     const next = cur ? `${cur}\n\n${pending}` : pending;
-    store.setSectionField(s.id, s.fields[0].key, next);
+    store.setSectionDraft(s.id, s.fields[0].key, next);
     if (s.status === "empty") store.updateSection(s.id, { status: "warn" });
     toast("已插入範本段落");
   }

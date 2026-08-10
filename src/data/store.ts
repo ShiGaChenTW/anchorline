@@ -37,7 +37,15 @@ import type {
   WorkflowStageDef,
 } from "./types";
 import { emptySectionValues } from "../lib/export";
-import { capVersions, pickBaseline, pickLatestCommit } from "../lib/prd-versions";
+import {
+  allStagesSettled,
+  canCommit,
+  capVersions,
+  changedFieldCount,
+  pickBaseline,
+  pickLatestCommit,
+  stagesAfterResubmit,
+} from "../lib/prd-versions";
 import { canResolveComment, migrateComments, projectOfComment } from "../lib/comment-scope";
 import { applyMeta, metaFromSections, orphanSectionIds, pickDomain } from "../lib/section-meta";
 import { DEFAULT_DOMAIN, domainPacks, reloadUserPacks } from "./domains";
@@ -1121,9 +1129,15 @@ export const store = {
   commitForReview(message: string): { ok: boolean; reason?: string; version?: PrdVersion } {
     const pid = state.activeProjectId;
     if (!pid) return { ok: false, reason: "沒有選擇專案" };
-    if (this.hasUnsaved()) {
-      return { ok: false, reason: "還有未儲存的變更 —— 先儲存，送審才會包含它們" };
-    }
+    // 用同一支 canCommit —— 它的規則有測試釘住，但先前沒有被執行路徑呼叫，
+    // 於是「跟主線零差異不可送審」只存在於測試與文件裡，實際按下去照樣送出。
+    const baseline = this.prdBaseline(pid);
+    const gate = canCommit({
+      hasUnsaved: this.hasUnsaved(),
+      // 沒有主線代表這是第一版，一律視為有差異
+      changedFields: baseline ? changedFieldCount(baseline.docs, state.sectionValues) : 1,
+    });
+    if (!gate.ok) return { ok: false, reason: gate.reason };
     const u = state.currentUser;
     const version: PrdVersion = {
       id: `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
@@ -1487,7 +1501,7 @@ export const store = {
     emit();
   },
 
-  approveAndLock(): { ok: boolean; reason?: string } {
+  approveAndLock(): { ok: boolean; reason?: string; allDone?: boolean } {
     const project =
       state.projects.find((p) => p.id === state.activeProjectId) ??
       state.projects.find((p) => p.id === "p1") ??
@@ -1531,7 +1545,7 @@ export const store = {
             },
       );
     }
-    const allDone = nextStages.every((s) => s.state === "approved" || s.state === "skipped");
+    const allDone = allStagesSettled(nextStages);
     const nextCase: CaseRecord = {
       ...(c ?? caseFromWorkflow(project.id, state.workflowStages, state.employees)),
       stages: nextStages,
@@ -1559,7 +1573,7 @@ export const store = {
       count: nextStages.filter((s) => s.state === "approved").length,
     });
     emit();
-    return { ok: true };
+    return { ok: true, allDone };
   },
 
   submitForReview(projectId?: string, commitId?: string) {
@@ -1578,6 +1592,10 @@ export const store = {
           ...c,
           // 綁定這次審閱要看／要合併的那一份快照
           reviewCommitId: commitId ?? c.reviewCommitId ?? null,
+          // 換了一份新快照就要重新簽。
+          // 沿用舊簽核等於把「工程看過 V1」當成「工程看過 V2」—— 簽核軌跡
+          // 會顯示已過關，但那一關的人根本沒看過現在要合併的內容。
+          stages: stagesAfterResubmit(c.stages, c.reviewCommitId ?? null, commitId ?? null),
           withdrawn: false,
           withdrawnAt: null,
           withdrawnBy: null,
