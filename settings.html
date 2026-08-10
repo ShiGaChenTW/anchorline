@@ -340,6 +340,21 @@
             <p class="sub">必須填入 API Key 後，編輯台「一鍵生稿／語調潤色／指令」才會呼叫真實模型。未設定時按鈕會停用，不會再產生假 demo 文案。</p>
             <div class="form-grid">
               <div class="form-group">
+                <label for="ai-provider">API 通路</label>
+                <select id="ai-provider">
+                  <option value="auto">自動判斷（依模型 ID 開頭）</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic Claude</option>
+                  <option value="ollama">Ollama／本機</option>
+                  <option value="custom">自訂 OpenAI 相容端點</option>
+                </select>
+                <span class="hint">
+                  選定通路後就不再猜。自架 gateway、Azure 部署名、OpenRouter 的
+                  <code>vendor/model</code> 這類名字，自動判斷一定會猜錯。
+                </span>
+              </div>
+              <div class="form-group">
                 <label for="ai-model">首選 AI 模型</label>
                 <input type="text" id="ai-model" list="ai-model-options" autocomplete="off"
                        placeholder="例如 claude-sonnet-4-5、gpt-5.1、gemini-2.5-pro" spellcheck="false" />
@@ -355,7 +370,7 @@
                 </datalist>
                 <span class="hint">
                   可直接打字填任何模型 ID —— 清單只是常用捷徑，不是白名單。
-                  供應商依開頭判斷：<code>claude</code>／<code>gpt</code>／<code>gemini</code>／<code>local-smart</code>。
+                  上面的通路留在「自動判斷」時，才會用 <code>claude</code>／<code>gpt</code>／<code>gemini</code> 開頭來猜。
                   <button type="button" class="linkish" id="btn-ai-fetch-models">從端點抓可用模型</button>
                 </span>
               </div>
