@@ -11,6 +11,7 @@
     "test": "bun test",
     "tauri": "tauri",
     "app": "tauri build",
+    "app:test": "VITE_APP_VARIANT=test tauri build --config src-tauri/tauri.test.conf.json",
     "app:dev": "tauri dev",
     "track": "bun run src/cli/track-tui.ts",
     "track:once": "bun run src/cli/track-tui.ts --once",
