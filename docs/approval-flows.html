@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anchorline 簽核流程</title>
+<!--
+  這一頁不含任何流程內容 —— 全部來自 approval-flows.data.js。
+  要改流程請改那個檔案，不要改這裡的圖或表。
+
+  離線可用：mermaid 若載不到（沒網路 / 內網），圖會自動退化成
+  可讀的文字版流程（節點 + 走向），其餘表格完全不受影響。
+-->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="./approval-flows.data.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --inset: #1c2128;
+    --fg: #e6edf3; --fg-2: #c9d1d9; --muted: #8b949e; --meta: #6e7681;
+    --border: #30363d;
+    --accent: #2f81f7; --ok: #3fb950; --warn: #d29922; --danger: #f85149;
+    --radius: 12px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f8fa; --surface: #fff; --inset: #f0f3f6;
+      --fg: #1f2328; --fg-2: #32383f; --muted: #59636e; --meta: #6e7781;
+      --border: #d1d9e0;
+      --accent: #0969da; --ok: #1a7f37; --warn: #9a6700; --danger: #cf222e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 20px 80px;
+    background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Noto Sans TC", "PingFang TC", system-ui, sans-serif;
+    line-height: 1.7;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  header.top { padding: 40px 0 24px; border-bottom: 1px solid var(--border); margin-bottom: 28px; }
+  h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: -0.02em; }
+  .sub { margin: 0; color: var(--muted); font-size: 14px; }
+  .howto {
+    margin: 18px 0 0; padding: 12px 16px;
+    background: color-mix(in oklab, var(--accent) 10%, transparent);
+    border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--border));
+    border-radius: 8px; font-size: 13.5px;
+  }
+  code { font-family: var(--mono); font-size: 0.9em; background: var(--inset); padding: 1px 5px; border-radius: 4px; }
+
+  nav.toc { position: sticky; top: 0; z-index: 5; padding: 12px 0; background: var(--bg); border-bottom: 1px solid var(--border); margin-bottom: 28px; }
+  nav.toc a { display: inline-block; margin: 0 14px 6px 0; color: var(--accent); text-decoration: none; font-size: 13.5px; }
+  nav.toc a:hover { text-decoration: underline; }
+
+  section.flow { margin: 0 0 56px; }
+  h2 { font-size: 20px; margin: 0 0 4px; scroll-margin-top: 64px; }
+  .purpose { margin: 0 0 4px; color: var(--fg-2); }
+  .trigger { margin: 0 0 16px; color: var(--muted); font-size: 13.5px; }
+  .chips { margin: 0 0 16px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { padding: 2px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--fg-2); background: var(--inset); }
+
+  .diagram { padding: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; margin: 0 0 20px; }
+  .diagram pre.fallback { margin: 0; font-family: var(--mono); font-size: 12.5px; color: var(--fg-2); white-space: pre-wrap; }
+
+  table { width: 100%; border-collapse: collapse; margin: 0 0 20px; font-size: 13.5px; }
+  th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  th { color: var(--meta); font-weight: 600; font-size: 12px; white-space: nowrap; }
+  tbody tr:hover { background: var(--inset); }
+  td ul { margin: 0; padding-left: 18px; }
+  td li { margin: 0 0 3px; }
+  .step-name { font-weight: 600; white-space: nowrap; }
+  .kind { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 10.5px; vertical-align: middle; }
+  .k-start { background: color-mix(in oklab, var(--accent) 22%, transparent); color: var(--accent); }
+  .k-decision { background: color-mix(in oklab, var(--warn) 22%, transparent); color: var(--warn); }
+  .k-action { background: var(--inset); color: var(--muted); }
+  .k-end { background: color-mix(in oklab, var(--ok) 22%, transparent); color: var(--ok); }
+  .k-blocked { background: color-mix(in oklab, var(--danger) 22%, transparent); color: var(--danger); }
+  .pass li { color: var(--ok); }
+  .fail li { color: var(--danger); }
+  .coderef { color: var(--meta); font-family: var(--mono); font-size: 11.5px; }
+  .lv { padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .lv-block { background: color-mix(in oklab, var(--danger) 20%, transparent); color: var(--danger); }
+  .lv-warn { background: color-mix(in oklab, var(--warn) 20%, transparent); color: var(--warn); }
+  footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--meta); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Anchorline 簽核流程</h1>
+    <p class="sub" id="meta-line"></p>
+    <p class="howto">
+      <strong>要改流程請改 <code>docs/approval-flows.data.js</code></strong>，不要改這一頁。
+      圖、步驟表、條件表全部由那個檔案生成 —— 改完存檔、重新整理就看得到。
+      每一步都標了對應的程式位置，方便回頭核對實作有沒有跟著改。
+    </p>
+  </header>
+
+  <nav class="toc" id="toc"></nav>
+  <main id="main"></main>
+
+  <section class="flow">
+    <h2 id="roles">角色與權限</h2>
+    <p class="purpose">三種角色。Agent 只能是編輯或核准，不可為管理員 —— 讓一個模型家族同時握有帳號管理與簽核權，等於沒有制衡。</p>
+    <table><thead><tr><th>角色</th><th>可做的事</th><th>說明</th></tr></thead><tbody id="roles-body"></tbody></table>
+  </section>
+
+  <section class="flow">
+    <h2 id="gates">結構檢查判定項</h2>
+    <p class="purpose">程式判定，不是 AI 判定。<strong>block</strong> 擋送審與核准；<strong>warn</strong> 只提示。</p>
+    <table><thead><tr><th>層級</th><th>項目</th><th>判定規則</th><th>備註</th></tr></thead><tbody id="gates-body"></tbody></table>
+  </section>
+
+  <section class="flow">
+    <h2 id="stages">預設簽核關卡</h2>
+    <p class="purpose">可在管理中心調整。required 的關卡沒簽完，案件就停在審閱中。</p>
+    <table><thead><tr><th>順序</th><th>關卡</th><th>必要</th></tr></thead><tbody id="stages-body"></tbody></table>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+(function () {
+  const D = window.APPROVAL_FLOWS;
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const KIND_LABEL = { start: "起點", action: "動作", decision: "判斷", end: "結束", blocked: "擋下" };
+
+  document.getElementById("meta-line").textContent =
+    `${D.meta.product} · 更新於 ${D.meta.updated} · ${D.meta.note}`;
+
+  // ── 目錄 ────────────────────────────────────────────────
+  const toc = document.getElementById("toc");
+  toc.innerHTML =
+    D.flows.map((f) => `<a href="#${esc(f.id)}">${esc(f.title)}</a>`).join("") +
+    `<a href="#roles">角色與權限</a><a href="#gates">結構檢查</a><a href="#stages">預設關卡</a>`;
+
+  // ── mermaid 圖：節點形狀依 kind ──────────────────────────
+  // 判斷用菱形、結束用圓角、擋下用梯形 —— 形狀本身就要說得出這一步是什麼。
+  function mermaidFor(flow) {
+    const shape = (s) => {
+      const t = esc(s.name).replace(/"/g, "'");
+      if (s.kind === "decision") return `${s.id}{"${t}"}`;
+      if (s.kind === "end") return `${s.id}(["${t}"])`;
+      if (s.kind === "blocked") return `${s.id}[/"${t}"\\]`;
+      if (s.kind === "start") return `${s.id}(["${t}"])`;
+      return `${s.id}["${t}"]`;
+    };
+    const lines = ["flowchart TD"];
+    flow.steps.forEach((s) => lines.push("  " + shape(s)));
+    flow.edges.forEach((e) => {
+      const label = e.label ? `|"${esc(e.label).replace(/"/g, "'")}"|` : "";
+      lines.push(`  ${e.from} -->${label} ${e.to}`);
+    });
+    flow.steps.forEach((s) => {
+      if (s.kind === "blocked") lines.push(`  class ${s.id} blocked;`);
+      if (s.kind === "end") lines.push(`  class ${s.id} done;`);
+      if (s.kind === "decision") lines.push(`  class ${s.id} dec;`);
+    });
+    lines.push("  classDef blocked fill:#f8514922,stroke:#f85149,color:inherit;");
+    lines.push("  classDef done fill:#3fb95022,stroke:#3fb950,color:inherit;");
+    lines.push("  classDef dec fill:#d2992222,stroke:#d29922,color:inherit;");
+    return lines.join("\n");
+  }
+
+  /** mermaid 載不到時的文字版 —— 內網或離線也要看得懂走向 */
+  function textFallback(flow) {
+    const byId = Object.fromEntries(flow.steps.map((s) => [s.id, s]));
+    const out = flow.steps.map((s) => `[${KIND_LABEL[s.kind] || s.kind}] ${s.name}`);
+    out.push("", "走向：");
+    flow.edges.forEach((e) => {
+      const a = byId[e.from]?.name ?? e.from;
+      const b = byId[e.to]?.name ?? e.to;
+      out.push(`  ${a} ──${e.label ? ` ${e.label} ` : "─"}→ ${b}`);
+    });
+    return out.join("\n");
+  }
+
+  // ── 流程區塊 ────────────────────────────────────────────
+  const roleName = (id) => (D.roles.find((r) => r.id === id) || {}).name || id;
+
+  document.getElementById("main").innerHTML = D.flows
+    .map(
+      (f) => `
+    <section class="flow">
+      <h2 id="${esc(f.id)}">${esc(f.title)}</h2>
+      <p class="purpose"><strong>目的：</strong>${esc(f.purpose)}</p>
+      <p class="trigger"><strong>觸發：</strong>${esc(f.trigger)}</p>
+      <div class="chips">${f.roles.map((r) => `<span class="chip">${esc(roleName(r))}</span>`).join("")}</div>
+      <div class="diagram" data-flow="${esc(f.id)}"><div class="mermaid">${esc(mermaidFor(f))}</div></div>
+      <table>
+        <thead><tr><th>步驟</th><th>由誰執行</th><th>要達成什麼</th><th>滿足條件</th><th>否決條件</th></tr></thead>
+        <tbody>
+          ${f.steps
+            .map(
+              (s) => `<tr>
+              <td><span class="step-name">${esc(s.name)}</span><span class="kind k-${esc(s.kind)}">${esc(KIND_LABEL[s.kind] || s.kind)}</span>
+                ${s.code ? `<div class="coderef">${esc(s.code)}</div>` : ""}</td>
+              <td>${esc(s.actor)}</td>
+              <td>${esc(s.purpose)}</td>
+              <td><ul class="pass">${(s.pass || []).map((x) => `<li>${esc(x)}</li>`).join("") || "<li style='color:var(--meta)'>—</li>"}</ul></td>
+              <td><ul class="fail">${(s.fail || []).map((x) => `<li>${esc(x)}</li>`).join("") || "<li style='color:var(--meta)'>—</li>"}</ul></td>
+            </tr>`,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </section>`,
+    )
+    .join("");
+
+  // ── 附表 ────────────────────────────────────────────────
+  document.getElementById("roles-body").innerHTML = D.roles
+    .map((r) => `<tr><td class="step-name">${esc(r.name)}<div class="coderef">${esc(r.id)}</div></td>
+      <td>${r.can.map((c) => `<span class="chip">${esc(c)}</span>`).join(" ")}</td>
+      <td>${esc(r.note)}</td></tr>`)
+    .join("");
+
+  document.getElementById("gates-body").innerHTML = D.gates
+    .map((g) => `<tr><td><span class="lv lv-${esc(g.level)}">${esc(g.level)}</span></td>
+      <td class="step-name">${esc(g.label)}</td><td>${esc(g.rule)}</td><td>${esc(g.note)}</td></tr>`)
+    .join("");
+
+  document.getElementById("stages-body").innerHTML = D.stages
+    .map((s) => `<tr><td>${esc(s.order)}</td><td class="step-name">${esc(s.name)}</td>
+      <td>${s.required ? "必要" : "可略過"}</td></tr>`)
+    .join("");
+
+  document.getElementById("footer").textContent =
+    `資料來源：src/lib/permissions.ts、src/lib/prd-gates.ts、src/data/store.ts（approveAndLock / submitForReview / withdrawCase / commitForReview / mergeApproved）。此頁由 docs/approval-flows.data.js 生成。`;
+
+  // ── 繪圖（含離線退化）────────────────────────────────────
+  if (window.mermaid) {
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "default", securityLevel: "loose" });
+  } else {
+    document.querySelectorAll(".diagram").forEach((d) => {
+      const flow = D.flows.find((f) => f.id === d.dataset.flow);
+      if (flow) d.innerHTML = `<pre class="fallback">${esc(textFallback(flow))}</pre>`;
+    });
+  }
+})();
+</script>
+</body>
+</html>
