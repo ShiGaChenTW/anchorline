@@ -13,8 +13,17 @@ import {
 import { buildHandoff, type AgentFamilyId } from "../lib/agent-handoff";
 import { initTheme } from "../lib/theme";
 import { sortByRecency, trackingTarget } from "../lib/tracking";
-import { canScanPlans, plansDirsOf, requestTrackingScan } from "../lib/tracking-bridge";
-import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+import {
+  canScanPlans,
+  plansDirsOf,
+  requestTrackingScan,
+} from "../lib/tracking-bridge";
+import {
+  escapeHtml,
+  initMobileNav,
+  toast,
+  updateUserRailFooter,
+} from "../lib/ui";
 import { byNewest, dedupe, parseLog, type LogEvent } from "../lib/event-log";
 import { hookInstallSnippet, logEvent } from "../lib/event-writer";
 import { canEditFiles, readFile, writeFile } from "../lib/file-editor";
@@ -66,6 +75,25 @@ if (__authed) {
   /** 有沒有真實 mtime 可用。決定要不要顯示追蹤點，而不是顯示一個永遠不亮的點 */
   let live = false;
   let lastSig = "";
+
+  /**
+   * 事件的 subject（`anc:t=XXXX`）→ 那個步驟在 plan 裡的原文。
+   *
+   * 漂移偵測不靠比對，靠並排：把「計劃說要做什麼」與「實際做了什麼」擺在
+   * 同一列，判斷交給讀的人。多數漂移是正當的（開始做 X、發現 Y 才對、於是
+   * 做 Y），所以自動標紅會在多數情況下誤報，然後被學會忽略。
+   *
+   * 找遍所有計劃而不只是當前這份 —— 事件可能來自別份 plan 的步驟。
+   */
+  function stepTextOf(subject: string): string {
+    const id = subject.replace(/^(?:anc|sf):t=/, "");
+    if (id === subject) return "";
+    for (const p of plans) {
+      const hit = p.meta.steps.find((st) => st.id === id);
+      if (hit) return hit.text;
+    }
+    return "";
+  }
 
   /** 當前選取專案的名稱，給空狀態文案用。找不到就回空字串。 */
   function activeProjectName(): string {
@@ -124,7 +152,10 @@ if (__authed) {
     );
     live = true;
     // 每次重繪重算，不快取 —— 快取只會製造「追蹤點卡住不動」這類 bug
-    trackingPath = trackingTarget({ files: plans, signal: scan.signal }, Date.now());
+    trackingPath = trackingTarget(
+      { files: plans, signal: scan.signal },
+      Date.now(),
+    );
     restoreIdx();
     return true;
   }
@@ -163,7 +194,12 @@ if (__authed) {
    * 追蹤中／進行中，沒有步驟的收進可展開的那一組 —— 需要時打開就有，
    * 不需要時不佔視野。
    */
-  type Group = { key: string; label: string; items: { p: PlanEntry; i: number }[]; open: boolean };
+  type Group = {
+    key: string;
+    label: string;
+    items: { p: PlanEntry; i: number }[];
+    open: boolean;
+  };
 
   function groupPlans(): Group[] {
     const tracked: Group["items"] = [];
@@ -176,7 +212,8 @@ if (__authed) {
       else if (p.meta.total_steps === 0) noSteps.push(entry);
       // 分桶要跟進度條同源。用 done_steps 的話，有放棄步驟的 plan 進度條到 100%
       // 卻永遠留在「進行中」——同一張卡上兩個地方說反話。
-      else if (planProgress(p.meta).closed >= p.meta.total_steps) done.push(entry);
+      else if (planProgress(p.meta).closed >= p.meta.total_steps)
+        done.push(entry);
       else active.push(entry);
     });
     return [
@@ -266,7 +303,8 @@ if (__authed) {
     if (!p) {
       if (hd) hd.textContent = "還沒選計劃";
       if (sum) sum.innerHTML = "";
-      if (steps) steps.innerHTML = `<div class="tk-empty"><p>從左邊挑一份計劃。</p></div>`;
+      if (steps)
+        steps.innerHTML = `<div class="tk-empty"><p>從左邊挑一份計劃。</p></div>`;
       return;
     }
     const prog = planProgress(p.meta);
@@ -310,7 +348,8 @@ if (__authed) {
           .map(({ s }) => {
             // 有錨點才能勾 —— 沒有 id 就沒有辦法在寫回時定位到那一行，
             // 也接不上事件流。UI 直接反映這個限制，而不是勾了沒反應。
-            const can = Boolean(s.id) && s.state !== "skipped" && canEditFiles();
+            const can =
+              Boolean(s.id) && s.state !== "skipped" && canEditFiles();
             const mark = can
               ? `<button type="button" class="tk-step-mark tk-step-toggle" data-step="${escapeHtml(s.id!)}" data-done="${s.state === "done" ? "1" : "0"}" aria-label="${s.state === "done" ? "取消勾選" : "標記完成"}"></button>`
               : `<span class="tk-step-mark" aria-hidden="true"></span>`;
@@ -329,12 +368,17 @@ if (__authed) {
           })
           .join("");
 
-        steps.querySelectorAll<HTMLButtonElement>(".tk-step-toggle").forEach((btn) => {
-          btn.onclick = () => void onToggleStep(btn.dataset.step!, btn.dataset.done !== "1");
-        });
-        steps.querySelectorAll<HTMLButtonElement>(".tk-step-handoff").forEach((btn) => {
-          btn.onclick = () => void onHandoffStep(btn.dataset.handoff!);
-        });
+        steps
+          .querySelectorAll<HTMLButtonElement>(".tk-step-toggle")
+          .forEach((btn) => {
+            btn.onclick = () =>
+              void onToggleStep(btn.dataset.step!, btn.dataset.done !== "1");
+          });
+        steps
+          .querySelectorAll<HTMLButtonElement>(".tk-step-handoff")
+          .forEach((btn) => {
+            btn.onclick = () => void onHandoffStep(btn.dataset.handoff!);
+          });
       }
     }
   }
@@ -372,7 +416,9 @@ if (__authed) {
     const [first, ...rest] = actionable.sort((a, b) =>
       a.level === b.level ? 0 : a.level === "block" ? -1 : 1,
     );
-    const card = (f: (typeof actionable)[number]) => `<div class="tk-gate tk-gate--${f.level}">
+    const card = (
+      f: (typeof actionable)[number],
+    ) => `<div class="tk-gate tk-gate--${f.level}">
       <p class="tk-gate-lv">${f.level === "block" ? "先處理" : "該處理"}</p>
       <p class="tk-gate-t">${escapeHtml(f.label)}</p>
       <p class="tk-gate-d">${escapeHtml(f.detail)}</p>
@@ -395,7 +441,10 @@ if (__authed) {
     const el = document.getElementById("layer-panel");
     if (!el) return;
     const hasPlan = plans.some((p) => p.meta.total_steps > 0);
-    const layers = deriveFlowLayers(store.get(), { hasPlanSteps: hasPlan, gateSpec: store.activeGateSpec() });
+    const layers = deriveFlowLayers(store.get(), {
+      hasPlanSteps: hasPlan,
+      gateSpec: store.activeGateSpec(),
+    });
     el.innerHTML = `<div class="tk-layers">${layers
       .map(
         (l) =>
@@ -416,7 +465,10 @@ if (__authed) {
     if (p.meta.blockers > 0) facts.push(["阻塞", `${p.meta.blockers} 項`]);
     if (!facts.length) return;
     el.innerHTML += `<dl class="tk-facts">${facts
-      .map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`)
+      .map(
+        ([k, v]) =>
+          `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`,
+      )
       .join("")}</dl>`;
   }
 
@@ -463,12 +515,19 @@ if (__authed) {
                 <summary>完整時間軸（${auditEvents.length} 筆）</summary>
                 <ul class="tk-timeline">${byNewest(auditEvents)
                   .slice(0, 200)
-                  .map(
-                    (e) =>
-                      `<li><span class="mono">${escapeHtml(e.ts.slice(0, 16).replace("T", " "))}</span>
+                  .map((e) => {
+                    // 步驟原文擺在事件旁邊。**這是漂移唯一看得見的地方。**
+                    // 只顯示 subject 的話，讀的人不知道那個步驟當初說要做什麼，
+                    // 就算「plan 寫 A、commit 做 B」擺在眼前也認不出來。
+                    // 兩行並排，人眼半秒就分辨得出 —— 不需要模型，不會誤報。
+                    const step = stepTextOf(e.subject);
+                    const did = String(e.payload?.title ?? "");
+                    return `<li><span class="mono">${escapeHtml(e.ts.slice(0, 16).replace("T", " "))}</span>
                        <b>${escapeHtml(kindLabel(e.kind))}</b>
-                       <span class="muted">${escapeHtml(e.subject)}</span></li>`
-                  )
+                       <span class="muted">${escapeHtml(e.subject)}</span>
+                       ${step ? `<span class="tk-tl-plan" title="plan 步驟原文">計劃：${escapeHtml(step)}</span>` : ""}
+                       ${did ? `<span class="tk-tl-did" title="實際發生的事">實際：${escapeHtml(did)}</span>` : ""}</li>`;
+                  })
                   .join("")}</ul>
                 <p class="tk-audit-actions">
                   <button type="button" class="btn btn-sm" id="btn-export-md">匯出 Markdown</button>
@@ -480,29 +539,52 @@ if (__authed) {
       }
     </section>`;
 
-    document.getElementById("btn-hook-snippet")?.addEventListener("click", () => {
-      // 只複製，不代寫 ~/.claude/settings.json —— 那是使用者的全域設定
-      void navigator.clipboard?.writeText(hookInstallSnippet());
-      toast("已複製。貼進 ~/.claude/settings.json 的 hooks 區段");
-    });
+    document
+      .getElementById("btn-hook-snippet")
+      ?.addEventListener("click", () => {
+        // 只複製，不代寫 ~/.claude/settings.json —— 那是使用者的全域設定
+        void navigator.clipboard?.writeText(hookInstallSnippet());
+        toast("已複製。貼進 ~/.claude/settings.json 的 hooks 區段");
+      });
     document.getElementById("btn-export-md")?.addEventListener("click", () => {
-      download(`稽核軌跡-${p.name}.md`, exportMarkdown(filterForExport(auditEvents, {}), `稽核軌跡 · ${p.meta.title}`));
+      download(
+        `稽核軌跡-${p.name}.md`,
+        exportMarkdown(
+          filterForExport(auditEvents, {}),
+          `稽核軌跡 · ${p.meta.title}`,
+        ),
+      );
     });
     document.getElementById("btn-export-csv")?.addEventListener("click", () => {
-      download(`稽核軌跡-${p.name}.csv`, exportCsv(filterForExport(auditEvents, {})));
+      download(
+        `稽核軌跡-${p.name}.csv`,
+        exportCsv(filterForExport(auditEvents, {})),
+      );
     });
     // 治理鏈 replay：作品用。撰寫者族系從專案的 authorAgentFamily 來，
     // 職務分離違規會被標出來 —— 一條沒有標示違規的治理鏈沒有說服力。
-    document.getElementById("btn-export-replay")?.addEventListener("click", () => {
-      const st = store.get();
-      const proj = st.projects.find((x) => x.id === st.activeProjectId);
-      const r = buildReplay(auditEvents, `prd:${proj?.id ?? ""}`, proj?.authorAgentFamily ?? null, Date.now());
-      download(`治理鏈-${p.name}.md`, replayMarkdown(r, `治理鏈 · ${proj ? proj.title : p.meta.title}`));
-    });
+    document
+      .getElementById("btn-export-replay")
+      ?.addEventListener("click", () => {
+        const st = store.get();
+        const proj = st.projects.find((x) => x.id === st.activeProjectId);
+        const r = buildReplay(
+          auditEvents,
+          `prd:${proj?.id ?? ""}`,
+          proj?.authorAgentFamily ?? null,
+          Date.now(),
+        );
+        download(
+          `治理鏈-${p.name}.md`,
+          replayMarkdown(r, `治理鏈 · ${proj ? proj.title : p.meta.title}`),
+        );
+      });
   }
 
   function download(name: string, text: string) {
-    const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+    const url = URL.createObjectURL(
+      new Blob([text], { type: "text/plain;charset=utf-8" }),
+    );
     const a = document.createElement("a");
     a.href = url;
     a.download = name;
@@ -646,11 +728,14 @@ if (__authed) {
       e.preventDefault();
       const i = plans.findIndex((p) => p.path === trackingPath);
       if (live && i >= 0) select(i);
-      else toast(live ? "等待 agent 開始執行…" : "靜態快照 · 桌面版才能即時追蹤");
+      else
+        toast(live ? "等待 agent 開始執行…" : "靜態快照 · 桌面版才能即時追蹤");
     }
     if (e.key === "?") {
       e.preventDefault();
-      toast("j/k 切計劃 · t 跳到追蹤中 · r 重新整理 · 右欄為 PRD 結構 gate（送審阻擋用）");
+      toast(
+        "j/k 切計劃 · t 跳到追蹤中 · r 重新整理 · 右欄為 PRD 結構 gate（送審阻擋用）",
+      );
     }
   });
 
