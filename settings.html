@@ -22,7 +22,7 @@
     box-shadow: var(--elev-ring);
   }
   .settings-section h2 {
-    font-size: 16px;
+    font-size: var(--fs-5);
     font-weight: var(--weight-em);
     margin: 0 0 6px;
     color: var(--fg);
@@ -32,7 +32,7 @@
   }
   .settings-section p.sub {
     margin: 0 0 18px;
-    font-size: 13px;
+    font-size: var(--fs-3);
     color: var(--muted);
   }
   .form-grid {
@@ -49,12 +49,12 @@
     gap: 6px;
   }
   .form-group label {
-    font-size: 13px;
+    font-size: var(--fs-3);
     font-weight: var(--weight-em);
     color: var(--fg);
   }
   .form-group .hint {
-    font-size: 11px;
+    font-size: var(--fs-1);
     color: var(--muted);
   }
   /* 所有單列控制項共用同一個高度，欄位才會對齊成一條線。
@@ -70,7 +70,7 @@
     border-radius: var(--radius-sm);
     padding: 0 12px;
     color: var(--fg);
-    font-size: 13px;
+    font-size: var(--fs-3);
     font-family: inherit;
   }
   .form-group input:focus,
@@ -102,14 +102,14 @@
     accent-color: var(--accent);
   }
   .switch-group span {
-    font-size: 13px;
+    font-size: var(--fs-3);
     line-height: 1.45;
     color: var(--fg);
     padding: 9px 0;
   }
   .range-val {
     font-family: var(--mono);
-    font-size: 12px;
+    font-size: var(--fs-2);
     color: var(--accent);
     margin-left: 8px;
   }
@@ -144,7 +144,7 @@
   html.in-modal .set-shell { grid-template-columns: 236px minmax(0, 1fr) !important; }
   html.in-modal .set-rail { padding: 20px 16px; gap: 4px; }
   /* 分類是這個視窗的主導覽，字級要撐得住 */
-  html.in-modal .set-cat { padding: 12px 16px; font-size: 15px; border-radius: 9px; }
+  html.in-modal .set-cat { padding: 12px 16px; font-size: var(--fs-5); border-radius: 9px; }
   html.in-modal .set-cat.on {
     background: color-mix(in oklab, var(--accent) 26%, transparent);
     font-weight: 600;
@@ -156,8 +156,8 @@
     margin-bottom: 18px;
     border-radius: 12px;
   }
-  html.in-modal #set-pane .settings-section h2 { font-size: 16px; margin-bottom: 8px; }
-  html.in-modal #set-pane .settings-section > .sub { font-size: 13.5px; margin-bottom: 20px; }
+  html.in-modal #set-pane .settings-section h2 { font-size: var(--fs-5); margin-bottom: 8px; }
+  html.in-modal #set-pane .settings-section > .sub { font-size: var(--fs-4); margin-bottom: 20px; }
   .actions-row {
     display: flex;
     gap: 12px;
@@ -331,7 +331,7 @@
               </div>
             </div>
 
-            <h4 style="margin:22px 0 6px;font-size:14px;color:var(--fg)">各章節的 prompt 覆寫</h4>
+            <h4 style="margin:22px 0 6px;font-size: var(--fs-4);color:var(--fg)">各章節的 prompt 覆寫</h4>
             <p class="sub" style="margin-bottom:12px">
               留空 = 用內建 prompt。只有在某一節的產出一直不對時才需要動它 ——
               覆寫是例外，不是預設。
@@ -422,11 +422,11 @@
               </div>
             </div>
 
-            <h4 style="margin:16px 0 10px;font-size:14px;color:var(--fg)">人員與 Agent 列表</h4>
+            <h4 style="margin:16px 0 10px;font-size: var(--fs-4);color:var(--fg)">人員與 Agent 列表</h4>
             <div id="employee-list-container" class="emp-list"></div>
 
             <div id="add-employee-panel" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
-              <h4 style="margin:0 0 10px;font-size:14px;color:var(--fg)">➕ 新增人員 / Agent</h4>
+              <h4 style="margin:0 0 10px;font-size: var(--fs-4);color:var(--fg)">➕ 新增人員 / Agent</h4>
               <div class="form-grid">
                 <div class="form-group">
                   <label for="new-emp-name">姓名</label>
@@ -501,6 +501,17 @@
           </div>
 
           <!-- Section: Editor -->
+          <div class="settings-section" data-cat="appearance">
+            <h2>🔠 介面字級</h2>
+            <p class="sub">
+              一次調整整個 App 的文字大小。**只影響這台機器**，不會跟著備份或分享出去。
+            </p>
+            <div class="fs-picker" id="fs-picker" role="radiogroup" aria-label="介面字級"></div>
+            <p class="hint" style="margin-top:8px">
+              即時生效。放大之後如果哪一頁被擠壞了，告訴我 —— 那是版面的問題，不是你的字調太大。
+            </p>
+          </div>
+
           <div class="settings-section" data-cat="appearance">
             <h2>📝 編輯台顯示與工具</h2>
             <p class="sub">控制 Markdown 編輯器行號、工具列與預設檢視模式（僅影響本機）。</p>
@@ -593,7 +604,7 @@
                 <p class="sub" id="da-status" style="margin-top:8px"></p>
                 <div id="da-result" hidden>
                   <label class="ask-adv-label" for="da-raw">產出（可直接手改）</label>
-                  <textarea id="da-raw" class="ask-input" rows="18" spellcheck="false" style="font-family:var(--font-mono);font-size:12px"></textarea>
+                  <textarea id="da-raw" class="ask-input" rows="18" spellcheck="false" style="font-family:var(--font-mono);font-size: var(--fs-2)"></textarea>
                   <label class="ask-adv-label" for="da-instruction">要改哪裡？</label>
                   <input type="text" id="da-instruction" class="ask-input" placeholder="例：把 KYC 那條改成 warn，另外加一段費率揭露" />
                   <div class="actions-row" style="margin-top:8px">

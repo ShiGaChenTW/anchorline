@@ -35,12 +35,12 @@
     padding: 11px 14px;
     border-bottom: 1px solid var(--border);
     background: inherit;
-    font-size: 11.5px;
+    font-size: var(--fs-2);
     font-weight: 600;
     letter-spacing: 0.02em;
     color: var(--muted);
   }
-  .tk-hd .mono { font-family: var(--mono); font-weight: 400; font-size: 11px; }
+  .tk-hd .mono { font-family: var(--mono); font-weight: 400; font-size: var(--fs-1); }
 
   /* ── 計劃清單：分組，未完成的組預設展開 ── */
   .tk-group { border-bottom: 1px solid var(--border-muted); }
@@ -49,7 +49,7 @@
     align-items: center;
     gap: 8px;
     padding: 9px 14px;
-    font-size: 11.5px;
+    font-size: var(--fs-2);
     font-weight: 600;
     color: var(--muted);
     cursor: pointer;
@@ -62,7 +62,7 @@
     padding: 0 6px;
     border-radius: 4px;
     background: var(--inset);
-    font-size: 10px;
+    font-size: var(--fs-1);
     font-variant-numeric: tabular-nums;
     color: var(--muted);
   }
@@ -85,7 +85,7 @@
   .tk-row.on { background: color-mix(in oklab, var(--accent) 15%, transparent); }
   .tk-row-t {
     display: block;
-    font-size: 13px;
+    font-size: var(--fs-3);
     font-weight: 500;
     line-height: 1.45;
     color: var(--fg-2);
@@ -105,7 +105,7 @@
   .tk-num {
     flex: 0 0 auto;
     font-family: var(--mono);
-    font-size: 10.5px;
+    font-size: var(--fs-1);
     font-variant-numeric: tabular-nums;
     color: var(--muted);
   }
@@ -115,7 +115,7 @@
   .tk-body { padding: 22px 26px 40px; }
   .tk-title {
     margin: 0 0 16px;
-    font-size: 21px;
+    font-size: var(--fs-7);
     font-weight: 650;
     letter-spacing: -0.02em;
     line-height: 1.3;
@@ -133,14 +133,14 @@
   }
   .tk-do-k {
     margin: 0 0 6px;
-    font-size: 11px;
+    font-size: var(--fs-1);
     font-weight: 600;
     letter-spacing: 0.04em;
     color: var(--accent);
   }
   .tk-do-what {
     margin: 0;
-    font-size: 16px;
+    font-size: var(--fs-5);
     font-weight: 600;
     line-height: 1.5;
     color: var(--fg);
@@ -149,7 +149,7 @@
   .tk-do-clear { color: var(--success); }
   .tk-do-why {
     margin: 6px 0 0;
-    font-size: 12.5px;
+    font-size: var(--fs-3);
     line-height: 1.6;
     color: var(--muted);
     max-width: 60ch;
@@ -159,7 +159,7 @@
     border-radius: 4px;
     background: var(--inset);
     font-family: var(--mono);
-    font-size: 11.5px;
+    font-size: var(--fs-2);
   }
 
   .tk-prog { margin-bottom: 22px; }
@@ -171,7 +171,7 @@
     background: var(--accent);
     transition: width 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
   }
-  .tk-prog-m { margin: 7px 0 0; font-size: 12px; color: var(--muted); }
+  .tk-prog-m { margin: 7px 0 0; font-size: var(--fs-2); color: var(--muted); }
   .tk-prog-m strong { color: var(--fg); font-variant-numeric: tabular-nums; }
 
   /* 步驟：未完成排前面，完成的降低對比但不刪除 */
@@ -193,14 +193,14 @@
   .tk-step.pending .tk-step-mark { border-color: var(--accent); }
   .tk-step.done .tk-step-mark { border-color: var(--success); background: var(--success); }
   .tk-step.skipped .tk-step-mark { border-style: dashed; }
-  .tk-step-t { font-size: 13.5px; line-height: 1.6; color: var(--fg-2); max-width: 74ch; }
+  .tk-step-t { font-size: var(--fs-4); line-height: 1.6; color: var(--fg-2); max-width: 74ch; }
   .tk-step.done .tk-step-t { color: var(--muted); }
   .tk-step.skipped .tk-step-t { color: var(--meta); text-decoration: line-through; }
 
   /* 空狀態要教怎麼做，不是只說「沒有」 */
   .tk-empty { padding: 18px 4px; max-width: 56ch; }
-  .tk-empty p { margin: 0 0 8px; font-size: 13px; line-height: 1.65; color: var(--fg-2); }
-  .tk-empty-how { color: var(--muted) !important; font-size: 12.5px !important; }
+  .tk-empty p { margin: 0 0 8px; font-size: var(--fs-3); line-height: 1.65; color: var(--fg-2); }
+  .tk-empty-how { color: var(--muted) !important; font-size: var(--fs-3) !important; }
   .tk-code {
     margin: 6px 0 0;
     padding: 11px 13px;
@@ -209,7 +209,7 @@
     background: var(--inset);
     overflow-x: auto;
   }
-  .tk-code code { font-family: var(--mono); font-size: 11.5px; line-height: 1.7; color: var(--fg-2); }
+  .tk-code code { font-family: var(--mono); font-size: var(--fs-2); line-height: 1.7; color: var(--fg-2); }
 
   /* ── 右欄：結構檢查 ── */
   .tk-side-body { padding: 12px 14px 24px; }
@@ -221,24 +221,24 @@
   }
   .tk-gate--block { border-color: color-mix(in oklab, var(--danger, #f85149) 45%, var(--border)); }
   .tk-gate--warn { border-color: color-mix(in oklab, var(--warn) 40%, var(--border)); }
-  .tk-gate-lv { margin: 0 0 5px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; }
+  .tk-gate-lv { margin: 0 0 5px; font-size: var(--fs-1); font-weight: 700; letter-spacing: 0.04em; }
   .tk-gate--block .tk-gate-lv { color: var(--danger, #f85149); }
   .tk-gate--warn .tk-gate-lv { color: var(--warn); }
-  .tk-gate-t { margin: 0 0 4px; font-size: 13px; font-weight: 600; line-height: 1.45; color: var(--fg); }
-  .tk-gate-d { margin: 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
+  .tk-gate-t { margin: 0 0 4px; font-size: var(--fs-3); font-weight: 600; line-height: 1.45; color: var(--fg); }
+  .tk-gate-d { margin: 0; font-size: var(--fs-2); line-height: 1.6; color: var(--muted); }
   .tk-gate-rest > summary {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 4px;
-    font-size: 12px;
+    font-size: var(--fs-2);
     color: var(--muted);
     cursor: pointer;
     list-style: none;
   }
   .tk-gate-rest > summary::-webkit-details-marker { display: none; }
   .tk-gate-rest > summary:hover { color: var(--fg-2); }
-  .tk-gate-ok { padding: 12px 4px; font-size: 12.5px; color: var(--success); }
+  .tk-gate-ok { padding: 12px 4px; font-size: var(--fs-3); color: var(--success); }
 
   .tk-layers { display: flex; flex-direction: column; gap: 1px; margin: 18px 0 0; }
   .tk-layer {
@@ -247,10 +247,10 @@
     gap: 9px;
     padding: 6px 8px;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: var(--fs-2);
     color: var(--meta);
   }
-  .tk-layer-c { font-family: var(--mono); font-size: 10.5px; }
+  .tk-layer-c { font-family: var(--mono); font-size: var(--fs-1); }
   .tk-layer.done { color: var(--fg-2); }
   .tk-layer.done .tk-layer-c { color: var(--success); }
   .tk-layer.active {
@@ -261,8 +261,8 @@
   .tk-layer.active .tk-layer-c { color: var(--accent); }
 
   .tk-facts { margin: 18px 0 0; display: grid; gap: 10px; }
-  .tk-facts dt { font-size: 10.5px; letter-spacing: 0.04em; color: var(--muted); }
-  .tk-facts dd { margin: 3px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--fg-2); }
+  .tk-facts dt { font-size: var(--fs-1); letter-spacing: 0.04em; color: var(--muted); }
+  .tk-facts dd { margin: 3px 0 0; font-size: var(--fs-3); line-height: 1.55; color: var(--fg-2); }
 
   /* ── 底部狀態列 ── */
   .tk-footer {
@@ -273,7 +273,7 @@
     padding: 8px 14px;
     border-top: 1px solid var(--border);
     background: var(--surface);
-    font-size: 11.5px;
+    font-size: var(--fs-2);
     color: var(--muted);
   }
   .tk-foot-sp { flex: 1 1 auto; }
@@ -284,7 +284,7 @@
     border-radius: 4px;
     background: var(--bg);
     font-family: var(--mono);
-    font-size: 10.5px;
+    font-size: var(--fs-1);
     color: var(--fg-2);
   }
   .tk-foot-live { color: var(--fg-2); }

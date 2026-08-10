@@ -4,7 +4,7 @@ import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
 import { canManageUsers } from "../lib/permissions";
-import { initTheme } from "../lib/theme";
+import { applyFontScale, currentFontScale, FONT_SCALES, initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 import { BUILTIN_PACKS, listDomains } from "../data/domains";
 import {
@@ -273,8 +273,36 @@ async function runProfileSuggestion() {
   }
 }
 
+/**
+ * 介面字級選擇器。每個選項用**自己代表的字級**顯示 ——
+ * 用同樣大小的字寫「大」「緊湊」等於要使用者先選了才知道結果。
+ */
+function renderFontScale() {
+  const host = document.getElementById("fs-picker");
+  if (!host) return;
+  const cur = currentFontScale();
+  host.innerHTML = FONT_SCALES.map(
+    (s) => `<button type="button" class="fs-opt ${s.id === cur ? "is-on" : ""}"
+      role="radio" aria-checked="${s.id === cur}" data-fs="${s.id}">
+      <span class="fs-sample" style="font-size:${Math.round(13 * s.value)}px">Aa</span>
+      <span class="fs-name">${s.label}</span>
+      <span class="fs-pct">${Math.round(s.value * 100)}%</span>
+    </button>`,
+  ).join("");
+
+  if (host.dataset.bound === "1") return;
+  host.dataset.bound = "1";
+  host.addEventListener("click", (ev) => {
+    const btn = (ev.target as HTMLElement | null)?.closest<HTMLElement>("[data-fs]");
+    if (!btn) return;
+    applyFontScale(btn.dataset.fs);
+    renderFontScale();
+  });
+}
+
 function populateSettings() {
   const s = store.get().settings;
+  renderFontScale();
 
   const awO = document.getElementById("aw-overwrite") as HTMLInputElement | null;
   if (awO) awO.checked = s.aiWriting.overwriteFilled;
