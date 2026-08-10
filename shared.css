@@ -8889,6 +8889,26 @@ p.gd-warn {
 .tk-step-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tk-step.done .tk-step-toggle { border-color: var(--success); background: var(--success); }
 
+/* 交接鍵。只在還沒做完、且有錨點的步驟上出現 —— 沒有錨點交出去也串不回來。
+   預設隱形、hover 或鍵盤聚焦才顯現：一排步驟每行都掛一顆常駐按鈕，會把
+   「哪一步該做」這個唯一重點稀釋掉。 */
+.tk-step-handoff {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-3);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 140ms ease, color 140ms ease;
+}
+.tk-step:hover .tk-step-handoff,
+.tk-step-handoff:focus-visible { opacity: 1; }
+.tk-step-handoff:hover { color: var(--fg-2); }
+.tk-step-handoff:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* ═══════════════════════════════════════════════════════════════
    側欄：「目前」卡固定在品牌列下方
    ═══════════════════════════════════════════════════════════════ */
