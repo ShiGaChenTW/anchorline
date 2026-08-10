@@ -1,8 +1,8 @@
 # 治理覆蓋率 — 未治理 task 的數量統計
 
 **建立時間：** 2026-08-10 22:03
-**最後更新：** 2026-08-10 22:03
-**狀態：** 進行中
+**最後更新：** 2026-08-10 22:20
+**狀態：** 進行中（等視覺確認）
 
 ## 目標
 
@@ -34,16 +34,25 @@
 
 ## Plan Steps
 
-- [ ] Step 1 — `paths.rs`：`log_dir_of()` 謂詞（已註冊根目錄 ∧ `.anchorline/log`）
-- [ ] Step 2 — `commands.rs`：`read_log` action（唯讀、有分片與位元組上限）
-- [ ] Step 3 — `lib.rs` 註冊 + `ping` 的 capabilities 補上 `readLog`
-- [ ] Step 4 — `native.ts`：`readLog` 包裝
-- [ ] Step 5 — `governance.ts`：純函式 `governanceCoverage()` + 測試
-- [ ] Step 6 — `dashboard.ts`：單一專案的卡片
-- [ ] Step 7 — `overview.ts`：跨專案總和 + 可展開的各專案明細
-- [ ] Step 8 — `docs/BRIDGE.md` 補上第 13 個 action（契約文件，改行為就改文件）
+- [x] Step 1 — `paths.rs`：`log_dir_of()` 謂詞（已註冊根目錄 ∧ `.anchorline/log`）
+- [x] Step 2 — `commands.rs`：`read_log` action（唯讀、有分片與位元組上限）
+- [x] Step 3 — `lib.rs` 註冊 + `ping` 的 capabilities 補上 `readLog`
+- [x] Step 4 — `native.ts`：`readLog` 包裝
+- [x] Step 5 — `governance.ts`：純函式 `governanceCoverage()` + 測試
+- [x] Step 6 — `dashboard.ts`：單一專案的卡片
+- [x] Step 7 — `overview.ts`：跨專案總和 + 可展開的各專案明細
+- [x] Step 8 — `docs/BRIDGE.md` 補上第 13 個 action（契約文件，改行為就改文件）
+
+- 22:20 — **修掉自己引進的 join key 不一致**：App 內動作寫的 subject 是
+  `anc:t=XXXX`（帶前綴），而 2026-08-10 稍早改的 backfill 寫裸 id。兩種形狀等於
+  兩條各自獨立的軌跡，而且不會有任何錯誤。已統一成帶前綴。
 
 ## 阻塞 / 待決議
+
+- **視覺未經實機確認。** Chrome（localhost:5173）打不開這一頁的主內容區 ——
+  側欄正常、無 JS 錯誤、但 `.main` 整片空白。把本次改動 stash 掉重現同樣結果，
+  **所以是既有問題，不是這次造成的**，但也因此無法用瀏覽器驗證版面。
+  要看實際畫面只能用 Tauri 測試版。
 
 - **收尾前必須跟 Scott 確認**：只裝一套軟體時的實際行為（只有 Border Loom／
   只有 Anchorline／兩者都有）三種情況各自的畫面與寫入行為。
