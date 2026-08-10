@@ -153,7 +153,7 @@ function renderAiWritingSections() {
         ? inheritToggleHtml(inherited, `data-sec-toggle="${escapeHtml(sec.id)}"`)
         : awDomain === BASE_DOMAIN
           ? ""
-          : '<span class="aw-badge aw-badge-only">領域限定章節</span>';
+          : '<span class="aw-seg-static" title="通用領域沒有這一節，所以沒有通用版本可沿用">領域限定章節</span>';
       const shown = inheritable && inherited ? "" : own;
       return `<div class="aw-section">
         <div class="aw-field-head">
