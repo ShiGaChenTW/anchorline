@@ -177,7 +177,9 @@
   /* 步驟：未完成排前面，完成的降低對比但不刪除 */
   .tk-step {
     display: grid;
-    grid-template-columns: 16px minmax(0, 1fr);
+    /* 第三欄是列尾的動作（交接）。用 auto 而不是固定寬：沒有動作的步驟
+       （已完成、沒有錨點）那一欄會收成 0，不會在右邊留一條空白帶。 */
+    grid-template-columns: 16px minmax(0, 1fr) auto;
     gap: 10px;
     align-items: start;
     padding: 9px 0;
