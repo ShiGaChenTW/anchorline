@@ -2,19 +2,20 @@
   var KEY = "anchorline:theme";
   var THEMES = {
     kami: { label: "kami · 紙", scheme: "light", bg: "#f5f4ed" },
-    github: { label: "GitHub · Dark", scheme: "dark", bg: "#0d1117" }
+    github: { label: "GitHub · Dark", scheme: "dark", bg: "#0d1117" },
+    terminal: { label: "terminal · 終端", scheme: "dark", bg: "#0d0b08" }
   };
   var root = document.documentElement;
 
   function migrate(theme) {
-    if (theme === "kami" || theme === "github") return theme;
-    if (theme === "warp") return "github";
+    if (THEMES[theme]) return theme;
+    if (theme === "warp") return "terminal";
     if (theme === "claude") return "kami";
     return null;
   }
 
   function normalize(theme) {
-    return migrate(theme) || "github";
+    return migrate(theme) || "terminal";
   }
 
   function apply(theme) {

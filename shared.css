@@ -222,6 +222,89 @@
   --tag-bg-soft: rgba(56, 139, 253, 0.15);
 }
 
+/* terminal / 終端 — 字元網格系統
+   設計依據：tui-design §4（語意色槽、背景分層）＋ §7-5（顏色編碼意義而非裝飾）。
+   終端機的第一性不是「綠色」，是「字元網格」——所有東西對齊等寬儲存格、
+   邊框是字元畫出來的（所以永遠 1px 實色、絕不半透明）、形狀只有矩形。
+   刻意不做的：CRT 掃描線／磷光殘影／螢幕曲率。那是主題包，不是工作介面
+   （tui-design 反模式 #10：過度裝飾的 chrome 會壓過內容）。 */
+:root[data-theme="terminal"],
+[data-theme="terminal"] {
+  /* 背景三層遞增（tui-design §4 背景層次），每階約 +4% 亮度。
+     琥珀色系要配暖近黑 —— 綠底的冷灰會讓橘色看起來髒 */
+  --bg: #0d0b08;
+  --surface: #15110c;
+  --surface-warm: #15110c;
+  --inset: #1f1912;
+  --fg: #ece2d2;
+  --fg-2: #d2c5b0;
+  --muted: #9a8b74;
+  /* 4.77:1 —— 時間戳與 metadata 也要過 WCAG AA 4.5:1，不能只靠「反正是次要文字」 */
+  --meta: #8a7b64;
+  /* 實色邊框，非 rgba —— 終端的框線是字元，不會有透明度 */
+  --border: #322718;
+  --border-soft: #241c11;
+  --border-muted: #2b2114;
+  /* 琥珀磷光（amber phosphor）accent。刻意選較深的橘而非亮黃橘：
+     accent 與 warn 只差 21° 色相，靠亮度拉開到 1.88:1 才分得出來。 */
+  --accent: #f97f2e;
+  --accent-on: #180c02;
+  --accent-hover: #ffa05c;
+  --accent-active: #d9641a;
+  --accent-light: #56d4dd;
+  --accent-soft: rgba(249, 127, 46, 0.14);
+  /* 語意色不跟著 accent 走 —— success 必須留在綠，否則成功與警告長一樣
+     （tui-design §7-5：顏色編碼意義，不是裝飾） */
+  --success: #4ade80;
+  --warn: #ffd85e;
+  --danger: #ff6b5e;
+  --done: #d2a8ff;
+  --success-bg: rgba(74, 222, 128, 0.14);
+  --warn-bg: rgba(255, 216, 94, 0.14);
+  --danger-bg: rgba(255, 107, 94, 0.14);
+  --done-bg: rgba(210, 168, 255, 0.14);
+  --tag-bg-soft: rgba(249, 127, 46, 0.13);
+  --success-btn: var(--accent);
+  /* 全域等寬 —— 標題也是。只有 code block 用 mono 的主題是半調子 */
+  --font-display: "JetBrains Mono", "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono CJK TC", "Sarasa Mono TC", monospace;
+  --font-body: "JetBrains Mono", "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono CJK TC", "Sarasa Mono TC", monospace;
+  --font-mono: "JetBrains Mono", "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono CJK TC", "Sarasa Mono TC", monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-lg: 15px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+  --text-3xl: 28px;
+  --text-4xl: 36px;
+  --leading-body: 1.5;
+  --leading-tight: 1.25;
+  /* 等寬字不吃負字距 */
+  --tracking-display: 0.01em;
+  /* 矩形是唯一形狀。--radius-pill 一併歸零，否則 .count 之類還是藥丸 */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-pill: 0;
+  --radius: 0;
+  --btn-radius: 0;
+  /* 終端沒有 z 軸，陰影全滅 */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: none;
+  --shadow: none;
+  --shadow-elev: none;
+  --focus-ring: 0 0 0 2px var(--accent);
+  --doc-paper: #0d0b08;
+  --doc-ink: var(--fg);
+  --doc-muted: var(--muted);
+  --shell-outer: #080604;
+  --font: var(--font-body);
+  --mono: var(--font-mono);
+  --weight-ui: 400;
+  --weight-em: 700;
+}
+
 *, *::before, *::after { box-sizing: border-box; }
 a { color: inherit; text-decoration: none; }
 html {
@@ -234,6 +317,10 @@ html[data-theme="kami"] {
   background: var(--bg);
 }
 html[data-theme="github"] {
+  color-scheme: dark;
+  background: var(--shell-outer);
+}
+html[data-theme="terminal"] {
   color-scheme: dark;
   background: var(--shell-outer);
 }
@@ -255,6 +342,10 @@ html[data-theme="kami"] body {
 }
 html[data-theme="github"] body {
   background: var(--shell-outer);
+  color: var(--fg);
+}
+html[data-theme="terminal"] body {
+  background: var(--bg);
   color: var(--fg);
 }
 
@@ -2676,6 +2767,175 @@ html[data-theme="github"] .toolbar h1,
 html[data-theme="github"] .editor-body h3,
 html[data-theme="github"] .review-doc h1 {
   font-weight: 600;
+}
+
+/* ─── terminal chrome ───────────────────────────────
+   token 已經帶掉八成（方角、等寬、無陰影都是 token 驅動）。這一段只處理
+   token 表達不了的三件事：① 面板拍平成單一背景 ② 選取態改成反白
+   （終端的 selection 是 reverse video，不是柔和底色）③ 標籤大寫加字距
+   ——等寬字沒有可靠的字重層級，大寫與字距才是終端的階層手段。 */
+html[data-theme="terminal"] .app {
+  box-shadow: none;
+  border-color: transparent;
+  background: var(--bg);
+}
+html[data-theme="terminal"] .main,
+html[data-theme="terminal"] .titlebar,
+html[data-theme="terminal"] .toolbar,
+html[data-theme="terminal"] .rail,
+html[data-theme="terminal"] .content,
+html[data-theme="terminal"] .wb-col,
+html[data-theme="terminal"] .review-doc {
+  background: var(--bg);
+}
+html[data-theme="terminal"] .coach,
+html[data-theme="terminal"] .comments {
+  background: var(--surface);
+}
+html[data-theme="terminal"] .table-wrap,
+html[data-theme="terminal"] .stat,
+html[data-theme="terminal"] .card,
+html[data-theme="terminal"] .t-card,
+html[data-theme="terminal"] .comment,
+html[data-theme="terminal"] .approval-card {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+/* 反白選取（reverse video）—— 這是終端感的來源，比綠色更重要 */
+html[data-theme="terminal"] .nav-item.active,
+html[data-theme="terminal"] .chip.on,
+html[data-theme="terminal"] .sec.active {
+  background: var(--accent);
+  color: var(--accent-on);
+  border-color: var(--accent);
+  font-weight: 400;
+}
+html[data-theme="terminal"] .nav-item.active .ic { opacity: 1; }
+html[data-theme="terminal"] .nav-item.active .count,
+html[data-theme="terminal"] .sec.active .n {
+  background: var(--accent-on);
+  color: var(--accent);
+  border-color: transparent;
+}
+html[data-theme="terminal"] .tab.on {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+html[data-theme="terminal"] .avatar {
+  background: var(--accent);
+  color: var(--accent-on);
+  border-color: var(--accent);
+}
+html[data-theme="terminal"] .rail-logo {
+  border-color: var(--border);
+}
+html[data-theme="terminal"] .pill-review,
+html[data-theme="terminal"] .tag {
+  color: var(--accent);
+  background: var(--tag-bg-soft);
+  border-color: var(--border);
+}
+html[data-theme="terminal"] .pill-approved {
+  color: var(--success);
+  background: var(--success-bg);
+}
+html[data-theme="terminal"] .progress-bar > i { background: var(--accent); opacity: 1; }
+html[data-theme="terminal"] .progress-bar.ok > i { background: var(--success); }
+html[data-theme="terminal"] .ring {
+  background: conic-gradient(var(--accent) calc(var(--p) * 1%), var(--border) 0);
+}
+html[data-theme="terminal"] .guide,
+html[data-theme="terminal"] .quote-block {
+  background: var(--accent-soft);
+  border-color: var(--border);
+  color: var(--fg-2);
+}
+html[data-theme="terminal"] .guide strong { color: var(--accent); }
+html[data-theme="terminal"] .example { border-left-color: var(--accent); background: var(--surface); }
+html[data-theme="terminal"] .hl {
+  background: var(--warn-bg);
+  border-bottom-color: var(--warn);
+  color: var(--fg);
+}
+html[data-theme="terminal"] .hl.active {
+  background: var(--accent);
+  color: var(--accent-on);
+  border-bottom-color: var(--accent);
+  box-shadow: none;
+}
+html[data-theme="terminal"] .comment.is-active {
+  border-color: var(--accent);
+  box-shadow: none;
+}
+html[data-theme="terminal"] .comment .anchor { color: var(--accent-light); }
+html[data-theme="terminal"] .approval-card.is-pending .st { background: var(--accent); }
+html[data-theme="terminal"] .screen-link .num,
+html[data-theme="terminal"] .screen-card .num {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--border);
+}
+html[data-theme="terminal"] table.data a:hover { color: var(--accent-light); }
+
+/* 按鈕：方角、大寫、字距。終端沒有藥丸形按鈕 */
+html[data-theme="terminal"] .btn {
+  background: var(--surface);
+  color: var(--fg);
+  border-color: var(--border);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  box-shadow: none;
+}
+html[data-theme="terminal"] .btn:hover {
+  background: var(--inset);
+  color: var(--fg);
+  border-color: var(--accent);
+  filter: none;
+}
+html[data-theme="terminal"] .btn-primary,
+html[data-theme="terminal"] .btn-accent {
+  background: var(--accent);
+  color: var(--accent-on);
+  border-color: var(--accent);
+}
+html[data-theme="terminal"] .btn-primary:hover,
+html[data-theme="terminal"] .btn-accent:hover {
+  background: var(--accent-hover);
+  color: var(--accent-on);
+  filter: none;
+}
+html[data-theme="terminal"] .btn-ghost {
+  background: transparent;
+  color: var(--accent);
+  border-color: transparent;
+}
+
+/* 標題掛 prompt 符號。一個字元，比掃描線省事也更像真的 */
+html[data-theme="terminal"] .toolbar h1::before {
+  content: "❯ ";
+  color: var(--accent);
+}
+html[data-theme="terminal"] .toolbar h1,
+html[data-theme="terminal"] .editor-body h3,
+html[data-theme="terminal"] .review-doc h1 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-em);
+  letter-spacing: 0.01em;
+}
+html[data-theme="terminal"] ::selection {
+  background: var(--accent);
+  color: var(--accent-on);
+}
+
+/* 等寬 CJK 每個字比 sans 寬約 15%，hub 頂部導覽會被擠成兩列。
+   nowrap + 收緊切換器（第三顆按鈕本身也吃寬度）把這一列救回單行。 */
+html[data-theme="terminal"] header nav a {
+  white-space: nowrap;
+}
+html[data-theme="terminal"] .theme-switch button {
+  padding: 4px 6px;
+  letter-spacing: 0;
 }
 
 /* Export / auth chrome */

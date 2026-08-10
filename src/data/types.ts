@@ -1,7 +1,7 @@
 import type { Release } from "../lib/release";
 
 /** 僅保留 kami（紙）與 github（暗） */
-export type ThemeId = "kami" | "github";
+export type ThemeId = "kami" | "github" | "terminal";
 
 export type ProjectStatus = "draft" | "review" | "approved" | "withdrawn";
 

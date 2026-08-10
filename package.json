@@ -12,6 +12,7 @@
     "tauri": "tauri",
     "app": "tauri build",
     "app:dev": "tauri dev",
+    "app:test": "VITE_APP_VARIANT=test tauri build --config src-tauri/tauri.test.conf.json",
     "track": "bun run src/cli/track-tui.ts",
     "track:once": "bun run src/cli/track-tui.ts --once",
     "signal": "sh scripts/anchorline-active.sh",
