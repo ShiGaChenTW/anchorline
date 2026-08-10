@@ -8605,15 +8605,23 @@ p.gd-warn {
    不該跟著標題列撐滿整行（用按鈕的那一版就是這樣被拉寬的）。 */
 .aw-seg { flex: 0 0 auto; display: inline-flex; cursor: pointer; user-select: none; }
 .aw-seg input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+/* 滑塊與「領域限定章節」共用同一組尺寸 —— 它們在同一欄對齊，
+   尺寸一有出入，那一欄看起來就是壞的。 */
+.aw-seg-track,
+.aw-seg-static {
+  box-sizing: border-box;
+  width: 152px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  background: var(--inset);
+}
 .aw-seg-track {
   position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  width: 118px;
   padding: 2px;
-  border-radius: 999px;
-  background: var(--inset);
-  border: 1px solid var(--border-muted);
 }
 .aw-seg-thumb {
   position: absolute;
@@ -8645,6 +8653,17 @@ p.gd-warn {
 .aw-seg input:focus-visible + .aw-seg-track { outline: 2px solid var(--accent); outline-offset: 2px; }
 .aw-seg:hover .aw-seg-track { border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); }
 
+/* 領域限定章節：同樣的長型圓角，但整塊反灰 —— 這一格沒有東西可以切換，
+   灰掉比虛線更直接說明「不是壞掉，是這裡沒有選項」。 */
+.aw-seg-static {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: var(--meta);
+  opacity: 0.7;
+}
+
 /* 繼承來的內容：唯讀展示，視覺上明顯不是你能改的東西 */
 .aw-base-preview {
   margin-top: 6px;
@@ -8675,7 +8694,6 @@ p.gd-warn {
   opacity: 0.55;
   cursor: not-allowed;
 }
-.aw-badge-only { background: transparent; border-style: dashed; }
 #aw-profile {
   height: 40px; background: var(--bg); border: 1px solid var(--border);
   border-radius: var(--radius-sm, 6px); padding: 0 12px; color: var(--fg); font: inherit; font-size: 13px;
