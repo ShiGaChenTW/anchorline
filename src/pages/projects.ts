@@ -171,7 +171,7 @@ if (!requireAuth()) {
         : Math.round(withSteps.reduce((a, p) => a + p.pct, 0) / withSteps.length);
     const pending = withSteps.reduce((a, p) => a + p.meta.pending_steps, 0);
     bar.innerHTML = `<span class="plan-bar-stat"><em>${plans.length}</em> 份計劃</span>
-      <span class="plan-bar-stat">完成 <em>${avg}%</em></span>
+      <span class="plan-bar-stat">已結 <em>${avg}%</em></span>
       <span class="plan-bar-stat">待辦 <em>${pending}</em></span>
       <a href="tracking.html" class="plan-bar-link">打開追蹤</a>`;
   }

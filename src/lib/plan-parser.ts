@@ -148,7 +148,17 @@ export function mintMissingIds(
   return { text: out.join("\n"), minted };
 }
 
-const STATUS_WORDS = ["進行中", "已完成", "已暫停", "已放棄", "阻塞"] as const;
+/**
+ * 狀態詞彙的封閉列舉。呈現端必須「完全比對」這五個詞，不可用子字串——
+ * `includes("完成")` 會把「尚未完成」判成完成，圖示跟文字說反話。
+ * 對不上就顯示未知：猜錯比說「我不知道」更糟。
+ */
+export const STATUS_WORDS = ["進行中", "已完成", "已暫停", "已放棄", "阻塞"] as const;
+export type StatusWord = (typeof STATUS_WORDS)[number];
+
+export function asStatusWord(s: string): StatusWord | null {
+  return (STATUS_WORDS as readonly string[]).includes(s) ? (s as StatusWord) : null;
+}
 
 export function parsePlanMeta(text: string, path?: string): PlanMeta {
   const out: PlanMeta = {
@@ -287,9 +297,21 @@ export function parsePlanMeta(text: string, path?: string): PlanMeta {
   return out;
 }
 
+/**
+ * 進度的單一真相：百分比與它的分子必須出自同一個地方。
+ *
+ * 分子是「已結」= done + skipped，不是 done——skipped 不會再產生事件，跟 done
+ * 一樣是關掉的。但呈現端過去只印 done/total，於是出現 `100% … 21/28`：
+ * 圖示跟數字說反話。回傳 closed 就是為了讓呈現端沒有第二種寫法可選。
+ */
+export function planProgress(meta: PlanMeta): { closed: number; total: number; pct: number } {
+  const total = meta.total_steps;
+  const closed = meta.done_steps + meta.skipped_steps;
+  return { closed, total, pct: total ? Math.round((closed / total) * 100) : 0 };
+}
+
 export function planProgressPct(meta: PlanMeta): number {
-  if (!meta.total_steps) return 0;
-  return Math.round(((meta.done_steps + meta.skipped_steps) / meta.total_steps) * 100);
+  return planProgress(meta).pct;
 }
 
 /** 瀏覽器：從 Vite 無法直接讀 disk plans/；改由頁面 fetch 或預嵌列表 */
