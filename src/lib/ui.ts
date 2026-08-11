@@ -57,6 +57,7 @@ export type MobileNavPage =
   | "write"
   | "signoff"
   | "templates"
+  | "openspec"
   | "review"
   | "tracking"
   | "admin"
@@ -81,8 +82,8 @@ export function initMobileNav(active: MobileNavPage) {
   ];
   // admin / agents / templates 落在「設定」鄰近；若當前是這些頁，高亮設定或對應項
   const highlight =
-    active === "admin" || active === "agents" || active === "templates" || active === "write"
-      ? active === "templates" || active === "write"
+    active === "admin" || active === "agents" || active === "templates" || active === "openspec" || active === "write"
+      ? active === "templates" || active === "openspec" || active === "write"
         ? "editor"
         : "settings"
       : active;

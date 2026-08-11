@@ -43,6 +43,7 @@ export default defineConfig({
         dashboard: resolve(root, "dashboard.html"),
         overview: resolve(root, "overview.html"),
         templates: resolve(root, "templates.html"),
+        openspec: resolve(root, "openspec.html"),
         review: resolve(root, "review.html"),
         settings: resolve(root, "settings.html"),
         admin: resolve(root, "admin.html"),
