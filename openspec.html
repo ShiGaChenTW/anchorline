@@ -142,16 +142,14 @@
   </div>
 </div>
 <div class="modal-back" id="os-help-modal" data-od-id="modal-os-help">
-  <div class="modal osh" role="dialog" aria-labelledby="osh-title" style="width:min(760px,100%)">
+  <div class="modal osh" role="dialog" aria-labelledby="osh-title" style="width:min(680px,100%)">
     <header>
       <h3 id="osh-title">怎麼用這一頁</h3>
       <button type="button" class="btn btn-ghost btn-sm" id="osh-close">關閉</button>
     </header>
     <div class="body">
-      <p class="osh-lead">
-        判準只有一句：<strong>這件事改不改「對外承諾」？</strong>
-        改了走新功能，沒改但行為不對走 Bug，兩者都不是就是維護。
-      </p>
+      <p class="osh-rule">先問一句：這件事改了「對外承諾」嗎？</p>
+      <p class="osh-rule-sub">改了走新功能。承諾照舊但行為對不上，走 Bug。剩下的都是維護。</p>
 
       <div class="osh-tabs" role="tablist" aria-label="變更類型">
         <button type="button" class="osh-tab on" data-kind="feature" role="tab" aria-selected="true">新功能</button>
@@ -159,92 +157,59 @@
         <button type="button" class="osh-tab" data-kind="maintenance" role="tab" aria-selected="false">維護／重構</button>
       </div>
 
-      <!-- ── 新功能 ─────────────────────────────────────── -->
       <section class="osh-panel" data-kind="feature" role="tabpanel">
-        <p class="osh-when"><span class="osh-badge">什麼時候用</span>
-          PRD 說的話要跟著改 —— 新增能力、改變驗收條件、擴大或縮小範圍。</p>
-        <p class="osh-out"><span class="osh-badge">會產生</span>
-          <code>openspec/changes/&lt;id&gt;/</code> 底下 4 份：proposal · spec · design · tasks</p>
-
+        <p class="osh-intro">PRD 說的話要跟著改的時候走這條：新增能力、動到驗收條件、範圍變大或變小。
+          產出四份文件，落在 <code>openspec/changes/&lt;id&gt;/</code>。</p>
         <ol class="osh-steps">
-          <li><b>先改 PRD，不是先開 change。</b>
-            承諾變了就先讓 PRD 反映，否則 change 會描述一件 PRD 沒說過的事，
-            之後看紀錄的人對不起來。</li>
-          <li><b>在這一頁建立並下載</b>，把 4 份文件放進 <code>openspec/changes/&lt;id&gt;/</code>。</li>
-          <li><b><code>proposal.md</code> 一定要寫 Non-goals。</b>
-            這是這個 repo 的 <code>openspec/config.yaml</code> 明訂的規則 ——
-            範圍沒有邊界的提案會在實作中無限膨脹。</li>
-          <li><b><code>specs/&lt;id&gt;/spec.md</code></b> 寫 Requirement 與 Scenario，
-            用 <code>## ADDED / MODIFIED Requirements</code> 標明是新增還是修改。</li>
-          <li><b><code>design.md</code> 只在有技術取捨時才寫。</b>
-            沒有需要記錄的決定就留空或刪掉，不要為了填滿而寫。</li>
-          <li><b><code>tasks.md</code> 每一步要能單獨驗證。</b>
-            不要出現「實作 X」這種驗不了的步驟；純邏輯的步驟要指名它對應的測試檔。
-            每項寫成單行 —— Task Tracking 只取 checkbox 的第一行當步驟文字。</li>
-          <li><b>實作</b>，然後到 Task Tracking 逐條勾選（讀的是 <code>tasks.md</code> 自己的 <code>N.M</code> 編號）。</li>
-          <li><b>收尾</b>：<code>openspec archive</code>，change 從「還沒收完」清單消失。</li>
+          <li>先改 PRD。承諾變了，change 才有依據可以引用。</li>
+          <li>回這一頁建立，把四份檔案放回上面列出的路徑。</li>
+          <li><code>proposal.md</code> 補上 Non-goals。<code>openspec/config.yaml</code> 要求這一段，
+            因為範圍沒有邊界的提案會在實作途中一路長大。</li>
+          <li><code>spec.md</code> 用 <code>## ADDED</code> 或 <code>## MODIFIED Requirements</code>
+            標明這次是新增還是修改。</li>
+          <li><code>design.md</code> 有技術取捨才寫，其餘留空。</li>
+          <li><code>tasks.md</code> 每一步都要能單獨驗證，而且寫成單行。Task Tracking 只讀 checkbox 的第一行。</li>
+          <li>實作，回 Task Tracking 逐條勾選。</li>
+          <li><code>openspec archive</code> 收尾，這個 change 就從「還沒收完」消失。</li>
         </ol>
-
-        <p class="osh-warn">⚠️ 目前 openspec 的步驟<b>不帶錨點</b>（用它自己的 <code>N.M</code> 編號當身分），
-          所以這條路線的 commit 在「治理覆蓋率」上會被算成未治理。這是已知缺口，不是你做錯。</p>
+        <p class="osh-note">openspec 的步驟用它自己的 <code>N.M</code> 編號當身分，身上沒有錨點，
+          所以這條路線的 commit 在治理覆蓋率上會被算成未治理。這是已知缺口。</p>
       </section>
 
-      <!-- ── Bug 修復 ───────────────────────────────────── -->
       <section class="osh-panel" data-kind="bug" role="tabpanel" hidden>
-        <p class="osh-when"><span class="osh-badge">什麼時候用</span>
-          行為與<b>已經核准過的承諾</b>不符。PRD 不用改，是實作沒做到它說的事。</p>
-        <p class="osh-out"><span class="osh-badge">會產生</span>
-          <code>plans/YYYY-MM-DD-bug-&lt;id&gt;.md</code> 一份（走 <code>plans/</code> 不走 openspec ——
-          bug 通常沒有規格變更可寫，proposal 加 spec delta 對它是空儀式）</p>
-
+        <p class="osh-intro">行為跟已經核准過的承諾對不上的時候走這條。PRD 維持原樣，
+          問題出在實作沒做到它說的事。產出一份 plan，落在 <code>plans/</code>。</p>
         <ol class="osh-steps">
-          <li><b>先重現，再讀程式。</b>
-            這是硬規則。沒重現就直接看可疑的程式碼，會很有說服力地修錯地方 ——
-            而且修完你不會知道有沒有修好。</li>
-          <li><b>在這一頁建立並下載</b>，放進 <code>plans/</code>。</li>
-          <li><b>先填「現象」與「重現步驟」。</b>
-            現象寫可觀察的事實，不要寫推測的原因。「根因」那一段**空著**，
+          <li>先重現。在讀任何可疑的程式碼之前，讓它當著你的面壞一次。
+            少了這一步，你會很有說服力地修錯地方，而且修完不知道有沒有修好。</li>
+          <li>回這一頁建立，放進 <code>plans/</code>。</li>
+          <li>填「現象」與「重現步驟」。現象寫看得到的事實，把推測留給「根因」那一段，
             等真的重現之後再回來寫。</li>
-          <li><b>修，然後補一條防迴歸測試。</b>
-            沒有測試的修復只證明「現在好了」，不證明「不會再壞」。</li>
-          <li><b>Task Tracking 勾選。</b> 步驟產生時就自帶錨點，不必再補鑄。</li>
-          <li><b>commit 訊息帶上錨點</b> <code>anc:t=XXXXXXXX</code>（從 plan 檔的步驟複製）。
-            沒有它，這筆 commit 串不回計劃步驟，治理覆蓋率會算成未治理。</li>
+          <li>修，然後補一條防迴歸測試。只有測試能證明它不會再壞。</li>
+          <li>Task Tracking 勾選。步驟產生時就自帶錨點。</li>
+          <li>commit 訊息複製那一步的 <code>anc:t=</code> 錨點，這筆 commit 才串得回計劃。</li>
         </ol>
-
-        <p class="osh-warn">⚠️ <b>根因如果是「PRD 當初沒寫清楚」，那就不是 bug。</b>
-          把它升級成「新功能」那條路線去改 PRD —— 當成 bug 修掉，同一個誤解會再回來一次。</p>
+        <p class="osh-note">根因如果落在「PRD 當初沒寫清楚」，改走新功能那條路線去修 PRD。
+          當成 bug 修掉，同一個誤解過一陣子會再回來一次。</p>
       </section>
 
-      <!-- ── 維護／重構 ─────────────────────────────────── -->
       <section class="osh-panel" data-kind="maintenance" role="tabpanel" hidden>
-        <p class="osh-when"><span class="osh-badge">什麼時候用</span>
-          對外行為<b>完全不變</b>：重構、升級相依、清理死碼、補文件、改測試結構。</p>
-        <p class="osh-out"><span class="osh-badge">會產生</span>
-          <code>plans/YYYY-MM-DD-maintenance-&lt;id&gt;.md</code> 一份</p>
-
+        <p class="osh-intro">對外行為完全不變的時候走這條：重構、升相依、清死碼、補文件、改測試結構。
+          產出一份 plan，落在 <code>plans/</code>。</p>
         <ol class="osh-steps">
-          <li><b>「不改變什麼」那一段先寫。</b>
-            那不是註解，是驗收前提 —— 這條路線唯一的成功定義就是「外面看不出差別」。</li>
-          <li><b>盤點範圍要一次列完。</b>
-            用一次 grep／glob 把所有要動的地方列出來，再開始改。
-            邊做邊發現的下場是改到一半才知道規模，然後停在半路。</li>
-          <li><b>執行變更。</b></li>
-          <li><b>確認對外行為未變</b> —— 既有測試全綠就是最好的證據；
-            測不到的部分（畫面、流程）實際操作一次。</li>
-          <li><b><code>bunx tsc --noEmit</code> 與 <code>bun test</code> 全綠。</b></li>
-          <li><b>commit 帶錨點</b>，同 Bug 那條。</li>
+          <li>先寫「不改變什麼」。這條路線的成功定義就是外面看不出差別，
+            那一段是驗收前提。</li>
+          <li>一次 grep 把要動的地方列完再開始。邊做邊發現的下場是改到一半才知道規模。</li>
+          <li>執行變更。</li>
+          <li>既有測試全綠就是最好的證據；測不到的部分（畫面、流程）實際走一次。</li>
+          <li><code>bunx tsc --noEmit</code> 與 <code>bun test</code>，然後 commit 帶錨點。</li>
         </ol>
-
-        <p class="osh-warn">⚠️ 做到一半發現「這樣改行為會變」——停下來。
-          那代表它其實是新功能或 bug，換一條路線重開，不要讓它在維護的名義下偷偷改掉承諾。</p>
+        <p class="osh-note">做到一半發現「這樣改行為會變」，停下來換路線。
+          維護的名義底下偷偷改掉承諾，是最難追的那一種。</p>
       </section>
 
-      <p class="osh-foot">
-        三條路線共通：這一頁<b>只產生文件，不會寫進你的專案資料夾</b>。
-        下載或複製之後由你自己放回建議路徑 —— 那條界線是刻意的，
-        讓 App 直接寫檔等於把它變成可以在你所有專案裡任意建檔的東西。
-      </p>
+      <p class="osh-foot">三條路線共通：這一頁只產生文件，放回專案資料夾由你自己做。
+        讓 App 直接寫檔，等於把它變成可以在你所有專案裡任意建檔的東西。那條界線是刻意留的。</p>
     </div>
     <footer>
       <div style="flex:1"></div>
