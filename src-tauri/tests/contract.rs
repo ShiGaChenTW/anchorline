@@ -184,7 +184,11 @@ fn domain_pack_rejects_odd_characters_and_overlong_names() {
     // 非 ASCII 檔名擋掉：不是歧視中文，是不想處理正規化差異帶來的同名混淆
     assert!(!domain_pack_writable(&dir, "保險.md", &roots));
     assert!(!domain_pack_writable(&dir, "a b.md", &roots));
-    assert!(!domain_pack_writable(&dir, &format!("{}.md", "x".repeat(70)), &roots));
+    assert!(!domain_pack_writable(
+        &dir,
+        &format!("{}.md", "x".repeat(70)),
+        &roots
+    ));
 }
 
 #[test]
