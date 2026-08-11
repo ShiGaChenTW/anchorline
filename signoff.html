@@ -80,16 +80,24 @@
     </aside>
 
     <main class="main" data-od-id="main-signoff">
-      <div class="toolbar" data-od-id="toolbar">
-        <div>
+      <div class="toolbar context-toolbar context-surface-toolbar" data-context="signoff" data-od-id="toolbar">
+        <div class="context-frame-top">
+          <span class="context-kicker">08 / SIGN-OFF</span>
+          <span class="context-state">DECISION GATE</span>
+        </div>
+        <div class="context-title-block">
           <h1 data-od-id="page-title">簽核管理</h1>
           <div class="sub" data-od-id="page-sub">載入中…</div>
         </div>
-        <div class="spacer"></div>
-        <button type="button" class="btn btn-sm" id="btn-sg-refresh">重新整理</button>
-        <a class="btn" href="review.html" data-od-id="btn-review">審閱內容</a>
-        <a class="btn" href="write.html" data-od-id="btn-write">PRD 審閱監控</a>
-        <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
+        <div class="context-frame-bottom">
+          <span class="context-path">project / signoff</span>
+          <div class="context-actions">
+            <button type="button" class="btn btn-sm" id="btn-sg-refresh">重新整理</button>
+            <a class="btn" href="review.html" data-od-id="btn-review">審閱內容</a>
+            <a class="btn" href="write.html" data-od-id="btn-write">PRD 審閱監控</a>
+            <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
+          </div>
+        </div>
       </div>
 
       <div class="content aiw-content">

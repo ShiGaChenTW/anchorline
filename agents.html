@@ -170,12 +170,19 @@
       </div>
     </aside>
     <main class="main" style="overflow:hidden;display:flex;flex-direction:column">
-      <div class="toolbar">
-        <div>
+      <div class="toolbar context-toolbar context-surface-toolbar" data-context="agents" data-od-id="toolbar">
+        <div class="context-frame-top">
+          <span class="context-kicker">12 / AGENTS</span>
+          <span class="context-state">ROSTER</span>
+        </div>
+        <div class="context-title-block">
           <h1>Agent 人員管理</h1>
           <div class="sub">編輯 prompt／role · 啟動／關閉 · 呼叫進場作業</div>
         </div>
-        <div class="spacer"></div>
+        <div class="context-frame-bottom">
+          <span class="context-path">workspace / agents</span>
+          <div class="context-actions"></div>
+        </div>
       </div>
       <div class="content" style="padding:0;overflow:hidden;flex:1;min-height:0">
         <div class="agents-layout">

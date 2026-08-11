@@ -74,16 +74,24 @@
     </aside>
 
     <main class="main" data-od-id="main-dashboard">
-      <div class="toolbar" data-od-id="toolbar">
-        <div>
+      <div class="toolbar context-toolbar context-surface-toolbar" data-context="dashboard" data-od-id="toolbar">
+        <div class="context-frame-top">
+          <span class="context-kicker">10 / PROJECT DASHBOARD</span>
+          <span class="context-state">MEASURED</span>
+        </div>
+        <div class="context-title-block">
           <h1 data-od-id="page-title">專案儀表板</h1>
           <div class="sub" data-od-id="page-sub">載入中…</div>
         </div>
-        <div class="spacer"></div>
-        <button type="button" class="btn btn-sm" id="btn-refresh-stats">重新量測</button>
-        <button type="button" class="btn btn-sm btn-primary" id="btn-optimize">優化 Dashboard</button>
-        <a class="btn" href="editor.html" data-od-id="btn-edit">回編輯台</a>
-        <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
+        <div class="context-frame-bottom">
+          <span class="context-path">project / dashboard</span>
+          <div class="context-actions">
+            <button type="button" class="btn btn-sm" id="btn-refresh-stats">重新量測</button>
+            <button type="button" class="btn btn-sm btn-primary" id="btn-optimize">優化 Dashboard</button>
+            <a class="btn" href="editor.html" data-od-id="btn-edit">回編輯台</a>
+            <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
+          </div>
+        </div>
       </div>
 
       <div class="content dash-content">

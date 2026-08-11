@@ -345,14 +345,22 @@
       </div>
     </aside>
     <main class="main" style="overflow:hidden;display:flex;flex-direction:column">
-      <div class="toolbar">
-        <div>
+      <div class="toolbar context-toolbar context-surface-toolbar" data-context="tracking" data-od-id="toolbar">
+        <div class="context-frame-top">
+          <span class="context-kicker">09 / TASK TRACKING</span>
+          <span class="context-state">EXECUTION</span>
+        </div>
+        <div class="context-title-block">
           <h1>Task Tracking</h1>
           <div class="sub">這個專案 <code>plans/</code> 底下每份計劃的進度。左緣有線的那一份是 agent 此刻正在寫的。</div>
         </div>
-        <div class="spacer"></div>
-        <button type="button" class="btn" id="btn-refresh">重新整理</button>
-        <a class="btn btn-ghost" href="editor.html">回編輯器</a>
+        <div class="context-frame-bottom">
+          <span class="context-path">project / task-tracking</span>
+          <div class="context-actions">
+            <button type="button" class="btn" id="btn-refresh">重新整理</button>
+            <a class="btn btn-ghost" href="editor.html">回編輯器</a>
+          </div>
+        </div>
       </div>
       <div class="content" style="padding:0;overflow:hidden;flex:1;min-height:0;display:flex;flex-direction:column">
         <div class="tk-shell" style="flex:1">
