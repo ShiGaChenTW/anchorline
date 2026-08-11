@@ -539,8 +539,12 @@ function renderOutline() {
       <span class="adhd-sec-body"><div class="t">${escapeHtml(s.title)}</div></span>
       <span class="st ${st}">${label}</span>
     </button>${
-      s.id === "custom"
-        ? ""
+      // 自訂章節可以刪、但不能改名：它是章節範本的固定落點，改了名字之後
+      // 「範本插到哪去了」就沒有答案了
+      s.id === CUSTOM_SECTION_ID
+        ? `<span class="sec-ops sec-ops--head">
+             <button type="button" class="sec-op sec-op--del" data-sec-del="${escapeHtml(s.id)}" title="刪掉整節（內容一併刪除）">✕</button>
+           </span>`
         : `<span class="sec-ops sec-ops--head">
              <button type="button" class="sec-op" data-sec-rename="${escapeHtml(s.id)}" title="改編號或標題">✎</button>
              <button type="button" class="sec-op sec-op--del" data-sec-del="${escapeHtml(s.id)}" title="刪掉整節（內容一併刪除）">✕</button>
@@ -591,7 +595,11 @@ function renderOutline() {
       const id = btn.dataset.secDel!;
       const cur = sections().find((x) => x.id === id);
       if (!cur) return;
-      if (!window.confirm(`刪掉「${cur.n} ${cur.title}」整節？這一節已經寫的內容會一起刪掉。`)) return;
+      const extra =
+        id === CUSTOM_SECTION_ID
+          ? "\n\n之後插入章節範本時它會自動回來（範本段落沒有別的落點）。"
+          : "";
+      if (!window.confirm(`刪掉「${cur.n} ${cur.title}」整節？這一節已經寫的內容會一起刪掉。${extra}`)) return;
       structOp(() => store.removeSection(id), "已刪掉整節");
     };
   });
@@ -1746,6 +1754,9 @@ function render() {
 // 後者會讓同一份範本每次落在不同地方，事後沒人找得到。
 const pending = store.consumePendingInsert();
 if (pending && editable()) {
+  // 這一節可能被刪掉了。範本段落沒有別的家，所以插入時把它放回來 ——
+  // 退回「當下開著的那一章」等於讓同一份範本每次落在不同地方
+  if (!sections().some((x) => x.id === CUSTOM_SECTION_ID)) store.restoreCustomSection();
   const s = sections().find((x) => x.id === CUSTOM_SECTION_ID) ?? sections()[idx] ?? sections()[0];
   if (s?.fields[0]) {
     const cur = valuesFor(s)[s.fields[0].key] ?? "";

@@ -508,6 +508,17 @@ export type AppState = {
    * 改名、刪章節都會寫進來。切換領域包會清掉它（那是明確的「重建骨架」）。
    */
   projectSections?: Record<string, Section[]>;
+  /**
+   * 哪些專案不要「自訂章節」。
+   *
+   * `withCustomSection()` 會在每次推導骨架時把那一節補回最後面 —— 所以它
+   * 不能靠「從 projectSections 拿掉」來刪，拿掉了下一次載入又長回來，而且
+   * 沒有任何錯誤訊息。要刪它只能用一個明確的旗標。
+   *
+   * 插入章節範本時會自動清掉這個旗標：那些段落只有這一節裝得下。
+   * key = projectId
+   */
+  projectNoCustom?: Record<string, boolean>;
   projectSectionMeta: Record<string, Record<string, SectionMeta>>;
   /**
    * 未儲存的編輯 —— **不是**事實，只是還沒決定要不要留下的東西。
