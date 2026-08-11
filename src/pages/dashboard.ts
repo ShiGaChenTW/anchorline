@@ -19,6 +19,17 @@ import {
 } from "../lib/dashboard-optimize";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { diagnoseGit, hasActionableIssue, usesConventionalCommits } from "../lib/git-doctor";
+import {
+  buildCommitSystem,
+  buildCommitUser,
+  commitCommand,
+  isUsableDraft,
+  parseCommitDraft,
+  parsePorcelain,
+  summarizeChanges,
+} from "../lib/commit-message";
+import { AiError, chatCompletion, getAiReadiness } from "../lib/ai-client";
+import { isNative, isUnavailable, native } from "../lib/native";
 import type { GitIssue } from "../lib/git-doctor";
 import { askForProjectFolder } from "../lib/project-folder";
 import { syncRailContext } from "../lib/rail-projects";
@@ -666,6 +677,118 @@ if (!requireAuth()) {
   }
 
   /**
+   * 「讀改動並產生 commit 訊息」。
+   *
+   * 三個狀態各自要說得清楚，因為它們的下一步完全不同：
+   * AI 沒設定 → 去設定頁；不是桌面版 → 沒有原生橋讀不到 diff；
+   * 沒有改動 → 根本不該出現這一區。含糊的一句「產生失敗」會讓人重按五次。
+   *
+   * 產出一律進可編輯的 textarea。模型看不到執行結果，寫出來的東西要人看過
+   * 才算數 —— 這也是為什麼這裡只到「複製指令」為止，不代跑 commit。
+   */
+  function bindAiCommit(
+    back: HTMLElement,
+    g: NonNullable<ProjectStats["git"]> | undefined,
+    conventional: boolean,
+  ) {
+    const runBtn = back.querySelector<HTMLButtonElement>("#gd-ai-run");
+    if (!runBtn) return;
+    const statusEl = back.querySelector<HTMLElement>("#gd-ai-status");
+    const result = back.querySelector<HTMLElement>("#gd-ai-result");
+    const text = back.querySelector<HTMLTextAreaElement>("#gd-ai-text");
+    const say = (m: string, tone: "" | "error" = "") => {
+      if (!statusEl) return;
+      statusEl.textContent = m;
+      statusEl.className = `gd-ai-status${tone ? " is-error" : ""}`;
+    };
+
+    runBtn.addEventListener("click", async () => {
+      const ready = getAiReadiness();
+      if (!ready.ok) {
+        say(`${ready.reason}（偏好設定 → AI）`, "error");
+        return;
+      }
+      if (!isNative()) {
+        say("讀取改動內容需要桌面版的原生橋。", "error");
+        return;
+      }
+      const root = store.get().projects.find((p) => p.id === store.get().activeProjectId)
+        ?.importSummary?.rootPath;
+      if (!root) {
+        say("這個專案還沒綁定資料夾。", "error");
+        return;
+      }
+
+      runBtn.disabled = true;
+      say("讀取改動內容…");
+      try {
+        const cs = await native.gitChangeset(root);
+        if (isUnavailable(cs)) {
+          say(cs.message, "error");
+          return;
+        }
+        const files = parsePorcelain(cs.status);
+        if (!files.length) {
+          say("沒有偵測到未提交的改動。", "error");
+          return;
+        }
+
+        say(
+          cs.truncated
+            ? `${summarizeChanges(files)}（差異過大已截斷）· 產生中…`
+            : `${summarizeChanges(files)} · 產生中…`,
+        );
+
+        const input = {
+          changeset: cs,
+          files,
+          recentSubjects: (g?.commits ?? []).slice(0, 8).map((c) => c.subject),
+          conventional,
+          language: store.get().settings.language,
+        };
+        const raw = await chatCompletion(buildCommitSystem(input), buildCommitUser(input));
+        const draft = parseCommitDraft(raw);
+        if (!isUsableDraft(draft)) {
+          say("模型沒有回傳可用的主旨，再試一次。", "error");
+          return;
+        }
+        if (text) text.value = draft.body ? `${draft.subject}\n\n${draft.body}` : draft.subject;
+        if (result) result.hidden = false;
+        say(cs.truncated ? "產生完成（依截斷後的差異）" : "產生完成");
+      } catch (e) {
+        say(e instanceof AiError ? e.message : String(e), "error");
+      } finally {
+        runBtn.disabled = false;
+      }
+    });
+
+    const copy = async (s: string, btn: HTMLButtonElement) => {
+      try {
+        await navigator.clipboard.writeText(s);
+        const prev = btn.textContent;
+        btn.textContent = "已複製";
+        window.setTimeout(() => {
+          btn.textContent = prev;
+        }, 1200);
+      } catch {
+        toast("複製失敗，請手動選取");
+      }
+    };
+    // 從 textarea 讀而不是從 draft 讀 —— 使用者改過的版本才是他要的那一份
+    const draftNow = () => {
+      const v = (text?.value ?? "").trim();
+      const [subject = "", ...rest] = v.split(/\r?\n/);
+      return { subject, body: rest.join("\n").replace(/^\s*\n+/, "").trimEnd() };
+    };
+    back.querySelector<HTMLButtonElement>("#gd-ai-copy-msg")?.addEventListener("click", (e) => {
+      void copy((text?.value ?? "").trim(), e.currentTarget as HTMLButtonElement);
+    });
+    back.querySelector<HTMLButtonElement>("#gd-ai-copy-cmd")?.addEventListener("click", (e) => {
+      void copy(commitCommand(draftNow()), e.currentTarget as HTMLButtonElement);
+    });
+  }
+
+  /**
    * 版控健檢。
    *
    * **只給指令，不執行。** git commit / push / remote add 都會改動使用者的
@@ -709,12 +832,35 @@ if (!requireAuth()) {
                }`
             : `<p class="gd-none">目前沒有發現版控問題。</p>`
         }
+        ${
+          (g?.dirtyCount ?? 0) > 0
+            ? `<section class="gd-ai" id="gd-ai">
+                 <div class="gd-ai-head">
+                   <strong>commit 訊息</strong>
+                   <span class="gd-ai-sub">${g?.dirtyCount} 個檔案還沒提交。讀實際改動內容產生訊息。</span>
+                 </div>
+                 <div class="gd-ai-actions">
+                   <button type="button" class="btn btn-sm btn-primary" id="gd-ai-run">讀改動並產生</button>
+                   <span class="gd-ai-status" id="gd-ai-status"></span>
+                 </div>
+                 <div id="gd-ai-result" hidden>
+                   <textarea id="gd-ai-text" class="gd-ai-text" rows="7" aria-label="commit 訊息，可編輯"></textarea>
+                   <div class="gd-ai-actions">
+                     <button type="button" class="btn btn-sm" id="gd-ai-copy-msg">複製訊息</button>
+                     <button type="button" class="btn btn-sm" id="gd-ai-copy-cmd">複製 git commit 指令</button>
+                   </div>
+                 </div>
+               </section>`
+            : ""
+        }
         <p class="gd-warn">這些指令不會自動執行 —— 複製到終端機自己跑。改動 repo 的決定留給你。</p>
       </div>
       <footer>
         <button type="button" class="btn btn-primary" data-opt-close>知道了</button>
       </footer>
     `);
+
+    bindAiCommit(back, g, conventional);
 
     back.querySelectorAll<HTMLButtonElement>("[data-gd-copy]").forEach((btn) => {
       btn.addEventListener("click", async () => {

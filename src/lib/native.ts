@@ -176,6 +176,17 @@ export const native = {
     callMaybe<{ folderPath: string; list: string; statuses: string[] }>("openspec_status", {
       folderPath,
     }),
+  /**
+   * 未提交的改動內容。**唯讀** —— `status --porcelain` 與兩種 `diff`，
+   * 沒有任何會改動 repo 的子指令（BRIDGE.md §4.14）。
+   *
+   * 路徑要是已註冊的專案根目錄，否則回 Missing。
+   */
+  gitChangeset: (folderPath: string) =>
+    callMaybe<{ status: string; stat: string; patch: string; truncated: boolean }>(
+      "git_changeset",
+      { folderPath },
+    ),
   ghStatus: () => callMaybe<{ raw: string; fetchedAt: string }>("gh_status"),
   onefetch: (folderPath: string) => callMaybe<{ raw: string }>("onefetch", { folderPath }),
   fastfetch: () => callMaybe<{ raw: string }>("fastfetch"),
