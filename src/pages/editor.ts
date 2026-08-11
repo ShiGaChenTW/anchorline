@@ -504,6 +504,12 @@ function outlineFieldsHtml(s: Section): string {
             <span class="sec-field-t">${escapeHtml(f.label)}</span>
             <span class="sec-field-dot" aria-label="${filled ? "已填" : "未填"}" role="img"></span>
           </button>
+          <span class="sec-ops">
+            <button type="button" class="sec-op" data-fld-rename="${escapeHtml(s.id)}" data-key="${escapeHtml(f.key)}"
+                    title="改這個子章節的名稱">✎</button>
+            <button type="button" class="sec-op sec-op--del" data-fld-del="${escapeHtml(s.id)}" data-key="${escapeHtml(f.key)}"
+                    title="刪掉這個子章節（內容一併刪除）">✕</button>
+          </span>
         </li>`;
       })
       .join("")}
@@ -532,7 +538,14 @@ function renderOutline() {
       <span class="n">${s.n}</span>
       <span class="adhd-sec-body"><div class="t">${escapeHtml(s.title)}</div></span>
       <span class="st ${st}">${label}</span>
-    </button>${kids}</div>`;
+    </button>${
+      s.id === "custom"
+        ? ""
+        : `<span class="sec-ops sec-ops--head">
+             <button type="button" class="sec-op" data-sec-rename="${escapeHtml(s.id)}" title="改編號或標題">✎</button>
+             <button type="button" class="sec-op sec-op--del" data-sec-del="${escapeHtml(s.id)}" title="刪掉整節（內容一併刪除）">✕</button>
+           </span>`
+    }${kids}</div>`;
     })
     .join("");
 
@@ -547,6 +560,67 @@ function renderOutline() {
   });
 
   // 點欄位：捲到那一格並讓游標落進去。只是導覽，不改任何內容。
+  // 結構編輯。**改的是這個專案自己的骨架**，不是領域包 —— 改完之後這個專案
+  // 就脫離領域包了（store.hasOwnSections()），要回去用「回到領域包骨架」。
+  const structOp = (fn: () => { ok: boolean; reason?: string }, okMsg: string) => {
+    const r = fn();
+    toast(r.ok ? okMsg : (r.reason ?? "改不動"));
+    if (r.ok) {
+      idx = Math.min(idx, Math.max(0, sections().length - 1));
+      render();
+    }
+  };
+
+  el.querySelectorAll<HTMLButtonElement>("[data-sec-rename]").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.secRename!;
+      const cur = sections().find((x) => x.id === id);
+      if (!cur) return;
+      const n = window.prompt(`章節編號（現在是 ${cur.n}）`, cur.n);
+      if (n === null) return;
+      const title = window.prompt(`章節標題（現在是 ${cur.title}）`, cur.title);
+      if (title === null) return;
+      structOp(() => store.renameSection(id, { n, title }), "已改章節");
+    };
+  });
+
+  el.querySelectorAll<HTMLButtonElement>("[data-sec-del]").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.secDel!;
+      const cur = sections().find((x) => x.id === id);
+      if (!cur) return;
+      if (!window.confirm(`刪掉「${cur.n} ${cur.title}」整節？這一節已經寫的內容會一起刪掉。`)) return;
+      structOp(() => store.removeSection(id), "已刪掉整節");
+    };
+  });
+
+  el.querySelectorAll<HTMLButtonElement>("[data-fld-rename]").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const sid = btn.dataset.fldRename!;
+      const key = btn.dataset.key!;
+      const f = sections().find((x) => x.id === sid)?.fields.find((x) => x.key === key);
+      if (!f) return;
+      const label = window.prompt(`子章節名稱（現在是 ${f.label}）`, f.label);
+      if (label === null) return;
+      structOp(() => store.renameField(sid, key, label), "已改子章節");
+    };
+  });
+
+  el.querySelectorAll<HTMLButtonElement>("[data-fld-del]").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const sid = btn.dataset.fldDel!;
+      const key = btn.dataset.key!;
+      const f = sections().find((x) => x.id === sid)?.fields.find((x) => x.key === key);
+      if (!f) return;
+      if (!window.confirm(`刪掉子章節「${f.label}」？裡面的內容會一起刪掉。`)) return;
+      structOp(() => store.removeField(sid, key), "已刪掉子章節");
+    };
+  });
+
   el.querySelectorAll<HTMLButtonElement>("[data-field-key]").forEach((btn) => {
     btn.onclick = (e) => {
       e.stopPropagation();

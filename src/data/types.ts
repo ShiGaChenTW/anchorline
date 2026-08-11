@@ -496,6 +496,18 @@ export type AppState = {
    * 是全域單例，A 專案的「已完成」標記會出現在 B 專案上。
    * key = projectId → sectionId
    */
+  /**
+   * 專案自己的章節結構，蓋過領域包推出來的骨架。
+   *
+   * **為什麼要多這一層：** 骨架本來每次載入都從領域包重算，`load()` 會把
+   * 存起來的 `sections` 丟掉、只留 status/score/checks。那個設計對「領域包
+   * 改了，所有專案跟著更新」是對的，但它同時讓「這個專案自己改章節」變成
+   * 不可能 —— 改完重開就沒了，而且不會有錯誤訊息。
+   *
+   * 有這個鍵的專案就用這一份；沒有的照舊走領域包。套用整份 PRD 範本、
+   * 改名、刪章節都會寫進來。切換領域包會清掉它（那是明確的「重建骨架」）。
+   */
+  projectSections?: Record<string, Section[]>;
   projectSectionMeta: Record<string, Record<string, SectionMeta>>;
   /**
    * 未儲存的編輯 —— **不是**事實，只是還沒決定要不要留下的東西。
