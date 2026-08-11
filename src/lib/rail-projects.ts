@@ -212,7 +212,7 @@ function ensureWorkspaceNav(nav: Element) {
     { href: "overview.html", label: "專案總覽", icon: IC.dashboard, title: "所有專案的彙整儀表板" },
     { href: "projects.html", label: "專案清單", icon: IC.projects, title: "可篩選、可搜尋的專案清單" },
     { href: "review.html", label: "審閱佇列", icon: IC.review, count: "review", title: "待審與待簽核的規格" },
-    { href: "templates.html", label: "章節範本", icon: IC.templates, count: "templates", title: "可直接插入的段落骨架" },
+    { href: "templates.html", label: "PRD 範本", icon: IC.templates, count: "templates", title: "整份 PRD 骨架與章節範本" },
   ];
 
   let row = nav.querySelector(".rail-wsnav") as HTMLElement | null;

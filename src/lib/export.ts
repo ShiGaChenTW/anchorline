@@ -1,4 +1,5 @@
 import type { AppState, Project, Section } from "../data/types";
+import { CUSTOM_SECTION_ID } from "../data/seed";
 
 function stamp(): string {
   const d = new Date();
@@ -196,6 +197,9 @@ profile: A
 
   md += `\n## Technical Specifications\n`;
   for (const s of state.sections) {
+    // 自訂章節是自由區，內容從範本來、什麼都可能是 —— 掃進「技術規格」會讓
+    // 讀 PRD 的人以為那是工程承諾。它自己在下面有一個 Appendix
+    if (s.id === CUSTOM_SECTION_ID) continue;
     if (["summary", "goals", "metrics", "problem", "stories"].includes(s.id)) continue;
     const vals = state.sectionValues[s.id] || {};
     const body = Object.values(vals).join("\n").trim();
@@ -206,6 +210,12 @@ profile: A
   md += `\n## Risks & Roadmap\n`;
   const oq = (state.sectionValues.open?.oq || "").trim();
   md += oq ? oq.split(/\n/).map((l) => (l.trim().startsWith("-") ? l : `- ${l.trim()}`)).join("\n") : `- （開放問題待補）\n`;
+
+  const custom = state.sections.find((s) => s.id === CUSTOM_SECTION_ID);
+  const customBody = custom
+    ? Object.values(state.sectionValues[custom.id] || {}).join("\n").trim()
+    : "";
+  if (custom && customBody) md += `\n## Appendix — ${custom.n} ${custom.title}\n\n${customBody}\n`;
 
   md += `\n---\n_Exported from Anchorline · ${new Date().toISOString()}_\n`;
   return md;

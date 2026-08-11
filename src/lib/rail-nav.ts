@@ -66,7 +66,7 @@ export const RAIL_ITEMS: RailItem[] = [
   { page: "overview", href: "overview.html", label: "總覽", odId: "nav-overview", icon: IC.dashboard, hidden: true },
   // 章節範本移到「工作區」那一組（rail-projects.ts 的 ensureWorkspaceNav）——
   // 它跟總覽／清單／審閱佇列一樣是跨專案的東西
-  { page: "templates", href: "templates.html", label: "章節範本", odId: "nav-templates", icon: IC.templates, count: true, hidden: true },
+  { page: "templates", href: "templates.html", label: "PRD 範本", odId: "nav-templates", icon: IC.templates, count: true, hidden: true },
   // 審閱佇列改掛在「工作區」區塊標題右側（rail-projects.ts）
   { page: "review", href: "review.html", label: "審閱佇列", odId: "nav-review", icon: IC.review, count: true, hidden: true },
   // 管理中心與 Agent 管理是系統設定，不是日常導覽 —— 入口改在設定彈窗的

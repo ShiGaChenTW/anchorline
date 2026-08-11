@@ -150,6 +150,7 @@ export const SECTION_TO_OPENSPEC: Record<string, string> = {
   stories: "PRD.md › ## User Experience & Functionality",
   scope: "PRD.md › ## Technical Specifications",
   open: "PRD.md › ## Risks & Roadmap",
+  custom: "PRD.md › ## Appendix",
 };
 
 function escapeHtml(s: string): string {

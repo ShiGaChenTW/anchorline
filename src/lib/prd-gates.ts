@@ -7,6 +7,7 @@
  * 不必改任何程式（見 `plans/Pm-Spec__2026-08-09__domain-pack-architecture-eval.md`）。
  */
 import type { AppState } from "../data/types";
+import { CUSTOM_SECTION_ID } from "../data/seed";
 import { type GateReport, type GateSpec, runGateSpec } from "./gate-rules";
 
 export type { GateFinding, GateLevel, GateReport } from "./gate-rules";
@@ -200,7 +201,9 @@ export function evaluatePrdGates(state: AppState, spec: GateSpec = BASE_GATE_SPE
   return runGateSpec(
     {
       sectionValues: state.sectionValues,
-      sectionStatuses: state.sections.map((s) => s.status),
+      // 自訂章節不算進「空白章節數」——它是選填的自由區，空著是常態，
+      // 算進去等於每份 PRD 都被推近一步的「多個章節仍空白」警告
+      sectionStatuses: state.sections.filter((s) => s.id !== CUSTOM_SECTION_ID).map((s) => s.status),
     },
     spec,
   );
