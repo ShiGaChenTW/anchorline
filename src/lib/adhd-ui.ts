@@ -103,8 +103,13 @@ function nextStepForPage(page: RailPage | null): NextStep {
         href: "editor.html",
       };
     case "openspec":
-      // OpenSpec 頁面本身就是入口與狀態面板，不需要再疊一條全站 fallback。
-      return { label: "", detail: "" };
+      // 這一頁的功能是「開新坑」，所以它的下一步要先問還沒收完的坑。
+      // 空字串會讓 renderContextFocus 整條移掉 —— 那正是這頁原本的狀態，
+      // 也是全站唯一沒有下一步的頁面。
+      return {
+        label: "下一步",
+        detail: "先看上面還沒收完的 change；真的要開新的，從「這次是哪一種」開始。",
+      };
     default:
       return {
         label: "從專案開始",
@@ -137,6 +142,41 @@ export function setFocusStripHidden(hidden: boolean) {
   if (btn) btn.textContent = hidden ? "顯示引導列" : "隱藏引導列";
 }
 
+/**
+ * context header 版的「下一步」——落在 `.context-title-block` 裡，
+ * 大標題與副標之下。
+ *
+ * `step.label` 是空字串代表這一頁刻意不給下一步（例如頁面本身就是入口面板），
+ * 那就把節點移掉而不是留一個空框 —— 一個空的提示框比沒有提示更吵。
+ */
+function renderContextFocus(toolbar: HTMLElement, step: NextStep) {
+  const host = toolbar.querySelector(".context-title-block");
+  const existing = document.getElementById("adhd-toolbar-focus");
+  if (!host || !step.label) {
+    existing?.remove();
+    return;
+  }
+
+  let line = existing;
+  if (!line) {
+    line = document.createElement("div");
+    line.id = "adhd-toolbar-focus";
+    line.className = "adhd-toolbar-focus";
+    line.setAttribute("role", "status");
+    line.setAttribute("aria-label", "目前建議的下一步");
+    host.appendChild(line);
+  } else if (line.parentElement !== host) {
+    // 頁內導覽重跑時節點可能還掛在舊位置，搬過來而不是再生一個
+    host.appendChild(line);
+  }
+
+  line.dataset.detail = step.detail;
+  line.innerHTML = `
+    <span class="adhd-toolbar-focus-kicker">${escape(step.label)}</span>
+    <span class="adhd-toolbar-focus-detail">${escape(step.detail)}</span>
+  `;
+}
+
 function integratePageChrome(step: NextStep) {
   const main = document.querySelector(".main");
   const toolbar = main?.querySelector(".toolbar") as HTMLElement | null;
@@ -146,11 +186,16 @@ function integratePageChrome(step: NextStep) {
     return;
   }
 
-  // 四個主要 context page 直接使用核准的 context-frame 結構；
-  // 不再把「下一步」焦點列塞回標題區，避免破壞設計稿的上下層次。
+  // context-frame 結構的頁面：不套 `.adhd-page-chrome` 那一整組改寫
+  // （那會拆掉設計稿的上下層次），但「下一步」那一行要留下來。
+  //
+  // 它是全站唯一一句「你現在該做什麼」，而 ADHD 的任務啟動缺損正是靠它補的
+  // （見 `focus-mode.ts` 檔頭）。第一版轉 context header 時連這行一起拿掉，
+  // 結果是九頁裡最需要它的編輯台反而沒有 —— 版面對了，機制掉了。
   if (toolbar.classList.contains("context-toolbar")) {
     document.getElementById("adhd-focus-strip")?.remove();
     toolbar.classList.add("context-surface-toolbar");
+    renderContextFocus(toolbar, step);
     return;
   }
 
@@ -403,6 +448,7 @@ function collapseToolbar() {
   // 引導列開關放「更多」裡 —— 偶爾才調一次的偏好，不該佔工具列。
   // 必須在 early return 之前掛：沒有次要按鈕可搬的頁面（例如總覽）
   // 也要有「更多」，否則開關整個消失。
+  //
   const stripToggle = document.createElement("button");
   stripToggle.type = "button";
   stripToggle.id = "btn-toggle-focus-strip";

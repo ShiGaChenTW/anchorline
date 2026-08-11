@@ -2872,7 +2872,11 @@ body {
   .toolbar h1 {
     font-size: var(--fs-5);
   }
-  .toolbar.context-toolbar {
+  /* `html` 前綴不是裝飾。無 media 的 `.toolbar.context-toolbar.context-surface-toolbar`
+     在檔案更後面（約 3111 行），特異度相同就由後者勝 —— 光是把 class 補齊
+     不夠，窄螢幕還是會吃到 52px 的桌面 padding。多一個元素選擇器才贏得過。 */
+  html .toolbar.context-toolbar,
+  html .toolbar.context-toolbar.context-surface-toolbar {
     min-height: 0;
     padding: 20px 16px 18px;
   }
@@ -3066,12 +3070,7 @@ html.reduce-motion .attn-expand-enter {
     radial-gradient(circle at 88% 0%, color-mix(in oklab, var(--accent) 8%, transparent), transparent 34%),
     var(--surface);
 }
-.toolbar.context-toolbar {
-  min-height: 148px;
-  padding: 24px 28px 22px;
-}
 .context-kicker {
-  margin-bottom: 10px;
   color: var(--accent);
   font-family: var(--mono);
   font-size: var(--fs-1);
@@ -3095,51 +3094,38 @@ html.reduce-motion .attn-expand-enter {
   letter-spacing: -0.02em;
   line-height: 1.25;
 }
-.context-toolbar .adhd-page-chrome-title h1,
-.context-toolbar .adhd-editor-chrome-title h1 {
-  font-size: clamp(1.5rem, 2.4vw, 2rem);
-  letter-spacing: -.04em;
-}
-.context-path {
-  margin-top: 16px;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: var(--fs-2);
-  line-height: 1;
-}
-.context-toolbar .adhd-page-chrome-actions,
-.context-toolbar .adhd-editor-chrome-actions {
-  align-self: flex-end;
-}
-html.adhd-calm .context-toolbar .adhd-page-chrome-title h1,
-html.adhd-calm .context-toolbar .adhd-editor-chrome-title h1 {
-  font-size: clamp(1.8rem, 3vw, 2.35rem);
-  line-height: 1.05;
-}
-html.adhd-calm .context-toolbar .adhd-toolbar-focus {
-  max-width: 62ch;
-  margin-top: 4px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-html.adhd-calm .context-toolbar .adhd-toolbar-focus-kicker {
-  font-size: var(--fs-2);
-  font-weight: 600;
-}
-html.adhd-calm .context-toolbar .adhd-toolbar-focus-detail {
-  color: var(--muted);
-  font-size: var(--fs-3);
-  font-weight: 400;
-}
-
+/*
+ * Context header 只有這一套（`.context-surface-toolbar`）。
+ *
+ * 曾經有過第一版：把 `.context-toolbar` 疊在 `.adhd-page-chrome-*` 結構上，
+ * 標題吃 `.context-toolbar .adhd-page-chrome-title h1`。第二版換成
+ * `.context-frame-top / .context-title-block / .context-frame-bottom`，
+ * 但第一版的規則沒有刪，於是留下一組永遠選不到東西的選擇器 ——
+ * `integratePageChrome()` 對 context-toolbar 是提早 return 的，
+ * 那些 `.adhd-*` class 根本不會被掛上去。
+ *
+ * 量到的證據（Chrome computed style）：min-height 0px 而不是第一版寫的 148px、
+ * padding-top 52px 而不是 24px、`.context-kicker` margin-bottom 0px 而不是 10px。
+ * 三個字元都被第二版蓋掉。要改 header 就改下面這一段，上面沒有第二個地方。
+ */
 /* Approved context-surface treatment: same structure as docs/design/green-context-frame.html. */
 .toolbar.context-toolbar.context-surface-toolbar {
   position: relative;
   display: block;
   min-height: 0;
-  overflow: hidden;
+  /*
+   * **不可以是 `overflow: hidden`。** 動作區的「更多」下拉是這個容器的
+   * 子節點（`.adhd-more-panel` 走 absolute），一旦這裡裁切，選單就會被
+   * 標題列的下緣切掉 —— 症狀是選單看得到最上面一條，點得到但讀不到。
+   *
+   * 原本加 hidden 是為了收住底部那條 accent 線與角落的漸層，但兩者都不會
+   * 溢出：漸層是 background（本來就不溢出），`::before` 的 left/right 都
+   * 有 inset。所以裁切沒有保護到任何東西，只擋掉了選單。
+   */
+  overflow: visible;
+  /* tracking.html 的 <main> 是 overflow:hidden 的 flex column —— 沒有這行，
+     標題列會被下方三欄擠扁，內容互相疊上去。 */
+  flex-shrink: 0;
   padding: 52px clamp(24px, 5vw, 72px) 38px;
   border-bottom: 1px solid var(--border);
   background:
@@ -13308,4 +13294,33 @@ p.gd-warn {
   .tv-list .tv-col-source {
     display: none;
   }
+}
+
+/*
+ * context header 裡的「下一步」。
+ *
+ * 尺寸刻意比舊版收斂：這裡的大標題是 58px，沿用舊版那個帶邊框的提示框
+ * 會在標題底下開一個跟標題搶注意力的第二塊。改成一條低對比的行，
+ * 靠 kicker 的 accent 色定位 —— 掃視時找得到，但不跟標題競爭。
+ */
+.context-title-block .adhd-toolbar-focus {
+  margin-top: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  max-width: 62ch;
+  gap: 4px 8px;
+}
+.context-title-block .adhd-toolbar-focus-kicker {
+  font-size: var(--fs-2);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+.context-title-block .adhd-toolbar-focus-detail {
+  font-size: var(--fs-3);
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1.5;
 }

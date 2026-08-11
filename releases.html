@@ -126,14 +126,22 @@
       </div>
     </aside>
     <main class="main">
-      <div class="toolbar" data-od-id="toolbar">
-        <div>
+      <div class="toolbar context-toolbar context-surface-toolbar" data-context="releases" data-od-id="toolbar">
+        <div class="context-frame-top">
+          <span class="context-kicker">11 / RELEASES</span>
+          <span class="context-state">VERSIONING</span>
+        </div>
+        <div class="context-title-block">
           <h1>版本取號</h1>
           <div class="sub">版號由你決定，系統不會自動指定。編列這一版要收哪些功能，再一鍵交辦下去。</div>
         </div>
-        <span class="spacer"></span>
-        <button type="button" class="btn btn-primary" id="rl-new">＋ 取一個新版號</button>
-        <a class="btn" href="dashboard.html">回儀表板</a>
+        <div class="context-frame-bottom">
+          <span class="context-path">project / releases</span>
+          <div class="context-actions">
+            <button type="button" class="btn btn-primary" id="rl-new">＋ 取一個新版號</button>
+            <a class="btn" href="dashboard.html">回儀表板</a>
+          </div>
+        </div>
       </div>
 
       <div class="content rl-wrap">
