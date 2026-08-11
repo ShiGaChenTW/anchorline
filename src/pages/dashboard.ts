@@ -103,14 +103,14 @@ if (!requireAuth()) {
   function identHtml(p: Project | null): string {
     const name = p ? projectDisplayName(p) : "未選擇專案";
     const desc = p?.description ?? "";
-    return `<div class="d-ident">
+    return `<section class="d-hero d-ident">
         <p class="d-eyebrow">專案</p>
         <input type="text" id="d-name" class="d-ident-name" value="${escapeHtml(name)}"
                aria-label="專案名稱" placeholder="未命名專案" />
         <textarea id="d-desc" class="d-ident-desc" rows="1" aria-label="專案介紹"
                   placeholder="一句話說明這個專案在做什麼">${escapeHtml(desc)}</textarea>
         <div class="d-ident-tags" id="d-tags">${tagsInnerHtml(p)}</div>
-      </div>`;
+      </section>`;
   }
 
   function tagsInnerHtml(p: Project | null): string {
@@ -155,9 +155,13 @@ if (!requireAuth()) {
       : [];
     const p = activeProject();
 
-    return `<section class="d-hero tone-${head.tone}">
+    // 專案身分與版本控制是**兩件事**：一個是人寫的中繼資料，一個是磁碟量出來的
+    // 狀態。擠在同一張卡裡，中間那條分隔線要做整張卡的分節工作，掃過去只會讀到
+    // 一坨。拆成上下兩張各半高的卡，各自有自己的框。
+    return `<div class="d-top-left">
       ${identHtml(p)}
 
+      <section class="d-hero tone-${head.tone}">
       <p class="d-eyebrow">版本控制</p>
       <div class="d-hero-head">
         <p class="d-hero-figure">${escapeHtml(head.text)}</p>
@@ -178,7 +182,8 @@ if (!requireAuth()) {
                .join("")}</dl>`
           : `<p class="d-hero-sub">用 <code>git init</code> 起版控後，這裡會顯示提交與推送狀態。</p>`
       }
-    </section>`;
+      </section>
+    </div>`;
   }
 
   function cardStack(s: ProjectStats): string {
@@ -479,7 +484,7 @@ if (!requireAuth()) {
       // 當場就能解決，不要把人踢去別頁再自己找按鈕 ——
       // 「沒綁資料夾」是這一頁最常見的狀態（多數專案都沒綁）
       renderState(
-        `<section class="d-hero">${identHtml(p)}</section>
+        `${identHtml(p)}
          <div class="dash-empty">
           <p>「${escapeHtml(projectDisplayName(p))}」還沒有對應磁碟上的資料夾，所以量不到 git、技術線與容量。</p>
           <button type="button" class="btn btn-primary" id="dash-bind">指定專案資料夾</button>
@@ -494,7 +499,7 @@ if (!requireAuth()) {
     }
     if (!isDesktop()) {
       renderState(
-        `<section class="d-hero">${identHtml(p)}</section>
+        `${identHtml(p)}
          <div class="dash-empty">
           <p>這一頁需要桌面版 App。瀏覽器看不到磁碟，也跑不了 git。</p>
           <p class="dash-note mono">${escapeHtml(path)}</p>

@@ -128,6 +128,42 @@
     </footer>
   </div>
 </div>
+<!--
+  套用整份範本的確認畫面。
+
+  取代原本的 window.confirm：置換整份章節是**破壞性且跨專案**的動作，
+  一段純文字問句既說不出「會套到哪個專案」，也說不出「哪幾節會不見」。
+  這裡把兩件事都變成看得到的東西：專案自己選，結果先看過再按。
+-->
+<div class="modal-back" id="ap-modal" data-od-id="modal-apply-template">
+  <div class="modal" role="dialog" style="width:min(880px,100%)">
+    <header>
+      <h3 id="ap-title">套用整份範本</h3>
+      <button type="button" class="btn btn-ghost btn-sm" id="ap-close">關閉</button>
+    </header>
+    <div class="body">
+      <label class="ap-label" for="ap-project">套用到哪一個專案</label>
+      <select id="ap-project" class="ap-select"></select>
+      <p id="ap-sum" class="ap-sum"></p>
+      <p id="ap-warn" class="ap-warn" hidden></p>
+      <div class="ap-cols">
+        <section>
+          <h4>目前結構 <span id="ap-cur-n" class="ap-count"></span></h4>
+          <ul id="ap-cur" class="ap-list"></ul>
+        </section>
+        <section>
+          <h4>套用後 <span id="ap-next-n" class="ap-count"></span></h4>
+          <ul id="ap-next" class="ap-list"></ul>
+        </section>
+      </div>
+    </div>
+    <footer>
+      <div style="flex:1"></div>
+      <button type="button" class="btn" id="ap-cancel">取消</button>
+      <button type="button" class="btn btn-primary" id="ap-go">套用</button>
+    </footer>
+  </div>
+</div>
 <!-- 領域包編輯器。新增與編輯共用 —— 差別只在開啟時載入哪一份原始碼 -->
 <div class="modal-back" id="dp-modal" data-od-id="modal-domain-pack">
   <div class="modal" role="dialog" style="width:min(820px,100%)">

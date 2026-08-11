@@ -8563,6 +8563,30 @@ button.ft-row:focus-visible {
 .d-top .d-hero {
   margin-bottom: 0;
 }
+/* 左欄拆成「專案」「版本控制」上下兩張卡：等高、中間留一樣的 16px。
+   兩張加上中間的間距要正好等於右邊版號卡的高度，所以高度由 grid 的
+   列軌決定，不能讓每一張各自吃 var(--d-card-h)（那會變成兩倍高）。 */
+.d-top-left {
+  display: grid;
+  /* 至少維持原本一張卡的高度，內容需要更多就往下長 —— 右邊的版號卡
+     由下面那條規則跟著這一欄的高度走，兩邊才會齊底 */
+  min-height: var(--d-card-h);
+  /* 兩列都是 1fr：兩張卡永遠一樣高，不管誰的內容多。
+     minmax(0,…) 是為了讓卡內的可捲區塊算得出剩餘高度。 */
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+.d-top-left > .d-hero {
+  height: auto;
+  min-height: 0;
+  margin-bottom: 0;
+}
+/* 版號紀錄：不再自己吃固定卡高，改由 grid 拉到與左欄同高。
+   固定高度會在左欄變高時矮一截，那正是「兩張卡沒對齊」的來源。 */
+.d-top > .d-card.d-tall {
+  height: auto;
+}
 /* d-tall 與 hero 同高：兩者都被 grid 拉滿，內容超出就在卡片內捲 */
 .d-card.d-tall {
   display: flex;
@@ -8790,9 +8814,15 @@ button.ft-row:focus-visible {
    排版跟「版本控制」同一套語法：小標 → 大字 → 說明行，全部靠左、不畫框。
    輸入框在閒置時必須看起來就是文字，不是表單欄位。 */
 .d-ident {
-  padding-bottom: 16px;
-  margin-bottom: 18px;
-  border-bottom: 1px solid var(--border);
+  /* 自己就是一張卡，框由 .d-hero 畫；原本那條 border-bottom 是卡內分節用的。
+     名稱輸入框刻意比卡寬 12px（負 margin 對齊文字），所以橫向不能給捲軸 —— 會冒出一條假的捲軸。 */
+  overflow: hidden;
+}
+/* 名稱＋介紹＋標籤總共就三行。沒綁資料夾時它是單獨一張卡，
+   吃 .d-hero 的固定卡高會拉出一大片空白，所以高度跟著內容走；
+   在 .d-top-left 裡才由格線把它拉到半高（規則在上面，選擇器更明確） */
+.d-hero.d-ident {
+  height: auto;
 }
 .d-ident .d-eyebrow {
   margin-bottom: 8px;
@@ -10982,6 +11012,97 @@ p.gd-warn {
 .domain-pack-row--err {
   border-color: var(--danger);
   color: var(--danger);
+}
+
+/* ─── 套用整份範本的預覽 ───
+   左右兩欄是「現在」與「套用後」。刪除線只給**真的會消失**的那幾節：
+   全部畫紅會讓人看不出哪一節才要救。 */
+.ap-label {
+  display: block;
+  margin: 0 0 6px;
+  font-size: var(--fs-2);
+  color: var(--muted);
+}
+.ap-select {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: var(--fs-3);
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.ap-sum {
+  margin: 12px 0 0;
+  font-size: var(--fs-3);
+}
+.ap-warn {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  font-size: var(--fs-2);
+  line-height: 1.5;
+  color: var(--warn, #d9534f);
+  background: color-mix(in oklab, var(--warn, #d9534f) 8%, var(--surface));
+  border-radius: 6px;
+}
+.ap-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+.ap-cols h4 {
+  margin: 0 0 8px;
+  font-size: var(--fs-2);
+  color: var(--muted);
+  font-weight: 600;
+}
+.ap-count {
+  color: var(--muted);
+  font-weight: 400;
+}
+.ap-list {
+  margin: 0;
+  padding: 8px;
+  max-height: 260px;
+  overflow: auto;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.ap-list li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 4px;
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+.ap-list b {
+  min-width: 2.4em;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-weight: 400;
+}
+.ap-list li.is-gone {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.ap-list li.is-lost {
+  color: var(--warn, #d9534f);
+  text-decoration: line-through;
+}
+.ap-list .ap-tag {
+  margin-left: auto;
+  font-size: var(--fs-1);
+  color: var(--warn, #d9534f);
+  text-decoration: none;
+}
+@media (max-width: 720px) {
+  .ap-cols {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ─── 章節欄位：未儲存變更的摘要 ───
