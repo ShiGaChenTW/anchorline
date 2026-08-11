@@ -21,6 +21,20 @@ export const BUILTIN_PACKS: Record<string, DomainPack> = Object.fromEntries(
 );
 
 /**
+ * 內建包的原始 markdown。編輯內建包 = 拿這份當底稿改成自訂包（同名覆寫）。
+ *
+ * 沒有這個出口的話，「編輯內建領域」只能從空白範本重寫一遍 —— 使用者最想做的
+ * 事（拿 digital_account 改成自己銀行的規矩）反而是最難做的。
+ */
+const BUILTIN_SOURCE: Record<string, string> = Object.fromEntries(
+  Object.entries(RAW).map(([path, raw]) => [parseDomainPack(raw, path).name, raw]),
+);
+
+export function builtinSource(name: string): string | null {
+  return BUILTIN_SOURCE[name] ?? null;
+}
+
+/**
  * 使用者自帶的包**覆寫**同名內建包。
  *
  * 拒絕同名比較安全，但也擋掉了最合理的用法：拿內建的 digital_account 改一版

@@ -83,6 +83,38 @@ export function getUserPacks(): ParsedUserPacks {
   return parseCache(readCache());
 }
 
+/** 自訂包的原始碼（要編輯就要拿得到原文，不能只有解析結果） */
+export function userPackSource(name: string): { file: string; raw: string } | null {
+  for (const [file, raw] of Object.entries(readCache()?.sources ?? {})) {
+    try {
+      if (parseDomainPack(raw, file).name === name) return { file, raw };
+    } catch {
+      /* 壞掉的檔在 errors 那條路顯示，這裡略過 */
+    }
+  }
+  return null;
+}
+
+/**
+ * 移除一個自訂包。
+ *
+ * **只動快取。** Rust 端沒有刪檔命令（`write_domain_pack` 是唯一的寫入路徑），
+ * 所以資料夾裡的 `.md` 還在：開著自動重掃的話，下次開 App 它會回來。
+ * 回傳 `stillOnDisk` 就是為了讓畫面把這件事講出來 —— 一個會自己復活的「移除」
+ * 不講清楚，就是最難查的那種資料不一致。
+ */
+export function removeUserPack(
+  name: string,
+): { ok: true; file: string; stillOnDisk: boolean } | { ok: false; reason: string } {
+  const cache = readCache();
+  const hit = userPackSource(name);
+  if (!cache || !hit) return { ok: false, reason: `找不到自訂領域包「${name}」` };
+  const sources = { ...cache.sources };
+  delete sources[hit.file];
+  writeCache({ ...cache, sources, scannedAt: new Date().toISOString() });
+  return { ok: true, file: hit.file, stillOnDisk: Boolean(cache.dir) && isNative() };
+}
+
 export function userDomainsDir(): string {
   return readCache()?.dir ?? "";
 }

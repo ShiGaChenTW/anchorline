@@ -260,7 +260,17 @@ export type SectionMeta = {
   checks: CheckDef[];
 };
 
-export type TemplateCat =
+/**
+ * 範本分兩種：
+ * - `section` 章節範本 —— 一段可以插進 PRD 的骨架（原本的功能）
+ * - `full` 整份 PRD 範本 —— 一份完整文件的章節結構
+ *
+ * 舊資料（localStorage 裡的自訂範本）沒有這個欄位，一律當 `section`。
+ */
+export type TemplateKind = "section" | "full";
+
+/** 章節範本的分類 */
+export type SectionCat =
   | "core"
   | "security"
   | "growth"
@@ -269,6 +279,11 @@ export type TemplateCat =
   | "delivery"
   | "research";
 
+/** 整份 PRD 範本的分類 —— 依「寫給誰看、要多重」分，不依產業分 */
+export type FullCat = "lean" | "narrative" | "enterprise" | "agile" | "technical";
+
+export type TemplateCat = SectionCat | FullCat;
+
 export type Template = {
   id: string;
   cat: TemplateCat;
@@ -276,7 +291,17 @@ export type Template = {
   blurb: string;
   uses: number;
   body: string;
+  /** 省略 = `section`。整份範本必須明寫 `full`。 */
+  kind?: TemplateKind;
+  /** 這份範本的出處（人看的名字），整份範本才有 */
+  source?: string;
+  sourceUrl?: string;
 };
+
+/** 舊資料沒有 kind 欄位，一律當章節範本 */
+export function templateKind(t: Template): TemplateKind {
+  return t.kind ?? "section";
+}
 
 export type Comment = {
   id: string;

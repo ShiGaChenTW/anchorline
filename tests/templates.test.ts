@@ -1,6 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { SEED_TEMPLATES } from "../src/data/seed";
+import { SEED_FULL_TEMPLATES, SEED_TEMPLATES } from "../src/data/seed";
+import { templateKind } from "../src/data/types";
 import type { TemplateCat } from "../src/data/types";
+
+const SECTION_CATS: TemplateCat[] = [
+  "core",
+  "security",
+  "growth",
+  "platform",
+  "openspec",
+  "delivery",
+  "research",
+];
+const FULL_CATS: TemplateCat[] = ["lean", "narrative", "enterprise", "agile", "technical"];
+
+const SECTION_TEMPLATES = SEED_TEMPLATES.filter((t) => templateKind(t) === "section");
 
 describe("SEED_TEMPLATES", () => {
   test("id 不重複", () => {
@@ -21,17 +35,12 @@ describe("SEED_TEMPLATES", () => {
     }
   });
 
-  test("分類都在允許值內", () => {
-    const allowed: TemplateCat[] = [
-      "core",
-      "security",
-      "growth",
-      "platform",
-      "openspec",
-      "delivery",
-      "research",
-    ];
-    for (const t of SEED_TEMPLATES) expect(allowed).toContain(t.cat);
+  test("分類不能跨種類 —— 章節範本用章節分類，整份範本用整份分類", () => {
+    // 分錯邊的症狀是「卡片在兩個分頁都看不到」：kind 篩掉它，或分類篩掉它
+    for (const t of SEED_TEMPLATES) {
+      const allowed = templateKind(t) === "full" ? FULL_CATS : SECTION_CATS;
+      expect(allowed).toContain(t.cat);
+    }
   });
 
   test("OpenSpec 分類的內容要符合官方三層格式", () => {
@@ -51,13 +60,52 @@ describe("SEED_TEMPLATES", () => {
     expect(tasks.body).toMatch(/- \[ \] 1\.1/);
   });
 
-  test("七個分類都至少有一個範本，頁籤不會點進空畫面", () => {
-    const cats = new Set(SEED_TEMPLATES.map((t) => t.cat));
-    for (const c of ["core", "security", "growth", "platform", "openspec", "delivery", "research"])
-      expect(cats.has(c as TemplateCat)).toBe(true);
+  test("七個章節分類都至少有一個範本，頁籤不會點進空畫面", () => {
+    const cats = new Set(SECTION_TEMPLATES.map((t) => t.cat));
+    for (const c of SECTION_CATS) expect(cats.has(c)).toBe(true);
   });
 
-  test("數量：原本 12 個 + 新增 14 個", () => {
-    expect(SEED_TEMPLATES).toHaveLength(26);
+  test("數量：章節範本 26 個 + 整份 PRD 範本 10 個", () => {
+    expect(SECTION_TEMPLATES).toHaveLength(26);
+    expect(SEED_TEMPLATES).toHaveLength(36);
+  });
+});
+
+describe("SEED_FULL_TEMPLATES（整份 PRD 範本）", () => {
+  test("全部標成 full —— 漏標就會掉進章節範本分頁", () => {
+    for (const t of SEED_FULL_TEMPLATES) expect(t.kind).toBe("full");
+    expect(SEED_FULL_TEMPLATES).toHaveLength(10);
+  });
+
+  test("五個分類都至少有一個範本", () => {
+    const cats = new Set(SEED_FULL_TEMPLATES.map((t) => t.cat));
+    for (const c of FULL_CATS) expect(cats.has(c)).toBe(true);
+  });
+
+  test("每一份都標出處 —— 照抄的人有權知道抄的是誰的方法論", () => {
+    for (const t of SEED_FULL_TEMPLATES) expect(t.source?.trim().length ?? 0).toBeGreaterThan(0);
+  });
+
+  test("整份範本至少有三個章節標題，否則它只是一個段落", () => {
+    for (const t of SEED_FULL_TEMPLATES) {
+      const headings = t.body.split("\n").filter((l) => /^#{1,3} /.test(l));
+      expect(headings.length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  test("Shape Up Pitch 五要素齊全", () => {
+    const pitch = SEED_FULL_TEMPLATES.find((t) => t.id === "f8")!;
+    for (const k of ["Problem", "Appetite", "Solution", "Rabbit holes", "No-gos"])
+      expect(pitch.body).toContain(k);
+  });
+
+  test("Google 設計文件要有目標／非目標與考慮過的其他方案", () => {
+    const doc = SEED_FULL_TEMPLATES.find((t) => t.id === "f9")!;
+    for (const h of ["## 目標", "## 非目標", "## 考慮過的其他方案"]) expect(doc.body).toContain(h);
+  });
+
+  test("PR/FAQ 要有新聞稿與兩種 FAQ", () => {
+    const prfaq = SEED_FULL_TEMPLATES.find((t) => t.id === "f3")!;
+    for (const h of ["# 新聞稿", "# 對外 FAQ", "# 對內 FAQ"]) expect(prfaq.body).toContain(h);
   });
 });
