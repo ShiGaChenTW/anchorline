@@ -3164,10 +3164,13 @@ html.reduce-motion .attn-expand-enter {
   margin-top: 15px;
 }
 .context-title-block h1 {
-  max-width: 780px;
+  /* 字級放大之後 780px 會讓兩字標題也吃滿一行，跟著同比例放寬 */
+  max-width: 1090px;
   margin: 0;
   color: var(--fg);
-  font-size: clamp(34px, 5vw, 58px);
+  /* 34/5vw/58 各 ×1.4（Scott 2026-08-12）。三個值一起放大，
+     不然窄螢幕會停在舊的下限，只有寬螢幕變大。 */
+  font-size: clamp(48px, 7vw, 81px);
   font-weight: 700;
   letter-spacing: -.045em;
   line-height: .98;
@@ -13328,11 +13331,12 @@ p.gd-warn {
 }
 
 /* 開放迴圈帶 */
+/* 邊框一圈同粗。左邊加一條粗色條是最好認的 AI 版面痕跡，
+   而這一塊本來就靠位置（置頂）與底色取得優先權，不需要再插一支旗子。 */
 .os-open {
   margin-bottom: 32px;
   padding: 18px 20px;
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
-  border-left: 3px solid var(--accent);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent) 6%, var(--surface));
 }
@@ -13618,25 +13622,36 @@ p.gd-warn {
 
 /* ── OpenSpec 操作說明 ────────────────────────────────────────
  *
- * 三條路線的教學不放在頁面上而放進彈窗：頁面本身要回答的是「現在做什麼」，
- * 而教學是「怎麼做」—— 那是偶爾才需要讀一次的東西，常駐會變成每次都要
- * 略過的一整段字。開啟時自動跳到目前選中的類型那一頁。
+ * 這是 Read 型的介面：來的人要看懂一件事，不是要操作什麼。所以排版讓位給
+ * 閱讀 —— 一條決策規則、三個分頁、每個分頁一段散文加一串步驟。
+ *
+ * 第一版有三種互相競爭的框：左邊三色條的 lead、灰底的 badge 標籤、
+ * 紅框的警告。三個框搶同一件事（「這裡重要」），結果是沒有一個重要。
+ * 現在框全部拿掉，層級交給字級、字重與留白。
  */
 .osh .body {
-  line-height: 1.7;
+  line-height: 1.8;
 }
-.osh-lead {
-  margin: 0 0 16px;
-  padding: 12px 14px;
-  border-left: 3px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  color: var(--fg-2, var(--fg));
+
+/* 決策規則是整份說明的入口，用字級講，不用框講 */
+.osh-rule {
+  margin: 0 0 4px;
+  color: var(--fg);
+  font-size: var(--fs-5);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+.osh-rule-sub {
+  margin: 0 0 26px;
+  color: var(--muted);
   font-size: var(--fs-3);
 }
+
 .osh-tabs {
   display: flex;
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: 22px;
   flex-wrap: wrap;
 }
 .osh-tab {
@@ -13662,43 +13677,24 @@ p.gd-warn {
   box-shadow: var(--focus-ring);
 }
 
-.osh-badge {
-  display: inline-block;
-  margin-right: 8px;
-  padding: 2px 7px;
-  border-radius: var(--radius-sm);
-  background: var(--border);
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: var(--fs-1);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  vertical-align: 2px;
-}
-.osh-when,
-.osh-out {
-  margin: 0 0 8px;
-  color: var(--muted);
+/* 每條路線先給一段散文：這是什麼、產出落在哪。
+   原本這裡是兩個 badge 標籤（什麼時候用／會產生），那是表單的語彙，
+   而這一段要被讀，不是被填。 */
+.osh-intro {
+  margin: 0 0 18px;
+  max-width: 66ch;
+  color: var(--fg-2, var(--fg));
   font-size: var(--fs-3);
-}
-.osh-when b,
-.osh-out b {
-  color: var(--fg);
-}
-.osh-out {
-  margin-bottom: 16px;
 }
 
 .osh-steps {
-  margin: 0 0 16px;
-  padding-left: 22px;
+  margin: 0 0 18px;
+  padding-left: 20px;
+  max-width: 66ch;
   display: grid;
-  gap: 10px;
+  gap: 12px;
   color: var(--muted);
   font-size: var(--fs-3);
-}
-.osh-steps li b {
-  color: var(--fg);
 }
 .osh-steps li::marker {
   color: var(--accent);
@@ -13706,29 +13702,26 @@ p.gd-warn {
   font-weight: 700;
 }
 
-/* 每條路線的那一句「這裡最容易做錯」—— 顏色與其他段落分開，
-   因為它不是流程的一步，而是流程的例外 */
-.osh-warn {
+/* 例外那一段：它不是流程的一步，所以縮排出來、標題留白比內文多，
+   靠位置分辨，不靠顏色框 */
+.osh-note {
   margin: 0;
-  padding: 11px 13px;
-  border: 1px solid color-mix(in srgb, var(--warn, #d9534f) 35%, var(--border));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--warn, #d9534f) 7%, transparent);
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+  max-width: 66ch;
   color: var(--muted);
   font-size: var(--fs-2);
-  line-height: 1.6;
-}
-.osh-warn b {
-  color: var(--fg);
+  line-height: 1.7;
 }
 
 .osh-foot {
-  margin: 18px 0 0;
-  padding-top: 14px;
+  margin: 26px 0 0;
+  padding-top: 16px;
   border-top: 1px solid var(--border);
+  max-width: 66ch;
   color: var(--muted);
   font-size: var(--fs-2);
-  line-height: 1.6;
+  line-height: 1.7;
 }
 .osh code {
   padding: 1px 5px;
@@ -13738,3 +13731,4 @@ p.gd-warn {
   font-family: var(--mono);
   font-size: 0.92em;
 }
+
