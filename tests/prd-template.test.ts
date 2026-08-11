@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { seedValuesFromTemplate, sectionsFromTemplate, splitTemplate } from "../src/lib/prd-template";
+import {
+  planApply,
+  seedValuesFromTemplate,
+  sectionsFromTemplate,
+  splitTemplate,
+} from "../src/lib/prd-template";
 
 const ONE_PAGER = `# [功能名稱]
 
@@ -92,5 +97,39 @@ describe("seedValuesFromTemplate", () => {
     // 中文標題產不出 ASCII slug，退回 `sec-<編號>` —— 仍然穩定、仍然對得上
     expect(ids[0]).toBe("sec-1");
     expect(v[ids[0]!]).toEqual({ body: "現況與痛點。" });
+  });
+});
+
+describe("planApply", () => {
+  const cur = [
+    { id: "summary", n: "01", title: "三行摘要" },
+    { id: "problem", n: "02", title: "問題陳述" },
+    { id: "goals", n: "03", title: "目標與非目標" },
+  ];
+  const next = [
+    { id: "problem", n: "1", title: "問題" },
+    { id: "sec-2", n: "2", title: "提案" },
+  ];
+
+  test("算得出哪幾節會留下、哪幾節會不見", () => {
+    const p = planApply(cur, next, {});
+    expect(p.current.filter((r) => r.kept).map((r) => r.id)).toEqual(["problem"]);
+    expect(p.current.filter((r) => !r.kept).map((r) => r.id)).toEqual(["summary", "goals"]);
+  });
+
+  test("**有內容又會消失的才算孤兒** —— 空章節不見不痛", () => {
+    const p = planApply(cur, next, { summary: { what: "寫過的字" }, goals: { goals: "  " } });
+    expect(p.orphans).toBe(1);
+  });
+
+  test("比對用 id 不是標題 —— 同名不同 id 的正文本來就不通用", () => {
+    const p = planApply([{ id: "a", n: "1", title: "問題" }], [{ id: "b", n: "1", title: "問題" }], {
+      a: { body: "x" },
+    });
+    expect(p.orphans).toBe(1);
+  });
+
+  test("沒有任何內容時孤兒數是 0", () => {
+    expect(planApply(cur, next, {}).orphans).toBe(0);
   });
 });

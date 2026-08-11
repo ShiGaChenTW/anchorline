@@ -1,7 +1,7 @@
 import { store } from "../data/store";
-import { seedValuesFromTemplate, sectionsFromTemplate, splitTemplate } from "../lib/prd-template";
+import { planApply, seedValuesFromTemplate, sectionsFromTemplate, splitTemplate } from "../lib/prd-template";
 import { templateKind } from "../data/types";
-import type { Template, TemplateCat, TemplateKind } from "../data/types";
+import type { Section, Template, TemplateCat, TemplateKind } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { canEditContent } from "../lib/permissions";
 import { initTheme } from "../lib/theme";
@@ -18,6 +18,7 @@ import {
   summarize,
   type ManagedPack,
 } from "../lib/domain-pack-manage";
+import { CUSTOM_SECTION_ID } from "../data/seed";
 import PACK_TEMPLATE_MD from "../data/domains/_template.md?raw";
 
 const __authed = requireAuth();
@@ -26,6 +27,7 @@ initTheme();
 initMobileNav("templates");
 bindModalDismiss("modal");
 bindModalDismiss("dp-modal");
+bindModalDismiss("ap-modal");
 bindLogout();
 {
   const u = store.get().currentUser;
@@ -291,6 +293,120 @@ function openTpl(id: string) {
   openModal("modal");
 }
 
+// ── 套用整份範本：選專案 + 預覽 ──────────────────────────────
+//
+// 置換整份章節是破壞性動作，而且**不一定套在你正在看的那個專案**。
+// 原本走 window.confirm，一段純文字既問不出目標專案、也顯示不了哪幾節
+// 會不見 —— 使用者只能按下去才知道。這裡把兩者都攤開來。
+
+/** 這次要套的章節（已從範本解析完）。開 modal 時填，關掉不清也無妨。 */
+let applySecs: Section[] = [];
+
+function apEl<T extends HTMLElement>(id: string): T | null {
+  return document.getElementById(id) as T | null;
+}
+
+/** 指定專案已儲存的正文。active 那份以 `sectionValues` 為準（袋子可能還沒同步） */
+function savedValues(pid: string): Record<string, Record<string, string>> {
+  const s = store.get();
+  return pid === s.activeProjectId ? s.sectionValues : (s.projectSectionValues[pid] ?? {});
+}
+
+function openApply(secs: Section[]) {
+  const projects = store.visibleProjects();
+  if (!projects.length) {
+    toast("目前沒有可以套用的專案");
+    return;
+  }
+  applySecs = secs;
+  const sel = apEl<HTMLSelectElement>("ap-project");
+  if (sel) {
+    const active = store.get().activeProjectId;
+    sel.innerHTML = projects
+      .map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.customName || p.title)}</option>`)
+      .join("");
+    sel.value = projects.some((p) => p.id === active) ? active! : projects[0]!.id;
+  }
+  const title = apEl("ap-title");
+  if (title && current) title.textContent = `套用整份範本：${current.title}`;
+  renderApply();
+  openModal("ap-modal");
+}
+
+function renderApply() {
+  const pid = apEl<HTMLSelectElement>("ap-project")?.value ?? "";
+  if (!pid) return;
+  // 自訂章節兩邊都在（applyFullTemplate 會補回去），放進比較只會製造假的「保留」
+  const cur = store.sectionsFor(pid).filter((x) => x.id !== CUSTOM_SECTION_ID);
+  const plan = planApply(cur, applySecs, savedValues(pid));
+
+  const sum = apEl("ap-sum");
+  if (sum) sum.textContent = `目前 ${cur.length} 節 → 套用後 ${applySecs.length} 節，編號與命名照範本。`;
+
+  const warn = apEl("ap-warn");
+  if (warn) {
+    warn.hidden = plan.orphans === 0;
+    warn.textContent =
+      plan.orphans === 0
+        ? ""
+        : `有 ${plan.orphans} 節已經寫了內容、但新結構裡沒有對應章節。那些字不會被刪掉，` +
+          `但編輯台上看不到它們（只有匯出時才會出現）。`;
+  }
+
+  const curN = apEl("ap-cur-n");
+  if (curN) curN.textContent = `${cur.length} 節`;
+  const nextN = apEl("ap-next-n");
+  if (nextN) nextN.textContent = `${applySecs.length} 節`;
+
+  const curList = apEl("ap-cur");
+  if (curList) {
+    curList.innerHTML =
+      plan.current
+        .map((r) => {
+          // 有內容又會消失的才標紅；空章節消失不痛，全部畫紅會蓋掉真正該救的那幾節
+          const cls = r.kept ? "" : r.hasContent ? "is-lost" : "is-gone";
+          const tag = !r.kept && r.hasContent ? `<span class="ap-tag">內容會變孤兒</span>` : "";
+          return `<li class="${cls}"><b>${escapeHtml(r.n)}</b><span>${escapeHtml(r.title)}</span>${tag}</li>`;
+        })
+        .join("") || `<li><span style="color:var(--muted)">（目前沒有章節）</span></li>`;
+  }
+
+  const nextList = apEl("ap-next");
+  if (nextList) {
+    nextList.innerHTML = plan.incoming
+      .map((r) => `<li><b>${escapeHtml(r.n)}</b><span>${escapeHtml(r.title)}</span></li>`)
+      .join("");
+  }
+
+  const go = apEl("ap-go");
+  if (go) go.textContent = `套用 ${applySecs.length} 節`;
+}
+
+apEl("ap-project")?.addEventListener("change", renderApply);
+apEl("ap-close")?.addEventListener("click", () => closeModal("ap-modal"));
+apEl("ap-cancel")?.addEventListener("click", () => closeModal("ap-modal"));
+
+apEl("ap-go")?.addEventListener("click", () => {
+  const pid = apEl<HTMLSelectElement>("ap-project")?.value ?? "";
+  if (!current || !applySecs.length) return;
+  // 沒選到專案就什麼都不做的話，按鈕看起來就是壞的 —— 一定要講話
+  if (!pid) {
+    toast("先選一個要套用的專案");
+    return;
+  }
+  const r = store.applyFullTemplate(pid, applySecs, seedValuesFromTemplate(current.body));
+  if (!r.ok) {
+    toast(r.reason ?? "套用失敗");
+    return;
+  }
+  store.bumpTemplateUse(current.id);
+  closeModal("ap-modal");
+  closeModal("modal");
+  toast(`已套用 ${r.count} 節 —— 範本示範內容放在草稿裡`);
+  // 套到別的專案就別把人拖去編輯器：那會偷偷換掉他正在看的專案
+  if (pid === store.get().activeProjectId) location.href = "editor.html";
+});
+
 // ── 領域包編輯器 ────────────────────────────────────────────
 //
 // 新增與編輯共用一個 modal：兩者的產物都是一份完整的 .md，差別只有底稿從哪來。
@@ -446,26 +562,7 @@ document.getElementById("m-insert")?.addEventListener("click", (e) => {
       toast("這份範本讀不出章節標題，無法置換 —— 請改用「插入」或修正範本");
       return;
     }
-    const pid = store.get().activeProjectId;
-    if (!pid) {
-      toast("先選一個專案再套用整份範本");
-      return;
-    }
-    const cur = store.sectionsFor(pid).filter((x) => x.id !== "custom").length;
-    const ok = window.confirm(
-      `套用「${current.title}」會把這個專案的 PRD 章節換成範本的 ${secs.length} 節` +
-        `（編號與命名照範本），目前的 ${cur} 節結構會被取代。\n\n` +
-        `已經寫好的正文不會被刪，但對不上新章節的會變成孤兒內容。要繼續嗎？`,
-    );
-    if (!ok) return;
-    const r = store.applyFullTemplate(pid, secs, seedValuesFromTemplate(current.body));
-    if (!r.ok) {
-      toast(r.reason ?? "套用失敗");
-      return;
-    }
-    store.bumpTemplateUse(current.id);
-    toast(`已套用 ${r.count} 節 —— 範本示範內容放在草稿裡`);
-    location.href = "editor.html";
+    openApply(secs);
     return;
   }
 

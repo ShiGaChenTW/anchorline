@@ -144,3 +144,48 @@ export function seedValuesFromTemplate(md: string): Record<string, Record<string
   for (const p of splitTemplate(md)) out[p.id] = { body: p.body };
   return out;
 }
+
+// ── 套用前的影響評估 ──────────────────────────────────────────
+
+export type ApplyPlan = {
+  /** 套用後會有的章節 */
+  incoming: { id: string; n: string; title: string }[];
+  /** 目前的章節，以及它會不會被換掉、裡面有沒有寫過東西 */
+  current: { id: string; n: string; title: string; hasContent: boolean; kept: boolean }[];
+  /**
+   * 有內容、但套用後不存在的章節數。
+   *
+   * 這是唯一真正會痛的一件事：那些字不會被刪，但畫面上再也看不到它們
+   * （只有匯出時才會冒出來）。使用者按下去之前必須知道這個數字。
+   */
+  orphans: number;
+};
+
+/**
+ * 套用會發生什麼事 —— 純函式，給預覽畫面用。
+ *
+ * 比對用 **id**，不是標題：標題一樣但 id 不同的兩節，正文本來就不通用。
+ */
+export function planApply(
+  current: readonly { id: string; n: string; title: string }[],
+  incoming: readonly { id: string; n: string; title: string }[],
+  values: Record<string, Record<string, string>> = {},
+): ApplyPlan {
+  const nextIds = new Set(incoming.map((s) => s.id));
+  const hasText = (id: string) =>
+    Object.values(values[id] ?? {}).some((v) => String(v ?? "").trim().length > 0);
+
+  const rows = current.map((s) => ({
+    id: s.id,
+    n: s.n,
+    title: s.title,
+    hasContent: hasText(s.id),
+    kept: nextIds.has(s.id),
+  }));
+
+  return {
+    incoming: incoming.map((s) => ({ id: s.id, n: s.n, title: s.title })),
+    current: rows,
+    orphans: rows.filter((r) => !r.kept && r.hasContent).length,
+  };
+}
