@@ -13870,3 +13870,39 @@ p.gd-warn {
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* ── 專案設定：版號政策 ──────────────────────────────────────
+ *
+ * 選了 vX.YY.ZZ 之後這裡只剩說明，切回去的按鈕整個拿掉而不是變灰 ——
+ * 一顆按下去只會告訴你「不行」的按鈕，每次看到都要重新想一次為什麼。
+ */
+.d-policy {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.7;
+}
+.d-policy strong {
+  color: var(--fg);
+  font-size: var(--fs-3);
+}
+.d-policy b {
+  color: var(--fg);
+}
+.d-policy code {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--accent);
+  font-family: var(--mono);
+}
+.d-policy.is-strict {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+}

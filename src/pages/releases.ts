@@ -199,6 +199,21 @@ function visibleCandidates(r: Release): Candidate[] {
  * `hasApprovedPrd`：這個專案有沒有「全部必簽關卡通過且已合併」的 PRD 版本。
  * 判定沿用既有資料（簽核個案 + prdVersions 的 merge），不新增欄位。
  */
+/**
+ * 版號欄位底下那一行，要說得出**現在這個專案用哪一套**。
+ *
+ * 使用者在這一頁看到「格式不符」的時候，需要知道兩件事：規則是什麼、
+ * 以及去哪裡改。少了後者，他會在這一頁找開關，而開關在專案設定 ——
+ * 那是專案層級的一次性決定，不該混在每次取號都要碰的地方。
+ */
+function policyHint(projectId: string): string {
+  const proj = store.get().projects.find((x) => x.id === projectId);
+  if (policyOf(proj) === "strict") {
+    return "這個專案採 vX.YY.ZZ（YY 與 ZZ 補兩位）。X 要 PRD 簽核紀錄、YY 要走過 OpenSpec、ZZ 挑 commit。系統不會自動 +1。";
+  }
+  return "這個專案不限版號格式，只擋掉 git tag 不接受的字元與重複。想改採 vX.YY.ZZ 的三段規則，到專案儀表板的專案設定切換（不可逆）。";
+}
+
 function gateFacts(r: Release): GateFacts {
   const merged = store.prdBaseline(r.projectId) !== null;
   const c = store.get().cases[r.projectId];
@@ -287,7 +302,7 @@ function renderDetail() {
         <label for="rl-version">版號</label>
         <input type="text" id="rl-version" value="${escapeHtml(r.version)}"
                placeholder="自己決定，例如 v1.2.0 / 2026.08 / R42" autocomplete="off" spellcheck="false" />
-        <span class="hint">系統不會幫你編號，也不會自動 +1。格式只擋掉 git tag 不接受的字元與重複。</span>
+        <span class="hint">${policyHint(r.projectId)}</span>
         <span class="err" id="rl-version-err"></span>
       </div>
       <div class="rl-field">
