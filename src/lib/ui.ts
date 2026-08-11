@@ -63,6 +63,7 @@ export type MobileNavPage =
   | "admin"
   | "agents"
   | "settings" | "dashboard"
+  | "releases"
   | "overview";
 
 export function initMobileNav(active: MobileNavPage) {
