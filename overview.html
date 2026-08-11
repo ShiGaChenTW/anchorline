@@ -74,15 +74,22 @@
     </aside>
 
     <main class="main" data-od-id="main-overview">
-      <div class="toolbar context-toolbar" data-context="overview" data-od-id="toolbar">
-        <div>
-          <div class="context-kicker">01 / DASHBOARD</div>
+      <div class="toolbar context-toolbar context-surface-toolbar" data-context="overview" data-od-id="toolbar">
+        <div class="context-frame-top">
+          <span class="context-kicker">01 / DASHBOARD</span>
+          <span class="context-state">ACTIVE WORK</span>
+        </div>
+        <div class="context-title-block">
           <h1 data-od-id="page-title">全部專案總覽</h1>
           <div class="sub" data-od-id="page-sub">載入中…</div>
         </div>
-        <div class="spacer"></div>
-        <button type="button" class="btn btn-sm" id="btn-measure-all">量測全部</button>
-        <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
+        <div class="context-frame-bottom">
+          <span class="context-path">workspace / overview</span>
+          <div class="context-actions">
+            <button type="button" class="btn btn-sm" id="btn-measure-all">量測全部</button>
+            <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
+          </div>
+        </div>
       </div>
       <div class="content dash-content">
         <div id="ov-root" aria-live="polite"></div>

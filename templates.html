@@ -75,18 +75,25 @@
     </aside>
 
     <main class="main" data-od-id="main-templates">
-      <div class="toolbar context-toolbar" data-context="templates" data-od-id="toolbar">
-        <div>
-          <div class="context-kicker">04 / PRD LIBRARY</div>
+      <div class="toolbar context-toolbar context-surface-toolbar" data-context="templates" data-od-id="toolbar">
+        <div class="context-frame-top">
+          <span class="context-kicker">04 / PRD LIBRARY</span>
+          <span class="context-state">SOURCE OF TRUTH</span>
+        </div>
+        <div class="context-title-block">
           <h1 data-od-id="page-title">PRD 範本庫</h1>
           <div class="sub">整份 PRD 骨架，或單一章節的段落範本 — 插入後再填內容</div>
         </div>
-        <div class="spacer"></div>
+        <div class="context-frame-bottom">
+          <span class="context-path">workspace / prd-templates</span>
+          <div class="context-actions">
         <div class="search">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="var(--muted)"><path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"/></svg>
           <input id="q" type="search" placeholder="搜尋範本…" aria-label="搜尋範本" />
         </div>
         <button type="button" class="btn" id="btn-custom" data-od-id="btn-custom">＋ 自訂範本</button>
+          </div>
+        </div>
       </div>
 
       <div class="tabs" id="kind-tabs" data-od-id="kind-tabs" role="group" aria-label="範本種類">

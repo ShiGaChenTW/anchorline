@@ -25,11 +25,21 @@
       <div class="rail-foot rail-foot--user" aria-label="目前使用者"><div class="rail-user"><div class="avatar" data-user-avatar aria-hidden="true">S</div><div class="rail-user-body"><div class="rail-user-top"><div class="rail-foot-meta" data-user-meta><div class="rail-foot-name">—</div><div class="rail-foot-title">—</div></div><button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout title="登出">登出</button></div><div class="rail-user-role-row"><span class="role-badge role-tone-editor" data-user-role-badge>—</span><span class="rail-user-kind" data-user-kind>人員</span></div><div class="rail-user-perms" data-user-perms role="list" aria-label="權限摘要"><span class="perm-chip" role="listitem">—</span></div></div></div></div>
     </aside>
     <main class="main" data-od-id="main-openspec">
-      <header class="os-hero">
-        <div class="os-eyebrow">SPEC-DRIVEN WORKBENCH</div>
-        <h1>OpenSpec 入口</h1>
-        <p>把 PRD 裡的下一個改動，收斂成一份可追蹤的 change。這裡負責起案與看狀態；實作進度回到 Task Tracking。</p>
-        <div class="os-flow" aria-label="OpenSpec 流程"><span>提案</span><i>→</i><span>規格</span><i>→</i><span>設計</span><i>→</i><span>Tasks</span><i>→</i><span>驗證</span></div>
+      <header class="toolbar context-toolbar context-surface-toolbar" data-context="openspec" data-od-id="toolbar">
+        <div class="context-frame-top">
+          <span class="context-kicker">05 / OPENSPEC</span>
+          <span class="context-state">CHANGE WORKBENCH</span>
+        </div>
+        <div class="context-title-block">
+          <h1 data-od-id="page-title">OpenSpec 入口</h1>
+          <div class="sub" data-od-id="page-sub">把 PRD 裡的下一個改動，收斂成一份可追蹤的 change。這裡負責起案與看狀態；實作進度回到 Task Tracking。</div>
+        </div>
+        <div class="context-frame-bottom">
+          <span class="context-path">workspace / openspec</span>
+          <div class="context-actions">
+            <div class="os-flow" aria-label="OpenSpec 流程"><span>提案</span><i>→</i><span>規格</span><i>→</i><span>設計</span><i>→</i><span>Tasks</span><i>→</i><span>驗證</span></div>
+          </div>
+        </div>
       </header>
       <div class="content os-content">
         <section class="os-start card" aria-labelledby="os-start-title">

@@ -3100,9 +3100,201 @@ html.reduce-motion .attn-expand-enter {
   font-size: clamp(1.5rem, 2.4vw, 2rem);
   letter-spacing: -.04em;
 }
+.context-path {
+  margin-top: 16px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--fs-2);
+  line-height: 1;
+}
 .context-toolbar .adhd-page-chrome-actions,
 .context-toolbar .adhd-editor-chrome-actions {
   align-self: flex-end;
+}
+html.adhd-calm .context-toolbar .adhd-page-chrome-title h1,
+html.adhd-calm .context-toolbar .adhd-editor-chrome-title h1 {
+  font-size: clamp(1.8rem, 3vw, 2.35rem);
+  line-height: 1.05;
+}
+html.adhd-calm .context-toolbar .adhd-toolbar-focus {
+  max-width: 62ch;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+html.adhd-calm .context-toolbar .adhd-toolbar-focus-kicker {
+  font-size: var(--fs-2);
+  font-weight: 600;
+}
+html.adhd-calm .context-toolbar .adhd-toolbar-focus-detail {
+  color: var(--muted);
+  font-size: var(--fs-3);
+  font-weight: 400;
+}
+
+/* Approved context-surface treatment: same structure as docs/design/green-context-frame.html. */
+.toolbar.context-toolbar.context-surface-toolbar {
+  position: relative;
+  display: block;
+  min-height: 0;
+  overflow: hidden;
+  padding: 52px clamp(24px, 5vw, 72px) 38px;
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(circle at 88% 0%, color-mix(in oklab, var(--accent) 10%, transparent), transparent 34%),
+    var(--surface);
+}
+.toolbar.context-toolbar.context-surface-toolbar::before {
+  content: "";
+  position: absolute;
+  left: clamp(24px, 5vw, 72px);
+  right: clamp(24px, 5vw, 72px);
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  opacity: .72;
+}
+.context-frame-top,
+.context-frame-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.context-frame-top .context-kicker {
+  margin-bottom: 0;
+}
+.context-state {
+  color: var(--meta);
+  font-family: var(--mono);
+  font-size: var(--fs-1);
+  font-weight: 600;
+  letter-spacing: .08em;
+}
+.context-title-block {
+  min-width: 0;
+  margin-top: 15px;
+}
+.context-title-block h1 {
+  max-width: 780px;
+  margin: 0;
+  color: var(--fg);
+  font-size: clamp(34px, 5vw, 58px);
+  font-weight: 700;
+  letter-spacing: -.045em;
+  line-height: .98;
+}
+.context-title-block .sub {
+  max-width: 640px;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.context-frame-bottom {
+  align-items: center;
+  margin-top: 28px;
+}
+.context-path {
+  min-width: 0;
+  overflow: hidden;
+  margin-top: 0;
+  color: var(--meta);
+  font-family: var(--mono);
+  font-size: var(--fs-2);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.context-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.context-actions .spacer,
+.context-actions > .adhd-toolbar-cta {
+  display: none;
+}
+.context-actions > .search {
+  display: flex;
+  align-items: center;
+  width: 190px;
+  min-width: 190px;
+  height: 34px;
+  margin: 0;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--meta);
+  background: var(--bg);
+}
+.context-actions > .search:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+.context-actions > .search svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+.context-actions > .search input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  padding: 7px 0 7px 7px;
+  color: var(--fg);
+  background: transparent;
+  font-size: var(--fs-2);
+}
+.context-actions > .search input:focus { outline: 0; }
+.context-actions > .btn,
+.context-actions > .adhd-more > .btn {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  font-size: var(--fs-2);
+}
+.context-actions > .btn.btn-primary {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.context-actions .adhd-more {
+  display: flex;
+  flex: 0 0 auto;
+}
+.context-actions .adhd-more-panel {
+  z-index: 30;
+}
+.context-actions .os-flow {
+  margin-top: 0;
+}
+@media (max-width: 860px) {
+  .toolbar.context-toolbar.context-surface-toolbar {
+    padding: 36px 20px 28px;
+  }
+  .toolbar.context-toolbar.context-surface-toolbar::before {
+    left: 20px;
+    right: 20px;
+  }
+  .context-frame-bottom {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .context-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .context-actions > .search {
+    flex: 1 1 190px;
+  }
 }
 html.adhd-calm .adhd-page-chrome-title .sub,
 html.adhd-calm .adhd-editor-chrome-title .sub {
