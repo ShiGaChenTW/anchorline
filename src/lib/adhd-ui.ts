@@ -104,6 +104,9 @@ function nextStepForPage(page: RailPage | null): NextStep {
         cta: "回編輯台",
         href: "editor.html",
       };
+    case "openspec":
+      // OpenSpec 頁面本身就是入口與狀態面板，不需要再疊一條全站 fallback。
+      return { label: "", detail: "" };
     default:
       return {
         label: "從專案開始",
@@ -257,6 +260,11 @@ function integratePageChrome(step: NextStep) {
 function ensureStandaloneFocusStrip(step: NextStep) {
   const main = document.querySelector(".main");
   if (!main) return;
+
+  if (!step.label) {
+    document.getElementById("adhd-focus-strip")?.remove();
+    return;
+  }
 
   let strip = document.getElementById("adhd-focus-strip");
   const isNew = !strip;
