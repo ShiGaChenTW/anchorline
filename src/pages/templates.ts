@@ -20,6 +20,13 @@ import {
 } from "../lib/domain-pack-manage";
 import { CUSTOM_SECTION_ID } from "../data/seed";
 import PACK_TEMPLATE_MD from "../data/domains/_template.md?raw";
+import {
+  buildChangeFiles,
+  CHANGE_KIND_BLURB,
+  CHANGE_KIND_LABEL,
+  type ChangeKind,
+  type ChangeFile,
+} from "../lib/change-templates";
 
 const __authed = requireAuth();
 if (__authed) {
@@ -82,6 +89,77 @@ let current: Template | null = null;
 
 function getTemplates(): Template[] {
   return store.get().templates || [];
+}
+
+function changeInput(kind: ChangeKind): { title: string; slug: string; date: string } | null {
+  const title = prompt(`${CHANGE_KIND_LABEL[kind]}標題：`);
+  if (!title?.trim()) return null;
+  const suggested = title.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const slug = prompt("識別碼（英數與連字號）：", suggested || "change");
+  if (!slug?.trim()) return null;
+  const date = new Date().toISOString().slice(0, 10);
+  return { title, slug, date };
+}
+
+function downloadChangeFile(file: ChangeFile) {
+  const url = URL.createObjectURL(new Blob([file.content], { type: "text/markdown;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = file.path.replaceAll("/", "__");
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function copyChangeBundle(files: ChangeFile[]) {
+  const bundle = files.map((file) => `===== ${file.path} =====\n\n${file.content}`).join("\n\n");
+  if (!navigator.clipboard) {
+    toast("目前環境不支援剪貼簿，請改用逐檔下載");
+    return;
+  }
+  void navigator.clipboard.writeText(bundle).then(
+    () => toast(`已複製 ${files.length} 份變更文件`),
+    () => toast("無法寫入剪貼簿，請改用逐檔下載"),
+  );
+}
+
+function renderChangeStarters() {
+  const host = document.getElementById("change-start-grid");
+  if (!host) return;
+  const kinds: ChangeKind[] = ["feature", "bug", "maintenance"];
+  host.innerHTML = kinds
+    .map(
+      (k) => `
+        <article class="t-card" data-change-kind="${k}">
+          <span class="tag">${CHANGE_KIND_LABEL[k]}</span>
+          <h3 style="margin-top:8px">${CHANGE_KIND_LABEL[k]}文件</h3>
+          <p>${CHANGE_KIND_BLURB[k]}</p>
+          <div class="meta" style="margin-top:auto;padding-top:10px;gap:8px">
+            <button type="button" class="btn btn-sm btn-ghost" data-change-copy="${k}">複製文件</button>
+            <button type="button" class="btn btn-sm btn-primary" data-change-download="${k}">建立並下載</button>
+          </div>
+        </article>`,
+    )
+    .join("");
+
+  host.querySelectorAll<HTMLButtonElement>("[data-change-download]").forEach((button) => {
+    button.onclick = () => {
+      const kind = button.dataset.changeDownload as ChangeKind;
+      const input = changeInput(kind);
+      if (!input) return;
+      const files = buildChangeFiles(kind, input);
+      files.forEach(downloadChangeFile);
+      toast(`已下載 ${files.length} 份${CHANGE_KIND_LABEL[kind]}文件；請放入建議的專案目錄`);
+    };
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-change-copy]").forEach((button) => {
+    button.onclick = () => {
+      const kind = button.dataset.changeCopy as ChangeKind;
+      const input = changeInput(kind);
+      if (!input) return;
+      copyChangeBundle(buildChangeFiles(kind, input));
+    };
+  });
 }
 
 /** 整份範本的卡片要講「這份有幾章」——那是選範本時真正在比的東西 */
@@ -183,6 +261,7 @@ function renderDomainPacks() {
 }
 
 function render() {
+  renderChangeStarters();
   renderCatTabs();
   if (kind === "domain") {
     renderDomainPacks();
@@ -615,4 +694,3 @@ document.addEventListener("keydown", (e) => {
 render();
 store.subscribe(render);
 } // end __authed
-
