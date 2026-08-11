@@ -10,6 +10,7 @@ export type RailPage =
   | "write"
   | "signoff"
   | "dashboard"
+  | "releases"
   | "overview"
   | "templates"
   | "openspec"
@@ -72,6 +73,10 @@ export const RAIL_ITEMS: RailItem[] = [
   { page: "signoff", href: "signoff.html", label: "簽核管理", odId: "nav-signoff", icon: IC.signoff, hidden: true },
   { page: "tracking", href: "tracking.html", label: "Task Tracking", odId: "nav-tracking", icon: IC.tracking, hidden: true },
   { page: "dashboard", href: "dashboard.html", label: "專案儀表板", odId: "nav-dashboard", icon: IC.dashboard, hidden: true },
+  // 漏了這一筆的症狀完全符合 config.yaml 那句警告：`detectRailPage()` 回 null，
+  // `auth.ts` 的 `if (page && …) initRailNav(page)` 因此整段跳過，
+  // 側欄不重建 —— 頁面於是停在 HTML 裡那份過期的靜態導覽，而且不報錯。
+  { page: "releases", href: "releases.html", label: "版本取號", odId: "nav-releases", icon: IC.signoff, hidden: true },
   { page: "overview", href: "overview.html", label: "總覽", odId: "nav-overview", icon: IC.dashboard, hidden: true },
   // 章節範本移到「工作區」那一組（rail-projects.ts 的 ensureWorkspaceNav）——
   // 它跟總覽／清單／審閱佇列一樣是跨專案的東西

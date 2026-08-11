@@ -95,13 +95,14 @@
           <button type="button" data-theme-value="terminal" aria-pressed="false">TERMINAL</button>
         </div>
       </div>
+      <!-- initRailNav() 會整段重建；這份是 JS 到位前那一幀，形狀要跟其他 13 頁一致 -->
       <nav class="rail-nav">
         <div class="nav-label">工作區</div>
-        <a class="nav-item" href="editor.html">編輯工作台</a>
-        <a class="nav-item" href="templates.html">PRD 範本</a>
-        <a class="nav-item" href="review.html">審閱佇列</a>
-        <a class="nav-item active" href="tracking.html">計劃追蹤</a>
-        <a class="nav-item" href="settings.html">偏好設定</a>
+        <a class="nav-item" href="editor.html" data-od-id="nav-editor">編輯工作台</a>
+        <a class="nav-item" href="templates.html" data-od-id="nav-templates">PRD 範本</a>
+        <a class="nav-item" href="review.html" data-od-id="nav-review">審閱佇列</a>
+        <a class="nav-item" href="tracking.html" data-od-id="nav-tracking">計劃追蹤</a>
+        <a class="nav-item" href="settings.html" data-od-id="nav-settings">偏好設定</a>
       </nav>
       <div class="rail-foot rail-foot--user" aria-label="目前使用者">
         <div class="rail-user">
