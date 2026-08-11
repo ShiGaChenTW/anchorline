@@ -4,7 +4,16 @@
  * 這裡只負責把使用者輸入轉成可落地的 Markdown 檔案，不做 I/O。
  * App 目前刻意不任意建立專案檔案，所以頁面會把這些檔案逐一下載，
  * 使用者再放進 `openspec/changes/<id>/` 或 `plans/`。
+ *
+ * ## 產出必須是「這個 App 自己讀得懂」的形狀
+ *
+ * plan 檔的合法形狀由 `plan-parser.ts` 定義，不是由這裡的美觀決定：
+ * 單一 `## Plan Steps` 區段、`**狀態：**` 標籤、`<!-- anc:t=… -->` 錨點。
+ * 少了任何一項，Task Tracking 會把檔案讀成 0 個步驟、狀態「未知」——
+ * **而且不會報錯**。一個產生自家工具讀不懂的檔案的產生器，比沒有產生器更糟。
+ * `tests/change-templates.test.ts` 用真的 parser 鎖住這件事，不用字串比對。
  */
+import { mintMissingIds } from "./plan-parser";
 
 export type ChangeKind = "feature" | "bug" | "maintenance";
 
@@ -33,12 +42,29 @@ export const CHANGE_KIND_BLURB: Record<ChangeKind, string> = {
 
 /** 只允許穩定、可放進路徑的 slug；不讓標題直接變成檔案路徑。 */
 export function normalizeChangeSlug(raw: string): string {
-  return raw
+  return deriveChangeSlug(raw) ?? "change";
+}
+
+/**
+ * 標題轉 slug，**推不出來就回 null**。
+ *
+ * 為什麼要跟 `normalizeChangeSlug` 分開：這個專案的標題幾乎都是中文，而
+ * `[^a-z0-9]` 會把整個中文標題洗成空字串，於是每一份文件都拿到同一個
+ * 保底值 `change` —— `openspec/changes/change/proposal.md` 會被第二個變更
+ * 直接蓋掉，而使用者只會看到「怎麼上一份不見了」。
+ *
+ * 保底值本身沒有錯，錯在**把它當成推導成功**。呼叫端要區分這兩件事：
+ * 推不出來時該擋下來請使用者自己填 change id，不是默默給一個會撞的名字。
+ */
+export function deriveChangeSlug(raw: string): string | null {
+  const slug = raw
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 50) || "change";
+    .slice(0, 50)
+    .replace(/-+$/, "");
+  return slug || null;
 }
 
 function safeTitle(raw: string): string {
@@ -72,17 +98,95 @@ function featureFiles(input: ChangeInput): ChangeFile[] {
   ];
 }
 
-function planFile(input: ChangeInput, kind: ChangeKind): ChangeFile {
+/**
+ * Bug 與維護走 `plans/`，不走 openspec change。
+ *
+ * 理由：這兩類多半沒有規格變更可寫，proposal + spec delta 對它們是空儀式；
+ * 而 `plans/` 的步驟有錨點，接得上 Task Tracking 與治理覆蓋率。
+ *
+ * 步驟一律先鑄好錨點再交出去 —— 沒有錨點的 plan 檔，commit 訊息就沒有
+ * `anc:t=` 可寫，那筆 commit 在治理覆蓋率上會被算成「未治理」。
+ */
+function planFile(input: ChangeInput, kind: ChangeKind, rand?: () => number): ChangeFile {
   const title = safeTitle(input.title);
   const slug = normalizeChangeSlug(input.slug || title);
   const label = CHANGE_KIND_LABEL[kind];
+  const date = safeDate(input.date);
+  const investigate =
+    kind === "bug"
+      ? [
+          "## 現象",
+          "",
+          "[實際看到什麼。寫可觀察的事實，不要寫推測的原因。]",
+          "",
+          "## 重現步驟",
+          "",
+          "1. [第一步]",
+          "2. [第二步]",
+          "3. [看到的錯誤結果 vs 應該要有的結果]",
+          "",
+          "## 根因",
+          "",
+          "[重現之後才填。如果根因是「PRD 沒寫清楚」，這件事要升級成 PRD 迭代，不是修 bug。]",
+        ]
+      : [
+          "## 背景",
+          "",
+          "[為什麼現在要處理這件事。]",
+          "",
+          "## 不改變什麼",
+          "",
+          "[維護與重構的驗收前提：對外行為不變。列出這次刻意不動的範圍。]",
+        ];
+
+  const body = [
+    `# ${label}：${title}`,
+    "",
+    `**建立時間：** ${date}`,
+    `**最後更新：** ${date}`,
+    "**狀態：** 進行中",
+    "",
+    "## 目標",
+    "",
+    "[一句話講完這份 plan 要達成什麼，寫成可以判斷做完沒有的形式。]",
+    "",
+    ...investigate,
+    "",
+    "## Plan Steps",
+    "",
+    ...(kind === "bug"
+      ? [
+          "- [ ] Step 1 — 重現問題並記錄實際輸出",
+          "- [ ] Step 2 — 定位根因（寫進上面的「根因」段）",
+          "- [ ] Step 3 — 修正實作",
+          "- [ ] Step 4 — 補上防迴歸測試",
+          "- [ ] Step 5 — `bunx tsc --noEmit` 與 `bun test` 全綠",
+        ]
+      : [
+          "- [ ] Step 1 — 盤點受影響範圍",
+          "- [ ] Step 2 — 執行變更",
+          "- [ ] Step 3 — 確認對外行為未變（測試或實際操作）",
+          "- [ ] Step 4 — `bunx tsc --noEmit` 與 `bun test` 全綠",
+        ]),
+    "",
+    "## 驗證紀錄",
+    "",
+    "- 指令：待補",
+    "- 結果：待補",
+    "",
+  ].join("\n");
+
   return {
-    path: `plans/${safeDate(input.date)}-${kind}-${slug}.md`,
-    content: `# ${label}：${title}\n\n## 狀態\n\n進行中\n\n## 背景\n\n[為什麼要處理這件事。]\n\n## 問題／目標\n\n[清楚描述要修正或改善的內容。]\n\n## 實作方式\n\n[完成調查後補上根因、方案與取捨。]\n\n## 驗收條件\n\n- [ ] [可驗證的結果一]\n- [ ] [可驗證的結果二]\n- [ ] 補上或確認回歸測試\n\n## 驗證紀錄\n\n- 指令：待補\n- 結果：待補\n`,
+    path: `plans/${date}-${kind}-${slug}.md`,
+    content: mintMissingIds(body, rand).text,
   };
 }
 
-export function buildChangeFiles(kind: ChangeKind, input: ChangeInput): ChangeFile[] {
+export function buildChangeFiles(
+  kind: ChangeKind,
+  input: ChangeInput,
+  rand?: () => number,
+): ChangeFile[] {
   if (kind === "feature") return featureFiles(input);
-  return [planFile(input, kind)];
+  return [planFile(input, kind, rand)];
 }
