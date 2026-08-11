@@ -38,7 +38,8 @@ export async function requestOpenspecStatus(folderPath: string): Promise<Openspe
   if (!changes.length && listed.length) {
     return { available: false, reason: `${listed.length} 個 change 讀不到狀態` };
   }
-  return { available: true, changes };
+  // listed 一起帶出去 —— 它有 `lastModified`，status 沒有
+  return { available: true, changes, listed };
 }
 
 /** 跨 repo 的 open PR。`gh search` 本來就是跨 repo，所以全 App 共用一次查詢。 */
