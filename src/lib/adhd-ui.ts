@@ -328,11 +328,10 @@ function collapseToolbar() {
   toolbar.dataset.adhdCollapsed = "1";
   toolbar.classList.add("adhd-toolbar");
 
-  // 主路徑按鈕：保留 primary / import / beginner / new
+  // 主路徑按鈕：保留專案匯入／新建 PRD；新手引導等次要入口進「更多」。
   const keepIds = new Set([
     "btn-new",
     "btn-import",
-    "btn-beginner",
     "btn-submit",
     "btn-prev",
     "btn-next",
