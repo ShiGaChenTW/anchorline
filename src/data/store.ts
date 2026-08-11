@@ -3,6 +3,7 @@ import {
   blankSections,
   buildSeedCase,
   buildStarterAgents,
+  CUSTOM_SECTION_ID,
   DEFAULT_SETTINGS,
   GHOST_USER,
   SEED_APPROVALS,
@@ -50,6 +51,7 @@ import {
   stagesAfterResubmit,
 } from "../lib/prd-versions";
 import { canResolveComment, migrateComments, projectOfComment } from "../lib/comment-scope";
+import { canEditContent } from "../lib/permissions";
 import { applyMeta, metaFromSections, orphanSectionIds, pickDomain } from "../lib/section-meta";
 import { DEFAULT_DOMAIN, domainPacks, reloadUserPacks } from "./domains";
 import { autoRescanUserDomains } from "../lib/user-domains";
@@ -121,12 +123,33 @@ function domainGates(domain: string): GateSpec {
   }
 }
 
-/** 解析某專案當下該看到的 sections（骨架 + 該專案的標記） */
+/** 把改好的骨架寫回「這個專案自己的結構」，並重算目前畫面的章節 */
+function applyStructure(projectId: string, sections: Section[]): { ok: boolean } {
+  const overrides = { ...(state.projectSections ?? {}), [projectId]: sections.map((x) => ({ ...x })) };
+  state = {
+    ...state,
+    projectSections: overrides,
+    sections: projectId === state.activeProjectId ? withCustomSection(sections) : state.sections,
+  };
+  touchProjectMeta(projectId);
+  emit();
+  return { ok: true };
+}
+
+/**
+ * 解析某專案當下該看到的 sections（骨架 + 該專案的標記）。
+ *
+ * 有專案自己的結構就用它，否則走領域包。順序不能反 —— 領域包優先的話，
+ * 使用者手改的章節每次載入都會被蓋回去。
+ */
 function sectionsForProject(
   p: Project | undefined,
   metaBag: AppState["projectSectionMeta"],
+  overrides?: AppState["projectSections"],
 ): Section[] {
-  return applyMeta(domainSections(domainOf(p)), p ? metaBag[p.id] : undefined);
+  const own = p ? overrides?.[p.id] : undefined;
+  const skeleton = own?.length ? withCustomSection(own) : domainSections(domainOf(p));
+  return applyMeta(skeleton, p ? metaBag[p.id] : undefined);
 }
 
 /** 從 section.fields.value 帶入種子正文 */
@@ -468,9 +491,11 @@ function load(): AppState {
       };
     }
 
+    const projectSections = (parsed.projectSections as AppState["projectSections"]) ?? {};
     const sections = sectionsForProject(
       withDomain.find((p) => p.id === activeProjectId),
       projectSectionMeta,
+      projectSections,
     );
 
     return {
@@ -478,6 +503,7 @@ function load(): AppState {
       ...parsed,
       projects: APP_VARIANT === "prod" ? withDomain.filter((p) => !p.isSample) : withDomain,
       sections,
+      projectSections,
       projectSectionMeta,
       sectionValues: activeDocs,
       projectSectionValues,
@@ -817,7 +843,7 @@ export const store = {
     const bag = snapshotActiveDocs(state);
     // 空白正文袋要照**新專案自己的領域**算，不是照當下開著的那個專案。
     // 拿錯來源時症狀很輕（缺 key 會 `?? {}`），所以會一路錯下去不被發現。
-    if (!bag[p.id]) bag[p.id] = blankDocsForSections(sectionsForProject(p, state.projectSectionMeta));
+    if (!bag[p.id]) bag[p.id] = blankDocsForSections(sectionsForProject(p, state.projectSectionMeta, state.projectSections));
     state = {
       ...state,
       projects: [p, ...state.projects],
@@ -1426,6 +1452,7 @@ export const store = {
     return sectionsForProject(
       state.projects.find((p) => p.id === projectId),
       state.projectSectionMeta,
+      state.projectSections,
     );
   },
 
@@ -1440,6 +1467,7 @@ export const store = {
       sections: sectionsForProject(
         state.projects.find((p) => p.id === state.activeProjectId),
         state.projectSectionMeta,
+        state.projectSections,
       ),
     };
     emit();
@@ -1463,6 +1491,10 @@ export const store = {
   setProjectDomain(projectId: string, domain: string): { ok: boolean; reason?: string } {
     if (!domainPacks()[domain]) return { ok: false, reason: `找不到領域「${domain}」` };
     const projects = state.projects.map((p) => (p.id === projectId ? { ...p, domain } : p));
+    // 切領域＝明確的「重建骨架」，所以清掉這個專案自己的結構覆寫。
+    // 留著的話畫面會顯示新領域，章節卻還是舊的那一套 —— 兩個地方說反話。
+    const nextOverrides = { ...(state.projectSections ?? {}) };
+    delete nextOverrides[projectId];
     const metaBag =
       projectId === state.activeProjectId
         ? { ...state.projectSectionMeta, [projectId]: metaFromSections(state.sections) }
@@ -1470,12 +1502,14 @@ export const store = {
     state = {
       ...state,
       projects,
+      projectSections: nextOverrides,
       projectSectionMeta: metaBag,
       sections:
         projectId === state.activeProjectId
           ? sectionsForProject(
               projects.find((p) => p.id === projectId),
               metaBag,
+              nextOverrides,
             )
           : state.sections,
     };
@@ -1486,6 +1520,172 @@ export const store = {
   /** 目前專案有正文、但不屬於目前領域的章節 id（UI 用來提示孤兒內容） */
   orphanSectionIds(): string[] {
     return orphanSectionIds(state.sections, state.sectionValues);
+  },
+
+  /* ─── 專案自己的章節結構 ─── */
+
+  /**
+   * 把目前的骨架固定成「這個專案自己的」。
+   *
+   * 任何一次結構編輯之前都要先做這件事，否則改完之後 `load()` 會從領域包
+   * 重算，使用者的修改**靜默消失**（沒有錯誤、沒有提示，只是下次打開就沒了）。
+   */
+  private_pinSections(projectId: string, sections?: Section[]) {
+    const cur =
+      sections ??
+      state.projectSections?.[projectId] ??
+      sectionsForProject(
+        state.projects.find((p) => p.id === projectId),
+        state.projectSectionMeta,
+        state.projectSections,
+      );
+    // 固定下來的是骨架，不含 `custom` —— 那一節由 withCustomSection 永遠補在最後
+    return cur.filter((x) => x.id !== CUSTOM_SECTION_ID).map((x) => ({ ...x }));
+  },
+
+  /** 套用整份 PRD 範本：**置換**整份章節，編號與命名一律照範本 */
+  applyFullTemplate(
+    projectId: string,
+    sections: Section[],
+    seed: Record<string, Record<string, string>> = {},
+  ): { ok: boolean; reason?: string; count?: number } {
+    if (!canEditContent(state.currentUser)) return { ok: false, reason: "目前身分無法編輯內文" };
+    if (!sections.length) return { ok: false, reason: "這份範本讀不出任何章節標題" };
+
+    const overrides = { ...(state.projectSections ?? {}), [projectId]: sections.map((x) => ({ ...x })) };
+    const nextSections = withCustomSection(sections);
+
+    // 範本的示範內容進**草稿**，不是已儲存 —— 跟 AI 產出同一條規則：
+    // 不是使用者打的字就不該直接變成正文
+    const drafts = { ...state.prdDrafts };
+    if (Object.keys(seed).length) {
+      const cur = { ...(drafts[projectId] ?? {}) };
+      for (const [sid, fields] of Object.entries(seed)) {
+        const nonEmpty = Object.fromEntries(Object.entries(fields).filter(([, v]) => v.trim()));
+        if (Object.keys(nonEmpty).length) cur[sid] = { ...(cur[sid] ?? {}), ...nonEmpty };
+      }
+      drafts[projectId] = cur;
+    }
+
+    state = {
+      ...state,
+      projectSections: overrides,
+      prdDrafts: drafts,
+      // 換骨架 = 舊的標記對不上新的章節 id，留著只會讓分數與勾選錯位
+      projectSectionMeta: { ...state.projectSectionMeta, [projectId]: {} },
+      sections: projectId === state.activeProjectId ? nextSections : state.sections,
+    };
+    touchProjectMeta(projectId);
+    emit();
+    return { ok: true, count: sections.length };
+  },
+
+  /** 改章節的編號或標題 */
+  renameSection(sectionId: string, patch: { n?: string; title?: string }): { ok: boolean; reason?: string } {
+    if (!canEditContent(state.currentUser)) return { ok: false, reason: "目前身分無法編輯內文" };
+    if (sectionId === CUSTOM_SECTION_ID) return { ok: false, reason: "自訂章節是固定的收納區，不能改名" };
+    const pid = state.activeProjectId;
+    if (!pid) return { ok: false, reason: "沒有選取專案" };
+    const pinned = this.private_pinSections(pid).map((x) =>
+      x.id === sectionId
+        ? { ...x, ...(patch.n !== undefined ? { n: patch.n.trim() || x.n } : {}), ...(patch.title !== undefined ? { title: patch.title.trim() || x.title } : {}) }
+        : x,
+    );
+    return applyStructure(pid, pinned);
+  },
+
+  /** 刪掉一整節。**正文一併刪** —— 留著是看不見的孤兒，匯出時才會突然冒出來 */
+  removeSection(sectionId: string): { ok: boolean; reason?: string } {
+    if (!canEditContent(state.currentUser)) return { ok: false, reason: "目前身分無法編輯內文" };
+    if (sectionId === CUSTOM_SECTION_ID) return { ok: false, reason: "自訂章節是固定的收納區，不能刪" };
+    const pid = state.activeProjectId;
+    if (!pid) return { ok: false, reason: "沒有選取專案" };
+    const pinned = this.private_pinSections(pid);
+    if (pinned.length <= 1) return { ok: false, reason: "至少要留一節" };
+    const next = pinned.filter((x) => x.id !== sectionId);
+    if (next.length === pinned.length) return { ok: false, reason: "找不到這一節" };
+
+    const docs = { ...(state.projectSectionValues[pid] ?? {}) };
+    delete docs[sectionId];
+    const drafts = { ...(state.prdDrafts[pid] ?? {}) };
+    delete drafts[sectionId];
+    state = {
+      ...state,
+      projectSectionValues: { ...state.projectSectionValues, [pid]: docs },
+      prdDrafts: { ...state.prdDrafts, [pid]: drafts },
+      ...(pid === state.activeProjectId ? { sectionValues: docs } : {}),
+    };
+    return applyStructure(pid, next);
+  },
+
+  /** 改子章節（欄位）的標題 */
+  renameField(sectionId: string, key: string, label: string): { ok: boolean; reason?: string } {
+    if (!canEditContent(state.currentUser)) return { ok: false, reason: "目前身分無法編輯內文" };
+    const pid = state.activeProjectId;
+    if (!pid) return { ok: false, reason: "沒有選取專案" };
+    const text = label.trim();
+    if (!text) return { ok: false, reason: "標題不能是空的" };
+    const pinned = this.private_pinSections(pid).map((x) =>
+      x.id === sectionId
+        ? { ...x, fields: x.fields.map((f) => (f.key === key ? { ...f, label: text } : f)) }
+        : x,
+    );
+    return applyStructure(pid, pinned);
+  },
+
+  /** 刪掉一個子章節（欄位）。正文一併刪，理由同 removeSection */
+  removeField(sectionId: string, key: string): { ok: boolean; reason?: string } {
+    if (!canEditContent(state.currentUser)) return { ok: false, reason: "目前身分無法編輯內文" };
+    const pid = state.activeProjectId;
+    if (!pid) return { ok: false, reason: "沒有選取專案" };
+    const pinned = this.private_pinSections(pid);
+    const target = pinned.find((x) => x.id === sectionId);
+    if (!target) return { ok: false, reason: "找不到這一節" };
+    if (target.fields.length <= 1) return { ok: false, reason: "每一節至少要留一個欄位 —— 要整節拿掉請刪章節" };
+
+    const next = pinned.map((x) =>
+      x.id === sectionId ? { ...x, fields: x.fields.filter((f) => f.key !== key) } : x,
+    );
+    const docs = { ...(state.projectSectionValues[pid] ?? {}) };
+    if (docs[sectionId]) {
+      const sec = { ...docs[sectionId] };
+      delete sec[key];
+      docs[sectionId] = sec;
+    }
+    state = {
+      ...state,
+      projectSectionValues: { ...state.projectSectionValues, [pid]: docs },
+      ...(pid === state.activeProjectId ? { sectionValues: docs } : {}),
+    };
+    return applyStructure(pid, next);
+  },
+
+  /** 這個專案的章節是不是自己改過的（UI 要提示「已脫離領域包」） */
+  hasOwnSections(projectId?: string): boolean {
+    const pid = projectId ?? state.activeProjectId;
+    return Boolean(pid && state.projectSections?.[pid]?.length);
+  },
+
+  /** 放棄自己的結構，回到領域包的骨架 */
+  resetSections(projectId?: string): { ok: boolean } {
+    const pid = projectId ?? state.activeProjectId;
+    if (!pid) return { ok: false };
+    const next = { ...(state.projectSections ?? {}) };
+    delete next[pid];
+    state = {
+      ...state,
+      projectSections: next,
+      sections:
+        pid === state.activeProjectId
+          ? sectionsForProject(
+              state.projects.find((p) => p.id === pid),
+              state.projectSectionMeta,
+              next,
+            )
+          : state.sections,
+    };
+    emit();
+    return { ok: true };
   },
 
   updateSection(sectionId: string, patch: Partial<Section>) {
@@ -1593,6 +1793,7 @@ export const store = {
     const nextSections = sectionsForProject(
       state.projects.find((p) => p.id === id),
       metaBag,
+      state.projectSections,
     );
     // 3) 載入目標專案正文（無則依新骨架給空白）
     const nextDocs = bag[id] ?? blankDocsForSections(nextSections);

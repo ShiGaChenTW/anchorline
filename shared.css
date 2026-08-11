@@ -12686,3 +12686,53 @@ p.gd-warn {
 .sg-log--override .sg-log-when { color: var(--warn); }
 .sg-log--comment .sg-log-when { color: var(--muted); }
 .sg-log--skipped .sg-log-when { color: var(--muted); }
+
+/* ─── 章節結構編輯 ────────────────────────────────────────────
+ *
+ * 改名／刪除只在 hover 或鍵盤焦點時浮出來 —— 這一欄是每天要掃視的導覽，
+ * 常駐兩顆操作鈕會把「我在哪一節」的訊號淹掉。
+ */
+.sec-group,
+.sec-fields li {
+  position: relative;
+}
+.sec-ops {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--motion-fast, 120ms) var(--ease-standard, ease);
+}
+.sec-fields li .sec-ops {
+  top: 3px;
+}
+.sec-group:hover .sec-ops,
+.sec-fields li:hover .sec-ops,
+.sec-ops:focus-within {
+  opacity: 1;
+}
+.sec-op {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--fs-1);
+  line-height: 1.4;
+  cursor: pointer;
+}
+.sec-op:hover {
+  color: var(--fg);
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+}
+.sec-op--del:hover {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 50%, var(--border));
+}
+/* 操作鈕浮在狀態徽章上面，讓徽章讓出位置而不是被蓋住 */
+.sec-group:hover .sec .st,
+.sec-fields li:hover .sec-field-dot {
+  opacity: 0;
+}

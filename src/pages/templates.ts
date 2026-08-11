@@ -1,4 +1,5 @@
 import { store } from "../data/store";
+import { seedValuesFromTemplate, sectionsFromTemplate, splitTemplate } from "../lib/prd-template";
 import { templateKind } from "../data/types";
 import type { Template, TemplateCat, TemplateKind } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
@@ -273,6 +274,20 @@ function openTpl(id: string) {
     src.hidden = !current.source;
     src.textContent = current.source ? `出處：${current.source}${current.sourceUrl ? ` · ${current.sourceUrl}` : ""}` : "";
   }
+  // 按鈕要講出它到底會做什麼。整份範本是**置換章節**，跟「插入一段文字」
+  // 是完全不同量級的動作，用同一個字會讓人以為只是多一段內容。
+  const insert = document.getElementById("m-insert");
+  if (insert) {
+    const full = templateKind(current) === "full";
+    const n = full ? splitTemplate(current.body).length : 0;
+    insert.textContent = full ? `套用整份範本（置換 ${n} 節）` : "插入編輯器";
+    insert.setAttribute(
+      "title",
+      full
+        ? "會把這個專案的 PRD 章節換成範本的章節，編號與命名照範本"
+        : "把這段內容附加到「自訂章節」",
+    );
+  }
   openModal("modal");
 }
 
@@ -415,13 +430,45 @@ document.getElementById("m-copy")?.addEventListener("click", async () => {
 });
 
 document.getElementById("m-insert")?.addEventListener("click", (e) => {
+  e.preventDefault();
   if (!canEditContent(store.get().currentUser)) {
-    e.preventDefault();
     toast("核准人員無法插入範本到編輯內文");
     return;
   }
-  e.preventDefault();
   if (!current) return;
+
+  // **整份 PRD 範本 = 置換整份章節，不是倒一坨文字進某一格。**
+  // 以前 full 與 section 走同一條路，一份十節的 PRD 被塞進「自訂章節」
+  // 的單一 textarea，範本的編號與命名全部丟失 —— 等於沒有採用那份範本。
+  if (templateKind(current) === "full") {
+    const secs = sectionsFromTemplate(current.body, { title: current.title });
+    if (!secs.length) {
+      toast("這份範本讀不出章節標題，無法置換 —— 請改用「插入」或修正範本");
+      return;
+    }
+    const pid = store.get().activeProjectId;
+    if (!pid) {
+      toast("先選一個專案再套用整份範本");
+      return;
+    }
+    const cur = store.sectionsFor(pid).filter((x) => x.id !== "custom").length;
+    const ok = window.confirm(
+      `套用「${current.title}」會把這個專案的 PRD 章節換成範本的 ${secs.length} 節` +
+        `（編號與命名照範本），目前的 ${cur} 節結構會被取代。\n\n` +
+        `已經寫好的正文不會被刪，但對不上新章節的會變成孤兒內容。要繼續嗎？`,
+    );
+    if (!ok) return;
+    const r = store.applyFullTemplate(pid, secs, seedValuesFromTemplate(current.body));
+    if (!r.ok) {
+      toast(r.reason ?? "套用失敗");
+      return;
+    }
+    store.bumpTemplateUse(current.id);
+    toast(`已套用 ${r.count} 節 —— 範本示範內容放在草稿裡`);
+    location.href = "editor.html";
+    return;
+  }
+
   store.setPendingInsert(current.body);
   store.bumpTemplateUse(current.id);
   toast("已排入插入 — 開啟編輯器");
