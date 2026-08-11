@@ -1,0 +1,24 @@
+schema: spec-driven
+
+context: |
+  Anchorline —— PRD 撰寫／審閱／簽核的桌面工具。
+
+  技術：TypeScript + Vite 多頁式（每個頁面 = `foo.html` + `src/pages/foo.ts`），
+  Tauri v2 打包成 macOS App。狀態全部在 `src/data/store.ts`（單一 store，
+  localStorage 持久化），純邏輯放 `src/lib/*.ts` 並用 `bun test` 測。
+  套件管理與執行一律 bun／bunx，不用 npm／npx。
+
+  慣例：
+  - 註解與文件用繁體中文，說明**為什麼**這樣寫，不重述程式碼在做什麼
+  - 純函式優先：能抽到 `src/lib/` 並單元測試的邏輯就不要留在頁面裡
+  - store 的方法回傳 `{ ok, reason }`，UI 負責把 reason 顯示出來；不要靜默失敗
+  - 章節骨架每次載入都從領域包重新推導，只有使用者手動產生的標記會存下來
+  - 新增一個頁面要改 10 個註冊點（vite input、RailPage、IC、RAIL_ITEMS…），
+    漏掉的症狀是靜默回退而不是錯誤
+
+rules:
+  proposal:
+    - 一定要寫「不做什麼」，範圍沒有邊界的提案會在實作中無限膨脹
+  tasks:
+    - 每一步都要能單獨驗證，不要出現「實作 X」這種驗不了的步驟
+    - 純邏輯的步驟要指名它對應的測試檔
