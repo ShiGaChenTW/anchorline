@@ -29,6 +29,7 @@ import {
   summarizeChanges,
 } from "../lib/commit-message";
 import { AiError, chatCompletion, getAiReadiness } from "../lib/ai-client";
+import { policyOf } from "../lib/release";
 import { isNative, isUnavailable, native } from "../lib/native";
 import type { GitIssue } from "../lib/git-doctor";
 import { askForProjectFolder } from "../lib/project-folder";
@@ -121,7 +122,34 @@ if (!requireAuth()) {
         <textarea id="d-desc" class="d-ident-desc" rows="1" aria-label="專案介紹"
                   placeholder="一句話說明這個專案在做什麼">${escapeHtml(desc)}</textarea>
         <div class="d-ident-tags" id="d-tags">${tagsInnerHtml(p)}</div>
+        ${policyHtml(p)}
       </section>`;
+  }
+
+  /**
+   * 版號政策。放在專案設定而不是版本取號頁：這是專案層級的**一次性**決定，
+   * 不是每次取號要碰的東西。
+   *
+   * 選了 vX.YY.ZZ 之後這裡只剩一段說明，沒有切回去的按鈕 ——
+   * 不是把按鈕變灰，是整個拿掉。一顆按下去只會告訴你「不行」的按鈕，
+   * 每次看到都要重新想一次為什麼。
+   */
+  function policyHtml(p: Project | null): string {
+    if (!p) return "";
+    if (policyOf(p) === "strict") {
+      return `<div class="d-policy is-strict">
+        <strong>版號採 vX.YY.ZZ</strong>
+        <span>X 大型迭代要有 PRD 簽核紀錄 · YY 新功能要走過 OpenSpec · ZZ 小修挑 commit。
+        已經用這套發出去的版號帶著這些保證，所以這個選擇不能改回去。</span>
+      </div>`;
+    }
+    return `<div class="d-policy">
+      <strong>版號目前不限格式</strong>
+      <span>可以用 v1.2.3、2026.08、R42，只擋會出問題的字元。
+      也可以改採 <code>vX.YY.ZZ</code>，讓三段各自綁定取號條件 ——
+      <b>這個選擇不能改回來。</b></span>
+      <button type="button" class="btn btn-sm" id="d-policy-strict">改採 vX.YY.ZZ</button>
+    </div>`;
   }
 
   function tagsInnerHtml(p: Project | null): string {
@@ -571,6 +599,34 @@ if (!requireAuth()) {
           e.preventDefault();
           nameEl.blur();
         }
+      });
+    }
+
+    const policyBtn = document.getElementById("d-policy-strict");
+    if (policyBtn && policyBtn.dataset.bound !== "1") {
+      policyBtn.dataset.bound = "1";
+      policyBtn.addEventListener("click", () => {
+        // 兩段確認：這個決定不可逆，而不可逆的動作值得一次刻意的停頓
+        if (
+          !confirm(
+            [
+              `「${projectDisplayName(p!)}」的版號要改採 vX.YY.ZZ。`,
+              "",
+              "之後取號會多三道閘門：",
+              "  X  大型迭代 —— 要有完成的 PRD 簽核紀錄",
+              "  YY 新功能  —— 收的內容要有走過 OpenSpec 的 change",
+              "  ZZ 小修    —— 挑已經 commit 的項目",
+              "",
+              "這個選擇不能改回來。已經用這套發出去的版號帶著上面的保證，",
+              "退回去之後那些保證沒有東西背書。",
+            ].join("\n"),
+          )
+        ) {
+          return;
+        }
+        const r = store.setVersionPolicy(p!.id, "strict");
+        toast(r.ok ? "已改採 vX.YY.ZZ" : (r.reason ?? "切換失敗"));
+        if (r.ok) void load(true);
       });
     }
 
