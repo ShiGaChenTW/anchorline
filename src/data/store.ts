@@ -129,7 +129,7 @@ function applyStructure(projectId: string, sections: Section[]): { ok: boolean }
   state = {
     ...state,
     projectSections: overrides,
-    sections: projectId === state.activeProjectId ? withCustomSection(sections) : state.sections,
+    sections: projectId === state.activeProjectId ? withCustomFor(projectId, sections) : state.sections,
   };
   touchProjectMeta(projectId);
   emit();
@@ -146,10 +146,68 @@ function sectionsForProject(
   p: Project | undefined,
   metaBag: AppState["projectSectionMeta"],
   overrides?: AppState["projectSections"],
+  noCustom?: AppState["projectNoCustom"],
 ): Section[] {
   const own = p ? overrides?.[p.id] : undefined;
-  const skeleton = own?.length ? withCustomSection(own) : domainSections(domainOf(p));
+  const raw = own?.length ? withCustomSection(own) : domainSections(domainOf(p));
+  const skeleton = p && noCustom?.[p.id] ? raw.filter((x) => x.id !== CUSTOM_SECTION_ID) : raw;
   return applyMeta(skeleton, p ? metaBag[p.id] : undefined);
+}
+
+/**
+ * 補上「自訂章節」，除非這個專案把它刪掉了。
+ *
+ * 每一條重算骨架的路徑都要走這裡。漏掉的那一條會讓被刪掉的自訂章節
+ * 在某個操作之後**默默長回來** —— 使用者只會覺得「刪不掉」。
+ */
+function withCustomFor(projectId: string | undefined, sections: Section[]): Section[] {
+  if (projectId && state.projectNoCustom?.[projectId]) {
+    return sections.filter((x) => x.id !== CUSTOM_SECTION_ID);
+  }
+  return withCustomSection(sections);
+}
+
+/**
+ * 刪掉「自訂章節」。正文一併刪 —— 跟刪其他章節同一條規則。
+ *
+ * 骨架（projectSections）不用動：那一節本來就不在裡面。
+ */
+function removeCustomSection(pid: string): { ok: boolean; reason?: string } {
+  const shown = sectionsForProject(
+    state.projects.find((p) => p.id === pid),
+    state.projectSectionMeta,
+    state.projectSections,
+    state.projectNoCustom,
+  );
+  if (!shown.some((x) => x.id === CUSTOM_SECTION_ID)) return { ok: false, reason: "這個專案已經沒有自訂章節了" };
+  if (shown.length <= 1) return { ok: false, reason: "至少要留一節" };
+
+  const docs = { ...(state.projectSectionValues[pid] ?? {}) };
+  delete docs[CUSTOM_SECTION_ID];
+  const drafts = { ...(state.prdDrafts[pid] ?? {}) };
+  delete drafts[CUSTOM_SECTION_ID];
+  // 不走 applyStructure：那會順手把骨架釘進 projectSections，等於因為刪了一節
+  // 就讓這個專案脫離領域包（之後領域包更新它收不到）。這裡只多一個旗標。
+  const noCustom = { ...(state.projectNoCustom ?? {}), [pid]: true };
+  state = {
+    ...state,
+    projectNoCustom: noCustom,
+    projectSectionValues: { ...state.projectSectionValues, [pid]: docs },
+    prdDrafts: { ...state.prdDrafts, [pid]: drafts },
+    ...(pid === state.activeProjectId ? { sectionValues: docs } : {}),
+    sections:
+      pid === state.activeProjectId
+        ? sectionsForProject(
+            state.projects.find((p) => p.id === pid),
+            state.projectSectionMeta,
+            state.projectSections,
+            noCustom,
+          )
+        : state.sections,
+  };
+  touchProjectMeta(pid);
+  emit();
+  return { ok: true };
 }
 
 /** 從 section.fields.value 帶入種子正文 */
@@ -496,6 +554,7 @@ function load(): AppState {
       withDomain.find((p) => p.id === activeProjectId),
       projectSectionMeta,
       projectSections,
+      parsed.projectNoCustom as AppState["projectNoCustom"],
     );
 
     return {
@@ -843,7 +902,7 @@ export const store = {
     const bag = snapshotActiveDocs(state);
     // 空白正文袋要照**新專案自己的領域**算，不是照當下開著的那個專案。
     // 拿錯來源時症狀很輕（缺 key 會 `?? {}`），所以會一路錯下去不被發現。
-    if (!bag[p.id]) bag[p.id] = blankDocsForSections(sectionsForProject(p, state.projectSectionMeta, state.projectSections));
+    if (!bag[p.id]) bag[p.id] = blankDocsForSections(sectionsForProject(p, state.projectSectionMeta, state.projectSections, state.projectNoCustom));
     state = {
       ...state,
       projects: [p, ...state.projects],
@@ -1453,6 +1512,7 @@ export const store = {
       state.projects.find((p) => p.id === projectId),
       state.projectSectionMeta,
       state.projectSections,
+      state.projectNoCustom,
     );
   },
 
@@ -1468,6 +1528,7 @@ export const store = {
         state.projects.find((p) => p.id === state.activeProjectId),
         state.projectSectionMeta,
         state.projectSections,
+        state.projectNoCustom,
       ),
     };
     emit();
@@ -1510,6 +1571,7 @@ export const store = {
               projects.find((p) => p.id === projectId),
               metaBag,
               nextOverrides,
+              state.projectNoCustom,
             )
           : state.sections,
     };
@@ -1538,6 +1600,7 @@ export const store = {
         state.projects.find((p) => p.id === projectId),
         state.projectSectionMeta,
         state.projectSections,
+        state.projectNoCustom,
       );
     // 固定下來的是骨架，不含 `custom` —— 那一節由 withCustomSection 永遠補在最後
     return cur.filter((x) => x.id !== CUSTOM_SECTION_ID).map((x) => ({ ...x }));
@@ -1553,7 +1616,7 @@ export const store = {
     if (!sections.length) return { ok: false, reason: "這份範本讀不出任何章節標題" };
 
     const overrides = { ...(state.projectSections ?? {}), [projectId]: sections.map((x) => ({ ...x })) };
-    const nextSections = withCustomSection(sections);
+    const nextSections = withCustomFor(projectId, sections);
 
     // 範本的示範內容進**草稿**，不是已儲存 —— 跟 AI 產出同一條規則：
     // 不是使用者打的字就不該直接變成正文
@@ -1597,9 +1660,11 @@ export const store = {
   /** 刪掉一整節。**正文一併刪** —— 留著是看不見的孤兒，匯出時才會突然冒出來 */
   removeSection(sectionId: string): { ok: boolean; reason?: string } {
     if (!canEditContent(state.currentUser)) return { ok: false, reason: "目前身分無法編輯內文" };
-    if (sectionId === CUSTOM_SECTION_ID) return { ok: false, reason: "自訂章節是固定的收納區，不能刪" };
     const pid = state.activeProjectId;
     if (!pid) return { ok: false, reason: "沒有選取專案" };
+    // 自訂章節不在 projectSections 裡（每次推導由 withCustomSection 補上），
+    // 所以它得靠旗標刪 —— 從陣列裡拿掉的話下次載入又會長回來。
+    if (sectionId === CUSTOM_SECTION_ID) return removeCustomSection(pid);
     const pinned = this.private_pinSections(pid);
     if (pinned.length <= 1) return { ok: false, reason: "至少要留一節" };
     const next = pinned.filter((x) => x.id !== sectionId);
@@ -1672,15 +1737,20 @@ export const store = {
     if (!pid) return { ok: false };
     const next = { ...(state.projectSections ?? {}) };
     delete next[pid];
+    // 「回到領域包骨架」包含把自訂章節帶回來 —— 那一節本來就是骨架的一部分
+    const noCustom = { ...(state.projectNoCustom ?? {}) };
+    delete noCustom[pid];
     state = {
       ...state,
       projectSections: next,
+      projectNoCustom: noCustom,
       sections:
         pid === state.activeProjectId
           ? sectionsForProject(
               state.projects.find((p) => p.id === pid),
               state.projectSectionMeta,
               next,
+              noCustom,
             )
           : state.sections,
     };
@@ -1718,6 +1788,34 @@ export const store = {
   setPendingInsert(body: string | null) {
     state = { ...state, pendingInsert: body };
     emit();
+  },
+
+  /**
+   * 把刪掉的「自訂章節」放回來。
+   *
+   * 章節範本只有那一節裝得下（插進「當下開著的那一章」會讓同一份範本每次
+   * 落在不同地方）。所以插入前先確保它在。
+   */
+  restoreCustomSection(projectId?: string): { ok: boolean } {
+    const pid = projectId ?? state.activeProjectId;
+    if (!pid || !state.projectNoCustom?.[pid]) return { ok: false };
+    const noCustom = { ...state.projectNoCustom };
+    delete noCustom[pid];
+    state = {
+      ...state,
+      projectNoCustom: noCustom,
+      sections:
+        pid === state.activeProjectId
+          ? sectionsForProject(
+              state.projects.find((p) => p.id === pid),
+              state.projectSectionMeta,
+              state.projectSections,
+              noCustom,
+            )
+          : state.sections,
+    };
+    emit();
+    return { ok: true };
   },
 
   consumePendingInsert(): string | null {
@@ -1794,6 +1892,7 @@ export const store = {
       state.projects.find((p) => p.id === id),
       metaBag,
       state.projectSections,
+      state.projectNoCustom,
     );
     // 3) 載入目標專案正文（無則依新骨架給空白）
     const nextDocs = bag[id] ?? blankDocsForSections(nextSections);
