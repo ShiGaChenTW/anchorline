@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>章節範本庫 · Anchorline</title>
+<title>PRD 範本庫 · Anchorline</title>
 <link rel="stylesheet" href="shared.css" />
 <script>(function(){try{var t=localStorage.getItem("anchorline:theme")||localStorage.getItem("specforge:theme");if(t==="warp")t="terminal";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"],terminal:["dark","#0d0b08"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
 </head>
@@ -34,7 +34,7 @@
         </a>
         <a class="nav-item active" href="templates.html" data-od-id="nav-templates">
           <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v3.5A1.75 1.75 0 0 1 14.25 7H1.75A1.75 1.75 0 0 1 0 5.25v-3.5zM1.75 1a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25H1.75zM0 10.75C0 9.784.784 9 1.75 9h12.5c.966 0 1.75.784 1.75 1.75v3.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25v-3.5zm1.75-.75a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25H1.75z"/></svg>
-          章節範本
+          PRD 範本
           <span class="count">12</span>
         </a>
         <a class="nav-item" href="review.html" data-od-id="nav-review">
@@ -77,8 +77,8 @@
     <main class="main" data-od-id="main-templates">
       <div class="toolbar" data-od-id="toolbar">
         <div>
-          <h1 data-od-id="page-title">章節範本庫</h1>
-          <div class="sub">插入結構完整的段落骨架，再填入你的內容</div>
+          <h1 data-od-id="page-title">PRD 範本庫</h1>
+          <div class="sub">整份 PRD 骨架，或單一章節的段落範本 — 插入後再填內容</div>
         </div>
         <div class="spacer"></div>
         <div class="search">
@@ -88,22 +88,20 @@
         <button type="button" class="btn" id="btn-custom" data-od-id="btn-custom">＋ 自訂範本</button>
       </div>
 
-      <div class="tabs" data-od-id="tabs">
-        <button type="button" class="tab on" data-cat="all">全部</button>
-        <button type="button" class="tab" data-cat="core">核心章節</button>
-        <button type="button" class="tab" data-cat="security">資安／合規</button>
-        <button type="button" class="tab" data-cat="growth">成長／實驗</button>
-        <button type="button" class="tab" data-cat="platform">平台</button>
-        <button type="button" class="tab" data-cat="openspec">OpenSpec</button>
-        <button type="button" class="tab" data-cat="delivery">交付</button>
-        <button type="button" class="tab" data-cat="research">研究</button>
+      <div class="tabs" id="kind-tabs" data-od-id="kind-tabs" role="group" aria-label="範本種類">
+        <button type="button" class="tab on" data-kind="full">整份 PRD 範本</button>
+        <button type="button" class="tab" data-kind="section">章節範本</button>
+        <button type="button" class="tab" data-kind="domain">領域包</button>
       </div>
+
+      <!-- 分類隨種類換一組（整份五類 / 章節七類），由 templates.ts 產生 -->
+      <div class="tabs" id="cat-tabs" data-od-id="tabs" role="group" aria-label="分類"></div>
 
       <div class="content">
         <div class="filters" style="padding-top:12px">
-          <span class="mono" id="count">12 個範本</span>
+          <span class="mono" id="count">—</span>
           <span class="spacer"></span>
-          <span class="hint" style="margin:0">點卡片可預覽並插入目前 PRD</span>
+          <span class="hint" id="kind-hint" style="margin:0">點卡片可預覽並插入目前 PRD</span>
         </div>
         <div class="grid-cards" id="grid" data-od-id="template-grid"></div>
       </div>
@@ -118,7 +116,8 @@
       <button type="button" class="btn btn-ghost btn-sm" id="m-close">關閉</button>
     </header>
     <div class="body">
-      <p id="m-desc" style="margin:0 0 12px;color:var(--muted);font-size: var(--fs-3)"></p>
+      <p id="m-desc" style="margin:0 0 8px;color:var(--muted);font-size: var(--fs-3)"></p>
+      <p id="m-source" style="margin:0 0 12px;color:var(--muted);font-size: var(--fs-2)" hidden></p>
       <pre id="m-body" style="margin:0;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-family:var(--mono);font-size: var(--fs-2);white-space:pre-wrap;line-height:1.5;max-height:280px;overflow:auto"></pre>
     </div>
     <footer>
@@ -126,6 +125,26 @@
       <div style="flex:1"></div>
       <button type="button" class="btn" id="m-copy">複製 Markdown</button>
       <a class="btn btn-primary" href="editor.html" id="m-insert">插入編輯器</a>
+    </footer>
+  </div>
+</div>
+<!-- 領域包編輯器。新增與編輯共用 —— 差別只在開啟時載入哪一份原始碼 -->
+<div class="modal-back" id="dp-modal" data-od-id="modal-domain-pack">
+  <div class="modal" role="dialog" style="width:min(820px,100%)">
+    <header>
+      <h3 id="dp-title">編輯領域包</h3>
+      <button type="button" class="btn btn-ghost btn-sm" id="dp-close">關閉</button>
+    </header>
+    <div class="body">
+      <p id="dp-desc" style="margin:0 0 10px;color:var(--muted);font-size: var(--fs-3)"></p>
+      <textarea id="dp-raw" rows="20" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:8px;font-family:var(--mono);font-size: var(--fs-2);line-height:1.5"></textarea>
+      <p id="dp-status" style="margin:8px 0 0;font-size: var(--fs-2);color:var(--muted)"></p>
+    </div>
+    <footer>
+      <button type="button" class="btn btn-ghost" id="dp-delete" style="color:var(--warn,#d9534f)">移除這個領域包</button>
+      <div style="flex:1"></div>
+      <button type="button" class="btn" id="dp-check">檢查格式</button>
+      <button type="button" class="btn btn-primary" id="dp-save">儲存</button>
     </footer>
   </div>
 </div>

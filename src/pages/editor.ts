@@ -8,6 +8,7 @@ import {
   polishTextWithAI,
 } from "../lib/ai-coach";
 import { evaluateChecks, liveScore, store } from "../data/store";
+import { CUSTOM_SECTION_ID } from "../data/seed";
 import type { Project, Section } from "../data/types";
 import { projectDisplayName } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
@@ -1786,16 +1787,18 @@ function render() {
   syncMotionPreferenceClass();
 }
 
-// Apply pending template insert into current section first field
+// 範本段落一律進最後一章「XX 自訂章節」，不進「當下開著的那一章」——
+// 後者會讓同一份範本每次落在不同地方，事後沒人找得到。
 const pending = store.consumePendingInsert();
 if (pending && editable()) {
-  const s = sections()[idx] ?? sections()[0];
+  const s = sections().find((x) => x.id === CUSTOM_SECTION_ID) ?? sections()[idx] ?? sections()[0];
   if (s?.fields[0]) {
     const cur = valuesFor(s)[s.fields[0].key] ?? "";
     const next = cur ? `${cur}\n\n${pending}` : pending;
     store.setSectionDraft(s.id, s.fields[0].key, next);
     if (s.status === "empty") store.updateSection(s.id, { status: "warn" });
-    toast("已插入範本段落");
+    goToSection(s.id);
+    toast(`已插入到「${s.n} ${s.title}」`);
   }
 } else if (pending && !editable()) {
   toast("目前身分無法插入範本到內文");
