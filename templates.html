@@ -87,6 +87,14 @@
         <div class="context-frame-bottom">
           <span class="context-path">workspace / prd-templates</span>
           <div class="context-actions">
+            <!-- 種類切換搬到標題列的動作區（原本在標題列下方自成一條 tab bar）。
+                 id 與 .tab class 都保持原樣 —— templates.ts 綁的是
+                 `#kind-tabs .tab` 與 data-kind，換 class 會靜默斷掉切換。 -->
+            <div class="tabs tabs-inline" id="kind-tabs" data-od-id="kind-tabs" role="group" aria-label="範本種類">
+              <button type="button" class="tab on" data-kind="full">整份 PRD 範本</button>
+              <button type="button" class="tab" data-kind="section">章節範本</button>
+              <button type="button" class="tab" data-kind="domain">領域包</button>
+            </div>
         <div class="search">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="var(--muted)"><path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"/></svg>
           <input id="q" type="search" placeholder="搜尋範本…" aria-label="搜尋範本" />
@@ -94,12 +102,6 @@
         <button type="button" class="btn" id="btn-custom" data-od-id="btn-custom">＋ 自訂範本</button>
           </div>
         </div>
-      </div>
-
-      <div class="tabs" id="kind-tabs" data-od-id="kind-tabs" role="group" aria-label="範本種類">
-        <button type="button" class="tab on" data-kind="full">整份 PRD 範本</button>
-        <button type="button" class="tab" data-kind="section">章節範本</button>
-        <button type="button" class="tab" data-kind="domain">領域包</button>
       </div>
 
       <!-- 分類隨種類換一組（整份五類 / 章節七類），由 templates.ts 產生 -->
@@ -110,8 +112,41 @@
           <span class="mono" id="count">—</span>
           <span class="spacer"></span>
           <span class="hint" id="kind-hint" style="margin:0">點卡片可預覽並插入目前 PRD</span>
+
+          <!-- 領域包分頁唯一的篩選器；範本分頁不顯示（它有分類 tab 與搜尋） -->
+          <label class="tv-filter" id="origin-filter-wrap" hidden>
+            <span>來源</span>
+            <select id="origin-filter" aria-label="依來源篩選領域包">
+              <option value="all">全部</option>
+              <option value="builtin">內建</option>
+              <option value="custom">自訂</option>
+              <option value="override">自訂（覆寫內建）</option>
+            </select>
+          </label>
+
+          <!-- 排序在兩種檢視都要能用：列表點表頭，卡片用這個下拉，共用同一份 state -->
+          <label class="tv-filter" id="sort-wrap">
+            <span>排序</span>
+            <select id="sort-select" aria-label="排序方式">
+              <option value="">預設順序</option>
+              <option value="title:asc">標題 ▲</option>
+              <option value="title:desc">標題 ▼</option>
+              <option value="cat:asc">分類 ▲</option>
+              <option value="outline:desc">段落多 → 少</option>
+              <option value="outline:asc">段落少 → 多</option>
+              <option value="uses:desc">使用多 → 少</option>
+              <option value="uses:asc">使用少 → 多</option>
+              <option value="source:asc">出處 ▲</option>
+            </select>
+          </label>
+
+          <div class="tv-switch" role="group" aria-label="顯示方式">
+            <button type="button" class="tv-btn on" data-view="cards" aria-pressed="true">卡片</button>
+            <button type="button" class="tv-btn" data-view="list" aria-pressed="false">列表</button>
+          </div>
         </div>
         <div class="grid-cards" id="grid" data-od-id="template-grid"></div>
+        <div class="tv-list-wrap" id="list-wrap" data-od-id="template-list" hidden></div>
       </div>
     </main>
   </div>
