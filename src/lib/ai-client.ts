@@ -31,8 +31,10 @@ function detectProvider(s: AISettings): AiReady["ok"] extends true
   : AiReady {
   const model = s.model;
   const key = (s.apiKey || "").trim();
+  const chosen = s.provider ?? "auto";
 
-  if (model === "local-smart") {
+  // Ollama 走 OpenAI 相容路徑且不需要付費 Key，所以它必須在 Key 檢查之前判掉。
+  if (model === "local-smart" || chosen === "ollama") {
     return { ok: true, provider: "custom" };
   }
 
@@ -41,6 +43,11 @@ function detectProvider(s: AISettings): AiReady["ok"] extends true
       ok: false,
       reason: "尚未設定 API Key。請至「偏好設定 → AI 模型」填入金鑰後儲存。",
     };
+  }
+
+  // 使用者講明了通路就照做。前綴推斷是猜，明示不是 —— 猜不該覆蓋知道的人。
+  if (chosen !== "auto") {
+    return { ok: true, provider: chosen };
   }
 
   if (model.startsWith("gemini")) {
@@ -58,7 +65,7 @@ function detectProvider(s: AISettings): AiReady["ok"] extends true
 export function getAiReadiness(): AiReady {
   const s = settings();
   // Ollama：不需付費 Key
-  if (s.model === "local-smart") {
+  if (s.model === "local-smart" || s.provider === "ollama") {
     const ep = (s.endpoint || "http://localhost:11434/v1").trim();
     if (!ep) {
       return { ok: false, reason: "請填 Ollama 端點，例如 http://localhost:11434/v1" };

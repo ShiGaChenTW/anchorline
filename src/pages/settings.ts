@@ -300,6 +300,18 @@ function renderFontScale() {
   });
 }
 
+/**
+ * 把使用者正在編輯的欄位排除在重畫之外。
+ *
+ * populateSettings 掛在 store.subscribe 上，所以**任何**一次寫入都會重畫全部欄位。
+ * 使用者游標還在裡面的那一個，重畫等於把他打到一半的字換成舊值，游標跳到尾端。
+ * 儲存路徑的先讀後寫已經處理了 saveSettings 這一條；這裡擋的是其他任何來源的
+ * emit（別的分頁、背景動作、之後才加的功能）。
+ */
+function skipIfEditing(el: HTMLElement | null): boolean {
+  return el !== null && document.activeElement === el;
+}
+
 function populateSettings() {
   const s = store.get().settings;
   renderFontScale();
@@ -322,13 +334,15 @@ function populateSettings() {
   const stEl = document.getElementById("linter-stories") as HTMLInputElement | null;
   const vagEl = document.getElementById("linter-vague") as HTMLInputElement | null;
 
-  if (modelEl) modelEl.value = s.model;
+  const providerEl = document.getElementById("ai-provider") as HTMLSelectElement | null;
+  if (providerEl && !skipIfEditing(providerEl)) providerEl.value = s.provider ?? "auto";
+  if (modelEl && !skipIfEditing(modelEl)) modelEl.value = s.model;
   if (tempEl) tempEl.value = String(s.temperature);
   if (tempValEl) tempValEl.textContent = String(s.temperature);
-  if (keyEl) keyEl.value = s.apiKey || "";
-  if (endpointEl) endpointEl.value = s.endpoint || "";
+  if (keyEl && !skipIfEditing(keyEl)) keyEl.value = s.apiKey || "";
+  if (endpointEl && !skipIfEditing(endpointEl)) endpointEl.value = s.endpoint || "";
   const localModelEl = document.getElementById("ai-local-model") as HTMLInputElement | null;
-  if (localModelEl) localModelEl.value = s.localModelName || "llama3.2";
+  if (localModelEl && !skipIfEditing(localModelEl)) localModelEl.value = s.localModelName || "llama3.2";
   if (personaEl) personaEl.value = s.persona;
   if (langEl) langEl.value = s.language;
   syncLocalModelUi();
@@ -538,48 +552,72 @@ document.getElementById("ai-temp")?.addEventListener("input", (e) => {
 
 function syncLocalModelUi() {
   const model = (document.getElementById("ai-model") as HTMLInputElement | null)?.value;
+  const provider = (document.getElementById("ai-provider") as HTMLSelectElement | null)?.value;
   const group = document.getElementById("local-model-group");
-  if (group) group.style.display = model === "local-smart" ? "" : "none";
+  // 選了 Ollama 通路也要看得到本機模型名稱欄位 —— 不是只有 model === local-smart
+  // 那條舊捷徑才算「在跑本機」。
+  if (group) group.style.display = model === "local-smart" || provider === "ollama" ? "" : "none";
 }
 
-document.getElementById("ai-model")?.addEventListener("input", () => {
-  const model = (document.getElementById("ai-model") as HTMLInputElement).value;
+/** 各通路的預設端點。使用者仍可覆寫 —— 這是起點，不是鎖。 */
+const PROVIDER_ENDPOINT: Record<string, string> = {
+  gemini: "https://generativelanguage.googleapis.com/v1beta",
+  openai: "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com",
+  ollama: "http://localhost:11434/v1",
+};
+
+/** 我們自己填過的端點才可以自動改掉；使用者手打的自訂端點絕不覆寫。 */
+const OURS = Object.values(PROVIDER_ENDPOINT);
+
+function applyProviderDefaults(provider: string) {
   const endpointEl = document.getElementById("ai-endpoint") as HTMLInputElement | null;
   const keyEl = document.getElementById("ai-key") as HTMLInputElement | null;
-  if (model === "local-smart" && endpointEl) {
-    if (
-      !endpointEl.value ||
-      endpointEl.value.includes("generativelanguage") ||
-      endpointEl.value.includes("openai.com") ||
-      endpointEl.value.includes("anthropic.com")
-    ) {
-      endpointEl.value = "http://localhost:11434/v1";
-    }
-    if (keyEl && !keyEl.value.trim()) keyEl.placeholder = "可填 ollama 或任意字";
+  const want = PROVIDER_ENDPOINT[provider];
+  if (endpointEl && want) {
+    const current = endpointEl.value.trim();
+    if (!current || OURS.includes(current)) endpointEl.value = want;
   }
-  if (model.startsWith("gemini") && endpointEl) {
-    if (!endpointEl.value || endpointEl.value.includes("11434") || endpointEl.value.includes("openai.com")) {
-      endpointEl.value = "https://generativelanguage.googleapis.com/v1beta";
-    }
-  }
-  if (model.startsWith("gpt") && endpointEl) {
-    if (!endpointEl.value || endpointEl.value.includes("11434") || endpointEl.value.includes("generativelanguage")) {
-      endpointEl.value = "https://api.openai.com/v1";
-    }
-  }
-  if (model.startsWith("claude") && endpointEl) {
-    if (!endpointEl.value || endpointEl.value.includes("11434") || endpointEl.value.includes("generativelanguage")) {
-      endpointEl.value = "https://api.anthropic.com";
-    }
+  if (provider === "ollama" && keyEl && !keyEl.value.trim()) {
+    keyEl.placeholder = "可填 ollama 或任意字";
   }
   syncLocalModelUi();
+}
+
+document.getElementById("ai-provider")?.addEventListener("change", () => {
+  const provider = (document.getElementById("ai-provider") as HTMLSelectElement).value;
+  applyProviderDefaults(provider);
+});
+
+document.getElementById("ai-model")?.addEventListener("input", () => {
+  // 通路是明示的就別動端點 —— 使用者已經講了要走哪裡，模型 ID 沒有發言權。
+  const provider = (document.getElementById("ai-provider") as HTMLSelectElement | null)?.value ?? "auto";
+  if (provider !== "auto") {
+    syncLocalModelUi();
+    return;
+  }
+  const model = (document.getElementById("ai-model") as HTMLInputElement).value;
+  if (model === "local-smart") applyProviderDefaults("ollama");
+  else if (model.startsWith("gemini")) applyProviderDefaults("gemini");
+  else if (model.startsWith("gpt")) applyProviderDefaults("openai");
+  else if (model.startsWith("claude")) applyProviderDefaults("anthropic");
+  else syncLocalModelUi();
 });
 
 function saveSettings() {
-  // **必須在 updateSettings 之前**：updateSettings 會 emit，訂閱者立刻重跑
-  // populateSettings 把 textarea 用「已存的舊值」重畫，之後再讀就讀到被清空的框。
-  saveCurrentDomainFields();
+  // **先把畫面上的值全部讀完，再做任何 store 寫入。**
+  //
+  // 每一次 store 寫入都會 emit，訂閱者立刻重跑 populateSettings，把每個欄位用
+  // 「已存的舊值」重畫。所以只要在寫入之後才讀某個欄位，讀到的就是舊值 ——
+  // 使用者剛打的字被自己的儲存動作吃掉。
+  //
+  // 原本的寫法只把 saveCurrentDomainFields() 提到 updateSettings 之前，但它自己
+  // 就會寫 store（setDomainWriteField / setDomainSectionPrompt，每個 section 一次），
+  // 而底下這些欄位是在它之後才讀的。實測一次 change 事件讓 #ai-model 被舊值覆寫
+  // 10 次，打進去的模型 ID 完全存不下來。分界線在這裡，不在函式呼叫的順序。
   const model = (document.getElementById("ai-model") as HTMLInputElement).value as AISettings["model"];
+  const provider = ((document.getElementById("ai-provider") as HTMLSelectElement | null)?.value ??
+    "auto") as AISettings["provider"];
   const temperature = Number((document.getElementById("ai-temp") as HTMLInputElement).value);
   const apiKey = (document.getElementById("ai-key") as HTMLInputElement).value.trim();
   const endpoint = (document.getElementById("ai-endpoint") as HTMLInputElement).value.trim();
@@ -607,8 +645,12 @@ function saveSettings() {
   const reduceMotion =
     (document.getElementById("editor-reduce-motion") as HTMLInputElement | null)?.checked === true;
 
+  // 讀完了，從這裡開始才可以寫。
+  saveCurrentDomainFields();
+
   store.updateSettings({
     model,
+    provider,
     temperature,
     apiKey: apiKey || (model === "local-smart" ? "ollama" : ""),
     endpoint:

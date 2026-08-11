@@ -275,12 +275,23 @@ export type DomainWriteConfig = {
   inherit?: string[];
 };
 
+/**
+ * API 通路。`auto` 沿用舊行為（用模型 ID 前綴猜），其餘是使用者的明示指定。
+ *
+ * 前綴推斷對 `gemini-*` / `claude-*` / `gpt-*` 以外的任何東西都會失敗 ——
+ * 自架 gateway、Azure 部署名、OpenRouter 的 `vendor/model` 寫法、任何改名過的
+ * 模型，全部掉進 custom。通路是使用者知道而我們猜不到的事實，讓他直接講。
+ */
+export type AIProvider = "auto" | "gemini" | "openai" | "anthropic" | "ollama" | "custom";
+
 export type AISettings = {
   /**
    * 模型名稱自由填。寫死聯集只會在下一次模型改版時過期，
-   * 而使用者永遠比這份型別新。供應商靠前綴判斷（gemini/claude/gpt/local-smart）。
+   * 而使用者永遠比這份型別新。
    */
   model: string;
+  /** 預設 auto —— 舊設定沒有這個欄位，讀進來就是 undefined，行為與從前相同。 */
+  provider?: AIProvider;
   apiKey: string;
   endpoint: string;
   /**
