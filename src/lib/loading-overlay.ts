@@ -36,9 +36,12 @@ export function showLoading(text: string, opts: LoadingOpts = {}) {
     el.setAttribute("aria-live", "polite");
     document.body.appendChild(el);
   }
+  // 進度條是**不定量**的：我們不知道要跑多久，所以不假裝有百分比。
+  // 一條會來回跑的填色比三顆點更能表達「還在動」，而假的百分比會讓人
+  // 盯著它算什麼時候好 —— 那個數字是編的。
   el.innerHTML = `<div class="load-box">
-    <span class="load-dots" aria-hidden="true"><i></i><i></i><i></i></span>
     <p class="load-text"></p>
+    <span class="load-bar" role="progressbar" aria-label="讀取中"><i></i></span>
   </div>`;
   // 文字走 textContent，不進 innerHTML —— 呼叫端傳什麼字串都不該變成標記
   const t = el.querySelector(".load-text");
