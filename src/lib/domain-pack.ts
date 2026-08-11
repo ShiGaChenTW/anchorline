@@ -79,6 +79,20 @@ function normalizeSection(p: SectionPatch, order: number): Section {
   };
 }
 
+/**
+ * 把範本改名成使用者要的新包。只換 `name` 與 `displayName` 兩行 ——
+ * 註解與結構原樣留著，那正是使用者要照著改的東西。
+ *
+ * `name` 是專案存的識別碼，非英數底線的字元一律換成 `_`；留著中文的話
+ * 專案存的 domain 會對不上任何一個包，症狀是「選好的領域下次開回到通用」。
+ */
+export function renamePackSource(template: string, name: string): string {
+  const safe = name.trim().replace(/[^A-Za-z0-9_]/g, "_").replace(/^_+/, "") || "my_domain";
+  return template
+    .replace(/^name:.*$/m, `name: ${safe}`)
+    .replace(/^displayName:.*$/m, `displayName: ${name.trim() || safe}`);
+}
+
 export function parseDomainPack(raw: string, sourceHint = "<inline>"): DomainPack {
   const m = FRONTMATTER.exec(raw);
   if (!m) throw new DomainPackError(`${sourceHint}：缺少 --- frontmatter ---`);
@@ -185,10 +199,12 @@ export type ValidatedPack = { ok: true; pack: DomainPack } | { ok: false; reason
  * 放在這個檔而不是 `domain-pack-author.ts`：那個檔 import 了 ai-client → store
  * → `import.meta.glob`，`bun test` 載不進來。閘門必須測得到。
  */
-export function validatePackStructure(raw: string): ValidatedPack {
+export function validatePackStructure(raw: string, sourceHint = "領域包"): ValidatedPack {
   let pack: DomainPack;
   try {
-    pack = parseDomainPack(raw, "AI 產出");
+    // 錯誤訊息會直接顯示給使用者。寫死「AI 產出」在手動編輯時就是假訊息 ——
+    // 他明明是自己打的，卻被告知 AI 產出有問題
+    pack = parseDomainPack(raw, sourceHint);
   } catch (e) {
     return { ok: false, reason: e instanceof DomainPackError ? e.message : String(e) };
   }
