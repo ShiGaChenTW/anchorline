@@ -62,7 +62,10 @@ impl RegisteredRoots {
         let Ok(st) = self.store.lock() else { return };
         let Some(path) = st.as_ref() else { return };
         let Ok(set) = self.set.lock() else { return };
-        let list: Vec<String> = set.iter().map(|p| p.to_string_lossy().to_string()).collect();
+        let list: Vec<String> = set
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
@@ -185,12 +188,7 @@ pub fn why_not_editable(p: &Path) -> String {
         .map(|e| e.to_ascii_lowercase());
     match ext {
         Some(e) if EDITABLE_EXTS.contains(&e.as_str()) => {}
-        Some(e) => {
-            return format!(
-                "不支援 .{e} 這種檔案，只能開 {}",
-                EDITABLE_EXTS.join(" / ")
-            )
-        }
+        Some(e) => return format!("不支援 .{e} 這種檔案，只能開 {}", EDITABLE_EXTS.join(" / ")),
         None => return "這個路徑沒有副檔名，判斷不出是不是文件檔".into(),
     }
     // `exists()` / `is_file()` 把「不存在」與「不准看」混成同一個 false。
