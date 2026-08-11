@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PRD 審閱監控 · Anchorline</title>
+<link rel="stylesheet" href="shared.css" />
+<script>(function(){try{var t=localStorage.getItem("anchorline:theme")||localStorage.getItem("specforge:theme");if(t==="warp")t="terminal";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"],terminal:["dark","#0d0b08"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
+</head>
+<body>
+<div class="app" data-od-id="app-write">
+  <div class="shell">
+    <aside class="rail" data-od-id="rail">
+            <div class="rail-brand">
+        <div class="rail-logo">AL</div>
+        <div class="rail-brand-text">
+          <strong>Anchorline</strong>
+          <span>anchorline.local</span>
+        </div>
+      </div>
+      <div class="rail-theme-row">
+        <div class="theme-switch rail-theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
+          <button type="button" data-theme-value="kami" aria-pressed="false">LIGHT</button>
+          <button type="button" data-theme-value="github" aria-pressed="true">DARK</button>
+          <button type="button" data-theme-value="terminal" aria-pressed="false">TERMINAL</button>
+        </div>
+      </div>
+
+      <nav class="rail-nav">
+        <div class="nav-label">工作區</div>
+        <a class="nav-item" href="editor.html" data-od-id="nav-editor">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086zM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064l6.286-6.286z"/></svg>
+          編輯工作台
+        </a>
+        <a class="nav-item active" href="write.html" data-od-id="nav-write">
+          PRD 審閱監控
+        </a>
+        <a class="nav-item" href="templates.html" data-od-id="nav-templates">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v3.5A1.75 1.75 0 0 1 14.25 7H1.75A1.75 1.75 0 0 1 0 5.25v-3.5zM1.75 1a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25H1.75zM0 10.75C0 9.784.784 9 1.75 9h12.5c.966 0 1.75.784 1.75 1.75v3.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25v-3.5zm1.75-.75a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25H1.75z"/></svg>
+          章節範本
+        </a>
+        <a class="nav-item" href="review.html" data-od-id="nav-review">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 8a6.5 6.5 0 1 1 13 0 6.5 6.5 0 0 1-13 0zM8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm.75 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .471.696l2.5 1a.75.75 0 0 0 .557-1.392l-2.028-.811V4.75z"/></svg>
+          審閱佇列
+        </a>
+        <a class="nav-item" href="tracking.html" data-od-id="nav-tracking">
+          計劃追蹤
+        </a>
+
+
+<a class="nav-item" href="settings.html" data-od-id="nav-settings">
+          <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm0 14.5a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13zM6.5 8a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z"/></svg>
+          偏好設定
+        </a>
+      </nav>
+      <div class="rail-foot rail-foot--user" aria-label="目前使用者">
+        <div class="rail-user">
+          <div class="avatar" data-user-avatar aria-hidden="true">S</div>
+          <div class="rail-user-body">
+            <div class="rail-user-top">
+              <div class="rail-foot-meta" data-user-meta>
+                <div class="rail-foot-name">—</div>
+                <div class="rail-foot-title">—</div>
+              </div>
+              <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout title="登出">登出</button>
+            </div>
+            <div class="rail-user-role-row">
+              <span class="role-badge role-tone-editor" data-user-role-badge>—</span>
+              <span class="rail-user-kind" data-user-kind>人員</span>
+            </div>
+            <div class="rail-user-perms" data-user-perms role="list" aria-label="權限摘要">
+              <span class="perm-chip" role="listitem">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main" data-od-id="main-write">
+      <div class="toolbar" data-od-id="toolbar">
+        <div>
+          <h1 data-od-id="page-title">PRD 審閱監控</h1>
+          <div class="sub" data-od-id="page-sub">載入中…</div>
+        </div>
+        <div class="spacer"></div>
+        <button type="button" class="btn btn-sm" id="btn-aiw-refresh">重新整理</button>
+        <button type="button" class="btn btn-primary" id="btn-aiw-write">AI 撰寫</button>
+        <a class="btn" href="editor.html" data-od-id="btn-editor">編輯工作台</a>
+        <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
+      </div>
+
+      <div class="content aiw-content">
+        <div id="aiw-root" aria-live="polite"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- 瀏覽器選夾 fallback：不可用 [hidden]，會擋掉 dialog -->
+<input type="file" id="aiw-folder-input" class="visually-hidden-file" webkitdirectory directory multiple
+       aria-hidden="true" tabindex="-1" />
+
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module" src="/src/pages/write.ts"></script>
+</body>
+</html>

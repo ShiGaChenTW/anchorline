@@ -24,6 +24,7 @@ import type {
   AISettings,
   AppState,
   Approval,
+  CaseDecision,
   CaseRecord,
   CaseStage,
   Comment,
@@ -44,6 +45,7 @@ import {
   changedFieldCount,
   pickBaseline,
   pickLatestCommit,
+  stageBlockedBy,
   stagesAfterResubmit,
 } from "../lib/prd-versions";
 import { canResolveComment, migrateComments, projectOfComment } from "../lib/comment-scope";
@@ -138,8 +140,22 @@ function approvalsFromCase(c: CaseRecord | undefined): Approval[] {
     role: s.name,
     name: s.assigneeName,
     assigneeId: s.assigneeId ?? undefined,
-    state: s.state === "skipped" ? "empty" : s.state,
+    // 已停用的 Approval 只有三態；`skipped` 與 `changes_requested` 都沒有對應詞，
+    // 前者退成「未指派」、後者退成「審閱中」—— 這個鏡像只餵舊的審閱頁，
+    // 真相在 CaseStage
+    state: s.state === "skipped" ? "empty" : s.state === "changes_requested" ? "pending" : s.state,
   }));
+}
+
+function canSignStageInternal(
+  u: Employee,
+  stage: CaseStage,
+  c: CaseRecord | undefined,
+): boolean {
+  if (stageBlockedBy(stage, c?.stages ?? [])) return false;
+  if (u.accessRole === "admin") return true;
+  if (stage.assigneeId === u.id) return true;
+  return !stage.assigneeId && u.accessRole === "approver";
 }
 
 function caseFromWorkflow(
@@ -160,11 +176,15 @@ function caseFromWorkflow(
         assigneeId: emp?.id ?? null,
         assigneeName: emp ? emp.name : "待指派",
         state: emp ? ("pending" as const) : ("empty" as const),
+        mode: w.mode ?? "parallel",
+        required: w.required,
       };
     });
   return {
     projectId,
     stages,
+    round: 1,
+    log: [],
     reviewCommitId: null,
     withdrawn: false,
     withdrawnAt: null,
@@ -370,13 +390,34 @@ function load(): AppState {
       structuredClone(GHOST_USER);
     if (!sessionUser) session = null;
 
-    const workflowStages =
+    // 移轉：既有關卡一律補 `parallel`。**不能給 sequential** —— 那會讓升級後
+    // 跑到一半的案子突然多出順序閘門，第二關的人按不下去卻不知道為什麼。
+    const workflowStages = (
       Array.isArray(parsed.workflowStages) && parsed.workflowStages.length
         ? (parsed.workflowStages as WorkflowStageDef[])
-        : base.workflowStages;
-    const cases: Record<string, CaseRecord> = {
-      ...(parsed.cases ?? {}),
-    };
+        : base.workflowStages
+    ).map((w) => ({ ...w, mode: w.mode ?? ("parallel" as const) }));
+
+    // 個案同樣補：round 從 1 起算、log 給空陣列、關卡補 mode 與 required。
+    // 舊個案沒有決策紀錄可以還原，紀錄從這一版之後才開始長。
+    const cases: Record<string, CaseRecord> = Object.fromEntries(
+      Object.entries((parsed.cases ?? {}) as Record<string, CaseRecord>).map(([k, c]) => {
+        const defByStageId = Object.fromEntries(workflowStages.map((w) => [w.id, w]));
+        return [
+          k,
+          {
+            ...c,
+            round: c.round ?? 1,
+            log: Array.isArray(c.log) ? c.log : [],
+            stages: (c.stages ?? []).map((st) => ({
+              ...st,
+              mode: st.mode ?? defByStageId[st.stageDefId]?.mode ?? "parallel",
+              required: st.required ?? defByStageId[st.stageDefId]?.required ?? true,
+            })),
+          },
+        ];
+      }),
+    );
     const activeProjectId =
       parsed.activeProjectId && projects.some((p) => p.id === parsed.activeProjectId)
         ? parsed.activeProjectId
@@ -1572,7 +1613,32 @@ export const store = {
     emit();
   },
 
-  approveAndLock(): { ok: boolean; reason?: string; allDone?: boolean } {
+  /**
+   * 簽核。
+   *
+   * `stageIds` 給了就**只簽那幾關**；不給維持原本的「簽我能簽的全部」。
+   * 這個差別是簽核管理頁需要的：在那裡按某一關的核准，不該順手把其他關也簽掉
+   * （admin 尤其明顯 —— 舊行為對 admin 是一鍵全簽）。
+   *
+   * `comment` 是簽核意見，連同時間與簽核者一起寫進被簽的那幾關。
+   */
+  approveAndLock(
+    opts: {
+      comment?: string;
+      stageIds?: string[];
+      /**
+       * 管理員代簽。**理由必填**，而且每一關都會單獨留一筆 `override` 決策 ——
+       * 四眼原則要的是「看得到」：不禁止一個人走完流程，但那件事必須在紀錄上
+       * 跟一般核准長得不一樣。
+       */
+      override?: { reason: string };
+    } = {},
+  ): {
+    ok: boolean;
+    reason?: string;
+    allDone?: boolean;
+    signed?: number;
+  } {
     const project =
       state.projects.find((p) => p.id === state.activeProjectId) ??
       state.projects.find((p) => p.id === "p1") ??
@@ -1584,42 +1650,66 @@ export const store = {
     if (!check.ok) return check;
 
     const u = state.currentUser;
-    const stages = (c?.stages ?? []).map((s) => {
-      if (s.state === "pending" || s.state === "empty") {
-        // 僅簽自己的關卡，或 admin 可簽全部 pending
-        if (
-          u.accessRole === "admin" ||
-          s.assigneeId === u.id ||
-          (!s.assigneeId && u.accessRole === "approver")
-        ) {
-          return {
-            ...s,
-            state: "approved" as const,
-            assigneeId: s.assigneeId ?? u.id,
-            assigneeName: `${u.name} · 已簽`,
-          };
-        }
-      }
-      return s;
-    });
-    // 若仍有 required pending，允許 admin 一鍵全簽
-    let nextStages = stages;
-    if (u.accessRole === "admin" || stages.every((s) => s.state === "approved" || s.state === "skipped")) {
-      nextStages = stages.map((s) =>
-        s.state === "approved" || s.state === "skipped"
-          ? s
-          : {
-              ...s,
-              state: "approved" as const,
-              assigneeId: s.assigneeId ?? u.id,
-              assigneeName: `${u.name} · 已簽`,
-            },
-      );
+    if (opts.override && u.accessRole !== "admin") {
+      return { ok: false, reason: "只有管理員可以代簽" };
     }
+    if (opts.override && !opts.override.reason.trim()) {
+      return { ok: false, reason: "代簽一定要寫理由 —— 那是紀錄上唯一說得出「為什麼一個人簽完全部」的地方" };
+    }
+
+    const only = opts.stageIds?.length ? new Set(opts.stageIds) : null;
+    const at = new Date().toISOString();
+    const round = c?.round ?? 1;
+    const decisions: CaseDecision[] = [];
+    let signed = 0;
+
+    const sign = (s: CaseStage, kind: "approved" | "override"): CaseStage => {
+      signed++;
+      const comment = (kind === "override" ? opts.override!.reason : (opts.comment ?? "")).trim();
+      decisions.push({
+        id: `d-${at}-${s.id}-${decisions.length}`,
+        stageId: s.id,
+        round,
+        at,
+        byId: u.id,
+        byName: u.name,
+        kind,
+        comment,
+      });
+      return {
+        ...s,
+        state: "approved" as const,
+        assigneeId: s.assigneeId ?? u.id,
+        assigneeName: `${u.name} · 已簽`,
+        decidedAt: at,
+        decidedById: u.id,
+        decidedByName: u.name,
+        ...(comment ? { comment } : {}),
+      };
+    };
+
+    const open = (s: CaseStage) =>
+      s.state === "pending" || s.state === "empty" || s.state === "changes_requested";
+
+    const stages = (c?.stages ?? []).map((s) => {
+      if (only && !only.has(s.id)) return s;
+      if (!open(s)) return s;
+      if (opts.override) return sign(s, "override");
+      if (!canSignStageInternal(u, s, c)) return s;
+      return sign(s, "approved");
+    });
+
+    // 代簽以外，不再有 admin 的隱形一鍵全簽 —— 舊行為是「只要你是 admin，
+    // 按一次就把所有未簽關卡吃掉」，畫面上完全看不出來發生了什麼事
+    const nextStages = stages;
+    if (only && signed === 0) return { ok: false, reason: "這一關現在不是你可以簽的" };
+    if (!only && signed === 0) return { ok: false, reason: "現在沒有你可以簽的關卡" };
     const allDone = allStagesSettled(nextStages);
+    const base0 = c ?? caseFromWorkflow(project.id, state.workflowStages, state.employees);
     const nextCase: CaseRecord = {
-      ...(c ?? caseFromWorkflow(project.id, state.workflowStages, state.employees)),
+      ...base0,
       stages: nextStages,
+      log: [...(base0.log ?? []), ...decisions],
       locked: allDone,
       withdrawn: false,
     };
@@ -1644,16 +1734,175 @@ export const store = {
       count: nextStages.filter((s) => s.state === "approved").length,
     });
     emit();
-    return { ok: true, allDone };
+    return { ok: true, allDone, signed };
+  },
+
+  /**
+   * 要求修改 —— 審閱者的負向決策。
+   *
+   * 這是這套流程原本完全缺席的一半：以前發現問題時唯一能做的是「不按核准」，
+   * 而那在畫面上跟「還沒輪到他」一模一樣。理由必填，因為作者要靠它知道改什麼。
+   *
+   * 不動專案狀態（仍是 review）—— 「待修正」由關卡推導。那個狀態詞彙表牽動
+   * 專案清單、總覽、側欄三處，為了這件事去動它不划算。
+   */
+  requestChanges(stageId: string, comment: string): { ok: boolean; reason?: string } {
+    const project = state.projects.find((p) => p.id === state.activeProjectId);
+    if (!project) return { ok: false, reason: "找不到專案" };
+    const c = state.cases[project.id];
+    if (!c) return { ok: false, reason: "這個專案還沒有簽核個案" };
+    if (c.withdrawn) return { ok: false, reason: "此案已抽單" };
+    const body = comment.trim();
+    if (!body) return { ok: false, reason: "要求修改一定要寫理由 —— 作者要靠它知道改什麼" };
+
+    const u = state.currentUser;
+    const check = canApproveProject(u, project);
+    if (!check.ok) return check;
+    const stage = c.stages.find((x) => x.id === stageId);
+    if (!stage) return { ok: false, reason: "找不到這一關" };
+    if (!canSignStageInternal(u, stage, c)) return { ok: false, reason: "這一關現在不是你可以動的" };
+
+    const at = new Date().toISOString();
+    const decision: CaseDecision = {
+      id: `d-${at}-${stageId}`,
+      stageId,
+      round: c.round ?? 1,
+      at,
+      byId: u.id,
+      byName: u.name,
+      kind: "changes_requested",
+      comment: body,
+    };
+    const nextCase: CaseRecord = {
+      ...c,
+      // 要求修改會解鎖：案子不再是「全部通過」的狀態
+      locked: false,
+      stages: c.stages.map((x) =>
+        x.id === stageId
+          ? {
+              ...x,
+              state: "changes_requested" as const,
+              decidedAt: at,
+              decidedById: u.id,
+              decidedByName: u.name,
+              comment: body,
+            }
+          : x,
+      ),
+      log: [...(c.log ?? []), decision],
+    };
+    state = {
+      ...state,
+      cases: { ...state.cases, [project.id]: nextCase },
+      locked: false,
+      projects: state.projects.map((p) =>
+        p.id === project.id ? { ...p, status: "review" as const, updated: "剛剛" } : p,
+      ),
+    };
+    syncApprovalsFromActiveCase();
+    audit(state, project.id, "gate.fail", `prd:${project.id}`, { stage: stage.name });
+    emit();
+    return { ok: true };
+  },
+
+  /**
+   * 保留意見 —— 留話但**不改變關卡狀態**（GitHub PR review 的第三態）。
+   *
+   * 為什麼值得有：多數審閱意見不是「這樣不行」而是「這裡我有疑問」。
+   * 逼人在核准與駁回之間二選一，結果是意見被寫進別的地方，或乾脆不說。
+   */
+  addStageComment(stageId: string, comment: string): { ok: boolean; reason?: string } {
+    const project = state.projects.find((p) => p.id === state.activeProjectId);
+    if (!project) return { ok: false, reason: "找不到專案" };
+    const c = state.cases[project.id];
+    if (!c) return { ok: false, reason: "這個專案還沒有簽核個案" };
+    const body = comment.trim();
+    if (!body) return { ok: false, reason: "意見是空的" };
+    const stage = c.stages.find((x) => x.id === stageId);
+    if (!stage) return { ok: false, reason: "找不到這一關" };
+
+    const u = state.currentUser;
+    const at = new Date().toISOString();
+    const decision: CaseDecision = {
+      id: `d-${at}-${stageId}-c`,
+      stageId,
+      round: c.round ?? 1,
+      at,
+      byId: u.id,
+      byName: u.name,
+      kind: "comment",
+      comment: body,
+    };
+    state = {
+      ...state,
+      cases: { ...state.cases, [project.id]: { ...c, log: [...(c.log ?? []), decision] } },
+    };
+    emit();
+    return { ok: true };
+  },
+
+  /**
+   * 略過一個**非必簽**關卡。
+   *
+   * `skipped` 這個狀態在型別裡躺了很久卻沒有任何程式路徑能產生它，
+   * 所以「非必簽」等於沒有出口。這支就是那個出口。必簽關卡不給略過 ——
+   * 那會讓 required 這個設定變成裝飾。
+   */
+  skipStage(stageId: string, comment: string): { ok: boolean; reason?: string } {
+    const project = state.projects.find((p) => p.id === state.activeProjectId);
+    if (!project) return { ok: false, reason: "找不到專案" };
+    const c = state.cases[project.id];
+    if (!c) return { ok: false, reason: "這個專案還沒有簽核個案" };
+    const stage = c.stages.find((x) => x.id === stageId);
+    if (!stage) return { ok: false, reason: "找不到這一關" };
+    if (stage.required !== false) return { ok: false, reason: "必簽關卡不能略過" };
+    const u = state.currentUser;
+    if (u.accessRole !== "admin" && stage.assigneeId !== u.id) {
+      return { ok: false, reason: "只有這一關的負責人或管理員可以略過" };
+    }
+
+    const at = new Date().toISOString();
+    const body = comment.trim();
+    const nextStages = c.stages.map((x) =>
+      x.id === stageId
+        ? { ...x, state: "skipped" as const, decidedAt: at, decidedById: u.id, decidedByName: u.name, ...(body ? { comment: body } : {}) }
+        : x,
+    );
+    const allDone = allStagesSettled(nextStages);
+    state = {
+      ...state,
+      cases: {
+        ...state.cases,
+        [project.id]: {
+          ...c,
+          stages: nextStages,
+          locked: allDone,
+          log: [
+            ...(c.log ?? []),
+            { id: `d-${at}-${stageId}-s`, stageId, round: c.round ?? 1, at, byId: u.id, byName: u.name, kind: "skipped" as const, comment: body },
+          ],
+        },
+      },
+      locked: allDone,
+    };
+    syncApprovalsFromActiveCase();
+    emit();
+    return { ok: true };
   },
 
   submitForReview(projectId?: string, commitId?: string) {
+    // 只有「真的有東西變了」才算新的一輪：換了快照，或上一輪有人要求修改。
+    // 同一份內容重按送審不該把輪次灌高，那會讓紀錄的分組失去意義。
     const id = projectId ?? state.activeProjectId ?? "p1";
     const existing = state.cases[id];
     const c =
       existing && !existing.withdrawn
         ? existing
         : caseFromWorkflow(id, state.workflowStages, state.employees);
+    const nextRound =
+      Boolean(c.stages.length) &&
+      (Boolean(commitId && commitId !== c.reviewCommitId) ||
+        c.stages.some((x) => x.state === "changes_requested"));
     state = {
       ...state,
       activeProjectId: id,
@@ -1667,6 +1916,9 @@ export const store = {
           // 沿用舊簽核等於把「工程看過 V1」當成「工程看過 V2」—— 簽核軌跡
           // 會顯示已過關，但那一關的人根本沒看過現在要合併的內容。
           stages: stagesAfterResubmit(c.stages, c.reviewCommitId ?? null, commitId ?? null),
+          // 進入新一輪。紀錄靠它講得出因果：「第 1 輪資安要求修改 → 第 2 輪重送」
+          round: (c.round ?? 1) + (nextRound ? 1 : 0),
+          log: c.log ?? [],
           withdrawn: false,
           withdrawnAt: null,
           withdrawnBy: null,
@@ -1701,6 +1953,8 @@ export const store = {
       name: partial?.name ?? `關卡 ${state.workflowStages.length + 1}`,
       defaultAssigneeId: partial?.defaultAssigneeId ?? null,
       required: partial?.required ?? true,
+      // 新關卡預設串行（市場常態）；既有關卡在移轉時給 parallel 以保留現行行為
+      mode: partial?.mode ?? "sequential",
     };
     state = { ...state, workflowStages: [...state.workflowStages, stage] };
     emit();

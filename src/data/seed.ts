@@ -321,10 +321,10 @@ export const GHOST_USER: Employee = {
 
 /** 正式版預設簽核流：不綁示範 Agent */
 export const SEED_WORKFLOW_PROD: WorkflowStageDef[] = [
-  { id: "ws-eng", order: 1, name: "工程", defaultAssigneeId: null, required: true },
-  { id: "ws-design", order: 2, name: "設計", defaultAssigneeId: null, required: true },
-  { id: "ws-sec", order: 3, name: "資安", defaultAssigneeId: null, required: true },
-  { id: "ws-legal", order: 4, name: "法務", defaultAssigneeId: null, required: false },
+  { id: "ws-eng", order: 1, name: "工程", defaultAssigneeId: null, required: true, mode: "sequential" },
+  { id: "ws-design", order: 2, name: "設計", defaultAssigneeId: null, required: true, mode: "parallel" },
+  { id: "ws-sec", order: 3, name: "資安", defaultAssigneeId: null, required: true, mode: "parallel" },
+  { id: "ws-legal", order: 4, name: "法務", defaultAssigneeId: null, required: false, mode: "sequential" },
 ];
 
 /** 把章節骨架清空為可填寫空白（正式版用） */
@@ -578,10 +578,10 @@ export const SEED_APPROVALS: Approval[] = [
 
 /** 預設簽核流程設計 */
 export const SEED_WORKFLOW: WorkflowStageDef[] = [
-  { id: "ws-eng", order: 1, name: "工程", defaultAssigneeId: "codex-approve", required: true },
-  { id: "ws-design", order: 2, name: "設計", defaultAssigneeId: "grok-approve", required: true },
-  { id: "ws-sec", order: 3, name: "資安", defaultAssigneeId: "claude-approve", required: true },
-  { id: "ws-legal", order: 4, name: "法務", defaultAssigneeId: "agy-approve", required: false },
+  { id: "ws-eng", order: 1, name: "工程", defaultAssigneeId: "codex-approve", required: true, mode: "sequential" },
+  { id: "ws-design", order: 2, name: "設計", defaultAssigneeId: "grok-approve", required: true, mode: "parallel" },
+  { id: "ws-sec", order: 3, name: "資安", defaultAssigneeId: "claude-approve", required: true, mode: "parallel" },
+  { id: "ws-legal", order: 4, name: "法務", defaultAssigneeId: "agy-approve", required: false, mode: "sequential" },
 ];
 
 export function buildSeedCase(projectId: string, employees: Employee[]): CaseRecord {
@@ -597,11 +597,15 @@ export function buildSeedCase(projectId: string, employees: Employee[]): CaseRec
       assigneeId: emp?.id ?? null,
       assigneeName: seed?.name ?? (emp ? emp.name : "待指派"),
       state: (seed?.state ?? "empty") as CaseRecord["stages"][0]["state"],
+      mode: w.mode,
+      required: w.required,
     };
   });
   return {
     projectId,
     stages,
+    round: 1,
+    log: [],
     reviewCommitId: null,
     withdrawn: false,
     withdrawnAt: null,

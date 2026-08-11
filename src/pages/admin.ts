@@ -235,7 +235,15 @@ if (__authed) {
             <label style="font-size:11px;color:var(--muted)">預設簽核人
               <select class="st-assignee" style="width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:6px 8px">${opts}</select>
             </label>
-            <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:18px">
+            <label style="font-size:11px;color:var(--muted)">順序
+              <select class="st-mode" style="width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:6px 8px"
+                      title="串行＝要等前面的關卡結案才輪得到；並行＝隨時可簽">
+                <option value="sequential" ${(s.mode ?? "parallel") === "sequential" ? "selected" : ""}>串行（等前面結案）</option>
+                <option value="parallel" ${(s.mode ?? "parallel") === "parallel" ? "selected" : ""}>並行（隨時可簽）</option>
+              </select>
+            </label>
+            <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:18px"
+                   title="非必簽的關卡不擋結案，而且可以被明確略過">
               <input type="checkbox" class="st-req" ${s.required ? "checked" : ""} /> 必簽關卡
             </label>
           </div>
@@ -270,7 +278,8 @@ if (__authed) {
         const defaultAssigneeId =
           (el.querySelector(".st-assignee") as HTMLSelectElement).value || null;
         const required = (el.querySelector(".st-req") as HTMLInputElement).checked;
-        store.updateWorkflowStage(id, { name, defaultAssigneeId, required });
+        const mode = (el.querySelector(".st-mode") as HTMLSelectElement).value as "sequential" | "parallel";
+        store.updateWorkflowStage(id, { name, defaultAssigneeId, required, mode });
         toast("已更新關卡");
         renderWorkflow();
       });

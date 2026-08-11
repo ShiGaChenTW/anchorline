@@ -54,6 +54,8 @@ export function bindModalDismiss(id: string) {
 export type MobileNavPage =
   | "projects"
   | "editor"
+  | "write"
+  | "signoff"
   | "templates"
   | "review"
   | "tracking"
@@ -79,8 +81,8 @@ export function initMobileNav(active: MobileNavPage) {
   ];
   // admin / agents / templates 落在「設定」鄰近；若當前是這些頁，高亮設定或對應項
   const highlight =
-    active === "admin" || active === "agents" || active === "templates"
-      ? active === "templates"
+    active === "admin" || active === "agents" || active === "templates" || active === "write"
+      ? active === "templates" || active === "write"
         ? "editor"
         : "settings"
       : active;

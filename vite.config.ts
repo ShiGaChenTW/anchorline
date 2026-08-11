@@ -38,6 +38,8 @@ export default defineConfig({
         onboarding: resolve(root, "onboarding.html"),
         projects: resolve(root, "projects.html"),
         editor: resolve(root, "editor.html"),
+        write: resolve(root, "write.html"),
+        signoff: resolve(root, "signoff.html"),
         dashboard: resolve(root, "dashboard.html"),
         overview: resolve(root, "overview.html"),
         templates: resolve(root, "templates.html"),

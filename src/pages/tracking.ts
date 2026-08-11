@@ -15,6 +15,7 @@ import { initTheme } from "../lib/theme";
 import { sortByRecency, trackingTarget } from "../lib/tracking";
 import {
   canScanPlans,
+  openspecRootsOf,
   plansDirsOf,
   requestTrackingScan,
 } from "../lib/tracking-bridge";
@@ -120,10 +121,11 @@ if (__authed) {
   async function loadLive(): Promise<boolean> {
     const st = store.get();
     const dirs = plansDirsOf(st.projects, st.activeProjectId);
+    const osRoots = openspecRootsOf(st.projects, st.activeProjectId);
     // 選取的專案沒綁資料夾 —— 清單就該是空的，不是退回全部專案。
     // 這裡回 true（不是 false）：清空就是正確結果，已經收工了。回 false 會讓
     // `loadPlans()` 再跑一次 `loadEmpty()`，白做一輪。
-    if (!dirs.length) {
+    if (!dirs.length && !osRoots.length) {
       plans = [];
       live = false;
       trackingPath = null;
@@ -132,7 +134,7 @@ if (__authed) {
     }
     let scan;
     try {
-      scan = await requestTrackingScan(dirs);
+      scan = await requestTrackingScan(dirs, osRoots);
     } catch {
       // 橋壞了／逾時。呼叫端會 `loadEmpty()` —— 沒有靜態快照可退，本 repo 自己的
       // plans/ 不屬於當前專案，拿來墊只會顯示別人的進度。空清單才是誠實的。
@@ -147,7 +149,8 @@ if (__authed) {
         path: f.path,
         mtimeMs: f.mtimeMs,
         raw: f.text,
-        meta: parsePlanMeta(f.text, f.name),
+        // 方言由 Rust 端標好帶過來，前端不再用路徑猜一次
+        meta: parsePlanMeta(f.text, f.name, { dialect: f.kind ?? "plan", change: f.change }),
       })),
     );
     live = true;
@@ -229,8 +232,11 @@ if (__authed) {
     const prog = planProgress(p.meta);
     const pct = prog.pct;
     const isTracked = live && p.path === trackingPath;
+    // OpenSpec 的檔案全部叫 tasks.md，清單上靠標題（變更代號）區分還不夠 ——
+    // 標一下來源，才知道勾選會寫回哪一個工具管的檔案
+    const src = p.meta.dialect === "openspec" ? `<span class="tk-row-src">OpenSpec</span>` : "";
     return `<button type="button" class="tk-row${i === idx ? " on" : ""}${isTracked ? " tracked" : ""}" data-i="${i}">
-      <span class="tk-row-t">${escapeHtml(p.meta.title)}</span>
+      <span class="tk-row-t">${escapeHtml(p.meta.title)}${src}</span>
       <span class="tk-row-m">
         ${
           p.meta.total_steps
@@ -344,8 +350,17 @@ if (__authed) {
         const sorted = p.meta.steps
           .map((s, n) => ({ s, n }))
           .sort((a, b) => order[a.s.state] - order[b.s.state] || a.n - b.n);
+        const isOs = p.meta.dialect === "openspec";
+        let lastGroup = "";
         steps.innerHTML = sorted
           .map(({ s }) => {
+            // OpenSpec 的 `## N. <群組>` 是它的分段方式，攤平成一長條會讓
+            // 「1.1 / 2.3 / 3.5」這種編號失去脈絡。排序後同群的會散開，
+            // 所以只在群組換人時插一行標題。
+            const head =
+              isOs && s.group && s.group !== lastGroup
+                ? ((lastGroup = s.group), `<div class="tk-step-group">${escapeHtml(s.group)}</div>`)
+                : "";
             // 有錨點才能勾 —— 沒有 id 就沒有辦法在寫回時定位到那一行，
             // 也接不上事件流。UI 直接反映這個限制，而不是勾了沒反應。
             const can =
@@ -355,13 +370,16 @@ if (__authed) {
               : `<span class="tk-step-mark" aria-hidden="true"></span>`;
             // 交接鍵只出現在還沒做完、而且有錨點的步驟上。沒有錨點的話交出去
             // 也串不回來，給一個做不到事的按鈕比不給更糟。
+            // OpenSpec 的步驟沒有錨點（編號不是 join key），交出去串不回來，
+            // 所以不給交接鍵 —— 給一個做不到事的按鈕比不給更糟。
             const handoff =
-              s.id && s.state === "pending"
+              !isOs && s.id && s.state === "pending"
                 ? `<button type="button" class="tk-step-handoff" data-handoff="${escapeHtml(s.id)}"
                      title="複製交接指令（含錨點 ${escapeHtml(s.id)}）">交接</button>`
                 : "";
-            return `<div class="tk-step ${s.state}">
+            return `${head}<div class="tk-step ${s.state}">
               ${mark}
+              ${isOs && s.id ? `<span class="tk-step-no mono">${escapeHtml(s.id)}</span>` : ""}
               <span class="tk-step-t">${escapeHtml(s.text)}</span>
               ${handoff}
             </div>`;
@@ -648,7 +666,7 @@ if (__authed) {
     const p = plans[idx];
     if (!p) return;
     const guard = guardOf(p.path, p.raw);
-    const r = await safeApply(guard, (text) => toggleStep(text, id, done), {
+    const r = await safeApply(guard, (text) => toggleStep(text, id, done, p.meta.dialect), {
       read: readFile,
       write: writeFile,
     });
@@ -671,7 +689,12 @@ if (__authed) {
           name: u.name,
         },
         kind: "task.done",
-        subject: `${ANCHOR_PREFIX}:t=${id}`,
+        // openspec 的編號不是錨點，寫成 `anc:t=1.1` 會讓事件流以為那是 join key，
+        // 之後任何依錨點聚合的查詢都會把它跟真正的步驟混在一起
+        subject:
+          p.meta.dialect === "openspec"
+            ? `openspec:${p.meta.title}/${id}`
+            : `${ANCHOR_PREFIX}:t=${id}`,
         payload: { title: p.meta.steps.find((s) => s.id === id)?.text ?? "" },
       });
     }

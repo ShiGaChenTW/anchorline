@@ -16,6 +16,8 @@ const DEFAULT_SECTIONS: HelpSection[] = [
       { keys: "3", desc: "範本庫" },
       { keys: "4", desc: "審閱佇列" },
       { keys: "5", desc: "計劃追蹤" },
+      { keys: "6", desc: "PRD 審閱監控" },
+      { keys: "7", desc: "簽核管理" },
       { keys: "?", desc: "顯示／關閉本說明" },
       { keys: "Esc", desc: "關閉浮層／Modal" },
     ],
@@ -131,6 +133,8 @@ export function ensureHelpOverlay(extra?: HelpSection[]) {
         "3": "templates.html",
         "4": "review.html",
         "5": "tracking.html",
+        "6": "write.html",
+        "7": "signoff.html",
       };
       if (routes[e.key] && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();

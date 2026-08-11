@@ -23,6 +23,8 @@ const routes: Record<string, string> = {
   "3": "templates.html",
   "4": "review.html",
   "5": "tracking.html",
+  "6": "write.html",
+  "7": "signoff.html",
 };
 
 const toastEl = document.getElementById("kbd-toast");

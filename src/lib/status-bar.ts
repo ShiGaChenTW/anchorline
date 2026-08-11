@@ -11,6 +11,8 @@ import { escapeHtml } from "./ui";
 const PAGE_LABEL: Record<RailPage, string> = {
   projects: "專案列表",
   editor: "編輯工作台",
+  write: "PRD 審閱監控",
+  signoff: "簽核管理",
   dashboard: "專案儀表板",
   overview: "全部專案總覽",
   templates: "章節範本",

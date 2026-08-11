@@ -144,10 +144,20 @@ export function capVersions(
  * 其餘關卡的人根本還沒看 —— 多關卡簽核形同虛設。
  */
 export function allStagesSettled(
-  stages: readonly { state: "approved" | "pending" | "empty" | "skipped" }[],
+  stages: readonly { state: StageStateLike; required?: boolean }[],
 ): boolean {
-  return stages.every((s) => s.state === "approved" || s.state === "skipped");
+  // **只看必簽關卡。** 以前是「每一關都要結案」，於是管理中心那個
+  // 「必簽關卡」核取方塊完全沒有作用 —— 取消勾選之後那一關照樣擋著結案，
+  // 而且沒有任何動作能把它變成 skipped。prod 種子的「法務」就是這個狀態。
+  const gating = stages.filter((s) => s.required !== false);
+  if (!gating.length) return stages.length > 0;
+  // 結案 = 已核准或已略過。「不能略過必簽關卡」是 `store.skipStage` 的守衛，
+  // 不是這裡的 —— 這支只回答「還有沒有人擋著」，把兩件事混在一起會讓
+  // 舊資料裡的 required+skipped 永遠結不了案。
+  return gating.every((s) => s.state === "approved" || s.state === "skipped");
 }
+
+type StageStateLike = "approved" | "changes_requested" | "pending" | "empty" | "skipped";
 
 /**
  * 重新送審時，哪些關卡的簽核要作廢。
@@ -155,12 +165,43 @@ export function allStagesSettled(
  * 換了一份新快照就要重新簽：沿用舊簽核等於把「工程看過 V1」當成
  * 「工程看過 V2」，簽核軌跡顯示已過關，但那一關的人沒看過現在要合併的內容。
  */
-export function stagesAfterResubmit<T extends { state: "approved" | "pending" | "empty" | "skipped" }>(
+export function stagesAfterResubmit<T extends { state: StageStateLike }>(
   stages: readonly T[],
   prevCommitId: string | null,
   nextCommitId: string | null,
 ): T[] {
-  const changed = Boolean(nextCommitId && prevCommitId && nextCommitId !== prevCommitId);
-  if (!changed) return stages as T[];
-  return stages.map((s) => (s.state === "approved" ? { ...s, state: "pending" as const } : s));
+  // 舊條件是「前後都存在且不同」，於是 `prevCommitId` 為 null 時（重開案件之後、
+  // 或呼叫端沒帶 commitId）永遠不作廢。只要拿到一個新的快照 id 就該重簽。
+  const newSnapshot = Boolean(nextCommitId) && nextCommitId !== prevCommitId;
+  // 有人要求修改過，代表作者動了東西 —— 就算 commitId 沒換也要重簽，
+  // 否則「資安說要改」跟「資安已核准」會同時掛在同一份上
+  const hadChangeRequest = stages.some((s) => s.state === "changes_requested");
+  if (!newSnapshot && !hadChangeRequest) return stages as T[];
+  return stages.map((s) =>
+    s.state === "approved" || s.state === "changes_requested"
+      ? { ...s, state: "pending" as const }
+      : s,
+  );
 }
+
+/**
+ * 關卡歸屬 + 順序閘門。**store 與畫面共用同一條規則**。
+ *
+ * 職責分立（作者不能簽自己的、同族 agent 不能簽自己家的）在
+ * `canApproveProject` 已經擋在前面，這裡只管關卡層級。
+ *
+ * 順序閘門：串行的關卡要等所有 `order` 較小的關卡結案（approved 或 skipped）。
+ * `changes_requested` **不算結案** —— 前面的人說要改，後面的人先簽沒有意義。
+ */
+export function stageBlockedBy(
+  stage: { order: number; mode?: "sequential" | "parallel" },
+  stages: readonly { order: number; name: string; state: StageStateLike }[],
+): string | null {
+  if ((stage.mode ?? "parallel") !== "sequential") return null;
+  const before = stages
+    .filter((s) => s.order < stage.order)
+    .sort((a, b) => a.order - b.order);
+  const blocker = before.find((s) => s.state !== "approved" && s.state !== "skipped");
+  return blocker ? blocker.name : null;
+}
+

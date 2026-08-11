@@ -88,7 +88,7 @@ fn scan_plans_only_md_and_dedupes_across_dirs() {
 
     let d = dir.to_string_lossy().to_string();
     // 同一個目錄傳兩次 —— 兩個專案綁到同一個資料夾的情況
-    let scan = scan_plans(&[d.clone(), d]);
+    let scan = scan_plans(&[d.clone(), d], &[]);
 
     assert_eq!(scan.files.len(), 2, "只收 .md，而且要跨目錄去重");
     assert!(
@@ -100,7 +100,7 @@ fn scan_plans_only_md_and_dedupes_across_dirs() {
 
 #[test]
 fn scan_plans_skips_unreadable_dirs_without_failing() {
-    let scan = scan_plans(&["/definitely/not/a/dir".into()]);
+    let scan = scan_plans(&["/definitely/not/a/dir".into()], &[]);
     assert!(scan.files.is_empty(), "讀不到的目錄要跳過，不是炸掉");
 }
 
@@ -111,7 +111,7 @@ fn scan_plans_skips_empty_and_oversized() {
     fs::write(dir.join("huge.md"), "x".repeat(600 * 1024)).unwrap();
     fs::write(dir.join("ok.md"), "# ok").unwrap();
 
-    let scan = scan_plans(&[dir.to_string_lossy().to_string()]);
+    let scan = scan_plans(&[dir.to_string_lossy().to_string()], &[]);
     assert_eq!(scan.files.len(), 1);
     assert_eq!(scan.files[0].name, "ok.md");
 }
@@ -257,4 +257,45 @@ fn registered_roots_without_store_do_not_touch_disk() {
     r.register(&base);
     assert!(r.contains_ancestor_of(&base));
     assert!(!base.join("registered-roots.json").exists());
+}
+
+// ── OpenSpec tasks.md 掃描 ────────────────────────────────────────
+
+#[test]
+fn scan_openspec_picks_tasks_md_and_skips_archive() {
+    let root = tmp("scan-openspec");
+    let changes = root.join("openspec").join("changes");
+    fs::create_dir_all(changes.join("alpha")).unwrap();
+    fs::create_dir_all(changes.join("beta")).unwrap();
+    fs::create_dir_all(changes.join("archive").join("old")).unwrap();
+    fs::write(changes.join("alpha").join("tasks.md"), "## 1. G\n\n- [x] 1.1 a\n").unwrap();
+    fs::write(changes.join("alpha").join("proposal.md"), "# not a task file").unwrap();
+    fs::write(changes.join("beta").join("tasks.md"), "## 1. G\n\n- [ ] 1.1 b\n").unwrap();
+    fs::write(changes.join("archive").join("old").join("tasks.md"), "- [x] 1.1 old").unwrap();
+
+    let scan = scan_plans(&[], &[root.to_string_lossy().to_string()]);
+
+    // archive/ 底下的是歷史，不該混進待辦清單；proposal.md 不是任務檔
+    assert_eq!(scan.files.len(), 2, "只收 changes/<id>/tasks.md，且跳過 archive");
+    let mut changes_seen: Vec<String> = scan.files.iter().map(|f| f.change.clone()).collect();
+    changes_seen.sort();
+    assert_eq!(changes_seen, vec!["alpha".to_string(), "beta".to_string()]);
+    assert!(scan.files.iter().all(|f| f.kind == "openspec"));
+    assert!(scan.files.iter().all(|f| f.name == "tasks.md"));
+}
+
+#[test]
+fn scan_openspec_missing_dir_is_not_an_error() {
+    let root = tmp("scan-openspec-none");
+    let scan = scan_plans(&[], &[root.to_string_lossy().to_string()]);
+    assert!(scan.files.is_empty(), "沒有 openspec/ 只是沒東西，不是錯誤");
+}
+
+#[test]
+fn scan_plans_marks_kind_plan() {
+    let dir = tmp("scan-kind");
+    fs::write(dir.join("a.md"), "# A").unwrap();
+    let scan = scan_plans(&[dir.to_string_lossy().to_string()], &[]);
+    assert_eq!(scan.files[0].kind, "plan");
+    assert_eq!(scan.files[0].change, "");
 }

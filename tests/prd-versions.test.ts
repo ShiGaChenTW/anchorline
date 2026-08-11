@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { inlineDiff } from "../src/lib/file-history";
-import { allStagesSettled, capVersions, stagesAfterResubmit } from "../src/lib/prd-versions";
+import {
+  allStagesSettled,
+  capVersions,
+  stageBlockedBy,
+  stagesAfterResubmit,
+} from "../src/lib/prd-versions";
 import {
   applyDrafts,
   canCommit,
@@ -193,8 +198,60 @@ describe("簽核狀態機（Grok 稽核補上的規則）", () => {
     expect(stagesAfterResubmit(stages, "c1", "c1")).toBe(stages);
   });
 
-  test("第一次送審（沒有前一份）→ 不動既有狀態", () => {
+  // 這條的預期在 2026-08-11 翻轉了。舊行為是「前一份為 null 就不作廢」，
+  // 於是重開案件之後再送審，舊簽章原封不動留著 —— 那些人沒看過現在這一份。
+  // 只要拿到一個新的快照 id 就重簽。
+  test("拿到新快照就作廢，即使沒有前一份", () => {
     const stages = [{ state: "approved" as const }];
-    expect(stagesAfterResubmit(stages, null, "c1")).toBe(stages);
+    expect(stagesAfterResubmit(stages, null, "c1").map((s) => s.state)).toEqual(["pending"]);
+  });
+
+  test("沒有新快照又沒人要求修改 → 原物件回傳，不製造無謂的重繪", () => {
+    const stages = [{ state: "approved" as const }];
+    expect(stagesAfterResubmit(stages, null, null)).toBe(stages);
+  });
+
+  test("有人要求修改 → 就算快照沒換也要全部重簽", () => {
+    const stages = [{ state: "approved" as const }, { state: "changes_requested" as const }];
+    expect(stagesAfterResubmit(stages, "c1", "c1").map((s) => s.state)).toEqual([
+      "pending",
+      "pending",
+    ]);
+  });
+
+  test("非必簽關卡不擋結案", () => {
+    expect(
+      allStagesSettled([
+        { state: "approved", required: true },
+        { state: "pending", required: false },
+      ]),
+    ).toBe(true);
+  });
+
+  test("串行閘門：前面沒結案就擋住後面", () => {
+    const stages = [
+      { order: 1, name: "工程", state: "pending" as const },
+      { order: 2, name: "設計", state: "pending" as const },
+    ];
+    expect(stageBlockedBy({ order: 2, mode: "sequential" }, stages)).toBe("工程");
+    // 並行的不受影響
+    expect(stageBlockedBy({ order: 2, mode: "parallel" }, stages)).toBeNull();
+  });
+
+  test("串行閘門：requested changes 不算結案", () => {
+    const stages = [
+      { order: 1, name: "工程", state: "changes_requested" as const },
+      { order: 2, name: "設計", state: "pending" as const },
+    ];
+    expect(stageBlockedBy({ order: 2, mode: "sequential" }, stages)).toBe("工程");
+  });
+
+  test("串行閘門：前面 approved / skipped 就放行", () => {
+    const stages = [
+      { order: 1, name: "工程", state: "approved" as const },
+      { order: 2, name: "設計", state: "skipped" as const },
+      { order: 3, name: "資安", state: "pending" as const },
+    ];
+    expect(stageBlockedBy({ order: 3, mode: "sequential" }, stages)).toBeNull();
   });
 });
