@@ -12133,9 +12133,11 @@ p.gd-warn {
 }
 .load-box {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 14px;
-  padding: 18px 26px;
+  min-width: min(320px, 78vw);
+  padding: 22px 26px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 12px);
@@ -12145,7 +12147,30 @@ p.gd-warn {
   margin: 0;
   font-size: var(--fs-4);
   color: var(--fg);
+  text-align: center;
   white-space: nowrap;
+}
+/* 不定量進度條：不知道要跑多久就不要假裝有百分比。
+   動的是 transform 不是 width —— 動 width 每一幀都會重排。 */
+.load-bar {
+  display: block;
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.load-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 38%;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: load-sweep 1.15s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+}
+@keyframes load-sweep {
+  0% { transform: translateX(-105%); }
+  100% { transform: translateX(300%); }
 }
 .load-dots {
   display: inline-flex;
@@ -12164,9 +12189,11 @@ p.gd-warn {
   0%, 60%, 100% { opacity: 0.25; }
   30% { opacity: 1; }
 }
-/* 會動的東西一律尊重系統設定：ADHD 對持續動態特別耗注意力 */
+/* 會動的東西一律尊重系統設定：ADHD 對持續動態特別耗注意力。
+   關掉動畫時把條子填滿而不是留空 —— 空的軌道看起來像壞掉。 */
 @media (prefers-reduced-motion: reduce) {
   .load-dots i { animation: none; opacity: 0.7; }
+  .load-bar i { animation: none; width: 100%; opacity: 0.55; }
 }
 
 /* ─── 改善建議 ∥ 章節進度 ────────────────────────────────────

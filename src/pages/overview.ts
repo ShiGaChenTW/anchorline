@@ -659,7 +659,7 @@ if (!requireAuth()) {
    * 6 秒硬上限：其中任何一個查詢卡住（gh 逾時、bridge 沒回應）都不該
    * 讓整頁永遠關不掉。上限到了就放行，畫面本來就已經有可讀的內容。
    */
-  showLoading("專案數據統計中", { minMs: 450, autoHideAfter: 6000 });
+  showLoading("專案統計中", { minMs: 450, autoHideAfter: 6000 });
 
   render();
   store.subscribe(render);
