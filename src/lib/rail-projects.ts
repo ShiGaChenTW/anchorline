@@ -214,7 +214,7 @@ function bumpCounts() {
  * `Cannot access 'IC' before initialization` 掛掉 —— 而症狀是側欄整塊不見、
  * 頁面停在「載入中…」，完全指不到這一行。icon 只在函式裡取，就沒有這個問題。
  */
-const WORKSPACE_HREFS = ["overview.html", "projects.html", "review.html", "templates.html"] as const;
+const WORKSPACE_HREFS = ["overview.html", "projects.html", "review.html", "templates.html", "openspec.html"] as const;
 
 /**
  * 現在這一頁是不是跨專案視圖。
@@ -243,6 +243,7 @@ function ensureWorkspaceNav(nav: Element) {
     { href: WORKSPACE_HREFS[1], label: "專案清單", icon: IC.projects, title: "可篩選、可搜尋的專案清單" },
     { href: WORKSPACE_HREFS[2], label: "審閱佇列", icon: IC.review, count: "review", title: "待審與待簽核的規格" },
     { href: WORKSPACE_HREFS[3], label: "PRD 範本", icon: IC.templates, count: "templates", title: "整份 PRD 骨架與章節範本" },
+    { href: WORKSPACE_HREFS[4], label: "OpenSpec 入口", icon: IC.tracking, title: "建立與追蹤 OpenSpec change" },
   ];
 
   let row = nav.querySelector(".rail-wsnav") as HTMLElement | null;

@@ -16,6 +16,7 @@ const PAGE_LABEL: Record<RailPage, string> = {
   dashboard: "專案儀表板",
   overview: "全部專案總覽",
   templates: "PRD 範本",
+  openspec: "OpenSpec 入口",
   review: "審閱佇列",
   tracking: "Task Tracking",
   admin: "管理中心",
