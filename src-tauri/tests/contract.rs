@@ -9,7 +9,7 @@
 
 use anchorline_lib::testing::{append_line, domain_pack_writable, scan_plans, RegisteredRoots};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn tmp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("sf-contract-{name}"));
@@ -121,7 +121,7 @@ fn scan_plans_skips_empty_and_oversized() {
 // 這是唯一一支**能建新檔**的寫入路徑（`editable` 要求 is_file()），
 // 所以它的界線要被釘死：目錄必須是使用者親手選過的，檔名由 Rust 驗證。
 
-fn roots_with(dir: &PathBuf) -> RegisteredRoots {
+fn roots_with(dir: &Path) -> RegisteredRoots {
     let r = RegisteredRoots::default();
     r.register(dir);
     r
