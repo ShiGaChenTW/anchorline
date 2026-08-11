@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>專案列表 · Anchorline</title>
+<title>專案清單 · Anchorline</title>
 <link rel="stylesheet" href="shared.css" />
 <script>(function(){try{var t=localStorage.getItem("anchorline:theme")||localStorage.getItem("specforge:theme");if(t==="warp")t="terminal";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"],terminal:["dark","#0d0b08"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
 </head>
@@ -80,9 +80,10 @@
     </aside>
 
     <main class="main" data-od-id="main-projects">
-      <div class="toolbar" data-od-id="toolbar">
+      <div class="toolbar context-toolbar" data-context="projects" data-od-id="toolbar">
         <div>
-          <h1 data-od-id="page-title">我的專案</h1>
+          <div class="context-kicker">02 / PROJECTS</div>
+          <h1 data-od-id="page-title">專案清單</h1>
           <div class="sub">選擇要繼續的規格</div>
         </div>
         <div class="spacer"></div>
@@ -103,8 +104,8 @@
         <button type="button" class="btn" id="btn-import" data-od-id="btn-import" title="選擇資料夾，自動偵測 PRD 相關檔並評分">專案匯入</button>
         <!-- 不可用 hidden：WebKit 會擋 file dialog；App 走原生 NSOpenPanel，此為瀏覽器 fallback -->
         <input type="file" id="folder-import-input" class="visually-hidden-file" webkitdirectory directory multiple tabindex="-1" aria-hidden="true" />
-        <button type="button" class="btn" id="btn-beginner" data-od-id="btn-beginner" title="一步步帶你寫出第一份 PRD">🌱 新手引導</button>
         <button type="button" class="btn btn-primary" id="btn-new" data-od-id="btn-new">＋ 新建 PRD</button>
+        <button type="button" class="btn" id="btn-beginner" data-od-id="btn-beginner" title="一步步帶你寫出第一份 PRD">🌱 新手引導</button>
         <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
       </div>
 

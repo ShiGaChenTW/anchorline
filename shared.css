@@ -2872,6 +2872,10 @@ body {
   .toolbar h1 {
     font-size: var(--fs-5);
   }
+  .toolbar.context-toolbar {
+    min-height: 0;
+    padding: 20px 16px 18px;
+  }
   .search {
     min-width: 0;
     flex: 1 1 140px;
@@ -3057,13 +3061,23 @@ html.reduce-motion .attn-expand-enter {
   justify-content: space-between;
   gap: 10px 16px;
   padding: 12px 16px 12px;
-  border-bottom: 1px solid color-mix(in oklab, var(--accent) 16%, var(--border));
-  background: linear-gradient(
-    105deg,
-    color-mix(in oklab, var(--accent) 9%, var(--surface)) 0%,
-    color-mix(in oklab, var(--accent) 3%, var(--surface)) 48%,
-    var(--surface) 100%
-  );
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(circle at 88% 0%, color-mix(in oklab, var(--accent) 8%, transparent), transparent 34%),
+    var(--surface);
+}
+.toolbar.context-toolbar {
+  min-height: 148px;
+  padding: 24px 28px 22px;
+}
+.context-kicker {
+  margin-bottom: 10px;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: var(--fs-1);
+  font-weight: 700;
+  letter-spacing: .14em;
+  line-height: 1;
 }
 .adhd-page-chrome-main,
 .adhd-editor-chrome-main {
@@ -3080,6 +3094,24 @@ html.reduce-motion .attn-expand-enter {
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.25;
+}
+.context-toolbar .adhd-page-chrome-title h1,
+.context-toolbar .adhd-editor-chrome-title h1 {
+  font-size: clamp(1.5rem, 2.4vw, 2rem);
+  letter-spacing: -.04em;
+}
+.context-toolbar .adhd-page-chrome-actions,
+.context-toolbar .adhd-editor-chrome-actions {
+  align-self: flex-end;
+}
+html.adhd-calm .adhd-page-chrome-title .sub,
+html.adhd-calm .adhd-editor-chrome-title .sub {
+  display: block;
+  max-width: 62ch;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: var(--fs-3);
+  line-height: 1.45;
 }
 .adhd-page-chrome-title .sub,
 .adhd-editor-chrome-title .sub {
@@ -5116,6 +5148,10 @@ html.adhd-calm .search {
   min-width: 140px;
   max-width: 220px;
   order: 5;
+}
+html.adhd-calm .adhd-page-chrome-actions .search,
+html.adhd-calm .adhd-editor-chrome-actions .search {
+  order: 0;
 }
 .adhd-more {
   position: relative;
