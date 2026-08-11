@@ -86,6 +86,13 @@ export type Project = {
   /** 匯入評分與對應摘要 */
   importSummary?: ProjectImportSummary;
   /**
+   * 版號政策。未設 = `loose`（這條規則出現之前的行為）。
+   *
+   * **選了 `strict` 就回不去**，`store.setVersionPolicy` 會擋。
+   * 定義與理由在 `lib/release.ts` 的 `VersionPolicy`。
+   */
+  versionPolicy?: "loose" | "strict";
+  /**
    * 領域包名稱（`src/data/domains/*.md` 的 name）。未設 = `generic`。
    * 可以改：改了之後不屬於新領域的章節內容會變成孤兒，但**不刪**——
    * 「寫到一半發現選錯領域」比「鎖死不給改」常見得多。

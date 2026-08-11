@@ -15,6 +15,7 @@ import { projectDisplayName } from "../data/types";
 import {
   buildHandoff,
   lastVersionOf,
+  policyOf,
   releaseProgress,
   validateVersion,
   type Release,
@@ -23,18 +24,32 @@ import {
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+import {
+  claimedRefs,
+  LEVEL_BLURB,
+  LEVEL_LABEL,
+  LEVEL_SEGMENT,
+  pushGate,
+  suggestNext,
+  type GateFacts,
+  type ReleaseLevel,
+} from "../lib/release-track";
 import { isDesktop, requestProjectStats, type ProjectStats } from "../lib/project-stats";
+import { requestOpenspecStatus } from "../lib/status-bridge";
+import type { OpenspecChange } from "../lib/openspec-status";
 import { attachDiffSummary } from "../lib/diff-summary";
 
 if (requireAuth()) {
   initTheme();
-  initMobileNav("dashboard");
+  initMobileNav("releases");
   bindLogout();
   updateUserRailFooter(toRailUser(store.get().currentUser));
 }
 
 let selectedId: string | null = null;
 let stats: ProjectStats | null = null;
+/** openspec change 的名稱與完成度。讀不到就是空陣列 —— 沒裝 openspec 不是錯誤。 */
+let openspecChanges: { name: string; isComplete: boolean }[] = [];
 
 function activeProject() {
   const st = store.get();
@@ -70,6 +85,32 @@ function commitCandidates(): Candidate[] {
     source: "commit" as const,
     ref: c.hash.slice(0, 7),
   }));
+}
+
+/**
+ * openspec change：還沒實作的東西。
+ *
+ * 只用 CLI `--json` 給的名稱與完成度（D10：不解析 spec.md）。
+ * 已完成的 change 也列出來 —— 一個版號可以收「剛做完但還沒發版」的東西。
+ */
+function changeCandidates(): Candidate[] {
+  return openspecChanges.map((c) => ({
+    text: c.name,
+    done: c.isComplete,
+    source: "change" as const,
+    ref: c.name,
+  }));
+}
+
+/**
+ * 候選來源。
+ *
+ * 層級（X/YY/ZZ）管的是**取號的條件**，不是「能收什麼」——
+ * 一個大型迭代本來就會同時收 change 與 commit。所以這裡不分流，
+ * 三種來源都列出來，由 `levelGate()` 去判斷這一版夠不夠格取那個號。
+ */
+function candidatesFor(_r: Release): Candidate[] {
+  return [...changeCandidates(), ...sectionCandidates(), ...commitCandidates()];
 }
 
 function alreadyIn(r: Release, c: Candidate): boolean {
@@ -132,10 +173,91 @@ function itemRow(i: ReleaseItem): string {
   </li>`;
 }
 
+/**
+ * PUSH 閘門。
+ *
+ * `shipped` 有版號有內容就能出；`planned` 要等收進來的 change 全部完成，
+ * 而且**未完成的要逐一列出來** —— 「還不能 push」沒有下一步，
+ * 「這三個 change 還沒完成」才有。
+ *
+ * 產出一樣是可複製的指令，不代跑：push 出去收不回來。
+ */
+/**
+ * 畫面上看得到的候選 —— **渲染與點擊必須共用這一支**。
+ *
+ * 兩邊各自組一次清單的話，索引會對不上：畫面照過濾後的順序畫，
+ * 點擊照未過濾的順序取，於是點 A 加進 B。而且不會報錯。
+ */
+function visibleCandidates(r: Release): Candidate[] {
+  const claimed = claimedRefs(r.projectId, store.releasesOf(r.projectId), r.id);
+  return candidatesFor(r).filter((c) => !alreadyIn(r, c) && !(c.ref && claimed.has(c.ref)));
+}
+
+/**
+ * 閘門要的外部事實。
+ *
+ * `hasApprovedPrd`：這個專案有沒有「全部必簽關卡通過且已合併」的 PRD 版本。
+ * 判定沿用既有資料（簽核個案 + prdVersions 的 merge），不新增欄位。
+ */
+function gateFacts(r: Release): GateFacts {
+  const merged = store.prdBaseline(r.projectId) !== null;
+  const c = store.get().cases[r.projectId];
+  const settled =
+    !!c &&
+    !c.withdrawn &&
+    c.stages.filter((s) => s.required !== false).every((s) => s.state === "approved");
+  return { hasApprovedPrd: merged && settled, items: r.items };
+}
+
+/**
+ * 取號閘門與放行狀態。
+ *
+ * 三種狀態在畫面上必須分得出來，因為下一步完全不同：
+ * 閘門沒過（去補條件）· 取了號還沒放行（正常的預先作業）· 已放行（可以出）。
+ * 全部說成「還不能 PUSH」會讓人以為壞掉了。
+ */
+function pushGateHtml(r: Release): string {
+  const proj = store.get().projects.find((x) => x.id === r.projectId);
+  const g = pushGate(r, gateFacts(r), policyOf(proj));
+  const seg =
+    policyOf(proj) === "loose"
+      ? "寬鬆版號"
+      : r.level
+        ? `${LEVEL_SEGMENT[r.level]}｜${LEVEL_LABEL[r.level]}`
+        : "規則上路前的版號";
+
+  if (g.ok) {
+    return `<div class="rl-push is-ready">
+      <div class="rl-push-head"><strong>已放行，可以 PUSH</strong>
+        <span class="rl-push-track">${escapeHtml(seg)}</span></div>
+      <pre class="rl-push-cmd"><code>${escapeHtml(g.command)}</code></pre>
+      <div class="rl-push-row">
+        <button type="button" class="btn btn-sm" id="rl-push-copy" data-cmd="${escapeHtml(g.command)}">複製標籤與推送指令</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="rl-unrelease">撤回放行</button>
+      </div>
+      <p class="rl-push-note">指令不會自動執行 —— 複製到終端機自己跑。</p>
+    </div>`;
+  }
+
+  // 閘門過了、只差放行 —— 這是預先作業的正常狀態，要給按鈕而不是只給理由
+  const onlyNeedsRelease = !r.releasedAt && g.reason.includes("還沒放行");
+  return `<div class="rl-push${onlyNeedsRelease ? " is-planned" : ""}">
+    <div class="rl-push-head"><strong>${onlyNeedsRelease ? "已取號，尚未放行" : "還不能取這個號"}</strong>
+      <span class="rl-push-track">${escapeHtml(seg)}</span></div>
+    <p class="rl-push-why">${escapeHtml(g.reason)}</p>
+    <p class="rl-push-fix">${escapeHtml(g.fix)}</p>
+    ${
+      onlyNeedsRelease
+        ? `<button type="button" class="btn btn-sm btn-primary" id="rl-release">正式放行</button>`
+        : ""
+    }
+  </div>`;
+}
+
 function candidateHtml(r: Release): string {
-  const cands = [...sectionCandidates(), ...commitCandidates()].filter((c) => !alreadyIn(r, c));
+  const cands = visibleCandidates(r);
   if (!cands.length) {
-    return `<p class="rl-empty">沒有其他候選項目了。用下面的欄位自己加。</p>`;
+    return `<p class="rl-empty">沒有其他候選項目了（已被其他版號收走的不會出現）。用下面的欄位自己加。</p>`;
   }
   return `<div class="rl-cands">${cands
     .map(
@@ -193,6 +315,7 @@ function renderDetail() {
     </div>
     <div class="rl-foot">
       <span class="rl-prog">${p.done}/${p.total} 完成 · ${p.pct}%</span>
+      ${pushGateHtml(r)}
       ${r.handedAt ? `<span class="rl-handed">已於 ${escapeHtml(r.handedAt.slice(0, 16).replace("T", " "))} 交辦</span>` : ""}
       <span class="sp"></span>
       <button type="button" class="btn btn-sm" id="rl-copy">複製交辦單</button>
@@ -260,7 +383,11 @@ function bindDetail(r: Release) {
     const text = manual.value.trim();
     if (!text) return;
     manual.value = "";
-    store.addReleaseItem(r.id, { text, state: "planned", source: "manual" });
+    const add = store.addReleaseItem(r.id, { text, state: "planned", source: "manual" });
+    if (!add.ok) {
+      toast(add.reason ?? "加不進去");
+      return;
+    }
     render();
     (document.getElementById("rl-manual") as HTMLInputElement | null)?.focus();
   };
@@ -272,17 +399,19 @@ function bindDetail(r: Release) {
     }
   });
 
-  const cands = [...sectionCandidates(), ...commitCandidates()].filter((c) => !alreadyIn(r, c));
+  const cands = visibleCandidates(r);
   document.querySelectorAll<HTMLButtonElement>("[data-rl-cand]").forEach((b) =>
     b.addEventListener("click", () => {
       const c = cands[Number(b.dataset.rlCand)];
       if (!c) return;
-      store.addReleaseItem(r.id, {
+      // store 會擋跨路線與已被佔用的 ref；擋下來的理由要顯示，不要靜靜不動作
+      const add = store.addReleaseItem(r.id, {
         text: c.text,
         state: c.done ? "done" : "planned",
         source: c.source,
         ref: c.ref,
       });
+      if (!add.ok) toast(add.reason ?? "加不進去");
       render();
     }),
   );
@@ -301,6 +430,28 @@ function bindDetail(r: Release) {
       toast("交辦單已複製");
     } catch {
       toast("複製失敗");
+    }
+  });
+
+  document.getElementById("rl-release")?.addEventListener("click", () => {
+    if (!confirm("放行之後這一版的內容就不能再改。確定？")) return;
+    const res = store.releaseNow(r.id);
+    toast(res.ok ? "已放行，可以 PUSH 了" : (res.reason ?? "放行失敗"));
+    render();
+  });
+  document.getElementById("rl-unrelease")?.addEventListener("click", () => {
+    const res = store.unreleaseNow(r.id);
+    toast(res.ok ? "已撤回放行" : (res.reason ?? "撤回失敗"));
+    render();
+  });
+
+  document.getElementById("rl-push-copy")?.addEventListener("click", async (e) => {
+    const cmd = (e.currentTarget as HTMLElement).dataset.cmd ?? "";
+    try {
+      await navigator.clipboard.writeText(cmd);
+      toast("指令已複製，到終端機執行");
+    } catch {
+      toast("複製失敗，請手動選取");
     }
   });
 
@@ -373,13 +524,65 @@ document.getElementById("rl-new")?.addEventListener("click", () => {
     toast("先選一個專案");
     return;
   }
-  const r = store.createRelease(p.id);
+  // loose 政策沒有段落語意，不必問層級
+  if (policyOf(p) === "loose") {
+    const r0 = store.createRelease(p.id);
+    selectedId = r0.id;
+    void loadOpenspecChanges();
+    render();
+    (document.getElementById("rl-version") as HTMLInputElement | null)?.focus();
+    return;
+  }
+
+  // 層級決定取號要過哪一道閘門，所以建立時就要選
+  const pick = prompt(
+    [
+      "這一版動哪一段？（vX.YY.ZZ）",
+      "",
+      `1 = X  ${LEVEL_BLURB.major}`,
+      `2 = YY ${LEVEL_BLURB.minor}`,
+      `3 = ZZ ${LEVEL_BLURB.patch}`,
+    ].join("\n"),
+    "3",
+  );
+  if (pick === null) return;
+  const level: ReleaseLevel = pick.trim() === "1" ? "major" : pick.trim() === "2" ? "minor" : "patch";
+
+  const r = store.createRelease(p.id, level);
+  // 建議版號放進欄位讓人改 —— 建議不是自動指定，最終決定仍然是使用者的
+  const prev = lastVersionOf(p.id, store.releasesOf(p.id).filter((x) => x.id !== r.id));
+  store.updateRelease(r.id, { version: suggestNext(prev, level) });
   selectedId = r.id;
+  void loadOpenspecChanges();
   render();
   (document.getElementById("rl-version") as HTMLInputElement | null)?.focus();
 });
 
+/**
+ * 讀 openspec change 的名稱與完成度。
+ *
+ * 讀不到一律當成沒有 change（空陣列），不是錯誤 —— 沒裝 openspec 的專案
+ * 走「未實作」路線時候選會是空的，畫面已經對這件事有交代。
+ */
+async function loadOpenspecChanges(): Promise<void> {
+  const root = activeProject()?.importSummary?.rootPath;
+  if (!root || !isDesktop()) return;
+  try {
+    const r = await requestOpenspecStatus(root);
+    openspecChanges = r.available
+      ? r.changes.map((c: OpenspecChange) => ({ name: c.name, isComplete: c.isComplete }))
+      : [];
+  } catch {
+    openspecChanges = [];
+  }
+  render();
+}
+
 render();
+
+// 已經有 planned 版號就要把 change 狀態讀進來，否則 PUSH 閘門會全部說「沒完成」
+// change 候選與 YY 閘門都要 openspec 狀態，一進頁就讀
+void loadOpenspecChanges();
 
 // commit 候選要等磁碟量測回來；量不到就只用章節，不擋畫面
 const path = activeProject()?.importSummary?.rootPath;

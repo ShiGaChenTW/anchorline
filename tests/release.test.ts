@@ -31,9 +31,19 @@ describe("checkVersionFormat", () => {
     expect(checkVersionFormat("   ").ok).toBe(false);
   });
 
-  test("常見慣例都放行，不強迫 semver", () => {
+  // 預設仍是 loose —— 版號政策是每個專案自己選一次（Scott 2026-08-12）
+  test("loose：常見慣例都放行，不強迫 semver", () => {
     for (const v of ["v1.0.0", "1.2.3", "2026.08", "R42", "v0.1.0-beta.1", "sprint-14"]) {
       expect(checkVersionFormat(v).ok).toBe(true);
+    }
+  });
+
+  test("strict：只放行 vX.YY.ZZ", () => {
+    for (const v of ["v1.00.00", "v1.02.15", "v12.00.00"]) {
+      expect(checkVersionFormat(v, "strict").ok).toBe(true);
+    }
+    for (const v of ["v1.0.0", "1.2.3", "2026.08", "R42"]) {
+      expect(checkVersionFormat(v, "strict").ok).toBe(false);
     }
   });
 
