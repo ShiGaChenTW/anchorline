@@ -8583,7 +8583,10 @@ button.ft-row:focus-visible {
   margin-bottom: 0;
 }
 /* 版號紀錄：不再自己吃固定卡高，改由 grid 拉到與左欄同高。
-   固定高度會在左欄變高時矮一截，那正是「兩張卡沒對齊」的來源。 */
+   固定高度會在左欄變高時矮一截，那正是「兩張卡沒對齊」的來源。
+   兩個選擇器都要寫：這一欄放的是普通 .d-card（不是 .d-tall），而
+   .d-card.d-tall 的固定高規則排在本檔後面，同分時會贏。 */
+.d-top > .d-card,
 .d-top > .d-card.d-tall {
   height: auto;
 }
