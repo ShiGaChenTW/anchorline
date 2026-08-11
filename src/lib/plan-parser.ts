@@ -16,6 +16,11 @@ export type PlanStep = {
    * 不透明且鑄造一次就不再變的。
    */
   id?: string;
+  /**
+   * OpenSpec 方言專用：這一步屬於哪個 `## N. <群組>`。
+   * plans/*.md 只有單一 `## Plan Steps`，沒有群組可言，所以留空。
+   */
+  group?: string;
 };
 
 export type PlanMeta = {
@@ -35,7 +40,38 @@ export type PlanMeta = {
   path?: string;
   /** 沒有錨點的步驟數。> 0 時 UI 要顯示警告 —— 這些步驟接不上事件流。 */
   unanchored: number;
+  /** 這份是用哪一種方言讀的。UI 要靠它決定顯不顯示「補鑄錨點」那類提示 */
+  dialect: PlanDialect;
 };
+
+/**
+ * 兩種方言。
+ *
+ * `plan` —— Anchorline 自己的 `plans/*.md`：單一 `## Plan Steps` 區段、
+ * 不透明錨點 `<!-- anc:t=… -->`、`**狀態：**` 標籤。
+ *
+ * `openspec` —— OpenSpec 的 `openspec/changes/<id>/tasks.md`：多個
+ * `## N. <群組>` 標題、`N.M` 編號當步驟身分、沒有 H1、沒有狀態標籤。
+ * 這是上游工具管的檔案格式，**我們只讀不重寫結構**（勾選只翻那一個方框字元）。
+ */
+export type PlanDialect = "plan" | "openspec";
+
+export type ParseOpts = {
+  dialect?: PlanDialect;
+  /** openspec 專用：變更代號（目錄名），沒有 H1 時拿它當標題 */
+  change?: string;
+};
+
+/**
+ * OpenSpec 步驟編號：`1.1`、`2.10`、`3.5.2`，以及**帶字母後綴的 `6.3a`**。
+ *
+ * 字母後綴是實測補上的：`Project_Border-loom_rust/openspec/changes/prompt-library`
+ * 裡就有 `6.3a`，插在 6.3 與 6.4 之間。少了它那一步沒有身分 → 不能勾，
+ * 而且文字會多帶一個「6.3a」前綴 —— 兩個症狀都不會報錯，只會看起來怪。
+ */
+export const OS_STEP_NO_RE = /^(\d+(?:\.\d+)+[a-z]?)\s+(.*)$/;
+/** 縮排也要吃：上游常有子項目 */
+export const OS_CHECKBOX_RE = /^\s*-\s*\[([ vVxX])\]\s*(.*)$/;
 
 const CHECKBOX_RE = /^- \[([ vVxX])\]\s*(.*)$/;
 const STRIKE_BULLET_RE = /^- ~~(.+?)~~/;
@@ -160,7 +196,87 @@ export function asStatusWord(s: string): StatusWord | null {
   return (STATUS_WORDS as readonly string[]).includes(s) ? (s as StatusWord) : null;
 }
 
-export function parsePlanMeta(text: string, path?: string): PlanMeta {
+/**
+ * OpenSpec 的 `tasks.md`。
+ *
+ * 跟 `plans/*.md` 三個地方不一樣，所以走自己的一條路而不是塞進同一個迴圈：
+ *
+ * 1. **沒有 `## Plan Steps` 閘門。** 整份檔就是任務清單，`## N. <群組>` 是分組
+ *    標題不是分隔線。硬套原本的閘門會讓每一份都變成 0 步驟 —— 那正是這個功能
+ *    原本壞掉的樣子。
+ * 2. **身分是 `N.M` 編號，不是鑄出來的錨點。** 這是上游工具管的檔案，往裡面寫
+ *    `<!-- anc:t=… -->` 等於我們開始改別人的格式。編號本來就穩定又看得懂。
+ * 3. **狀態是算出來的。** 沒有 `**狀態：**` 標籤可讀，全勾完就是已完成。
+ *
+ * 沒有編號的 checkbox 照樣收，只是沒有 id（不能勾選，UI 會標出來）。
+ */
+function parseOpenspecTasks(text: string, path: string | undefined, change: string): PlanMeta {
+  const out: PlanMeta = {
+    title: change || "(未命名變更)",
+    status: "進行中",
+    created: "—",
+    updated: "—",
+    total_steps: 0,
+    done_steps: 0,
+    skipped_steps: 0,
+    pending_steps: 0,
+    last_decision: "—",
+    blockers: 0,
+    next_step: "—",
+    steps: [],
+    goal: "—",
+    path,
+    unanchored: 0,
+    dialect: "openspec",
+  };
+  if (!text) return out;
+
+  let group = "";
+  const groups: string[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const s = raw.trim();
+
+    if (s.startsWith("# ") && !s.startsWith("## ")) {
+      out.title = s.slice(2).trim() || out.title;
+      continue;
+    }
+    if (s.startsWith("## ")) {
+      // `## 1. Line separation` → 群組名保留編號，使用者在 tasks.md 裡看到的就是它
+      group = s.slice(3).trim();
+      if (group) groups.push(group);
+      continue;
+    }
+
+    const m = s.match(OS_CHECKBOX_RE);
+    if (!m) continue;
+    const done = /[xXvV]/.test(m[1]!);
+    const body = m[2]!.trim();
+    const numbered = body.match(OS_STEP_NO_RE);
+    const step: PlanStep = {
+      text: numbered ? numbered[2]!.trim() : body,
+      state: done ? "done" : "pending",
+    };
+    if (numbered) step.id = numbered[1]!;
+    if (group) step.group = group;
+    out.steps.push(step);
+  }
+
+  out.total_steps = out.steps.length;
+  out.done_steps = out.steps.filter((x) => x.state === "done").length;
+  out.pending_steps = out.steps.filter((x) => x.state === "pending").length;
+  out.unanchored = out.steps.filter((x) => !x.id).length;
+  const next = out.steps.find((x) => x.state === "pending");
+  out.next_step = next?.text ?? "—";
+  // 狀態沒有地方可讀，只能從勾選推。全空也算「進行中」——「未開始」不是
+  // OpenSpec 的狀態詞，而且對還沒動的變更說「已暫停」是在說謊。
+  if (out.total_steps > 0 && out.pending_steps === 0) out.status = "已完成";
+  if (groups.length) out.goal = groups.join("、").slice(0, 280);
+
+  return out;
+}
+
+export function parsePlanMeta(text: string, path?: string, opts: ParseOpts = {}): PlanMeta {
+  if (opts.dialect === "openspec") return parseOpenspecTasks(text, path, opts.change ?? "");
   const out: PlanMeta = {
     title: "(無標題)",
     status: "未知",
@@ -177,6 +293,7 @@ export function parsePlanMeta(text: string, path?: string): PlanMeta {
     goal: "—",
     path,
     unanchored: 0,
+    dialect: "plan",
   };
   if (!text) return out;
 

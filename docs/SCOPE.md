@@ -32,8 +32,27 @@
 | **D8** | **改用 Tauri** 跨平台 | 本輪 | 殼重寫 |
 | **D9** | **MIT 開源** | 本輪 | 新增開源化工作 |
 | **D10** | **openspec CLI 為唯一真相來源**，取消自建 parser | 本輪 | **取消**原訂 0.5 天，改為 CLI 探測 |
+| **D10a** | **D10 收窄**：`spec.md` 與變更狀態仍只走 CLI；`changes/<id>/tasks.md` 的 checkbox 例外，允許本地讀寫 | 2026-08-11 | Task Tracking 收 openspec 任務（步驟層級） |
 
 > D10 的理由更正：失敗模式不是「使用者沒裝 openspec」（沒裝的人專案裡也不會有 `openspec/`），而是**「裝了但 GUI 進程找不到」**。那是 PATH 問題，解法是探測（~25 行）不是第二套 parser（80 行）。
+
+> **D10a（2026-08-11，Scott 拍板）——「唯一真相來源」收窄成「唯一*狀態*來源」。**
+>
+> 原本的 D10 一路擋到 Task Tracking：CLI 給得出來的只有變更層級的
+> `completedTasks/totalTasks` 與 artifact 狀態，**拿不到單一步驟的文字**，
+> 所以「逐條列出、可勾選」在 D10 之下做不到 —— 而那正是使用者要的東西。
+>
+> 收窄後的界線，兩句話講完：
+>
+> - **仍然只走 CLI：** `spec.md` 的內容、變更的整體狀態、artifact 的
+>   done/ready/blocked。上游格式會演進，這幾樣不解析是對 OpenSpec 生態的相容承諾。
+> - **允許本地讀寫：** `changes/<id>/tasks.md` 的 checkbox。它是 GFM 標準
+>   checkbox，不是 OpenSpec 自創語法；勾選**只翻那一個方框字元**，不重寫結構、
+>   不加我們的錨點（步驟身分用它自己的 `N.M` 編號）。
+>
+> 代價寫在這裡，不要之後假裝沒看到：`tasks.md` 的分組標題若從 `## N. <名稱>`
+> 改成別的形狀，我們的 parser 會少算步驟，而**症狀是安靜的**（清單變短，不報錯）。
+> `tests/openspec-tasks.test.ts` 用真實檔案形狀鎖住這個假設。
 
 ---
 
@@ -70,7 +89,7 @@ TS 端要改的只有 **8 檔**：`tracking-bridge` `status-bridge` `event-write
 
 | 項目 | 原因 |
 |---|---|
-| 自建 openspec parser | D10 |
+| 自建 openspec `spec.md` / 狀態 parser | D10（`tasks.md` checkbox 除外，見 D10a）|
 | 19 處 desktop guard 分支 | D5 |
 | 4 檔的 `import.meta.glob` 編譯期快照 | D5 |
 | Kanban／拖曳／優先級／指派 | 報告 §七（維持） |
@@ -187,7 +206,7 @@ MIT 開源實質上已經回答了——**會**。所以：
 | 不做 | 為什麼 |
 |---|---|
 | 瀏覽器版 | D5。降級路徑的維護成本 > 價值 |
-| 自建 openspec `spec.md` parser | D10。上游格式會演進；不解析是對 OpenSpec 生態的相容承諾 |
+| 自建 openspec `spec.md` parser | D10。上游格式會演進；不解析是對 OpenSpec 生態的相容承諾（`tasks.md` 的 checkbox 是 D10a 的例外）|
 | Kanban／拖曳／優先級／指派／到期日 | Linear 的形狀，做進來就是兩套任務系統 |
 | agent 派工執行 | 要讓原生端跑 JS 傳來的任意 prompt，直接拆掉整個注入防護 |
 | `gh pr review --approve` 等寫入 | 不可逆對外動作，沿用 `git-doctor.ts` 的界線 |

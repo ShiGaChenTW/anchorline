@@ -49,6 +49,12 @@ pub struct PlanStat {
     pub name: String,
     pub mtime_ms: f64,
     pub text: String,
+    /// "plan" = `plans/*.md`；"openspec" = `openspec/changes/<id>/tasks.md`。
+    /// 兩種檔的內文方言不同，前端要靠這個欄位選 parser —— 用副檔名或路徑
+    /// 在前端再猜一次，等於同一個判斷寫兩個地方。
+    pub kind: String,
+    /// openspec 專用：變更代號（目錄名）。plans 一律空字串。
+    pub change: String,
 }
 
 #[derive(Serialize)]
@@ -355,11 +361,61 @@ fn mtime_ms(p: &Path) -> Option<f64> {
 
 #[tauri::command]
 // async：掃 plans/ 每秒會被呼叫一次，別佔著主執行緒
-pub async fn tracking_scan(plans_dirs: Vec<String>) -> R<TrackingScan> {
-    Ok(scan_plans(&plans_dirs))
+pub async fn tracking_scan(
+    plans_dirs: Vec<String>,
+    openspec_roots: Option<Vec<String>>,
+) -> R<TrackingScan> {
+    Ok(scan_plans(&plans_dirs, &openspec_roots.unwrap_or_default()))
 }
 
-pub fn scan_plans(plans_dirs: &[String]) -> TrackingScan {
+/// `<root>/openspec/changes/<id>/tasks.md`。
+///
+/// 只往下一層，且**跳過 `archive/`** —— 封存的變更是歷史，不是待辦；
+/// 把它們混進追蹤清單，每個專案的清單都會被幾十個已完成的變更淹掉。
+fn scan_openspec(roots: &[String], files: &mut Vec<PlanStat>, seen: &mut std::collections::HashSet<PathBuf>) {
+    for root in roots {
+        let changes = Path::new(root).join("openspec").join("changes");
+        let Ok(rd) = fs::read_dir(&changes) else { continue };
+        for e in rd.flatten() {
+            if files.len() >= MAX_PLAN_FILES {
+                return;
+            }
+            let dir = e.path();
+            if !dir.is_dir() {
+                continue;
+            }
+            let name = dir
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if name.eq_ignore_ascii_case("archive") || name.starts_with('.') {
+                continue;
+            }
+            let p = dir.join("tasks.md");
+            let canon = p.canonicalize().unwrap_or_else(|_| p.clone());
+            if !seen.insert(canon) {
+                continue;
+            }
+            let Ok(meta) = fs::metadata(&p) else { continue };
+            if !meta.is_file() || meta.len() == 0 || meta.len() > MAX_TEXT_BYTES {
+                continue;
+            }
+            let (Some(ms), Ok(text)) = (mtime_ms(&p), fs::read_to_string(&p)) else {
+                continue;
+            };
+            files.push(PlanStat {
+                path: p.to_string_lossy().to_string(),
+                name: "tasks.md".into(),
+                mtime_ms: ms,
+                text,
+                kind: "openspec".into(),
+                change: name,
+            });
+        }
+    }
+}
+
+pub fn scan_plans(plans_dirs: &[String], openspec_roots: &[String]) -> TrackingScan {
     let mut files = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
@@ -397,9 +453,13 @@ pub fn scan_plans(plans_dirs: &[String]) -> TrackingScan {
                     .unwrap_or_default(),
                 mtime_ms: ms,
                 text,
+                kind: "plan".into(),
+                change: String::new(),
             });
         }
     }
+
+    scan_openspec(openspec_roots, &mut files, &mut seen);
 
     let sp = signal_path();
     let signal = match (fs::read_to_string(&sp), mtime_ms(&sp)) {

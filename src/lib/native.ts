@@ -150,7 +150,8 @@ export const native = {
   pickProjectFolder: () => call<FolderPick>("pick_project_folder"),
 
   projectStats: (folderPath: string) => call<unknown>("project_stats", { folderPath }),
-  trackingScan: (plansDirs: string[]) => call<NativeTrackingScan>("tracking_scan", { plansDirs }),
+  trackingScan: (plansDirs: string[], openspecRoots: string[] = []) =>
+    call<NativeTrackingScan>("tracking_scan", { plansDirs, openspecRoots }),
 
   readFile: (path: string) => call<{ path: string; text: string }>("read_file", { path }),
   writeFile: (path: string, text: string) => call<{ path: string }>("write_file", { path, text }),

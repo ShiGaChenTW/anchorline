@@ -764,7 +764,24 @@ document.getElementById("btn-approve")?.addEventListener("click", () => {
     toast(gateSummaryLine(prdGate) + " — 無法核准");
     return;
   }
-  const r = store.approveAndLock();
+  let r = store.approveAndLock();
+
+  // 沒有我可以簽的關卡時，admin 可以代簽 —— 但**理由必填**，而且紀錄上會
+  // 逐關標成「以管理員身分代簽」。舊行為是 admin 按一次就靜默把所有未簽關卡
+  // 吃掉，畫面看不出來、紀錄只有一筆。四眼原則要的是看得到，不是做不到。
+  if (!r.ok && store.get().currentUser.accessRole === "admin") {
+    const reason = window.prompt(
+      "沒有你自己負責的關卡。要以管理員身分代簽其餘關卡嗎？\n請寫理由（會逐關留在簽核紀錄裡）：",
+      "",
+    );
+    if (reason === null) return;
+    if (!reason.trim()) {
+      toast("代簽一定要寫理由");
+      return;
+    }
+    r = store.approveAndLock({ override: { reason } });
+  }
+
   if (!r.ok) {
     toast(r.reason ?? "無法簽核");
     return;

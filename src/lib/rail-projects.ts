@@ -200,6 +200,35 @@ function bumpCounts() {
  * 每次 render 都呼叫（自帶存在性守衛）：initRailNav 會整段重建 nav.innerHTML，
  * 只掛一次的話任何一次重建都會把它抹掉。
  */
+/**
+ * 「工作區」那一組 —— 四個**跨專案**的視圖。
+ *
+ * 同時也是「現在沒有選中任何專案」的判準來源（`onWorkspacePage`）：
+ * 兩者共用一份清單，才不會在這裡加一個入口、忘了另一邊而讓選取狀態說謊。
+ */
+/**
+ * 只有 href，**刻意不含 icon**。
+ *
+ * `rail-nav.ts` 與這個檔互相 import（它要 `renderRailProjects`，這裡要 `IC`）。
+ * 在模組頂層讀 `IC.*` 會在這個循環還沒解開時求值，整個模組以
+ * `Cannot access 'IC' before initialization` 掛掉 —— 而症狀是側欄整塊不見、
+ * 頁面停在「載入中…」，完全指不到這一行。icon 只在函式裡取，就沒有這個問題。
+ */
+const WORKSPACE_HREFS = ["overview.html", "projects.html", "review.html", "templates.html"] as const;
+
+/**
+ * 現在這一頁是不是跨專案視圖。
+ *
+ * 是的話，下面的專案清單**不標選中、也不展開那三個動作**：這四頁看的是
+ * 全部專案，卻同時把某一張卡片標亮並在它底下列出「PRD 審閱監控／編輯工作台／
+ * Task Tracking」，等於宣稱你正在那個專案裡 —— 你不在。而且那三個入口一旦
+ * 出現就會被點，點下去才發現它帶你去的是「上次選的那個」，不是你剛剛在看的。
+ */
+function onWorkspacePage(): boolean {
+  const here = location.pathname.split("/").pop() || "";
+  return (WORKSPACE_HREFS as readonly string[]).includes(here);
+}
+
 function ensureWorkspaceNav(nav: Element) {
   const workLabel = Array.from(nav.querySelectorAll(".nav-label")).find(
     (el) => /工作區/.test(el.textContent || "") && !el.classList.contains("rail-proj-head"),
@@ -208,11 +237,12 @@ function ensureWorkspaceNav(nav: Element) {
 
   ensureSectionToggle(workLabel, "ws", "工作區");
 
+  // href 順序與 WORKSPACE_HREFS 對齊 —— 那一份是「哪幾頁不算選中專案」的判準
   const items: { href: string; label: string; icon: string; count?: "review" | "templates"; title: string }[] = [
-    { href: "overview.html", label: "專案總覽", icon: IC.dashboard, title: "所有專案的彙整儀表板" },
-    { href: "projects.html", label: "專案清單", icon: IC.projects, title: "可篩選、可搜尋的專案清單" },
-    { href: "review.html", label: "審閱佇列", icon: IC.review, count: "review", title: "待審與待簽核的規格" },
-    { href: "templates.html", label: "章節範本", icon: IC.templates, count: "templates", title: "可直接插入的段落骨架" },
+    { href: WORKSPACE_HREFS[0], label: "專案總覽", icon: IC.dashboard, title: "所有專案的彙整儀表板" },
+    { href: WORKSPACE_HREFS[1], label: "專案清單", icon: IC.projects, title: "可篩選、可搜尋的專案清單" },
+    { href: WORKSPACE_HREFS[2], label: "審閱佇列", icon: IC.review, count: "review", title: "待審與待簽核的規格" },
+    { href: WORKSPACE_HREFS[3], label: "章節範本", icon: IC.templates, count: "templates", title: "可直接插入的段落骨架" },
   ];
 
   let row = nav.querySelector(".rail-wsnav") as HTMLElement | null;
@@ -246,15 +276,24 @@ function ensureWorkspaceNav(nav: Element) {
 
 function projActionsHtml(): string {
   const items = [
+    { href: "write.html", label: "PRD 審閱監控", icon: IC.write },
+    { href: "signoff.html", label: "簽核管理", icon: IC.signoff },
     { href: "editor.html", label: "編輯工作台", icon: IC.editor },
     { href: "tracking.html", label: "Task Tracking", icon: IC.tracking },
   ];
+  // 現在站在哪一頁要標出來。上面的「工作區」那一組早就這麼做了，這三個沒有 ——
+  // 結果是在編輯台跟在 PRD 審閱監控看到的側欄長得一模一樣，位置感全靠記憶。
+  const here = location.pathname.split("/").pop() || "";
   return `<div class="rail-proj-actions" role="group" aria-label="這個專案可以做的事">
     ${items
-      .map(
-        (it) =>
-          `<a class="rail-proj-action" href="${it.href}"><svg class="ic" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${it.icon}</svg><span>${it.label}</span></a>`,
-      )
+      .map((it) => {
+        const on = it.href === here;
+        // 內層 span 才是選中底色的載體：外層 <a> 的兩個 pseudo 被樹狀幹線與
+        // 橫枝佔著，底色畫在外層會把那兩條線一起框進去，看起來像框歪了。
+        return `<a class="rail-proj-action${on ? " on" : ""}" href="${it.href}"${
+          on ? ' aria-current="page"' : ""
+        }><span class="rail-proj-action-in"><svg class="ic" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${it.icon}</svg><span>${it.label}</span></span></a>`;
+      })
       .join("")}
   </div>`;
 }
@@ -369,7 +408,8 @@ function bindAddMenu(block: HTMLElement) {
   ensureWorkspaceNav(nav);
 
   const projects = store.visibleProjects();
-  const activeId = store.get().activeProjectId;
+  // 跨專案視圖上沒有「目前這個專案」—— 不標選中，也不展開專案動作
+const activeId = onWorkspacePage() ? "" : store.get().activeProjectId;
 
   // 簽章要用**畫面上真的看得到的值**，不是原始資料。
   //

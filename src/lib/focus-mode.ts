@@ -13,9 +13,9 @@ import { elapsedLabel } from "./writing-assist";
 
 const KEY = "anchorline:focus";
 /** 中文草稿速度，字/分。保守估，寧可高估剩餘時間也不要讓人覺得被騙。 */
-const CHARS_PER_MIN = 40;
+export const CHARS_PER_MIN = 40;
 /** hint 沒寫字數時的預設目標 */
-const DEFAULT_TARGET = 200;
+export const DEFAULT_TARGET = 200;
 
 export function isFocusMode(): boolean {
   return document.documentElement.classList.contains("focus-mode");

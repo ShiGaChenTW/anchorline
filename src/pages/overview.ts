@@ -11,6 +11,7 @@ import type { AppState, Project } from "../data/types";
 import { projectDisplayName } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
+import { hideLoading, showLoading } from "../lib/loading-overlay";
 import { evaluatePrdGates } from "../lib/prd-gates";
 import {
   formatBytes,
@@ -648,10 +649,21 @@ if (!requireAuth()) {
     render();
   }
 
+  /**
+   * 進頁的載入遮罩。
+   *
+   * 每次點「專案總覽」都會看到 —— 這一頁一進來就同時在抓 openspec、PR、
+   * 治理覆蓋率，畫面會先畫一版再跳一次。與其讓數字自己變，不如把那幾秒
+   * 明確標成「還在算」。
+   *
+   * 6 秒硬上限：其中任何一個查詢卡住（gh 逾時、bridge 沒回應）都不該
+   * 讓整頁永遠關不掉。上限到了就放行，畫面本來就已經有可讀的內容。
+   */
+  showLoading("專案數據統計中", { minMs: 450, autoHideAfter: 6000 });
+
   render();
   store.subscribe(render);
   store.subscribe(() => void refreshOpenspec());
-  void refreshOpenspec();
-  void refreshGh();
+  void Promise.allSettled([refreshOpenspec(), refreshGh()]).then(() => hideLoading());
   window.setInterval(() => void refreshGh(), GH_REFRESH_MS);
 }

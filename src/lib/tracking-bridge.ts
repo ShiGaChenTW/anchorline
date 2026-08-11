@@ -13,6 +13,14 @@ export type ScannedPlan = {
   name: string;
   mtimeMs: number;
   text: string;
+  /**
+   * `plan` = `plans/*.md`；`openspec` = `openspec/changes/<id>/tasks.md`。
+   * 兩種檔的內文方言不同，前端要靠這個欄位選 parser —— 在前端用路徑再猜一次，
+   * 等於同一個判斷寫兩個地方，而且改一邊不會有人發現。
+   */
+  kind?: "plan" | "openspec";
+  /** openspec 專用：變更代號（目錄名）。tasks.md 沒有 H1，靠它當標題 */
+  change?: string;
 };
 
 export type TrackingScan = {
@@ -25,8 +33,11 @@ export function canScanPlans(): boolean {
 }
 
 /** 向原生橋要一次掃描。逾時由 Tauri 的 IPC 自己處理，這裡不再自訂計時器。 */
-export async function requestTrackingScan(plansDirs: string[]): Promise<TrackingScan> {
-  const r = await native.trackingScan(plansDirs);
+export async function requestTrackingScan(
+  plansDirs: string[],
+  openspecRoots: string[] = [],
+): Promise<TrackingScan> {
+  const r = await native.trackingScan(plansDirs, openspecRoots);
   return { files: r.files as ScannedPlan[], signal: r.signal ?? null };
 }
 
@@ -52,4 +63,23 @@ export function plansDirsOf(projects: ProjectLike[], activeProjectId?: string | 
     .filter(Boolean)
     .map((root) => `${root}/plans`);
   return [...new Set(dirs)];
+}
+
+/**
+ * 要掃 OpenSpec 的專案根目錄。
+ *
+ * 跟 `plansDirsOf` 同一條規矩：**只看當前選取的專案**，沒有就回空陣列。
+ * 傳的是專案根目錄而不是 `openspec/changes`，因為「往下一層、跳過 archive」
+ * 那段邏輯屬於 Rust（它才知道哪些是目錄），前端不該自己拼那條路徑。
+ */
+export function openspecRootsOf(
+  projects: ProjectLike[],
+  activeProjectId?: string | null,
+): string[] {
+  const scoped = activeProjectId ? projects.filter((p) => p.id === activeProjectId) : [];
+  return [
+    ...new Set(
+      scoped.map((p) => (p.importSummary?.rootPath ?? "").replace(/\/+$/, "")).filter(Boolean),
+    ),
+  ];
 }

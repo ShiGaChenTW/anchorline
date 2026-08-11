@@ -17,7 +17,15 @@
  *
  * 純函式 + 一個需要注入 reader/writer 的協調函式。
  */
-import { ANCHOR_PREFIX, ANCHOR_RE, anchorOf, mintId, type PlanStep } from "./plan-parser";
+import {
+  ANCHOR_PREFIX,
+  ANCHOR_RE,
+  anchorOf,
+  mintId,
+  OS_STEP_NO_RE,
+  type PlanDialect,
+  type PlanStep,
+} from "./plan-parser";
 
 /** 讀取當下的憑證。寫回去之前拿它跟磁碟上的現況比對。 */
 export type PlanGuard = {
@@ -82,17 +90,30 @@ const CHECKBOX_LINE = /^(\s*-\s*\[)([ vVxX])(\]\s*)(.*)$/;
  * 不用「重新產生整份 markdown」是刻意的：那會把使用者手寫的縮排、註解、
  * 空行全部正規化掉，而那些是他的東西不是我們的。
  */
-export function toggleStep(text: string, id: string, done: boolean): string {
+export function toggleStep(
+  text: string,
+  id: string,
+  done: boolean,
+  dialect: PlanDialect = "plan",
+): string {
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    if (anchorOf(line) !== id) continue;
     const m = line.match(CHECKBOX_LINE);
     if (!m) continue;
+    // `plan` 用不透明錨點定位；`openspec` 用它自己的 `N.M` 編號 ——
+    // 那是上游工具管的檔案，往裡面塞我們的錨點等於改別人的格式。
+    const hit = dialect === "openspec" ? osStepNoOf(m[4]!) === id : anchorOf(line) === id;
+    if (!hit) continue;
     lines[i] = `${m[1]}${done ? "x" : " "}${m[3]}${m[4]}`;
     return lines.join("\n");
   }
   return text;
+}
+
+/** `1.1 Verify …` → `1.1`。沒有編號回 null（那種步驟不能勾，UI 也不給勾選鈕）。 */
+export function osStepNoOf(body: string): string | null {
+  return body.trim().match(OS_STEP_NO_RE)?.[1] ?? null;
 }
 
 /**

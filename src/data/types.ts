@@ -110,10 +110,56 @@ export type WorkflowStageDef = {
   order: number;
   name: string;
   defaultAssigneeId: string | null;
+  /**
+   * 非必簽的關卡**不擋結案**，而且可以被明確「略過」。
+   *
+   * 這個旗標本來是死的：UI 可以取消勾選，但 `allStagesSettled` 要求每一關
+   * 都結案，所以非必簽照樣擋著（prod 種子的「法務」就是 `required:false`）。
+   */
   required: boolean;
+  /**
+   * 串行的關卡要等前面所有關卡結案才輪得到；並行的隨時可簽。
+   *
+   * **移轉時既有關卡一律給 `parallel`** —— 那是現行行為，不能因為升級就把
+   * 跑到一半的案子擋住。新增關卡預設 `sequential`（市場常態）。
+   */
+  mode: StageMode;
 };
 
-export type CaseStageState = "approved" | "pending" | "empty" | "skipped";
+export type StageMode = "sequential" | "parallel";
+
+/**
+ * 關卡狀態。
+ *
+ * `changes_requested` 是審閱者的負向決策 —— 在這之前這套流程只有「核准」，
+ * 發現問題時唯一能做的是不按按鈕，而那在畫面上跟「還沒輪到他」一模一樣。
+ */
+export type CaseStageState =
+  | "approved"
+  | "changes_requested"
+  | "pending"
+  | "empty"
+  | "skipped";
+
+/** 一次決策。**不覆蓋**，每一次都往 `CaseRecord.log` 追加。 */
+export type CaseDecision = {
+  id: string;
+  stageId: string;
+  /** 第幾輪送審。重送 +1，讓紀錄看得出「這是第二輪才提的意見」 */
+  round: number;
+  at: string;
+  byId: string;
+  byName: string;
+  kind: DecisionKind;
+  /** `changes_requested` 與 `override` 必填 */
+  comment: string;
+};
+
+/**
+ * `comment` 是「保留意見」：留話但**不改變關卡狀態**（照抄 GitHub PR review
+ * 的第三態）。`override` 是管理員代簽，必填理由，紀錄上跟一般核准分開標示。
+ */
+export type DecisionKind = "approved" | "changes_requested" | "comment" | "skipped" | "override";
 
 /** 個案上的關卡實例（可異動關卡人員） */
 export type CaseStage = {
@@ -124,6 +170,23 @@ export type CaseStage = {
   assigneeId: string | null;
   assigneeName: string;
   state: CaseStageState;
+  /**
+   * 決策戳記。**全部 optional** —— 這四個欄位是後來補的，舊個案沒有，
+   * 畫面顯示「—」而不是假裝有。
+   *
+   * 為什麼不重用 `assigneeName`：既有程式碼在簽核時把它改成 `"名字 · 已簽"`，
+   * 那個欄位同時扛「被指派給誰」與「誰簽的」兩件事，改派之後就分不出來了。
+   * 紀錄一律以 `decidedByName` 為準。
+   */
+  decidedAt?: string;
+  decidedById?: string;
+  decidedByName?: string;
+  /** 簽核意見。核准時可留一句話，會進簽核紀錄 */
+  comment?: string;
+  /** 這個關卡實例的順序模式。舊資料沒有就當 `parallel`（＝現行行為） */
+  mode?: StageMode;
+  /** 非必簽的關卡不擋結案。舊資料沒有就當必簽（＝現行行為） */
+  required?: boolean;
 };
 
 /** 個案簽核狀態（含抽單） */
@@ -140,6 +203,20 @@ export type CaseRecord = {
    */
   reviewCommitId: string | null;
   stages: CaseStage[];
+  /**
+   * 第幾輪送審。第一次送審是 1，每次重送 +1。
+   *
+   * 有了輪次，紀錄才講得出因果：「第 1 輪資安要求修改 → 第 2 輪重送 → 通過」。
+   * 舊資料沒有這個欄位，移轉時補 1。
+   */
+  round?: number;
+  /**
+   * 所有決策，**只追加不覆蓋**。
+   *
+   * `CaseStage` 上那組 `decidedAt/By/comment` 是「最新一筆的投影」，方便清單
+   * 直接讀；真相在這裡。少了它，第二輪的決策會把第一輪的意見蓋掉。
+   */
+  log?: CaseDecision[];
   withdrawn: boolean;
   withdrawnAt: string | null;
   withdrawnBy: string | null;
