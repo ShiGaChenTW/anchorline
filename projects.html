@@ -80,13 +80,18 @@
     </aside>
 
     <main class="main" data-od-id="main-projects">
-      <div class="toolbar context-toolbar" data-context="projects" data-od-id="toolbar">
-        <div>
-          <div class="context-kicker">02 / PROJECTS</div>
+      <div class="toolbar context-toolbar context-surface-toolbar" data-context="projects" data-od-id="toolbar">
+        <div class="context-frame-top">
+          <span class="context-kicker">02 / PROJECTS</span>
+          <span class="context-state">PROJECT SPACE</span>
+        </div>
+        <div class="context-title-block">
           <h1 data-od-id="page-title">專案清單</h1>
           <div class="sub">選擇要繼續的規格</div>
         </div>
-        <div class="spacer"></div>
+        <div class="context-frame-bottom">
+          <span class="context-path">workspace / projects</span>
+          <div class="context-actions">
         <div class="search" data-od-id="search">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="var(--muted)"><path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"/></svg>
           <input id="q" type="search" placeholder="搜尋標題、擁有者、標籤…" aria-label="搜尋專案" />
@@ -101,12 +106,14 @@
         </div>
         <!-- 不可用 hidden：WebKit 會擋 file dialog -->
         <input type="file" id="tasks-readback-input" class="visually-hidden-file" accept=".md,text/markdown" tabindex="-1" aria-hidden="true" />
-        <button type="button" class="btn" id="btn-import" data-od-id="btn-import" title="選擇資料夾，自動偵測 PRD 相關檔並評分">專案匯入</button>
+        <button type="button" class="btn btn-primary" id="btn-import" data-od-id="btn-import" title="選擇資料夾，自動偵測 PRD 相關檔並評分">專案匯入</button>
         <!-- 不可用 hidden：WebKit 會擋 file dialog；App 走原生 NSOpenPanel，此為瀏覽器 fallback -->
         <input type="file" id="folder-import-input" class="visually-hidden-file" webkitdirectory directory multiple tabindex="-1" aria-hidden="true" />
-        <button type="button" class="btn btn-primary" id="btn-new" data-od-id="btn-new">＋ 新建 PRD</button>
+        <button type="button" class="btn btn-primary" id="btn-new" data-od-id="btn-new">新建 PRD</button>
         <button type="button" class="btn" id="btn-beginner" data-od-id="btn-beginner" title="一步步帶你寫出第一份 PRD">🌱 新手引導</button>
         <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
+          </div>
+        </div>
       </div>
 
       <div class="content">

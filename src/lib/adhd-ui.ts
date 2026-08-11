@@ -29,8 +29,6 @@ function nextStepForPage(page: RailPage | null): NextStep {
         return {
           label: "下一步",
           detail: "先建立第一份規格：匯入資料夾或新建空白 PRD，一次只選一個。",
-          cta: "匯入專案",
-          action: () => document.getElementById("btn-import")?.click(),
         };
       }
       return {
@@ -145,6 +143,14 @@ function integratePageChrome(step: NextStep) {
   if (!toolbar) {
     // 無 toolbar 的頁面才退回獨立焦點條
     ensureStandaloneFocusStrip(step);
+    return;
+  }
+
+  // 四個主要 context page 直接使用核准的 context-frame 結構；
+  // 不再把「下一步」焦點列塞回標題區，避免破壞設計稿的上下層次。
+  if (toolbar.classList.contains("context-toolbar")) {
+    document.getElementById("adhd-focus-strip")?.remove();
+    toolbar.classList.add("context-surface-toolbar");
     return;
   }
 
@@ -351,9 +357,11 @@ function collapseToolbar() {
 
   // 頁面 chrome 整合後按鈕在 actions 內
   const host =
-    (toolbar.querySelector(
-      ".adhd-page-chrome-actions, .adhd-editor-chrome-actions",
-    ) as HTMLElement | null) ?? toolbar;
+    (toolbar.classList.contains("context-toolbar")
+      ? toolbar.querySelector(".context-actions")
+      : toolbar.querySelector(
+          ".adhd-page-chrome-actions, .adhd-editor-chrome-actions",
+        )) as HTMLElement | null ?? toolbar;
 
   const moveables: HTMLElement[] = [];
   Array.from(host.children).forEach((child) => {
