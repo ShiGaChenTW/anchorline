@@ -599,6 +599,9 @@ if (!requireAuth()) {
     }
 
     measuring = true;
+    // 逐個專案跑 git／onefetch，真的會等 —— 這裡本來只有按鈕上的文字在變，
+    // 而使用者的眼睛在畫面中央，不在那顆按鈕上
+    showLoading(`專案統計中`, { minMs: 600 });
     const btn = document.getElementById("btn-measure-all") as HTMLButtonElement | null;
     let done = 0;
     for (const path of targets) {
@@ -613,6 +616,7 @@ if (!requireAuth()) {
     }
     if (btn) btn.textContent = "量測全部";
     measuring = false;
+    hideLoading();
     toast(`已量測 ${done} 個專案`);
   }
 
@@ -658,8 +662,12 @@ if (!requireAuth()) {
    *
    * 6 秒硬上限：其中任何一個查詢卡住（gh 逾時、bridge 沒回應）都不該
    * 讓整頁永遠關不掉。上限到了就放行，畫面本來就已經有可讀的內容。
+   *
+   * 最短 1.1 秒：桌面版在沒有綁定資料夾的專案上，兩個查詢都會立刻回來，
+   * 原本 450ms 的遮罩快到根本看不見 —— 「有出現但你沒看到」跟「沒出現」
+   * 對使用者是同一件事。
    */
-  showLoading("專案統計中", { minMs: 450, autoHideAfter: 6000 });
+  showLoading("專案統計中", { minMs: 1100, autoHideAfter: 6000 });
 
   render();
   store.subscribe(render);
