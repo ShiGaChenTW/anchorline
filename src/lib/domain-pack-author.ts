@@ -145,7 +145,7 @@ export async function authorDomainPack(input: AuthorInput, complete: Complete): 
   const cut = looksTruncated(raw);
   if (cut) return { ok: false, reason: cut, raw };
 
-  const first = validate(raw);
+  const first = validate(raw, "AI 產出");
   if (first.ok) return { ok: true, raw, pack: first.pack, repaired: false };
 
   let fixed: string;
@@ -171,7 +171,7 @@ ${raw}
   const cut2 = looksTruncated(fixed);
   if (cut2) return { ok: false, reason: cut2, raw: fixed };
 
-  const second = validate(fixed);
+  const second = validate(fixed, "AI 產出");
   if (second.ok) return { ok: true, raw: fixed, pack: second.pack, repaired: true };
   return { ok: false, reason: `修正後仍無法解析：${second.reason}`, raw: fixed };
 }

@@ -14,6 +14,7 @@ import {
   SEED_WORKFLOW,
   SEED_WORKFLOW_PROD,
   TEST_CASE_DOCS,
+  withCustomSection,
 } from "./seed";
 import { draftRelease, validateVersion, type Release, type ReleaseItem } from "../lib/release";
 import { logEvent } from "../lib/event-writer";
@@ -93,14 +94,19 @@ function domainOf(p: Project | undefined): string {
 }
 
 function domainSections(domain: string): Section[] {
+  // 「XX 自訂章節」在這裡追加，不在 resolveDomain 裡：領域包會在 base 後面補
+  // 自己的章節，先追加就會被擠到中間、編號也錯。兩條路徑都要包，退路漏掉的
+  // 症狀是「領域包寫壞之後範本插入無處可去」。
   try {
-    return resolveDomain(domain, domainPacks(), {
-      sections: SEED_SECTIONS,
-      gates: BASE_GATE_SPEC,
-    }).sections;
+    return withCustomSection(
+      resolveDomain(domain, domainPacks(), {
+        sections: SEED_SECTIONS,
+        gates: BASE_GATE_SPEC,
+      }).sections,
+    );
   } catch {
     // 領域包寫壞不該讓整個 App 開不起來——退回通用 7 章，使用者至少還能工作
-    return SEED_SECTIONS;
+    return withCustomSection(SEED_SECTIONS);
   }
 }
 
@@ -196,9 +202,9 @@ function caseFromWorkflow(
 
 function seedState(): AppState {
   const isTest = APP_VARIANT === "test";
-  const sections = isTest
-    ? structuredClone(SEED_SECTIONS)
-    : blankSections(structuredClone(SEED_SECTIONS));
+  const sections = withCustomSection(
+    isTest ? structuredClone(SEED_SECTIONS) : blankSections(structuredClone(SEED_SECTIONS)),
+  );
   const employees = structuredClone(SEED_EMPLOYEES);
   const current =
     employees.find((e) => e.isCurrent) ?? employees[0] ?? structuredClone(GHOST_USER);
@@ -2261,7 +2267,7 @@ export const store = {
         showSamples: true,
         sectionValues: useSeed ? seedVals : restored,
         sampleSectionValues: null,
-        sections: structuredClone(SEED_SECTIONS),
+        sections: withCustomSection(structuredClone(SEED_SECTIONS)),
         projects: (() => {
           const nonSample = state.projects.filter((p) => !p.isSample);
           const samples = structuredClone(SEED_PROJECTS);
