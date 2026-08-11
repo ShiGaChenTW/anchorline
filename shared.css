@@ -13790,3 +13790,83 @@ p.gd-warn {
   box-shadow: var(--focus-ring);
 }
 
+/* ── 版本取號：PUSH 閘門 ──────────────────────────────────────
+ *
+ * 兩條路線的差別在這裡才真正顯現：shipped 有版號就能出，
+ * planned 要等 change 完成。所以未完成的 change 逐一列出來 ——
+ * 「還不能 push」沒有下一步，「這三個還沒完成」才有。
+ */
+.rl-push {
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+.rl-push.is-ready {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+.rl-push-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.rl-push-track {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--fs-1);
+  letter-spacing: 0.06em;
+}
+.rl-push-why {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+.rl-push-block {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+.rl-push-block code {
+  color: var(--accent);
+  font-family: var(--mono);
+}
+.rl-push-cmd {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg-2, var(--fg));
+  font-family: var(--mono);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+.rl-push-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-1);
+}
+
+/* 取號完成但還沒放行 —— 這是預先作業的正常狀態，不是錯誤，所以不用警告色 */
+.rl-push.is-planned {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+}
+.rl-push-fix {
+  margin: 6px 0 10px;
+  color: var(--fg-2, var(--fg));
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+.rl-push-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

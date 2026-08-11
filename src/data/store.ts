@@ -17,7 +17,8 @@ import {
   TEST_CASE_DOCS,
   withCustomSection,
 } from "./seed";
-import { draftRelease, validateVersion, type Release, type ReleaseItem } from "../lib/release";
+import { draftRelease, validateVersion, type Release, type ReleaseItem, type ReleaseLevelId, type VersionPolicy, policyOf } from "../lib/release";
+import { canAddItem } from "../lib/release-track";
 import { logEvent } from "../lib/event-writer";
 import type {
   AgentFamily,
@@ -2614,9 +2615,10 @@ export const store = {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   },
 
-  createRelease(projectId?: string): Release {
+  /** 建立時決定動哪一段 —— 層級決定取號要過哪一道閘門 */
+  createRelease(projectId?: string, level: ReleaseLevelId = "patch"): Release {
     const pid = projectId ?? state.activeProjectId;
-    const r = draftRelease(pid, `rel-${Date.now()}`, nowIso());
+    const r = { ...draftRelease(pid, `rel-${Date.now()}`, nowIso()), level, releasedAt: null };
     state = { ...state, releases: [r, ...state.releases] };
     emit();
     return r;
@@ -2627,7 +2629,8 @@ export const store = {
     const cur = state.releases.find((r) => r.id === id);
     if (!cur) return { ok: false, reason: "找不到這一版" };
     if (patch.version !== undefined) {
-      const v = validateVersion(patch.version, cur.projectId, state.releases, id);
+      const proj = state.projects.find((x) => x.id === cur.projectId);
+      const v = validateVersion(patch.version, cur.projectId, state.releases, id, policyOf(proj));
       if (!v.ok) return v;
     }
     state = {
@@ -2645,7 +2648,19 @@ export const store = {
     emit();
   },
 
-  addReleaseItem(id: string, item: Omit<ReleaseItem, "id">) {
+  /**
+   * 加一個項目。**擋兩件事**：跨路線的來源，以及已被別的版號收走的 ref。
+   *
+   * 擋在 store 而不是只擋在畫面上：候選清單已經過濾過，但手打與之後可能
+   * 出現的其他入口不會，而重複收同一筆 commit 的後果是兩份 release note
+   * 都宣稱擁有它，讀的人無從判斷。
+   */
+  addReleaseItem(id: string, item: Omit<ReleaseItem, "id">): { ok: boolean; reason?: string } {
+    const cur = state.releases.find((r) => r.id === id);
+    if (!cur) return { ok: false, reason: "找不到這一版" };
+    const check = canAddItem(cur, item, state.releases);
+    if (!check.ok) return check;
+
     const withId: ReleaseItem = { ...item, id: `ri-${Date.now()}-${Math.round(performance.now())}` };
     state = {
       ...state,
@@ -2654,6 +2669,7 @@ export const store = {
       ),
     };
     emit();
+    return { ok: true };
   },
 
   updateReleaseItem(id: string, itemId: string, patch: Partial<ReleaseItem>) {
@@ -2682,6 +2698,71 @@ export const store = {
       ),
     };
     emit();
+  },
+
+  /**
+   * 切換版號政策。**單向：loose → strict 可以，反過來不行。**
+   *
+   * 擋回頭不是為了懲罰反悔。strict 底下發出去的版號帶著保證 ——
+   * `v1.02.00` 的 YY 是「這一版走過 OpenSpec」的憑證。退回 loose 之後
+   * 那個保證沒有東西背書，而號已經在 git tag 與別人的 changelog 裡了。
+   *
+   * 換句話說：可以撤回的是規則，撤不回的是已經用那條規則發出去的號。
+   */
+  setVersionPolicy(projectId: string, policy: VersionPolicy): { ok: boolean; reason?: string } {
+    const p = state.projects.find((x) => x.id === projectId);
+    if (!p) return { ok: false, reason: "找不到這個專案" };
+    if (policyOf(p) === "strict" && policy === "loose") {
+      return {
+        ok: false,
+        reason: "這個專案已經採 vX.YY.ZZ，不能改回寬鬆 —— 已經發出去的版號會失去依據。",
+      };
+    }
+    if (policyOf(p) === policy) return { ok: true };
+    state = {
+      ...state,
+      projects: state.projects.map((x) =>
+        x.id === projectId ? { ...x, versionPolicy: policy } : x,
+      ),
+    };
+    emit();
+    return { ok: true };
+  },
+
+  /**
+   * 正式放行。**取號是規劃，放行才是「要出去了」。**
+   *
+   * 分成兩個動作而不是自動推導：push 出去收不回來，那個決定要有一個
+   * 明確按下去的瞬間。放行後內容不能再改（`canAddItem` 會擋）。
+   */
+  releaseNow(id: string): { ok: boolean; reason?: string } {
+    const cur = state.releases.find((r) => r.id === id);
+    if (!cur) return { ok: false, reason: "找不到這一版" };
+    if (cur.releasedAt) return { ok: false, reason: "這一版已經放行過了" };
+    if (!cur.items.length) return { ok: false, reason: "這一版還沒有任何內容" };
+    const iso = nowIso();
+    state = {
+      ...state,
+      releases: state.releases.map((r) =>
+        r.id === id ? { ...r, releasedAt: iso, updatedAt: iso } : r,
+      ),
+    };
+    emit();
+    return { ok: true };
+  },
+
+  /** 撤回放行。還沒 push 出去之前反悔是正常的，所以這條路要留著。 */
+  unreleaseNow(id: string): { ok: boolean; reason?: string } {
+    const cur = state.releases.find((r) => r.id === id);
+    if (!cur) return { ok: false, reason: "找不到這一版" };
+    state = {
+      ...state,
+      releases: state.releases.map((r) =>
+        r.id === id ? { ...r, releasedAt: null, updatedAt: nowIso() } : r,
+      ),
+    };
+    emit();
+    return { ok: true };
   },
 
   markReleaseHanded(id: string) {
