@@ -9,7 +9,7 @@
 
 use anchorline_lib::testing::{append_line, domain_pack_writable, scan_plans, RegisteredRoots};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn tmp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("sf-contract-{name}"));
@@ -121,7 +121,7 @@ fn scan_plans_skips_empty_and_oversized() {
 // 這是唯一一支**能建新檔**的寫入路徑（`editable` 要求 is_file()），
 // 所以它的界線要被釘死：目錄必須是使用者親手選過的，檔名由 Rust 驗證。
 
-fn roots_with(dir: &PathBuf) -> RegisteredRoots {
+fn roots_with(dir: &Path) -> RegisteredRoots {
     let r = RegisteredRoots::default();
     r.register(dir);
     r
@@ -184,7 +184,11 @@ fn domain_pack_rejects_odd_characters_and_overlong_names() {
     // 非 ASCII 檔名擋掉：不是歧視中文，是不想處理正規化差異帶來的同名混淆
     assert!(!domain_pack_writable(&dir, "保險.md", &roots));
     assert!(!domain_pack_writable(&dir, "a b.md", &roots));
-    assert!(!domain_pack_writable(&dir, &format!("{}.md", "x".repeat(70)), &roots));
+    assert!(!domain_pack_writable(
+        &dir,
+        &format!("{}.md", "x".repeat(70)),
+        &roots
+    ));
 }
 
 #[test]
