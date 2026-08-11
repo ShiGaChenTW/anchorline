@@ -37,7 +37,19 @@ export type OpenspecListEntry = {
 
 /** CLI 不在、不是 openspec 專案、輸出壞掉 —— 全部走這個，不是錯誤。 */
 export type OpenspecUnavailable = { available: false; reason: string };
-export type OpenspecReport = { available: true; changes: OpenspecChange[] };
+export type OpenspecReport = {
+  available: true;
+  changes: OpenspecChange[];
+  /**
+   * `openspec list --json` 的原始列。**判讀一律走 `changes`**，這裡只多帶
+   * `list` 才有而 `status` 沒有的兩樣東西：`lastModified` 與 tasks 計數。
+   *
+   * 為什麼要：畫面要回答「這個 change 幾天沒動了」。時間盲是 ADHD 的核心缺損，
+   * 而「三天沒動」跟「剛剛才動」對要不要現在接手是完全不同的答案。
+   * 選填 —— 舊呼叫端（`overview.ts`）不讀它，不必跟著改。
+   */
+  listed?: OpenspecListEntry[];
+};
 export type OpenspecResult = OpenspecReport | OpenspecUnavailable;
 
 const KNOWN_STATUS: ArtifactStatus[] = ["done", "ready", "blocked", "skipped"];
