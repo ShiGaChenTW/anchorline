@@ -20,6 +20,21 @@ import {
 } from "../lib/domain-pack-manage";
 import { CUSTOM_SECTION_ID } from "../data/seed";
 import PACK_TEMPLATE_MD from "../data/domains/_template.md?raw";
+import {
+  asViewMode,
+  filterByOrigin,
+  filterTemplates,
+  nextSort,
+  outlineCount,
+  outlineOf,
+  sortIndicator,
+  sortTemplates,
+  VIEW_KEY,
+  type PackOriginFilter,
+  type SortKey,
+  type SortState,
+  type ViewMode,
+} from "../lib/template-view";
 
 const __authed = requireAuth();
 if (__authed) {
@@ -80,17 +95,20 @@ let cat: "all" | TemplateCat = "all";
 let q = "";
 let current: Template | null = null;
 
+/** 卡片／列表。存 localStorage —— 這是偏好，不是每次都要重選的東西。 */
+let view: ViewMode = "cards";
+try {
+  view = asViewMode(localStorage.getItem(VIEW_KEY));
+} catch {
+  /* private mode */
+}
+/** 兩種檢視共用同一份排序狀態。null = 維持 store 的原始順序 */
+let sort: SortState = null;
+/** 領域包分頁專用 */
+let packOrigin: PackOriginFilter = "all";
+
 function getTemplates(): Template[] {
   return store.get().templates || [];
-}
-
-/** 整份範本的卡片要講「這份有幾章」——那是選範本時真正在比的東西 */
-function outlineOf(t: Template): string[] {
-  return t.body
-    .split("\n")
-    .filter((l) => /^#{1,3} /.test(l))
-    .map((l) => l.replace(/^#{1,3} /, "").trim())
-    .filter(Boolean);
 }
 
 function renderCatTabs() {
@@ -129,7 +147,7 @@ const ORIGIN_LABEL: Record<ManagedPack["origin"], string> = {
 };
 
 function renderDomainPacks() {
-  const packs = listManagedPacks().filter((p) => {
+  const packs = filterByOrigin(listManagedPacks(), packOrigin).filter((p) => {
     if (!q) return true;
     const s = q.toLowerCase();
     return p.name.toLowerCase().includes(s) || p.displayName.includes(q) || (p.industry ?? "").includes(q);
@@ -182,27 +200,162 @@ function renderDomainPacks() {
   });
 }
 
+/**
+ * 檢視切換與排序控制列。
+ *
+ * 領域包分頁沒有排序（它的欄位不成表格），所以那一組收起來，
+ * 換成它自己的來源篩選 —— 那一頁原本一個篩選器都沒有。
+ */
+function renderViewControls() {
+  const isDomain = kind === "domain";
+
+  document.querySelectorAll<HTMLButtonElement>(".tv-btn").forEach((b) => {
+    const on = b.dataset.view === view;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+
+  const sortWrap = document.getElementById("sort-wrap");
+  if (sortWrap) (sortWrap as HTMLElement).hidden = isDomain;
+  const sel = document.getElementById("sort-select") as HTMLSelectElement | null;
+  if (sel) sel.value = sort ? `${sort.key}:${sort.dir}` : "";
+
+  const originWrap = document.getElementById("origin-filter-wrap");
+  if (originWrap) (originWrap as HTMLElement).hidden = !isDomain;
+  const origin = document.getElementById("origin-filter") as HTMLSelectElement | null;
+  if (origin) origin.value = packOrigin;
+
+  // 檢視切換對領域包也有效（它只有卡片一種畫法，所以整組收起來）
+  const sw = document.querySelector(".tv-switch") as HTMLElement | null;
+  if (sw) sw.hidden = isDomain;
+}
+
+/** 兩種檢視共用的資料入口 —— 篩選與排序只算一次 */
+function visibleTemplates(): Template[] {
+  return sortTemplates(
+    filterTemplates(getTemplates(), { kind: kind as TemplateKind, cat, q }),
+    sort,
+  );
+}
+
+const LIST_COLS: { key: SortKey | null; label: string; cls?: string }[] = [
+  { key: "title", label: "標題" },
+  { key: "cat", label: "分類" },
+  { key: "outline", label: "段落", cls: "tv-num" },
+  { key: "uses", label: "使用", cls: "tv-num" },
+  { key: "source", label: "出處", cls: "tv-col-source" },
+  { key: null, label: "", cls: "tv-actions" },
+];
+
+function renderList(list: Template[]) {
+  const host = document.getElementById("list-wrap");
+  if (!host) return;
+
+  if (list.length === 0) {
+    host.innerHTML = `<div class="tv-empty">沒有符合的範本</div>`;
+    return;
+  }
+
+  const head = LIST_COLS.map((c) => {
+    // 動作欄沒有標題文字，但螢幕閱讀器要念得出這一欄是什麼
+    if (!c.key) return `<th class="${c.cls ?? ""}" aria-label="動作"></th>`;
+    const arrow = sortIndicator(sort, c.key);
+    const dir = sort && sort.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : "none";
+    return `<th class="tv-sortable ${c.cls ?? ""}" data-sort="${c.key}" role="columnheader"
+                aria-sort="${dir}" tabindex="0" title="點一下排序，再點反向，第三次回到預設">
+              ${escapeHtml(c.label)}${arrow ? `<span class="tv-sort-arrow">${arrow}</span>` : ""}
+            </th>`;
+  }).join("");
+
+  const rows = list
+    .map((t) => {
+      const n = outlineCount(t);
+      return `<tr data-id="${t.id}" data-od-id="tpl-row-${t.id}">
+        <td>
+          <span class="tv-title">${escapeHtml(t.title)}</span>
+          <span class="tv-blurb tv-col-blurb">${escapeHtml(t.blurb)}</span>
+        </td>
+        <td><span class="tag">${CAT_LABEL[t.cat]}</span></td>
+        <td class="tv-num">${n || "—"}</td>
+        <td class="tv-num">${t.uses}</td>
+        <td class="tv-col-source">${t.source ? escapeHtml(t.source) : "—"}</td>
+        <td class="tv-actions">
+          <button type="button" class="btn btn-sm btn-ghost btn-open-tpl" data-open-id="${t.id}" style="color:var(--accent);font-weight:600">預覽與套用</button>
+          <button type="button" class="btn btn-sm btn-ghost btn-del-tpl" data-del-id="${t.id}" title="一鍵移除範本" style="color:var(--muted)">✕</button>
+        </td>
+      </tr>`;
+    })
+    .join("");
+
+  host.innerHTML = `<table class="tv-list"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+
+  host.querySelectorAll<HTMLElement>("th.tv-sortable").forEach((th) => {
+    const apply = () => {
+      sort = nextSort(sort, th.dataset.sort as SortKey);
+      render();
+    };
+    th.onclick = apply;
+    // 表頭是 <th> 不是 <button>，鍵盤要自己接 —— 少了這段就只有滑鼠能排序
+    th.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        apply();
+      }
+    };
+  });
+
+  bindTemplateRowActions(host);
+}
+
+/** 預覽／移除的綁定 —— 卡片與列表用同一份，兩邊的行為不會分岔 */
+function bindTemplateRowActions(host: Element) {
+  host.querySelectorAll(".btn-open-tpl").forEach((btn) => {
+    (btn as HTMLButtonElement).onclick = (e) => {
+      e.stopPropagation();
+      openTpl((btn as HTMLElement).dataset.openId!);
+    };
+  });
+  host.querySelectorAll(".btn-del-tpl").forEach((btn) => {
+    (btn as HTMLButtonElement).onclick = (e) => {
+      e.stopPropagation();
+      const id = (btn as HTMLElement).dataset.delId!;
+      const tpl = getTemplates().find((t) => t.id === id);
+      if (tpl && confirm(`確定要移除範本「${tpl.title}」嗎？`)) {
+        store.deleteTemplate(id);
+        toast(`已移除範本「${tpl.title}」`);
+      }
+    };
+  });
+}
+
 function render() {
   renderCatTabs();
+  renderViewControls();
+
+  const grid = document.getElementById("grid") as HTMLElement | null;
+  const listWrap = document.getElementById("list-wrap") as HTMLElement | null;
+
   if (kind === "domain") {
+    // 領域包只有卡片一種畫法
+    if (grid) grid.hidden = false;
+    if (listWrap) listWrap.hidden = true;
     renderDomainPacks();
     return;
   }
-  const templates = getTemplates();
-  const list = templates.filter((t) => {
-    if (templateKind(t) !== kind) return false;
-    if (cat !== "all" && t.cat !== cat) return false;
-    if (q) {
-      const s = q.toLowerCase();
-      return t.title.toLowerCase().includes(s) || t.blurb.includes(q);
-    }
-    return true;
-  });
+
+  const list = visibleTemplates();
 
   const count = document.getElementById("count");
   if (count) count.textContent = `${list.length} 個${KIND_TAB_LABEL[kind]}`;
 
-  const grid = document.getElementById("grid");
+  if (grid) grid.hidden = view !== "cards";
+  if (listWrap) listWrap.hidden = view !== "list";
+
+  if (view === "list") {
+    renderList(list);
+    return;
+  }
+
   if (!grid) return;
 
   if (list.length === 0) {
@@ -241,24 +394,8 @@ function render() {
     })
     .join("");
 
-  grid.querySelectorAll(".btn-open-tpl").forEach((btn) => {
-    (btn as HTMLButtonElement).onclick = (e) => {
-      e.stopPropagation();
-      openTpl((btn as HTMLElement).dataset.openId!);
-    };
-  });
-
-  grid.querySelectorAll(".btn-del-tpl").forEach((btn) => {
-    (btn as HTMLButtonElement).onclick = (e) => {
-      e.stopPropagation();
-      const id = (btn as HTMLElement).dataset.delId!;
-      const tpl = templates.find((t) => t.id === id);
-      if (tpl && confirm(`確定要移除範本「${tpl.title}」嗎？`)) {
-        store.deleteTemplate(id);
-        toast(`已移除範本「${tpl.title}」`);
-      }
-    };
-  });
+  // 與列表共用同一份綁定 —— 兩種檢視的「預覽／移除」不該有兩套行為
+  bindTemplateRowActions(grid);
 }
 
 function openTpl(id: string) {
@@ -515,8 +652,39 @@ document.querySelectorAll("#kind-tabs .tab").forEach((tab) => {
   (tab as HTMLButtonElement).onclick = () => {
     kind = ((tab as HTMLElement).dataset.kind as Tab) || "full";
     cat = "all"; // 分類集合換了一組，舊的選擇在新集合裡不存在
+    // 排序鍵在不同 kind 之間仍然合法（標題／分類／使用都在），唯獨「段落」
+    // 對章節範本一律是 0 —— 那會排出一個看起來沒排序的清單，所以換 kind 時清掉
+    if (sort?.key === "outline" && kind !== "full") sort = null;
     render();
   };
+});
+
+document.querySelectorAll<HTMLButtonElement>(".tv-btn").forEach((btn) => {
+  btn.onclick = () => {
+    view = asViewMode(btn.dataset.view);
+    try {
+      localStorage.setItem(VIEW_KEY, view);
+    } catch {
+      /* private mode：這一輪仍然切得動，只是記不住 */
+    }
+    render();
+  };
+});
+
+document.getElementById("sort-select")?.addEventListener("change", (e) => {
+  const raw = (e.target as HTMLSelectElement).value;
+  if (!raw) {
+    sort = null;
+  } else {
+    const [key, dir] = raw.split(":") as [SortKey, "asc" | "desc"];
+    sort = { key, dir };
+  }
+  render();
+});
+
+document.getElementById("origin-filter")?.addEventListener("change", (e) => {
+  packOrigin = (e.target as HTMLSelectElement).value as PackOriginFilter;
+  render();
 });
 
 document.getElementById("q")?.addEventListener("input", (e) => {
