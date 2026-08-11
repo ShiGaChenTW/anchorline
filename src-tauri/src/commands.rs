@@ -736,6 +736,68 @@ pub fn openspec_status(
     }))
 }
 
+/// 未提交的改動內容 —— 給「AI 產生 commit 訊息」用。
+///
+/// **全部唯讀。** 這裡跑的是 `status --porcelain` 與兩種 `diff`，
+/// 沒有任何會改動 repo 的子指令。commit 仍然由使用者自己在終端機執行，
+/// 那是 `git-doctor.ts` 立過兩次的界線，這個功能不越過它。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitChangeset {
+    status: String,
+    stat: String,
+    patch: String,
+    /// patch 是否因為超過上限被截斷。前端要把這件事顯示出來 ——
+    /// 截斷過的 diff 產出的訊息比較粗，使用者有權知道
+    truncated: bool,
+}
+
+/// patch 的位元組上限。
+///
+/// 上限的第二個理由比第一個重要：超過的部分會被送到外部 AI 服務。
+/// 截斷是使用者看得到的降級，靜靜把整份 diff 寄出去不是。
+const PATCH_LIMIT: usize = 24_000;
+
+#[tauri::command]
+pub fn git_changeset(
+    folder_path: String,
+    roots: State<RegisteredRoots>,
+    overrides: State<CliOverrides>,
+) -> R<Maybe<GitChangeset>> {
+    let dir = PathBuf::from(&folder_path);
+    // 只讀已註冊的專案根目錄，跟 append_file 同一道守衛
+    if !roots.contains_ancestor_of(&dir) && !roots.contains_ancestor_of(&dir.join("x")) {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "這個資料夾沒有註冊為專案根目錄".to_string(),
+        )));
+    }
+    let Some(status) = exec::git(&dir, &["status", "--porcelain"], &overrides) else {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "這個資料夾不是 git 專案，或找不到 git".to_string(),
+        )));
+    };
+    let stat = exec::git(&dir, &["diff", "HEAD", "--stat"], &overrides).unwrap_or_default();
+    let raw = exec::git(&dir, &["diff", "HEAD", "--unified=1"], &overrides).unwrap_or_default();
+    let truncated = raw.len() > PATCH_LIMIT;
+    // 截在字元邊界上，切一半的 UTF-8 會讓整個 JSON 序列化壞掉
+    let patch = if truncated {
+        let mut cut = PATCH_LIMIT;
+        while cut > 0 && !raw.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        raw[..cut].to_string()
+    } else {
+        raw
+    };
+
+    Ok(Maybe::Ok(GitChangeset {
+        status,
+        stat,
+        patch,
+        truncated,
+    }))
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GhStatus {

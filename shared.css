@@ -13732,3 +13732,61 @@ p.gd-warn {
   font-size: 0.92em;
 }
 
+/* ── 版控健檢：AI 產生 commit 訊息 ────────────────────────────
+ *
+ * 這一區的產物是「一段可以改的文字」與「一行可以貼的指令」，
+ * 不是一顆會改動 repo 的按鈕。視覺上刻意不做成 primary 主動作 ——
+ * 主動作仍然是使用者自己去終端機執行。
+ */
+.gd-ai {
+  margin: 18px 0 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+.gd-ai-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.gd-ai-sub {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+.gd-ai-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gd-ai-status {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+/* 失敗訊息要說得出下一步，所以它值一個顏色 */
+.gd-ai-status.is-error {
+  color: var(--warn, #d9534f);
+}
+.gd-ai-text {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+  resize: vertical;
+}
+.gd-ai-text:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+

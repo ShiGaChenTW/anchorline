@@ -51,6 +51,7 @@ pub fn run() {
             commands::read_log,
             commands::open_path,
             commands::openspec_status,
+            commands::git_changeset,
             commands::gh_status,
             commands::onefetch,
             commands::fastfetch,

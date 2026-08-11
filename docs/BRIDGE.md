@@ -93,7 +93,7 @@ canonicalize(path) 仍位於某個「已註冊專案根目錄」之內   ← 擋
 
 ---
 
-## 4. 十三個 action
+## 4. 十四個 action
 
 ### 4.1 `pickFolder` / `pickProjectFolder`
 
@@ -206,6 +206,37 @@ canonicalize(path) 仍位於某個「已註冊專案根目錄」之內   ← 擋
 **所有 JSON 判讀留在 `src/lib/openspec-status.ts`**，不要在兩端各寫一套。
 
 > CLI 探測順序見 §5。找不到就回 unavailable，畫面顯示安裝提示。
+
+### 4.7b `gitChangeset`
+
+```ts
+gitChangeset(folderPath: string)
+  -> Maybe<{ status: string; stat: string; patch: string; truncated: boolean }>
+```
+
+未提交的改動內容，給「AI 產生 commit 訊息」用。
+
+**全部唯讀。** Rust 端跑的是三條寫死的子指令：
+
+| | |
+|---|---|
+| `status` | `git status --porcelain` |
+| `stat` | `git diff HEAD --stat` |
+| `patch` | `git diff HEAD --unified=1` |
+
+沒有任何會改動 repo 的子指令，也沒有任何參數來自前端（`exec.rs` 的規矩）。
+commit 本身仍由使用者在終端機執行 —— 那是 `git-doctor.ts` 立過兩次的界線。
+
+**兩個必須維持的行為：**
+
+- `patch` 上限 24,000 bytes，超過就截斷並把 `truncated` 設為 `true`。
+  上限的第二個理由比第一個重要：超出的部分會被送到外部 AI 服務，
+  截斷是使用者看得到的降級，靜靜把整份 diff 寄出去不是。
+  截斷點要落在 UTF-8 字元邊界上，切一半會讓整個 JSON 序列化壞掉。
+- `folderPath` 必須是已註冊的專案根目錄，否則回 `Missing`。
+  與 `appendFile` 共用同一道守衛。
+
+非 git 專案或找不到 `git` 一律回 `Missing`，不是錯誤。
 
 ### 4.8 `ghStatus`
 
