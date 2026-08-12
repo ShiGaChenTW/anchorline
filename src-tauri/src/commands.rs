@@ -850,6 +850,9 @@ pub fn scan_project(folder_path: String, roots: State<RegisteredRoots>) -> R<May
 pub struct SnapshotEntry {
     name: String,
     mtime_ms: f64,
+    /// 檔案大小。畫面拿它當「這份報告真的產出來了」的證據 —— 掃描快到
+    /// 像是沒執行，只有檔名的話沒有任何東西能證明裡面有內容。
+    bytes: f64,
 }
 
 fn snapshot_dir(root: &Path) -> PathBuf {
@@ -879,14 +882,19 @@ pub fn list_snapshots(folder_path: String, roots: State<RegisteredRoots>) -> R<V
             if !name.ends_with(".md") {
                 continue;
             }
-            let mtime_ms = e
-                .metadata()
-                .ok()
+            let meta = e.metadata().ok();
+            let mtime_ms = meta
+                .as_ref()
                 .and_then(|m| m.modified().ok())
                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|d| d.as_millis() as f64)
                 .unwrap_or(0.0);
-            out.push(SnapshotEntry { name, mtime_ms });
+            let bytes = meta.as_ref().map(|m| m.len() as f64).unwrap_or(0.0);
+            out.push(SnapshotEntry {
+                name,
+                mtime_ms,
+                bytes,
+            });
         }
     }
     Ok(out)
