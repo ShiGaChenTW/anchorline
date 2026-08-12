@@ -961,7 +961,6 @@ if (!requireAuth()) {
       return;
     }
     exportMarkdownFile(store.get());
-    toast("已下載 Markdown");
   });
   document.getElementById("btn-export-json")?.addEventListener("click", () => {
     if (!canExport(store.get().currentUser)) {
@@ -969,7 +968,6 @@ if (!requireAuth()) {
       return;
     }
     exportJsonFile(store.get());
-    toast("已下載 JSON 備份");
   });
   document.getElementById("btn-export-html")?.addEventListener("click", () => {
     if (!canExport(store.get().currentUser)) {
@@ -977,7 +975,6 @@ if (!requireAuth()) {
       return;
     }
     exportHtmlFile(store.get());
-    toast("已下載 HTML（可列印）");
   });
 
   document.getElementById("btn-export-openspec")?.addEventListener("click", () => {

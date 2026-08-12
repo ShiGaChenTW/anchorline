@@ -52,6 +52,7 @@ const VAGUE_TERMS = ["優化", "儘快", "盡快", "大幅", "適當", "良好",
 // 分級門檻的唯一出處在 ai-shared.ts（純函式才測得到）；本機與 AI 兩軌都用它
 import { gradeFromScore } from "./ai-shared";
 export { gradeFromScore };
+import { aiTellFindings, DEFAULT_STYLE_SAMPLE, WRITING_DISCIPLINE } from "./ai-tells";
 
 function langHint(settings: AISettings): string {
   return settings.language === "en-US" ? "English" : "Traditional Chinese (zh-TW)";
@@ -105,6 +106,9 @@ export function critiqueSectionLocal(
         `檢測到模糊描述詞：${foundVague.map((w) => `「${w}」`).join("、")}。建議替換為量化數據或可驗收標準。`,
       );
     }
+    // AI 味檢查掛在同一個開關下：同屬「文字品質」，不值得多一個設定。
+    // 主要抓結構（長句／不分段／超長條列）—— HelmDeck 樣本的病灶是節奏不是空話
+    for (const f of aiTellFindings(text)) warnings.push(f.message);
   }
 
   // 章節規則全部來自領域包（gate + hints），教練不再認得任何章節 id。
@@ -269,13 +273,15 @@ Fill policy:
 - Empty fields: fill from section guide, tips, project context, and existing draft.
 - Non-empty fields: keep substance; only refine clarity unless User instruction asks a rewrite.
 - Do not invent product features, vendors, metrics, or regulations not grounded in the provided context; write 【待補】 for unknowns.
+${WRITING_DISCIPLINE}
 Example output (keys must match exactly):
 ${example}
-JSON only, no markdown fences.${
-    writing.styleSample.trim()
-      ? `\n\nMatch the tone and structure of this sample the user provided:\n"""\n${writing.styleSample.trim().slice(0, 1500)}\n"""`
-      : ""
-  }`;
+JSON only, no markdown fences.
+
+Match the tone and rhythm of this sample (structure only — never copy its content or domain terms):
+"""
+${(writing.styleSample.trim() || DEFAULT_STYLE_SAMPLE).slice(0, 1500)}
+"""`;
 
   const user = `Section ${section.n} ${section.title}
 Guide: ${section.guide}
@@ -326,7 +332,7 @@ Return JSON with keys: ${section.fields.map((f) => f.key).join(", ")}`;
 
 export async function polishTextWithAI(
   text: string,
-  mode: "concise" | "executive" | "technical",
+  mode: "concise" | "executive" | "technical" | "deflate",
   /** 章節標題與欄位 label——沒有上下文的逐欄潤色會讓術語漂移 */
   ctx?: { sectionTitle?: string; fieldLabel?: string },
 ): Promise<string> {
@@ -340,7 +346,16 @@ export async function polishTextWithAI(
       ? "Make concise: shorter, denser, keep facts."
       : mode === "executive"
         ? "Rewrite for executives: outcomes, risk, decision clarity."
-        : "Rewrite for engineers: interfaces, constraints, edge cases.";
+        : mode === "deflate"
+          ? // 去 AI 味：只動結構與空話，一個事實都不准加。
+            // 「更短或等長」是可驗的出口條件 —— 變長就代表它在加內容
+            `Remove AI-flavored writing, add NOTHING:
+- Split any sentence over ${80} chars into short ones. Unnest 「——」 and parenthetical asides.
+- Break walls of text into paragraphs (blank line every 2-3 sentences).
+- Bullets: one-line conclusion first; move detail to sub-bullets or drop it.
+- Delete filler and boilerplate phrases outright.
+- Every fact, number, path, and name in the source must survive. The result must be SHORTER or equal in length.`
+          : "Rewrite for engineers: interfaces, constraints, edge cases.";
 
   // 潤色刻意不疊 withDomain()：整包法遵知識疊上來，欄位會越潤越像合規說明書。
   // 只留一句守住領域術語的底線。

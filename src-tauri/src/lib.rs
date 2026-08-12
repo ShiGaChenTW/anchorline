@@ -57,6 +57,7 @@ pub fn run() {
             commands::scan_project,
             commands::list_snapshots,
             commands::write_snapshot,
+            commands::write_export,
             commands::gh_status,
             commands::onefetch,
             commands::fastfetch,

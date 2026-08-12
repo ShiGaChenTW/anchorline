@@ -1115,7 +1115,9 @@ function saveCurrentSection(): void {
     return;
   }
   store.saveSections(s.id);
-  toast(`已儲存「${s.title}」`);
+  // 存去哪要講清楚 —— 使用者以為「儲存」會產生檔案（2026-08-12 回報）。
+  // 內容存在 App 的專案資料裡，落地成檔案是「匯出 MD」的事
+  toast(`已儲存「${s.title}」— 存在 App 專案資料裡；要存成檔案用「匯出 MD」`);
   render();
 }
 
@@ -1127,7 +1129,7 @@ function saveAllSections(): void {
     return;
   }
   store.saveSections();
-  toast(`已儲存 ${n} 個章節`);
+  toast(`已儲存 ${n} 個章節 — 存在 App 專案資料裡；要存成檔案用「匯出 MD」`);
   render();
 }
 
@@ -1473,6 +1475,7 @@ function renderCoach() {
       <div class="adhd-ai-actions">
         <button type="button" class="btn btn-sm btn-accent" id="btn-ai-draft">一鍵生稿</button>
         <button type="button" class="btn btn-sm" id="btn-ai-polish">語調潤色</button>
+        <button type="button" class="btn btn-sm" id="btn-ai-deflate" title="拆長句、分段、刪樣板語 —— 不增加任何內容">去 AI 味</button>
         <button type="button" class="btn btn-sm" id="btn-ai-audit">本機＋AI 評估</button>
       </div>
       <div class="adhd-ai-prompt-row">
@@ -1556,8 +1559,8 @@ function renderCoach() {
     }
   });
 
-  // 語調潤色 — 真實 API only
-  document.getElementById("btn-ai-polish")?.addEventListener("click", async () => {
+  // 語調潤色與去 AI 味 — 同一條迴圈，差別只在 mode
+  const polishSection = async (mode: "concise" | "executive" | "technical" | "deflate") => {
     if (!editable()) {
       toast("目前身分無法編輯內文");
       return;
@@ -1567,13 +1570,13 @@ function renderCoach() {
       toast(r.ok ? "AI 未就緒" : r.reason);
       return;
     }
+    const verb = mode === "deflate" ? "去 AI 味" : "潤色";
     const feedbackEl = document.getElementById("ai-feedback");
     if (feedbackEl)
-      feedbackEl.innerHTML = `<span class="adhd-ai-busy">正在呼叫 ${escapeHtml(settings.model)} 潤色…</span>`;
+      feedbackEl.innerHTML = `<span class="adhd-ai-busy">正在呼叫 ${escapeHtml(settings.model)} ${verb}…</span>`;
     setAiBusy(true);
     try {
       const current = valuesFor(s);
-      const mode = settings.persona === "concise" ? "concise" : settings.persona === "technical" ? "technical" : "executive";
       let n = 0;
       for (const key of Object.keys(current)) {
         const v = current[key];
@@ -1586,12 +1589,12 @@ function renderCoach() {
         n++;
       }
       if (!n) {
-        toast("本章沒有可潤色的內容");
-        if (feedbackEl) feedbackEl.innerHTML = `<div class="adhd-ai-err">請先撰寫內容再潤色</div>`;
+        toast(`本章沒有可${verb}的內容`);
+        if (feedbackEl) feedbackEl.innerHTML = `<div class="adhd-ai-err">請先撰寫內容再${verb}</div>`;
       } else {
-        toast(`已潤色 ${n} 個欄位`);
+        toast(`已${verb} ${n} 個欄位`);
         if (feedbackEl)
-          feedbackEl.innerHTML = `<div class="adhd-ai-ok-msg">已用 ${escapeHtml(settings.model)} 潤色 ${n} 欄</div>`;
+          feedbackEl.innerHTML = `<div class="adhd-ai-ok-msg">已用 ${escapeHtml(settings.model)} ${verb} ${n} 欄 —— 結果在草稿，儲存才算數</div>`;
         renderEditor();
         renderOutline();
         renderCoach();
@@ -1601,7 +1604,14 @@ function renderCoach() {
     } finally {
       setAiBusy(false);
     }
+  };
+  document.getElementById("btn-ai-polish")?.addEventListener("click", () => {
+    void polishSection(
+      settings.persona === "concise" ? "concise" : settings.persona === "technical" ? "technical" : "executive",
+    );
   });
+  // 去 AI 味：只拆長句、分段、刪空話 —— 不加任何內容。給「AI 寫完之後救可讀性」用
+  document.getElementById("btn-ai-deflate")?.addEventListener("click", () => void polishSection("deflate"));
 
   // 評估：本機規則一定跑；有 Key 再加深 AI
   document.getElementById("btn-ai-audit")?.addEventListener("click", async () => {
@@ -1912,8 +1922,9 @@ document.getElementById("btn-outline")?.addEventListener("click", () => {
 });
 
 document.getElementById("btn-export-md")?.addEventListener("click", () => {
+  // toast 交給 export 的唯一出口（deliver）—— 它知道檔案真正去了哪，
+  // 在這裡再喊「已下載」會蓋掉那句有路徑的
   exportMarkdownFile(store.get());
-  toast("已下載 Markdown");
 });
 
 document.getElementById("btn-toggle-samples")?.addEventListener("click", () => {

@@ -1,5 +1,7 @@
 import type { AppState, Project, Section } from "../data/types";
 import { CUSTOM_SECTION_ID } from "../data/seed";
+import { isNative, isUnavailable, native } from "./native";
+import { toast } from "./ui";
 
 function stamp(): string {
   const d = new Date();
@@ -100,10 +102,46 @@ export function downloadText(filename: string, content: string, mime: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
+/**
+ * 把匯出檔真的送到使用者手上，並**講清楚它去了哪**。
+ *
+ * 桌面殼沒有掛 `on_download`，WKWebView 對 `<a download>` 是無聲失敗 ——
+ * 按了匯出，沒有檔案、沒有錯誤、沒有訊息（Scott 2026-08-12 回報的正是這個）。
+ * 所以桌面版改寫進 `<專案根>/.anchorline/exports/`，toast 完整路徑；
+ * 瀏覽器版維持下載，toast 檔名。這裡是唯一出口，七個呼叫端不用各自處理。
+ */
+async function deliver(
+  state: AppState,
+  project: Project | null | undefined,
+  filename: string,
+  content: string,
+  mime: string,
+): Promise<void> {
+  if (isNative()) {
+    const p =
+      project ?? state.projects.find((x) => x.id === state.activeProjectId) ?? state.projects[0] ?? null;
+    const root = p?.importSummary?.rootPath;
+    if (!root) {
+      // 沒綁資料夾時瀏覽器下載那條路在桌面版根本不會動 —— 與其假裝成功，不如講原因
+      toast("桌面版匯出需要先綁定專案資料夾（檔案會放進 專案/.anchorline/exports/）");
+      return;
+    }
+    const r = await native.writeExport(root, filename, content);
+    if (isUnavailable(r)) {
+      toast(`匯出失敗：${r.message}`);
+      return;
+    }
+    toast(`已匯出 → ${r.path}`);
+    return;
+  }
+  downloadText(filename, content, mime);
+  toast(`已下載 ${filename}（在瀏覽器的下載資料夾）`);
+}
+
 export function exportMarkdownFile(state: AppState, project?: Project | null) {
   const p = project ?? state.projects[0];
   const name = safeName(p?.title ?? "prd");
-  downloadText(`${name}-${stamp()}.md`, buildMarkdown(state, p), "text/markdown;charset=utf-8");
+  void deliver(state, project, `${name}-${stamp()}.md`, buildMarkdown(state, p), "text/markdown;charset=utf-8");
 }
 
 export function exportJsonFile(state: AppState) {
@@ -112,13 +150,19 @@ export function exportJsonFile(state: AppState) {
     exporter: { id: state.currentUser.id, name: state.currentUser.name, role: state.currentUser.accessRole },
     state,
   };
-  downloadText(`anchorline-backup-${stamp()}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+  void deliver(
+    state,
+    null,
+    `anchorline-backup-${stamp()}.json`,
+    JSON.stringify(payload, null, 2),
+    "application/json;charset=utf-8",
+  );
 }
 
 export function exportHtmlFile(state: AppState, project?: Project | null) {
   const p = project ?? state.projects[0];
   const name = safeName(p?.title ?? "prd");
-  downloadText(`${name}-${stamp()}.html`, buildHtmlDocument(state, p), "text/html;charset=utf-8");
+  void deliver(state, project, `${name}-${stamp()}.html`, buildHtmlDocument(state, p), "text/html;charset=utf-8");
 }
 
 /**

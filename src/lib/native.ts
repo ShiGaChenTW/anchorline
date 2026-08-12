@@ -206,6 +206,9 @@ export const native = {
   /** **不覆寫**：同名存在就回 Missing。報告蓋掉就沒有東西可以比對變化。 */
   writeSnapshot: (folderPath: string, name: string, text: string) =>
     callMaybe<{ path: string }>("write_snapshot", { folderPath, name, text }),
+  /** 匯出檔進 `<root>/.anchorline/exports/`。**允許覆寫** —— 匯出是可重生的成品。 */
+  writeExport: (folderPath: string, name: string, text: string) =>
+    callMaybe<{ path: string }>("write_export", { folderPath, name, text }),
   ghStatus: () => callMaybe<{ raw: string; fetchedAt: string }>("gh_status"),
   onefetch: (folderPath: string) => callMaybe<{ raw: string }>("onefetch", { folderPath }),
   fastfetch: () => callMaybe<{ raw: string }>("fastfetch"),
