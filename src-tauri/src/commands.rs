@@ -741,6 +741,195 @@ pub fn openspec_status(
 /// **全部唯讀。** 這裡跑的是 `status --porcelain` 與兩種 `diff`，
 /// 沒有任何會改動 repo 的子指令。commit 仍然由使用者自己在終端機執行，
 /// 那是 `git-doctor.ts` 立過兩次的界線，這個功能不越過它。
+/// 專案快照用的資料夾掃描。
+///
+/// **副檔名白名單 + 三道上限。** 沒有上限的話，一個帶 node_modules 或
+/// build 產物的專案會讓這個呼叫跑到記憶體爆掉，而使用者只會看到 App 卡死。
+/// 略過的目錄與二進位檔不是遺漏，是刻意的 —— 快照要餵給模型，
+/// 塞進 minified bundle 只會擠掉真正有用的原始碼。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanFile {
+    path: String,
+    text: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectScan {
+    files: Vec<ScanFile>,
+    /// 因為任一道上限而沒讀完。畫面必須講出來
+    truncated: bool,
+}
+
+const SCAN_MAX_FILES: usize = 400;
+const SCAN_MAX_BYTES: usize = 1_200_000;
+const SCAN_MAX_FILE_BYTES: u64 = 200_000;
+
+fn scan_skip_dir(name: &str) -> bool {
+    matches!(
+        name,
+        "node_modules" | ".git" | "target" | "dist" | "build" | ".next" | ".venv"
+            | "__pycache__" | "vendor" | ".anchorline" | "coverage" | ".turbo"
+    )
+}
+
+fn scan_take_ext(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    [
+        ".ts", ".tsx", ".js", ".jsx", ".rs", ".py", ".go", ".java", ".kt", ".swift",
+        ".md", ".mdx", ".txt", ".json", ".yaml", ".yml", ".toml", ".css", ".html", ".sql", ".sh",
+    ]
+    .iter()
+    .any(|e| lower.ends_with(e))
+}
+
+fn scan_dir(dir: &Path, root: &Path, out: &mut Vec<ScanFile>, bytes: &mut usize) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    let mut truncated = false;
+    for entry in entries.flatten() {
+        if out.len() >= SCAN_MAX_FILES || *bytes >= SCAN_MAX_BYTES {
+            return true;
+        }
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') && name != ".github" {
+            continue;
+        }
+        if path.is_dir() {
+            if scan_skip_dir(&name) {
+                continue;
+            }
+            truncated |= scan_dir(&path, root, out, bytes);
+            continue;
+        }
+        if !scan_take_ext(&name) {
+            continue;
+        }
+        if entry.metadata().map(|m| m.len()).unwrap_or(0) > SCAN_MAX_FILE_BYTES {
+            truncated = true;
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        *bytes += text.len();
+        let rel = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .to_string();
+        out.push(ScanFile { path: rel, text });
+    }
+    truncated
+}
+
+#[tauri::command]
+pub fn scan_project(folder_path: String, roots: State<RegisteredRoots>) -> R<Maybe<ProjectScan>> {
+    let dir = PathBuf::from(&folder_path);
+    if !roots.contains_ancestor_of(&dir) && !roots.contains_ancestor_of(&dir.join("x")) {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "這個資料夾沒有註冊為專案根目錄".to_string(),
+        )));
+    }
+    let mut files = Vec::new();
+    let mut bytes = 0usize;
+    let hit_limit = scan_dir(&dir, &dir, &mut files, &mut bytes);
+    let truncated = hit_limit || files.len() >= SCAN_MAX_FILES || bytes >= SCAN_MAX_BYTES;
+    Ok(Maybe::Ok(ProjectScan { files, truncated }))
+}
+
+/// 快照的寫入與列出 —— **只准 `.anchorline/context/` 底下的 `.md`**。
+///
+/// 檔名由前端給，所以這裡要擋路徑穿越：只取最後一段、拒絕 `..` 與分隔符。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotEntry {
+    name: String,
+    mtime_ms: f64,
+}
+
+fn snapshot_dir(root: &Path) -> PathBuf {
+    root.join(".anchorline").join("context")
+}
+
+fn safe_snapshot_name(name: &str) -> Option<String> {
+    if name.contains('/') || name.contains('\\') || name.contains("..") {
+        return None;
+    }
+    if !name.ends_with(".md") || name.len() > 120 {
+        return None;
+    }
+    Some(name.to_string())
+}
+
+#[tauri::command]
+pub fn list_snapshots(folder_path: String, roots: State<RegisteredRoots>) -> R<Vec<SnapshotEntry>> {
+    let dir = PathBuf::from(&folder_path);
+    if !roots.contains_ancestor_of(&dir) && !roots.contains_ancestor_of(&dir.join("x")) {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(snapshot_dir(&dir)) {
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if !name.ends_with(".md") {
+                continue;
+            }
+            let mtime_ms = e
+                .metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as f64)
+                .unwrap_or(0.0);
+            out.push(SnapshotEntry { name, mtime_ms });
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn write_snapshot(
+    folder_path: String,
+    name: String,
+    text: String,
+    roots: State<RegisteredRoots>,
+) -> R<Maybe<FilePath>> {
+    let dir = PathBuf::from(&folder_path);
+    if !roots.contains_ancestor_of(&dir) && !roots.contains_ancestor_of(&dir.join("x")) {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "這個資料夾沒有註冊為專案根目錄".to_string(),
+        )));
+    }
+    let Some(safe) = safe_snapshot_name(&name) else {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "檔名不合法（只接受 .md，且不能包含路徑）".to_string(),
+        )));
+    };
+    let target_dir = snapshot_dir(&dir);
+    if std::fs::create_dir_all(&target_dir).is_err() {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "無法建立 .anchorline/context/".to_string(),
+        )));
+    }
+    let target = target_dir.join(&safe);
+    // 不覆寫 —— 快照是「當時的專案長這樣」，蓋掉就沒有東西可以比對
+    if target.exists() {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "同名快照已存在（同一分鐘內重複產生）".to_string(),
+        )));
+    }
+    match std::fs::write(&target, text) {
+        Ok(_) => Ok(Maybe::Ok(FilePath {
+            path: target.to_string_lossy().to_string(),
+        })),
+        Err(e) => Ok(Maybe::Missing(Unavailable::new(format!("寫入失敗：{e}")))),
+    }
+}
+
 /// 這個資料夾有沒有 openspec 骨架。
 ///
 /// 判準是 `openspec/` 目錄存在 —— 不呼叫 CLI，因為「CLI 不在」與

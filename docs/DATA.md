@@ -1,6 +1,6 @@
 # 資料落在哪裡
 
-這個 App 會在你的專案資料夾裡寫東西。**只有一個地方，而且只寫一種檔。**
+這個 App 會在你的專案資料夾裡寫東西。**只有一個地方。**
 
 ---
 
@@ -9,10 +9,17 @@
 ```
 .anchorline/
 ├── .gitattributes        # *.jsonl merge=union（只在缺檔時種下，不覆寫）
-└── log/
-    ├── 2026-08.jsonl     # 稽核軌跡，append-only，按月分片
-    └── 2026-09.jsonl
+├── log/
+│   ├── 2026-08.jsonl     # 稽核軌跡，append-only，按月分片
+│   └── 2026-09.jsonl
+└── context/
+    └── MyProject-20260812-0940.md   # 專案快照，AI 撰寫的前置條件
 ```
+
+**快照為什麼是第二種檔。** AI 撰寫需要「這個專案長什麼樣」當背景，
+而模型手上只有一個標題時會很流暢地寫出一份跟這個 repo 沒有關係的提案。
+快照**不覆寫**：檔名帶時間，每次重讀都是新檔 —— 蓋掉就沒有東西可以回答
+「這中間變了什麼」。契約見 `BRIDGE.md` §4.7d。
 
 除此之外，App **不會**在你的專案裡建立任何檔案。`plans/*.md` 的勾選是修改
 既有檔案的一個字元（見下）。
@@ -60,6 +67,7 @@ App 只在 `.anchorline/.gitattributes` 不存在時種下它，**不覆寫你�
 
 ```
 .anchorline/log/
+.anchorline/context/
 ```
 
 原因見 [`SECURITY.md`](SECURITY.md) §4：append-only 的機密洩漏刪不掉。
