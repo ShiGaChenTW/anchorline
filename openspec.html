@@ -84,18 +84,6 @@
           內容放右邊而不是塞進第 3 步，是因為「按下去會發生什麼」該在按之前
           就讀得到，而那份東西比一個步驟卡放得下的還長。
         -->
-        <div class="os-scope">
-          <label class="os-scope-field">
-            <span>專案</span>
-            <select id="os-project" aria-label="選擇專案"></select>
-          </label>
-          <span class="os-scope-note" id="os-scope-note"></span>
-          <div class="os-init" id="os-init" hidden>
-            <span class="os-init-warn" id="os-init-warn"></span>
-            <button type="button" class="btn btn-sm" id="os-init-run">一鍵 openspec init</button>
-          </div>
-        </div>
-
         <div class="os-work">
         <!-- 三步驟：後面的步驟用 dim 不用隱藏，版面才不會跳（跳動會讓人丟失位置） -->
         <ol class="os-steps" id="os-steps">
@@ -103,7 +91,18 @@
             <div class="os-step-head">
               <span class="os-step-n">1</span>
               <h2>這次是哪一種？</h2>
-              <span class="os-step-hint">決定會產生哪些文件</span>
+              <span class="os-step-hint">先確定範圍，再決定會產生哪些文件</span>
+            </div>
+            <div class="os-scope">
+              <label class="os-scope-field">
+                <span>專案</span>
+                <select id="os-project" aria-label="選擇專案"></select>
+              </label>
+              <span class="os-scope-note" id="os-scope-note"></span>
+              <div class="os-init" id="os-init" hidden>
+                <span class="os-init-warn" id="os-init-warn"></span>
+                <button type="button" class="btn btn-sm" id="os-init-run">一鍵 openspec init</button>
+              </div>
             </div>
             <div class="os-kinds" id="os-kinds" role="radiogroup" aria-label="變更類型">
               <button type="button" class="os-kind" data-kind="feature" role="radio" aria-checked="false">
