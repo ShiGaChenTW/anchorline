@@ -13339,7 +13339,7 @@ p.gd-warn {
  * 每次選擇後跳動，而版面一跳就得重新找自己在哪。形狀固定，亮度變化。
  */
 .os-content {
-  max-width: 860px;
+  max-width: 1500px;
   padding: 28px clamp(24px, 5vw, 72px) 80px;
 }
 
@@ -13434,12 +13434,33 @@ p.gd-warn {
 }
 
 /* 三步驟 */
+/*
+ * 兩欄。左欄的三個步驟等高平均分散，右欄是檔案內容，兩欄總高相同。
+ *
+ * 高度的來源是 `.os-work` 的 min-height，不是內容 —— 三個步驟的內容量
+ * 差很多（第 1 步三張卡、第 2 步兩個欄位、第 3 步兩顆鈕），
+ * 讓內容決定高度的話三張卡會高低不齊，而右欄又會跟著其中一邊。
+ */
+.os-work {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.02fr);
+  gap: 20px;
+  align-items: stretch;
+  min-height: min(76vh, 720px);
+}
 .os-steps {
   margin: 0;
   padding: 0;
   list-style: none;
   display: grid;
+  /* 三等分：等高 + 平均分散，由這一行負責，不靠內容 */
+  grid-template-rows: repeat(3, 1fr);
   gap: 20px;
+  min-height: 0;
+}
+.os-step {
+  min-height: 0;
+  overflow: auto;
 }
 .os-step {
   padding: 20px;
@@ -13918,4 +13939,198 @@ p.gd-warn {
 }
 .d-policy.is-strict {
   border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+}
+
+/* ── OpenSpec：檔案內容預覽 ──────────────────────────────────
+ *
+ * 「按下去會發生什麼」該在按之前就讀得到。原本第 3 步只列檔名，
+ * 那回答的是「會產生幾個檔」，不是「裡面寫什麼」——
+ * 而使用者要判斷的是後者。
+ */
+.os-preview {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.os-preview-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.os-preview-head h2 {
+  margin: 0;
+  font-size: var(--fs-4);
+  letter-spacing: -0.02em;
+}
+.os-preview-count {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--fs-2);
+}
+.os-preview-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  flex-wrap: wrap;
+}
+.os-preview-tab {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--fs-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: none;
+}
+.os-preview-tab.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  color: var(--accent);
+}
+.os-preview-tab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* 內容是 markdown 原文，等寬字是因為它就是要被存成檔案的東西，
+   不是為了看起來技術感 */
+.os-preview-body {
+  margin: 0;
+  min-height: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg-2, var(--fg));
+  font-family: var(--mono);
+  font-size: var(--fs-2);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.os-preview-body:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.os-preview-empty {
+  color: var(--muted);
+  font-family: var(--sans, inherit);
+  line-height: 1.8;
+}
+
+@media (max-width: 1080px) {
+  /* 窄螢幕改回單欄，三等分也拿掉 —— 疊起來之後等高沒有意義 */
+  .os-work {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+  .os-steps {
+    grid-template-rows: none;
+  }
+  .os-step {
+    overflow: visible;
+  }
+  .os-preview {
+    min-height: 420px;
+  }
+}
+
+/* ── OpenSpec：專案範圍列 ───────────────────────────────────── */
+.os-scope {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.os-scope-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+.os-scope-field select {
+  min-height: var(--ctl-h-md);
+  min-width: 220px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: var(--fs-3);
+}
+.os-scope-field select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+.os-scope-note {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+/* 沒 init 過要講清楚而且當場能解決 —— 把人踢去終端機再自己回來，
+   是把一個 30 秒的問題變成一次中斷 */
+.os-init {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.os-init[hidden] {
+  display: none;
+}
+.os-init-warn {
+  color: var(--warn, #d9534f);
+  font-size: var(--fs-2);
+  font-weight: var(--weight-em);
+}
+
+.os-ai-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.os-ai-status {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+.os-ai-status.is-error {
+  color: var(--warn, #d9534f);
+}
+.os-release-note {
+  margin: 6px 0 14px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+.os-field select {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: var(--ctl-h-md);
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: var(--fs-3);
+}
+.os-field select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }

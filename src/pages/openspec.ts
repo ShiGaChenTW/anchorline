@@ -24,6 +24,14 @@ import {
   type ChangeFile,
   type ChangeKind,
 } from "../lib/change-templates";
+import {
+  applyDraft,
+  buildDraftSystem,
+  buildDraftUser,
+} from "../lib/change-templates";
+import { AiError, chatCompletion, extractJsonObject, getAiReadiness } from "../lib/ai-client";
+import { projectDisplayName } from "../data/types";
+import { isNative, isUnavailable, native } from "../lib/native";
 import { canQueryStatus, requestOpenspecStatus } from "../lib/status-bridge";
 import { nextArtifact, type OpenspecChange, type OpenspecResult } from "../lib/openspec-status";
 import { sinceLabel } from "../lib/time-format";
@@ -51,6 +59,13 @@ if (requireAuth()) {
   let scannedAt: string | null = null;
   /** null = 還沒選類型，第 2、3 步因此鎖著 */
   let kind: ChangeKind | null = null;
+  /**
+   * AI 產生的初稿。非 null 時預覽與下載都用它。
+   *
+   * 換類型或改標題會清掉 —— 那份初稿是照舊的標題寫的，
+   * 留著會讓下載到的東西跟畫面上填的對不起來。
+   */
+  let draftFiles: ChangeFile[] | null = null;
 
   function projects(): Project[] {
     const st = store.get();
@@ -134,7 +149,100 @@ if (requireAuth()) {
     if (!title) return null;
     const slug = deriveChangeSlug(val("os-slug")) ?? deriveChangeSlug(title);
     if (!slug) return null;
-    return buildChangeFiles(kind, { title, slug, date: new Date().toISOString().slice(0, 10) });
+    const base = buildChangeFiles(kind, { title, slug, date: new Date().toISOString().slice(0, 10) });
+    // AI 初稿只在標題與類型都沒變的情況下才算數
+    if (draftFiles && draftFiles.length === base.length) {
+      return base.map((f, i) => ({ ...f, content: draftFiles![i]!.content }));
+    }
+    return base;
+  }
+
+  // ── 專案 ─────────────────────────────────────────────────────
+
+  /**
+   * 專案選單。**選了要同步 store 的 activeProject**，
+   * 否則這一頁跟側欄會各講各的：側欄顯示 A、這裡在替 B 產生文件。
+   */
+  /**
+   * 這個專案有沒有 openspec 骨架。
+   *
+   * 沒有的話這一頁做出來的 change 放回去也沒有東西會讀它 ——
+   * 所以要紅字講清楚，並且給一顆能當場解決的按鈕，
+   * 而不是把人踢去終端機再自己回來。
+   */
+  async function checkInit() {
+    const box = el("os-init");
+    const warn = el("os-init-warn");
+    if (!box || !warn) return;
+    const p = currentProject();
+    const root = p?.importSummary?.rootPath;
+    if (!root || !isNative()) {
+      box.hidden = true;
+      return;
+    }
+    try {
+      const r = await native.openspecProbe(root);
+      box.hidden = r.initialized;
+      if (!r.initialized) warn.textContent = "這個專案還沒有 openspec/ —— change 放回去不會被讀到。";
+    } catch {
+      box.hidden = true;
+    }
+  }
+
+  function renderProjectPicker() {
+    const sel = el("os-project") as HTMLSelectElement | null;
+    const note = el("os-scope-note");
+    if (!sel) return;
+    const list = projects();
+    const cur = currentProject();
+    sel.innerHTML = list.length
+      ? list
+          .map(
+            (p) =>
+              `<option value="${p.id}"${p.id === cur?.id ? " selected" : ""}>${escapeHtml(projectDisplayName(p))}</option>`,
+          )
+          .join("")
+      : `<option value="">（還沒有專案）</option>`;
+    sel.disabled = !list.length;
+    if (note) {
+      note.textContent = cur?.importSummary?.rootPath
+        ? "已綁定資料夾，可以讀 OpenSpec 狀態"
+        : cur
+          ? "尚未綁定資料夾 —— 讀不到既有的 change，但仍可產生文件"
+          : "先建立或匯入一個專案";
+    }
+  }
+
+  // ── 版號 ─────────────────────────────────────────────────────
+
+  /**
+   * 要收進哪一版。
+   *
+   * **只列尚未放行的版號。** 已放行的 `canAddItem` 會擋，
+   * 讓它出現在清單裡只是製造一次注定失敗的選擇。
+   * 已經被別的版號收走的 change 也不重複列。
+   */
+  function renderReleasePicker() {
+    const sel = el("os-release") as HTMLSelectElement | null;
+    const note = el("os-release-note");
+    if (!sel) return;
+    const p = currentProject();
+    const open = p ? store.releasesOf(p.id).filter((r) => !r.releasedAt) : [];
+    const keep = sel.value;
+    sel.innerHTML =
+      `<option value="">加入該專案</option>` +
+      open
+        .map(
+          (r) =>
+            `<option value="${r.id}">${escapeHtml(r.version || "（未命名版號）")}${r.title ? ` · ${escapeHtml(r.title)}` : ""}</option>`,
+        )
+        .join("");
+    sel.value = open.some((r) => r.id === keep) ? keep : "";
+    if (note) {
+      note.textContent = open.length
+        ? "選「加入該專案」就只是建立 change，不綁版號。收進某一版之後，那一版的 YY 閘門才有 change 可以認。"
+        : "這個專案還沒有未放行的版號。選「加入該專案」先建立，之後到「版本取號」再收。";
+    }
   }
 
   /**
@@ -166,12 +274,57 @@ if (requireAuth()) {
     const files = filesFromForm();
     step3?.classList.toggle("is-locked", !files);
 
-    const list = el("os-files");
-    if (list) {
-      list.innerHTML = files
-        ? files.map((f) => `<li>${escapeHtml(f.path)}</li>`).join("")
-        : `<li style="border-style:dashed">填完上一步就會列出要產生的檔案</li>`;
+    renderPreview(files);
+  }
+
+  /** 目前預覽的是第幾個檔。換一組檔案時要夾住，否則切到不存在的索引會空白 */
+  let previewIdx = 0;
+
+  /**
+   * 右欄：**要產生的檔案內容**。
+   *
+   * 原本第 3 步只列檔名，那回答的是「會產生幾個檔」，
+   * 而使用者要判斷的是「裡面寫什麼」。按下去會發生什麼，
+   * 該在按之前就讀得到。
+   */
+  function renderPreview(files: ChangeFile[] | null) {
+    const tabs = el("os-preview-tabs");
+    const body = el("os-preview-body");
+    const count = el("os-preview-count");
+    if (!tabs || !body) return;
+
+    if (!files || !files.length) {
+      tabs.innerHTML = "";
+      if (count) count.textContent = "";
+      body.className = "os-preview-body os-preview-empty";
+      body.textContent = kind
+        ? "填上標題與 change id，這裡就會顯示每一份檔案的完整內容。"
+        : "先在左邊選這次是哪一種，這裡會列出要產生的檔案並顯示內容。";
+      return;
     }
+
+    previewIdx = Math.min(previewIdx, files.length - 1);
+    if (count) count.textContent = `${files.length} 份`;
+
+    tabs.innerHTML = files
+      .map((f, i) => {
+        const name = f.path.split("/").pop() ?? f.path;
+        return `<button type="button" class="os-preview-tab${i === previewIdx ? " on" : ""}"
+                  role="tab" aria-selected="${i === previewIdx}" data-file="${i}"
+                  title="${escapeHtml(f.path)}">${escapeHtml(name)}</button>`;
+      })
+      .join("");
+    tabs.querySelectorAll<HTMLButtonElement>("[data-file]").forEach((b) => {
+      b.onclick = () => {
+        previewIdx = Number(b.dataset.file);
+        renderPreview(files);
+      };
+    });
+
+    const cur = files[previewIdx]!;
+    body.className = "os-preview-body";
+    // 路徑放在內容最上面 —— 檔名在分頁上是縮寫，完整路徑才知道要放回哪裡
+    body.textContent = `${cur.path}\n${"─".repeat(Math.min(cur.path.length, 60))}\n\n${cur.content}`;
   }
 
   function download(file: ChangeFile) {
@@ -209,6 +362,7 @@ if (requireAuth()) {
   document.querySelectorAll<HTMLButtonElement>(".os-kind").forEach((btn) => {
     btn.onclick = () => {
       kind = btn.dataset.kind as ChangeKind;
+      draftFiles = null; // 初稿是照舊類型寫的，留著會跟畫面對不起來
       renderSteps();
       // 選完類型直接把游標送到標題 —— 少一次「接下來要點哪裡」的決定
       (el("os-title") as HTMLInputElement | null)?.focus();
@@ -216,6 +370,7 @@ if (requireAuth()) {
   });
 
   el("os-title")?.addEventListener("input", (e) => {
+    draftFiles = null;
     const slug = el("os-slug") as HTMLInputElement | null;
     if (slug && !slug.dataset.edited) {
       // 推不出來就留空 —— 把保底值寫進欄位會讓人以為系統已經幫他決定好了
@@ -233,7 +388,8 @@ if (requireAuth()) {
     const files = filesFromForm();
     if (!files || !kind) return;
     files.forEach(download);
-    feedback(`已下載 ${files.length} 份${CHANGE_KIND_LABEL[kind]}文件。`, "ok");
+    const extra = attachToRelease();
+    feedback(`已下載 ${files.length} 份${CHANGE_KIND_LABEL[kind]}文件。${extra}`, "ok");
     toast("文件已下載，請放回上面列出的路徑");
   });
 
@@ -252,6 +408,148 @@ if (requireAuth()) {
       feedback("剪貼簿寫入失敗，請改用下載。", "error");
     }
   });
+
+  el("os-project")?.addEventListener("change", (e) => {
+    const id = (e.target as HTMLSelectElement).value;
+    if (!id) return;
+    selectedProjectId = id;
+    // 同步 store，否則這一頁跟側欄會各講各的
+    store.setActiveProject(id);
+    renderProjectPicker();
+    renderReleasePicker();
+    void checkInit();
+    void refresh();
+  });
+
+  el("os-init-run")?.addEventListener("click", async () => {
+    const p = currentProject();
+    const root = p?.importSummary?.rootPath;
+    if (!root) return;
+    const btn = el("os-init-run") as HTMLButtonElement;
+    const warn = el("os-init-warn");
+    if (
+      !confirm(
+        [
+          `要在「${projectDisplayName(p!)}」執行 openspec init 嗎？`,
+          "",
+          `它會在 ${root} 底下建立 openspec/ 骨架。`,
+          "",
+          "這是這個 App 唯一會寫進你專案資料夾的動作。",
+          "不想要的話刪掉那個資料夾就還原了。",
+        ].join("\n"),
+      )
+    ) {
+      return;
+    }
+    btn.disabled = true;
+    if (warn) warn.textContent = "執行中…";
+    try {
+      const r = await native.openspecInit(root);
+      if (isUnavailable(r)) {
+        if (warn) warn.textContent = r.message;
+        return;
+      }
+      toast("openspec init 完成");
+      await checkInit();
+      void refresh();
+    } catch (e) {
+      if (warn) warn.textContent = e instanceof Error ? e.message : String(e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ── AI 撰寫 ───────────────────────────────────────────────────
+
+  /** 專案的 PRD 內容，給模型當背景。沒有就是空字串，prompt 會明講。 */
+  function prdContext(): string {
+    const p = currentProject();
+    if (!p) return "";
+    const st = store.get();
+    const vals = st.projectSectionValues?.[p.id] ?? {};
+    return st.sections
+      .map((sec) => {
+        const body = Object.values(vals[sec.id] ?? {})
+          .filter(Boolean)
+          .join("\n")
+          .trim();
+        return body ? `## ${sec.n} ${sec.title}\n${body}` : "";
+      })
+      .filter(Boolean)
+      .join("\n\n");
+  }
+
+  el("os-ai")?.addEventListener("click", async () => {
+    const status = el("os-ai-status");
+    const say = (m: string, bad = false) => {
+      if (status) {
+        status.textContent = m;
+        status.className = `os-ai-status${bad ? " is-error" : ""}`;
+      }
+    };
+
+    const ready = getAiReadiness();
+    if (!ready.ok) {
+      // reason 本身已經寫了去哪裡設定，再接一次就是同一句話講兩遍
+      say(ready.reason, true);
+      return;
+    }
+    const title = val("os-title").trim();
+    const slug = deriveChangeSlug(val("os-slug")) ?? deriveChangeSlug(title);
+    if (!kind || !title || !slug) {
+      say("先選類型並填好標題與 change id。", true);
+      return;
+    }
+
+    const btn = el("os-ai") as HTMLButtonElement;
+    btn.disabled = true;
+    say("撰寫中…");
+    try {
+      const base = buildChangeFiles(kind, { title, slug, date: new Date().toISOString().slice(0, 10) });
+      const raw = await chatCompletion(
+        buildDraftSystem(kind),
+        buildDraftUser({ kind, title, slug, prdContext: prdContext(), files: base }),
+      );
+      const { files, filled } = applyDraft(base, extractJsonObject(raw));
+      if (!filled) {
+        say("模型沒有回傳可用的內容，再試一次。", true);
+        return;
+      }
+      draftFiles = files;
+      renderSteps();
+      // 說出填了幾份 —— 少填的那幾份仍然是骨架，使用者有權知道
+      say(
+        filled === base.length
+          ? `已產生 ${filled} 份初稿`
+          : `已產生 ${filled} / ${base.length} 份，其餘保留骨架`,
+      );
+    } catch (e) {
+      say(e instanceof AiError ? e.message : String(e), true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  /**
+   * 把這個 change 收進選定的版號。
+   *
+   * 只在 feature 走 —— bug 與維護產出的是 `plans/` 檔，不是 openspec change，
+   * 而版號的 YY 閘門認的是 change。
+   */
+  function attachToRelease(): string {
+    const relId = (el("os-release") as HTMLSelectElement | null)?.value ?? "";
+    if (!relId || kind !== "feature") return "";
+    const slug = deriveChangeSlug(val("os-slug")) ?? deriveChangeSlug(val("os-title").trim());
+    if (!slug) return "";
+    const r = store.addReleaseItem(relId, {
+      text: val("os-title").trim() || slug,
+      state: "planned",
+      source: "change",
+      ref: slug,
+    });
+    renderReleasePicker();
+    return r.ok ? "已收進選定的版號。" : `版號未收：${r.reason ?? "失敗"}`;
+  }
 
   el("os-refresh")?.addEventListener("click", () => void refresh());
 
@@ -281,8 +579,11 @@ if (requireAuth()) {
   el("osh-close")?.addEventListener("click", () => closeModal("os-help-modal"));
   el("osh-done")?.addEventListener("click", () => closeModal("os-help-modal"));
 
+  renderProjectPicker();
+  renderReleasePicker();
   renderSteps();
   renderOpenLoops();
+  void checkInit();
   void refresh();
 
   store.subscribe(() => {
@@ -292,9 +593,13 @@ if (requireAuth()) {
     const active = store.get().activeProjectId ?? "";
     if (active && active !== selectedProjectId) {
       selectedProjectId = active;
+      renderProjectPicker();
+      renderReleasePicker();
+      void checkInit();
       void refresh();
       return;
     }
+    renderReleasePicker();
     renderOpenLoops();
   });
 }
