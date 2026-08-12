@@ -308,19 +308,8 @@ export async function chatCompletion(system: string, user: string, opts?: ChatOp
   }
 }
 
-/** 嘗試從模型輸出抽出 JSON 物件 */
-export function extractJsonObject(text: string): Record<string, unknown> | null {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced?.[1]?.trim() || text.trim();
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  try {
-    return JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
+// 純函式抽到 ai-shared.ts（bun test 載不動本檔——import.meta.glob）；re-export 保持既有 import 路徑
+export { extractJsonObject } from "./ai-shared";
 
 /** 偏好設定用：最小請求測通 */
 export async function testAiConnection(): Promise<{ ok: true; sample: string } | { ok: false; reason: string }> {

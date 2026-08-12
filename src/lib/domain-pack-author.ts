@@ -20,6 +20,48 @@ import { type DomainPack, validatePackStructure as validate } from "./domain-pac
 
 export { validatePackStructure as validate } from "./domain-pack";
 
+/**
+ * SCHEMA 尾端附的最小合法範例。
+ *
+ * 抽成獨立常數的唯一理由：測試要能把它餵進 validatePackStructure()。
+ * 一份教模型格式的範例如果自己就驗不過，教出來的全是驗不過的包——
+ * 而這種錯不會有任何執行期症狀，只會默默拉高產包失敗率。
+ */
+export const SCHEMA_EXAMPLE = `---
+name: example_pack
+displayName: 範例領域
+industry: 範例產業
+extends: _base
+prompt: |
+  - 必須涵蓋：主管機關申報義務（範例法 §12）
+  - 引用法規要寫具體條號，例如「範例法施行細則 §3」
+sections:
+  - id: reg_report
+    n: "08"
+    title: 申報義務
+    desc: 向主管機關申報的範圍與時限
+    guide: 寫清楚要向誰申報、期限幾個工作日、漏報的後果
+    tips:
+      - "注意：期限以工作日計，不含例假日"
+    example: 重大事故於知悉後 5 個工作日內向主管機關完成申報
+    fields:
+      - key: report_scope
+        label: 申報範圍
+        hint: 哪些事件觸發申報義務
+        type: textarea
+        rows: 4
+gates:
+  - rules:
+      - id: reg_report_present
+        level: block
+        label: 申報範圍不可空白
+        detail: 缺 {count} 個欄位：{missing}
+        section: reg_report
+        fields: [report_scope]
+        require: { kind: present }
+    pass: { id: reg_report_ok, label: 申報章節齊備, detail: 申報範圍已填寫 }
+---`;
+
 /** 模型每次都要重讀一次的規格。長，但比讓它猜便宜。 */
 const SCHEMA = `你要輸出一個 Anchorline「領域包」檔案：一份 Markdown，全部語意在 YAML frontmatter 裡。
 
@@ -68,7 +110,11 @@ require 只有四種，不可組合、不可自創：
 - 章節最多 4 個。挑最重要的，不要把所有想得到的都放進去。
 - 每個章節的 guide 最多 3 行、tips 最多 4 條、example 最多 3 行、欄位最多 4 個。
 - prompt 最多 20 行。條列必須涵蓋的法規面向即可，不要展開成教學。
-- gates 最多 6 條。`;
+- gates 最多 6 條。
+
+以下是一份最小合法範例（結構示範，內容請勿照抄）：
+
+${SCHEMA_EXAMPLE}`;
 
 export type AuthorInput = {
   /** 使用者對這個產業／子領域的描述 */
