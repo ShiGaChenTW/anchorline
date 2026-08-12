@@ -34,6 +34,7 @@ import { projectDisplayName } from "../data/types";
 import { isNative, isUnavailable, native } from "../lib/native";
 import {
   buildSnapshot,
+  clampForContext,
   latestSnapshot,
   snapshotFileName,
   staleness,
@@ -492,7 +493,10 @@ if (requireAuth()) {
     if (root && snapName && isNative()) {
       try {
         const r = await native.readFile(`${root}/.anchorline/context/${snapName}`);
-        snap = r.text;
+        // 存的是全部，送的是一段 —— 整份丟進 prompt 會撐爆 context window
+        const c = clampForContext(r.text);
+        snap = c.text;
+        if (c.clamped) toast("快照較長，只送出前段給模型");
       } catch {
         /* 讀不到就只給 PRD */
       }

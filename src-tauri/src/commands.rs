@@ -762,9 +762,13 @@ pub struct ProjectScan {
     truncated: bool,
 }
 
-const SCAN_MAX_FILES: usize = 400;
-const SCAN_MAX_BYTES: usize = 1_200_000;
-const SCAN_MAX_FILE_BYTES: u64 = 200_000;
+/// 檔案數上限。一個 repo 有幾萬個檔的時候，逐檔 read_to_string 會慢到像當機。
+const SCAN_MAX_FILES: usize = 4_000;
+/// 總量上限 —— **這是記憶體與 IPC 的護欄，不是「檔案太大不要讀」。**
+/// 整包會跨過 Tauri 的 IPC 邊界並在前端持有，無上限等於讓一個 repo 就能把 App 打死。
+const SCAN_MAX_BYTES: usize = 40_000_000;
+// 單檔大小上限已移除（Scott 2026-08-12）：跳過大檔會漏掉真正重要的東西，
+// 而「哪個檔重要」不是掃描器判斷得出來的。
 
 fn scan_skip_dir(name: &str) -> bool {
     matches!(
@@ -808,10 +812,7 @@ fn scan_dir(dir: &Path, root: &Path, out: &mut Vec<ScanFile>, bytes: &mut usize)
         if !scan_take_ext(&name) {
             continue;
         }
-        if entry.metadata().map(|m| m.len()).unwrap_or(0) > SCAN_MAX_FILE_BYTES {
-            truncated = true;
-            continue;
-        }
+        // 不看檔案大小 —— 只有讀不成 UTF-8 的（二進位）才略過
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
         };
