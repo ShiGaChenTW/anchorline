@@ -190,3 +190,96 @@ export function buildChangeFiles(
   if (kind === "feature") return featureFiles(input);
   return [planFile(input, kind, rand)];
 }
+
+// ── AI 撰寫 ─────────────────────────────────────────────────────
+
+/**
+ * 讓模型把骨架填成初稿。
+ *
+ * **不讓模型決定 change id 或類型** —— 那是使用者的判斷，
+ * 而且 id 一旦變了，已經寫在別處的引用就對不上。
+ */
+export type DraftInput = {
+  kind: ChangeKind;
+  title: string;
+  slug: string;
+  /** 這個專案的 PRD 內容（章節標題 → 內文），給模型當背景。可以是空的 */
+  prdContext: string;
+  files: readonly ChangeFile[];
+};
+
+export function buildDraftSystem(kind: ChangeKind): string {
+  const shared = [
+    "你在替一個開發專案填寫變更文件。用繁體中文書寫。",
+    "",
+    "規則：",
+    "- 你拿到的是骨架，方括號 `[…]` 是要被替換掉的提示，不是要保留的內容。",
+    "- 只寫你從輸入推得出來的事。推不出來的段落寫「待補」並說明缺什麼，",
+    "  不要編造需求、指標或技術細節。",
+    "- 不要宣稱效果（「提升效能」「修好了」）—— 這份文件是在動工之前寫的。",
+    "- 保持骨架原有的標題結構與層級，不要新增或刪除 `##` 段落。",
+  ];
+  if (kind === "feature") {
+    shared.push(
+      "- `proposal.md` 的 Non-goals **一定要寫實質內容**：範圍沒有邊界的提案",
+      "  會在實作途中一路長大。",
+      "- `tasks.md` 每一步要能單獨驗證，而且**寫成單行**（追蹤工具只讀第一行）。",
+      "  不要出現「實作 X」這種驗不了的步驟。",
+    );
+  } else {
+    shared.push(
+      "- Plan Steps 每一步寫成單行、能單獨驗證。",
+      "- 這一份走 `plans/`，不是 OpenSpec change，不要加 proposal／spec 的段落。",
+    );
+  }
+  shared.push(
+    "",
+    "輸出格式：一個 JSON 物件，key 是檔名（例如 `proposal.md`、`tasks.md`），",
+    "value 是那一份檔案的完整內容字串。不要加任何說明文字或程式碼圍欄以外的東西。",
+  );
+  return shared.join("\n");
+}
+
+export function buildDraftUser(input: DraftInput): string {
+  const parts = [
+    `變更標題：${safeTitle(input.title)}`,
+    `類型：${CHANGE_KIND_LABEL[input.kind]}`,
+    `change id：${input.slug}`,
+    "",
+  ];
+  if (input.prdContext.trim()) {
+    parts.push("這個專案的 PRD 內容（背景，不要照抄）：", input.prdContext.trim().slice(0, 6000), "");
+  } else {
+    parts.push("（這個專案還沒有 PRD 內容可以參考，只能依標題判斷。）", "");
+  }
+  parts.push("要填寫的骨架：");
+  for (const f of input.files) {
+    const name = f.path.split("/").pop() ?? f.path;
+    parts.push(`\n===== ${name} =====\n${f.content}`);
+  }
+  return parts.join("\n");
+}
+
+/**
+ * 把模型輸出套回檔案。
+ *
+ * **少回一個檔就保留骨架**，不要整組失敗 —— 模型漏一份的時候，
+ * 其餘三份的初稿仍然有用，而使用者看得出哪一份沒被填。
+ * 比對只看檔名，因為模型不一定會照抄完整路徑。
+ */
+export function applyDraft(
+  files: readonly ChangeFile[],
+  draft: Record<string, unknown> | null,
+): { files: ChangeFile[]; filled: number } {
+  if (!draft) return { files: [...files], filled: 0 };
+  let filled = 0;
+  const out = files.map((f) => {
+    const name = f.path.split("/").pop() ?? f.path;
+    const hit =
+      draft[f.path] ?? draft[name] ?? draft[name.replace(/\.md$/, "")] ?? undefined;
+    if (typeof hit !== "string" || !hit.trim()) return f;
+    filled++;
+    return { ...f, content: hit.trim() + "\n" };
+  });
+  return { files: out, filled };
+}

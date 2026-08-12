@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { buildChangeFiles, deriveChangeSlug, normalizeChangeSlug } from "../src/lib/change-templates";
+import {
+  applyDraft,
+  buildChangeFiles,
+  buildDraftSystem,
+  buildDraftUser,
+  deriveChangeSlug,
+  normalizeChangeSlug,
+} from "../src/lib/change-templates";
 import { parsePlanMeta } from "../src/lib/plan-parser";
 
 /**
@@ -96,5 +103,62 @@ describe("change templates", () => {
     });
     expect(file?.path).toBe("plans/undated-maintenance-safe.md");
     expect(file?.content).toContain("# 維護／重構：重構 標題");
+  });
+});
+
+describe("AI 撰寫", () => {
+  const files = buildChangeFiles("feature", { title: "匯出稽核軌跡", slug: "audit-export", date: "2026-08-12" });
+
+  test("prompt 要求 Non-goals 有實質內容、tasks 單行", () => {
+    const sys = buildDraftSystem("feature");
+    expect(sys).toContain("Non-goals");
+    expect(sys).toContain("單行");
+    // 這份文件寫在動工之前，模型沒資格宣稱效果
+    expect(sys).toContain("不要宣稱效果");
+  });
+
+  test("plan 類型的 prompt 不談 proposal／spec", () => {
+    const sys = buildDraftSystem("bug");
+    expect(sys).toContain("Plan Steps");
+    expect(sys).toContain("不要加 proposal");
+  });
+
+  test("沒有 PRD 內容時要明講，模型才不會假裝有背景", () => {
+    const u = buildDraftUser({ kind: "feature", title: "X", slug: "x", prdContext: "", files });
+    expect(u).toContain("還沒有 PRD 內容");
+  });
+
+  test("套回：依檔名比對，模型不必回完整路徑", () => {
+    const r = applyDraft(files, { "proposal.md": "# 我的提案\n\n內容。" });
+    expect(r.filled).toBe(1);
+    expect(r.files[0]?.content).toContain("我的提案");
+    // 其餘三份保留骨架
+    expect(r.files[3]?.content).toContain("## 1. 規格與資料");
+  });
+
+  test("套回：完整路徑也吃得到", () => {
+    const r = applyDraft(files, { "openspec/changes/audit-export/design.md": "# 設計" });
+    expect(r.filled).toBe(1);
+    expect(r.files[2]?.content).toContain("設計");
+  });
+
+  test("少回一個檔就保留骨架，不整組失敗", () => {
+    // 模型漏一份時其餘的初稿仍然有用，而使用者看得出哪一份沒被填
+    const r = applyDraft(files, { "proposal.md": "A", "tasks.md": "B" });
+    expect(r.filled).toBe(2);
+    expect(r.files[1]?.content).toContain("ADDED Requirements");
+  });
+
+  test("垃圾輸出不炸也不動內容", () => {
+    expect(applyDraft(files, null).filled).toBe(0);
+    expect(applyDraft(files, {}).filled).toBe(0);
+    expect(applyDraft(files, { "proposal.md": 123 }).filled).toBe(0);
+    expect(applyDraft(files, { "proposal.md": "   " }).filled).toBe(0);
+  });
+
+  test("套回不改動原陣列", () => {
+    const before = files[0]!.content;
+    applyDraft(files, { "proposal.md": "換掉" });
+    expect(files[0]!.content).toBe(before);
   });
 });

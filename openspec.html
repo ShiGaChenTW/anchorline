@@ -79,6 +79,24 @@
           <div id="os-open-body" aria-live="polite"></div>
         </section>
 
+        <!--
+          兩欄：左邊是三個步驟，右邊是**要產生的檔案內容**。
+          內容放右邊而不是塞進第 3 步，是因為「按下去會發生什麼」該在按之前
+          就讀得到，而那份東西比一個步驟卡放得下的還長。
+        -->
+        <div class="os-scope">
+          <label class="os-scope-field">
+            <span>專案</span>
+            <select id="os-project" aria-label="選擇專案"></select>
+          </label>
+          <span class="os-scope-note" id="os-scope-note"></span>
+          <div class="os-init" id="os-init" hidden>
+            <span class="os-init-warn" id="os-init-warn"></span>
+            <button type="button" class="btn btn-sm" id="os-init-run">一鍵 openspec init</button>
+          </div>
+        </div>
+
+        <div class="os-work">
         <!-- 三步驟：後面的步驟用 dim 不用隱藏，版面才不會跳（跳動會讓人丟失位置） -->
         <ol class="os-steps" id="os-steps">
           <li class="os-step" data-step="1">
@@ -120,6 +138,10 @@
               <input id="os-slug" type="text" placeholder="audit-export" autocomplete="off" />
             </label>
             <p class="os-field-err" id="os-slug-err" role="status" aria-live="polite"></p>
+            <div class="os-ai-row">
+              <button type="button" class="btn btn-sm" id="os-ai">AI 撰寫初稿</button>
+              <span class="os-ai-status" id="os-ai-status"></span>
+            </div>
           </li>
 
           <li class="os-step is-locked" data-step="3">
@@ -128,7 +150,10 @@
               <h2>把文件拿走</h2>
               <span class="os-step-hint">只產生文件，不直接寫入專案</span>
             </div>
-            <ul class="os-files" id="os-files"></ul>
+            <label class="os-field os-field-wide">要收進哪一版？
+              <select id="os-release"><option value="">加入該專案</option></select>
+            </label>
+            <p class="os-release-note" id="os-release-note"></p>
             <div class="os-actions">
               <button type="button" class="btn btn-primary" id="os-download">建立並下載</button>
               <button type="button" class="btn btn-ghost" id="os-copy">複製文件</button>
@@ -137,6 +162,16 @@
             <p class="os-help">下載後放回上面列出的路徑，再到 Task Tracking 勾選步驟。</p>
           </li>
         </ol>
+
+        <section class="os-preview" aria-labelledby="os-preview-title">
+          <div class="os-preview-head">
+            <h2 id="os-preview-title">會產生的檔案</h2>
+            <span class="os-preview-count" id="os-preview-count"></span>
+          </div>
+          <div class="os-preview-tabs" id="os-preview-tabs" role="tablist" aria-label="檔案"></div>
+          <pre class="os-preview-body" id="os-preview-body" tabindex="0" aria-live="polite"></pre>
+        </section>
+        </div>
       </div>
     </main>
   </div>
