@@ -24,6 +24,7 @@ import { restorePlan, snapshotDrafts, type TouchedField } from "../lib/draft-sna
 import {
   makeSnapshot,
   NO_SNAPSHOT,
+  openSnapshot,
   readSnapshotState,
   readSnapshotText,
   snapshotLine,
@@ -191,7 +192,7 @@ if (!requireAuth()) {
 
   let snapState = NO_SNAPSHOT;
   /**
-   * 快照落後判定要用的 commit 時間。開面板時取一次 ——
+   * 報告落後判定要用的 commit 時間。開面板時取一次 ——
    * 這一頁本來沒有專案統計，為了一個數字常駐輪詢不值得。
    */
   async function commitTimes(root: string | undefined): Promise<string[]> {
@@ -209,7 +210,7 @@ if (!requireAuth()) {
    *
    * 兩件事在這裡決定，因為它們都會影響「寫出來的東西對不對」：
    *
-   * 1. **快照** —— 既有專案沒讀過資料夾就不給寫。模型手上只有章節骨架時，
+   * 1. **分析報告** —— 既有專案沒讀過資料夾就不給寫。模型手上只有章節骨架時，
    *    它會很流暢地寫出一份跟這個專案沒有關係的 PRD。
    * 2. **要寫哪幾節** —— 取代原本的「已有內容自動略過」。自動略過看起來
    *    貼心，但它替使用者做了決定：想重寫某一節的人得先去把它清空。
@@ -225,6 +226,7 @@ if (!requireAuth()) {
 
     const line = document.getElementById("awp-snap-line")!;
     const scanBtn = document.getElementById("awp-scan") as HTMLButtonElement;
+    const openBtn = document.getElementById("awp-open") as HTMLButtonElement;
     const qa = document.getElementById("awp-qa")!;
     const goBtn = document.getElementById("awp-go") as HTMLButtonElement;
     const listEl = document.getElementById("awp-list")!;
@@ -233,7 +235,14 @@ if (!requireAuth()) {
     const paintSnap = () => {
       line.textContent = snapshotLine(snapState, snapState.at ? sinceLabel(snapState.at.toISOString(), Date.now()) : "");
       line.className = `awp-snap-line${!snapState.required ? "" : !snapState.at ? " is-block" : snapState.stale?.stale ? " is-stale" : ""}`;
+      // 更新與否是使用者的決定，所以按鈕一直在 —— 不是只有「沒有報告」時才出現。
+      // 有報告時它是「重新分析」，沒有時是「產出分析報告」。
       scanBtn.hidden = !snapState.required || snapState.unavailable;
+      scanBtn.textContent = snapState.at ? "重新分析" : "產出分析報告";
+      scanBtn.title = snapState.at
+        ? "重新讀一次整個資料夾，產出一份新的分析報告（舊的會留著）"
+        : "完整讀一次專案資料夾，產出分析報告";
+      openBtn.hidden = !snapState.path;
       qa.hidden = snapState.required;
       paintCount();
     };
@@ -301,15 +310,19 @@ if (!requireAuth()) {
         chosen.clear();
         paintList();
       };
+      openBtn.onclick = () => void openSnapshot(snapState.path);
       scanBtn.onclick = async () => {
         if (!root) return;
+        // 已經有報告就問一次 —— 讀整個資料夾要花時間，而且會多一份檔案
+        if (snapState.at && !confirm("要重新讀一次整個專案資料夾，產出新的分析報告嗎？（舊的會留著）")) return;
         scanBtn.disabled = true;
-        line.textContent = "讀取中…";
+        line.textContent = "讀取整個專案資料夾中…";
         const r = await makeSnapshot(root, projectDisplayName(p!));
         if (!r.ok) {
           line.textContent = r.reason;
         } else {
-          toast(r.truncated ? `已讀 ${r.files} 個檔（有上限，未讀完）` : `已讀 ${r.files} 個檔`);
+          // 檔案數要講出來 —— 掃描快到像是沒執行，數字是它真的跑過的證據
+          toast(r.truncated ? `已分析 ${r.files} 個檔（有上限，未讀完）` : `已分析 ${r.files} 個檔`);
           snapState = await readSnapshotState(root, commits);
         }
         scanBtn.disabled = false;
@@ -342,15 +355,15 @@ if (!requireAuth()) {
     const before = snapshotDrafts(store.get().prdDrafts[pid]);
     const touched: TouchedField[] = [];
 
-    // 快照當背景。既有專案在前置面板已經擋過「沒有快照」，這裡只負責取用
+    // 分析報告當背景。既有專案在前置面板已經擋過「沒有報告」，這裡只負責取用
     const root = store.get().projects.find((x) => x.id === pid)?.importSummary?.rootPath;
     let snapContext = "";
     if (root && snapState.name) {
       const raw = await readSnapshotText(root, snapState.name);
       if (raw) {
         const c = clampForContext(raw);
-        snapContext = `專案快照（${snapState.name}）：\n${c.text}`;
-        if (c.clamped) toast("快照較長，只送出前段給模型");
+        snapContext = `專案分析報告（${snapState.name}）：\n${c.text}`;
+        if (c.clamped) toast("分析報告較長，只送出前段給模型");
       }
     } else if (opts.brief) {
       snapContext = `使用者說明：\n${opts.brief}`;

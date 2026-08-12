@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildSnapshot,
+  formatBytes,
   latestSnapshot,
   parseSnapshotTime,
   CONTEXT_LIMIT,
@@ -65,6 +66,28 @@ describe("latestSnapshot", () => {
 
   test("沒有檔案回 null", () => {
     expect(latestSnapshot([])).toBeNull();
+  });
+});
+
+describe("大小 —— 產出證據", () => {
+  // 讀 595 個檔不到一秒，畫面上只跳出一個檔名時看起來像是沒執行過。
+  // 大小是「它真的寫出東西了」最便宜的證據，所以不能因為缺欄位就變成 NaN。
+  test("沒給 bytes 也不會壞成 NaN", () => {
+    const r = latestSnapshot([{ name: "P-20260812-1039.md", mtimeMs: 0 }]);
+    expect(r?.bytes).toBe(0);
+  });
+
+  test("有給就帶出來", () => {
+    const r = latestSnapshot([{ name: "P-20260812-1039.md", mtimeMs: 0, bytes: 7_080_082 }]);
+    expect(r?.bytes).toBe(7_080_082);
+    expect(formatBytes(r!.bytes)).toBe("6.8 MB");
+  });
+
+  test("換算跨過每一個級距", () => {
+    expect(formatBytes(0)).toBe("0 B");
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(2048)).toBe("2.0 KB");
+    expect(formatBytes(3_500_000)).toBe("3.3 MB");
   });
 });
 

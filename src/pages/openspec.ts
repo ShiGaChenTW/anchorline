@@ -35,6 +35,7 @@ import { isNative, isUnavailable, native } from "../lib/native";
 import { clampForContext } from "../lib/project-snapshot";
 import {
   makeSnapshot,
+  openSnapshot,
   NO_SNAPSHOT,
   readSnapshotState,
   readSnapshotText,
@@ -75,7 +76,7 @@ if (requireAuth()) {
    * 留著會讓下載到的東西跟畫面上填的對不起來。
    */
   let draftFiles: ChangeFile[] | null = null;
-  /** 這個專案的快照狀態。判定與文案共用 `snapshot-bridge` */
+  /** 這個專案的分析報告狀態。判定與文案共用 `snapshot-bridge` */
   let snapState = NO_SNAPSHOT;
   /** 勾了要寫哪幾份。key 是檔名 */
   const picked = new Set<string>();
@@ -479,8 +480,8 @@ if (requireAuth()) {
   /**
    * 給模型的背景。
    *
-   * 新專案沒有資料夾可讀，用使用者填的問答；既有專案用**快照**加 PRD。
-   * 快照是那份「完整讀過資料夾」的東西 —— 少了它，模型只有一個標題，
+   * 新專案沒有資料夾可讀，用使用者填的問答；既有專案用**分析報告**加 PRD。
+   * 分析報告是那份「完整讀過資料夾」的東西 —— 少了它，模型只有一個標題，
    * 而它會很流暢地寫出一份跟這個 repo 沒有關係的提案。
    */
   async function aiContext(): Promise<string> {
@@ -496,10 +497,10 @@ if (requireAuth()) {
         // 存的是全部，送的是一段 —— 整份丟進 prompt 會撐爆 context window
         const c = clampForContext(raw);
         snap = c.text;
-        if (c.clamped) toast("快照較長，只送出前段給模型");
+        if (c.clamped) toast("分析報告較長，只送出前段給模型");
       }
     }
-    return [snap && `專案快照（${snapState.name}）：\n${snap}`, prdContext()].filter(Boolean).join("\n\n");
+    return [snap && `專案分析報告（${snapState.name}）：\n${snap}`, prdContext()].filter(Boolean).join("\n\n");
   }
 
   /** 專案的 PRD 內容，給模型當背景。沒有就是空字串，prompt 會明講。 */
@@ -520,9 +521,9 @@ if (requireAuth()) {
       .join("\n\n");
   }
 
-  // ── 專案快照：AI 撰寫的前置條件 ──────────────────────────────
+  // ── 專案分析報告：AI 撰寫的前置條件 ──────────────────────────────
 
-  /** 新專案＝沒有綁定資料夾。沒有資料夾可讀，所以不要求快照，改走問答。 */
+  /** 新專案＝沒有綁定資料夾。沒有資料夾可讀，所以不要求分析報告，改走問答。 */
   function isNewProject(): boolean {
     return !currentProject()?.importSummary?.rootPath;
   }
@@ -534,8 +535,8 @@ if (requireAuth()) {
   }
 
   /**
-   * 快照狀態。三種話各自不同，因為下一步不同：
-   * 新專案（不需要快照）· 有快照且新（可以寫）· 沒有或落後（要先讀）。
+   * 報告狀態。三種話各自不同，因為下一步不同：
+   * 新專案（不需要報告）· 有報告且新（可以寫）· 沒有或落後（要先產出）。
    */
   function renderSnapshotLine() {
     const line = el("os-ai-snap");
@@ -545,34 +546,41 @@ if (requireAuth()) {
     if (!line || !scanBtn || !aiBtn) return;
 
     // 文案與判定跟 PRD 撰寫共用 `snapshot-bridge` —— 兩邊各寫一份的話，
-    // 同一個專案會在兩頁顯示不同的快照狀態
+    // 同一個專案會在兩頁顯示不同的報告狀態
     const age = snapState.at ? since(snapState.at.toISOString(), Date.now()) : "";
     line.textContent = snapshotLine(snapState, age);
     line.className = `os-ai-snap${
       !snapState.required ? "" : snapState.unavailable || !snapState.at ? " is-block" : snapState.stale?.stale ? " is-stale" : ""
     }`;
     qa && (qa.hidden = snapState.required);
+    // 更新與否是使用者的決定，所以按鈕一直在，只是換字
     scanBtn.hidden = !snapState.required || snapState.unavailable;
+    scanBtn.textContent = snapState.at ? "重新分析" : "產出分析報告";
+    const openBtn = el("os-ai-open") as HTMLButtonElement | null;
+    if (openBtn) openBtn.hidden = !snapState.path;
     aiBtn.disabled = snapState.required && !snapState.unavailable && !snapState.at;
   }
 
-  /** 快照落後判定要用的 commit 時間。這一頁沒有專案統計，先留空 —— 
+  /** 報告落後判定要用的 commit 時間。這一頁沒有專案統計，先留空 ——
       年齡那一半的判定仍然有效（超過 7 天照樣提醒）。 */
   const commitTimes: string[] = [];
+
+  el("os-ai-open")?.addEventListener("click", () => void openSnapshot(snapState.path));
 
   el("os-ai-scan")?.addEventListener("click", async () => {
     const p = currentProject();
     const root = p?.importSummary?.rootPath;
     const line = el("os-ai-snap");
     if (!root) return;
+    if (snapState.at && !confirm("要重新讀一次整個專案資料夾，產出新的分析報告嗎？（舊的會留著）")) return;
     const btn = el("os-ai-scan") as HTMLButtonElement;
     btn.disabled = true;
-    if (line) line.textContent = "讀取中…";
+    if (line) line.textContent = "讀取整個專案資料夾中…";
     const r = await makeSnapshot(root, projectDisplayName(p!));
     if (!r.ok) {
       if (line) line.textContent = r.reason;
     } else {
-      toast(r.truncated ? `已讀 ${r.files} 個檔（有上限，未讀完）` : `已讀 ${r.files} 個檔`);
+      toast(r.truncated ? `已分析 ${r.files} 個檔（有上限，未讀完）` : `已分析 ${r.files} 個檔`);
       await refreshSnapshot();
     }
     btn.disabled = false;
@@ -618,9 +626,9 @@ if (requireAuth()) {
       say(ready.reason, true);
       return;
     }
-    // 既有專案沒有快照就不給寫 —— 沒讀過專案寫出來的文件是編的
+    // 既有專案沒有分析報告就不給寫 —— 沒讀過專案寫出來的文件是編的
     if (snapState.required && !snapState.unavailable && !snapState.at) {
-      say("先按「讀取專案資料夾」建立快照。", true);
+      say("先按「產出分析報告」讀一次專案資料夾。", true);
       return;
     }
     const title = val("os-title").trim();

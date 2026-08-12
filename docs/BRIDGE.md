@@ -267,11 +267,14 @@ openspecInit(folderPath: string)  -> Maybe<{ raw: string }>
 
 ```ts
 scanProject(folderPath)                 -> Maybe<{ files: {path,text}[]; truncated: boolean }>
-listSnapshots(folderPath)               -> { name: string; mtimeMs: number }[]
+listSnapshots(folderPath)               -> { name: string; mtimeMs: number; bytes: number }[]
 writeSnapshot(folderPath, name, text)   -> Maybe<{ path: string }>
 ```
 
-專案快照：AI 撰寫的前置條件。沒讀過專案就寫出來的變更文件是編的。
+專案分析報告：AI 撰寫的前置條件。沒讀過專案就寫出來的變更文件是編的。
+
+`listSnapshots` 回 `bytes`，因為畫面需要它：讀 595 個檔不到一秒，
+只顯示一個檔名的話看起來像是根本沒執行。大小是最便宜的產出證據。
 
 **`scanProject` 沒有單檔大小上限**（2026-08-12 改）：跳過大檔會漏掉真正
 重要的東西，而「哪個檔重要」不是掃描器判斷得出來的。只有讀不成 UTF-8 的
@@ -281,9 +284,9 @@ writeSnapshot(folderPath, name, text)   -> Maybe<{ path: string }>
 外加副檔名白名單與略過 `node_modules` / `target` / `dist` 之類的目錄。
 整包會跨過 Tauri 的 IPC 邊界並在前端持有，無上限等於讓一個 repo 就能把
 App 打死。任一道觸發就把 `truncated` 設為 `true`，畫面必須講出來 ——
-一份沒讀完的快照會讓模型以為它看過全部。
+一份沒讀完的報告會讓模型以為它看過全部。
 
-**存檔與送模型是兩件事。** 快照檔存全部內容，不截斷任何檔案；
+**存檔與送模型是兩件事。** 報告檔存全部內容，不截斷任何檔案；
 餵給模型的部分由前端夾到 60,000 字（`clampForContext`），並提示使用者。
 爆掉的是 context window，不是磁碟。
 
@@ -297,7 +300,7 @@ App 打死。任一道觸發就把 `truncated` 設為 `true`，畫面必須講�
 | 檔名 | 前端給，但 Rust 端擋路徑穿越（`/`、`\`、`..` 一律拒絕），長度上限 120 |
 | 覆寫 | **不覆寫**。同名存在直接回 `Missing` |
 
-不覆寫是設計而不是保守：快照是「當時的專案長這樣」，蓋掉就沒有東西可以
+不覆寫是設計而不是保守：報告是「當時的專案長這樣」，蓋掉就沒有東西可以
 回答「這中間變了什麼」，而那正是畫面上「落後多少」的來源。
 
 ### 4.8 `ghStatus`

@@ -1,5 +1,5 @@
 /**
- * 專案快照 —— AI 撰寫的前置條件。純函式、零 I/O。
+ * 專案分析報告 —— AI 撰寫的前置條件。純函式、零 I/O。
  *
  * ## 為什麼要前置
  *
@@ -9,7 +9,7 @@
  *
  * ## 為什麼不覆寫
  *
- * 快照的檔名帶時間、每次重讀都是新檔。覆寫掉就沒有東西可以回答
+ * 報告的檔名帶時間、每次重讀都是新檔。覆寫掉就沒有東西可以回答
  * 「這中間變了什麼」—— 而那正是「落後多少」這個數字的來源。
  */
 
@@ -43,36 +43,50 @@ export function parseSnapshotTime(fileName: string): Date | null {
   return Number.isNaN(at.getTime()) ? null : at;
 }
 
-export type SnapshotFile = { name: string; mtimeMs: number };
+export type SnapshotFile = { name: string; mtimeMs: number; bytes?: number };
 
 /**
- * 最新的一份快照。**時間優先讀檔名**，讀不到才退回 mtime ——
- * 檔案被複製或搬動時 mtime 會變，而檔名裡的時間是快照真正產生的時刻。
+ * 最新的一份分析報告。**時間優先讀檔名**，讀不到才退回 mtime ——
+ * 檔案被複製或搬動時 mtime 會變，而檔名裡的時間是報告真正產生的時刻。
  */
-export function latestSnapshot(files: readonly SnapshotFile[]): { name: string; at: Date } | null {
+export function latestSnapshot(
+  files: readonly SnapshotFile[],
+): { name: string; at: Date; bytes: number } | null {
   const withTime = files
-    .map((f) => ({ name: f.name, at: parseSnapshotTime(f.name) ?? new Date(f.mtimeMs) }))
+    .map((f) => ({
+      name: f.name,
+      at: parseSnapshotTime(f.name) ?? new Date(f.mtimeMs),
+      bytes: f.bytes ?? 0,
+    }))
     .filter((f) => !Number.isNaN(f.at.getTime()));
   if (!withTime.length) return null;
   return withTime.sort((a, b) => b.at.getTime() - a.at.getTime())[0]!;
 }
 
+/** 人看的檔案大小。畫面用它證明「報告不是空的」。 */
+export function formatBytes(n: number): string {
+  if (!n || n < 0) return "0 B";
+  if (n < 1024) return `${Math.round(n)} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
 // ── 落後多少 ────────────────────────────────────────────────────
 
 export type Staleness = {
-  /** 快照之後有幾筆 commit */
+  /** 報告產出之後有幾筆 commit */
   commitsBehind: number;
-  /** 快照距今多久（毫秒） */
+  /** 報告距今多久（毫秒） */
   ageMs: number;
   /** 該不該提醒重讀 */
   stale: boolean;
 };
 
-/** 超過這個天數就提醒，即使沒有新 commit —— 沒進版控的改動一樣會讓快照過期 */
+/** 超過這個天數就提醒，即使沒有新 commit —— 沒進版控的改動一樣會讓報告過期 */
 export const STALE_DAYS = 7;
 
 /**
- * 快照落後多少。
+ * 報告落後多少。
  *
  * 兩個判準都要看：**commit 數**回答「程式碼變了多少」，
  * **年齡**回答「這中間可能發生過沒進版控的事」。只看 commit 數的話，
@@ -111,9 +125,9 @@ export type SnapshotInput = {
 };
 
 /**
- * 快照**存檔時不截斷任何檔案**（Scott 2026-08-12）。
+ * 報告**存檔時不截斷任何檔案**（Scott 2026-08-12）。
  *
- * 原本每個檔截到 6,000 字。截斷會讓快照漏掉真正重要的段落，
+ * 原本每個檔截到 6,000 字。截斷會讓報告漏掉真正重要的段落，
  * 而「哪一段重要」不是產生器判斷得出來的。
  *
  * 送給模型的部分另外有上限（`CONTEXT_LIMIT`）—— 存的是全部，送的是一段。
@@ -121,7 +135,7 @@ export type SnapshotInput = {
  */
 
 /**
- * 餵給模型的快照上限。
+ * 餵給模型的報告上限。
  *
  * 存檔不設限，但整份丟進 prompt 會撐爆 context window，症狀是 API 報錯
  * 或費用暴衝。所以送出去的部分要夾，而且**要讓使用者看得到被夾了**。
@@ -131,21 +145,21 @@ export const CONTEXT_LIMIT = 60_000;
 export function clampForContext(md: string): { text: string; clamped: boolean } {
   if (md.length <= CONTEXT_LIMIT) return { text: md, clamped: false };
   return {
-    text: `${md.slice(0, CONTEXT_LIMIT)}\n\n…（快照過長，只送出前 ${CONTEXT_LIMIT} 字給模型；完整內容仍在檔案裡）`,
+    text: `${md.slice(0, CONTEXT_LIMIT)}\n\n…（分析報告過長，只送出前 ${CONTEXT_LIMIT} 字給模型；完整內容仍在檔案裡）`,
     clamped: true,
   };
 }
 
 /**
- * 組成快照的 Markdown。
+ * 組成分析報告的 Markdown。
  *
- * 這份東西有兩個讀者：模型（當背景）與人（判斷這份快照涵蓋了什麼）。
+ * 這份東西有兩個讀者：模型（當背景）與人（判斷這份報告涵蓋了什麼）。
  * 所以檔案清單放前面 —— 人只想知道「讀到了哪些」，不必捲過全部內容。
  */
 export function buildSnapshot(input: SnapshotInput): string {
   const { projectName, rootPath, at, files, gitLine, truncated } = input;
   const out: string[] = [
-    `# 專案快照：${projectName}`,
+    `# 專案分析報告：${projectName}`,
     "",
     `**產生時間：** ${at.toISOString()}`,
     `**專案路徑：** ${rootPath}`,
@@ -153,7 +167,7 @@ export function buildSnapshot(input: SnapshotInput): string {
   ];
   if (gitLine) out.push(`**版控：** ${gitLine}`);
   if (truncated) {
-    out.push("", "> ⚠️ 這份快照因為檔案數或大小上限而**沒有讀完整個資料夾**。");
+    out.push("", "> ⚠️ 這份報告因為檔案數或大小上限而**沒有讀完整個資料夾**。");
   }
   out.push("", "## 檔案清單", "");
   out.push(...files.map((f) => `- \`${f.path}\``));
