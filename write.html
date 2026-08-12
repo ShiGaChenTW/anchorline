@@ -108,6 +108,36 @@
 <input type="file" id="aiw-folder-input" class="visually-hidden-file" webkitdirectory directory multiple
        aria-hidden="true" tabindex="-1" />
 
+<div class="modal-back" id="aiw-plan" data-od-id="modal-aiw-plan">
+  <div class="modal awp" role="dialog" aria-labelledby="awp-title" style="width:min(640px,100%)">
+    <header>
+      <h3 id="awp-title">要寫哪幾節</h3>
+      <button type="button" class="btn btn-ghost btn-sm" id="awp-close">關閉</button>
+    </header>
+    <div class="body">
+      <div class="awp-snap">
+        <span id="awp-snap-line" class="awp-snap-line"></span>
+        <button type="button" class="btn btn-sm" id="awp-scan" hidden>讀取專案資料夾</button>
+      </div>
+      <label class="awp-qa" id="awp-qa" hidden>這個專案在做什麼？
+        <textarea id="awp-brief" rows="3"
+          placeholder="沒有資料夾可以讀，所以請用幾句話說明：要解決誰的什麼問題、目前怎麼做"></textarea>
+      </label>
+      <div class="awp-tools">
+        <button type="button" class="btn btn-sm btn-ghost" id="awp-all">全選</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="awp-none">全不選</button>
+        <span class="awp-count" id="awp-count"></span>
+      </div>
+      <ul class="awp-list" id="awp-list"></ul>
+    </div>
+    <footer>
+      <div style="flex:1"></div>
+      <button type="button" class="btn btn-ghost" id="awp-cancel">取消</button>
+      <button type="button" class="btn btn-primary" id="awp-go">開始撰寫</button>
+    </footer>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status"></div>
 
 <script type="module" src="/src/pages/write.ts"></script>
