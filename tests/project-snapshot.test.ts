@@ -3,7 +3,8 @@ import {
   buildSnapshot,
   latestSnapshot,
   parseSnapshotTime,
-  PER_FILE_LIMIT,
+  CONTEXT_LIMIT,
+  clampForContext,
   snapshotFileName,
   snapshotSlug,
   staleness,
@@ -117,14 +118,33 @@ describe("摘要組裝", () => {
     expect(md.indexOf("沒有讀完整個資料夾")).toBeLessThan(md.indexOf("## 檔案清單"));
   });
 
-  test("單一檔案有上限，一個大檔不能吃掉整份", () => {
-    const md = buildSnapshot({ ...base, files: [{ path: "big.ts", text: "y".repeat(PER_FILE_LIMIT + 500) }] });
-    expect(md).toContain("（截斷）");
-    expect(md.length).toBeLessThan(PER_FILE_LIMIT + 2000);
+  test("存檔不截斷任何檔案 —— 漏掉的段落沒有人救得回來", () => {
+    // 政策變更（Scott 2026-08-12）：原本每個檔截到 6,000 字。
+    // 「哪一段重要」不是產生器判斷得出來的，所以存檔存全部。
+    const big = "y".repeat(20_000);
+    const md = buildSnapshot({ ...base, files: [{ path: "big.ts", text: big }] });
+    expect(md).toContain(big);
+    expect(md).not.toContain("（截斷）");
   });
 
   test("沒有 git 時不印空的版控行", () => {
     const md = buildSnapshot({ ...base, gitLine: "", files: [] });
     expect(md).not.toContain("**版控：**");
+  });
+});
+
+describe("送給模型的上限", () => {
+  test("沒超過就原樣送", () => {
+    const r = clampForContext("短的");
+    expect(r.clamped).toBe(false);
+    expect(r.text).toBe("短的");
+  });
+
+  test("超過就夾，而且要講出來 —— 存的是全部，送的是一段", () => {
+    // 磁碟裝得下，context window 裝不下。兩件事分開處理。
+    const r = clampForContext("z".repeat(CONTEXT_LIMIT + 1000));
+    expect(r.clamped).toBe(true);
+    expect(r.text).toContain("只送出前");
+    expect(r.text).toContain("完整內容仍在檔案裡");
   });
 });

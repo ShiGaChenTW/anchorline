@@ -110,8 +110,31 @@ export type SnapshotInput = {
   truncated: boolean;
 };
 
-/** 單一檔案在快照裡的內容上限。整包再大也不能讓一個檔吃掉全部。 */
-export const PER_FILE_LIMIT = 6_000;
+/**
+ * 快照**存檔時不截斷任何檔案**（Scott 2026-08-12）。
+ *
+ * 原本每個檔截到 6,000 字。截斷會讓快照漏掉真正重要的段落，
+ * 而「哪一段重要」不是產生器判斷得出來的。
+ *
+ * 送給模型的部分另外有上限（`CONTEXT_LIMIT`）—— 存的是全部，送的是一段。
+ * 那兩件事分開，因為爆掉的是 context window，不是磁碟。
+ */
+
+/**
+ * 餵給模型的快照上限。
+ *
+ * 存檔不設限，但整份丟進 prompt 會撐爆 context window，症狀是 API 報錯
+ * 或費用暴衝。所以送出去的部分要夾，而且**要讓使用者看得到被夾了**。
+ */
+export const CONTEXT_LIMIT = 60_000;
+
+export function clampForContext(md: string): { text: string; clamped: boolean } {
+  if (md.length <= CONTEXT_LIMIT) return { text: md, clamped: false };
+  return {
+    text: `${md.slice(0, CONTEXT_LIMIT)}\n\n…（快照過長，只送出前 ${CONTEXT_LIMIT} 字給模型；完整內容仍在檔案裡）`,
+    clamped: true,
+  };
+}
 
 /**
  * 組成快照的 Markdown。
@@ -136,8 +159,7 @@ export function buildSnapshot(input: SnapshotInput): string {
   out.push(...files.map((f) => `- \`${f.path}\``));
   out.push("", "## 內容", "");
   for (const f of files) {
-    const body = f.text.length > PER_FILE_LIMIT ? `${f.text.slice(0, PER_FILE_LIMIT)}\n…（截斷）` : f.text;
-    out.push(`### \`${f.path}\``, "", "```", body, "```", "");
+    out.push(`### \`${f.path}\``, "", "```", f.text, "```", "");
   }
   return out.join("\n");
 }
