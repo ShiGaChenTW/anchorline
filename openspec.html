@@ -137,9 +137,28 @@
               <input id="os-slug" type="text" placeholder="audit-export" autocomplete="off" />
             </label>
             <p class="os-field-err" id="os-slug-err" role="status" aria-live="polite"></p>
-            <div class="os-ai-row">
-              <button type="button" class="btn btn-sm" id="os-ai">AI 撰寫初稿</button>
-              <span class="os-ai-status" id="os-ai-status"></span>
+            <div class="os-ai" id="os-ai-block">
+              <div class="os-ai-head">
+                <strong>AI 撰寫</strong>
+                <span class="os-ai-snap" id="os-ai-snap"></span>
+              </div>
+
+              <!-- 新專案（沒綁資料夾）走這條：沒有資料夾可讀，改用問答 -->
+              <label class="os-field os-field-wide os-ai-qa" id="os-ai-qa" hidden>這個專案在做什麼？
+                <textarea id="os-ai-brief" rows="3"
+                  placeholder="沒有資料夾可以讀，所以請用幾句話說明：要解決誰的什麼問題、目前怎麼做、這次要改成什麼"></textarea>
+              </label>
+
+              <fieldset class="os-ai-pick" id="os-ai-pick">
+                <legend>要寫哪幾份</legend>
+                <div id="os-ai-picks"></div>
+              </fieldset>
+
+              <div class="os-ai-row">
+                <button type="button" class="btn btn-sm" id="os-ai-scan" hidden>讀取專案資料夾</button>
+                <button type="button" class="btn btn-sm" id="os-ai">AI 撰寫初稿</button>
+                <span class="os-ai-status" id="os-ai-status"></span>
+              </div>
             </div>
           </li>
 
