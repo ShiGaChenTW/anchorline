@@ -93,7 +93,7 @@ canonicalize(path) 仍位於某個「已註冊專案根目錄」之內   ← 擋
 
 ---
 
-## 4. 十六個 action
+## 4. 十九個 action
 
 ### 4.1 `pickFolder` / `pickProjectFolder`
 
@@ -262,6 +262,34 @@ openspecInit(folderPath: string)  -> Maybe<{ raw: string }>
 `openspecProbe` 用**檔案系統檢查**（`openspec/` 目錄在不在），刻意不呼叫 CLI：
 「CLI 沒裝」與「沒 init 過」是兩件事，混在一起會讓畫面對沒裝 CLI 的人說
 「請 init」，而他 init 不了。
+
+### 4.7d `scanProject` / `listSnapshots` / `writeSnapshot`
+
+```ts
+scanProject(folderPath)                 -> Maybe<{ files: {path,text}[]; truncated: boolean }>
+listSnapshots(folderPath)               -> { name: string; mtimeMs: number }[]
+writeSnapshot(folderPath, name, text)   -> Maybe<{ path: string }>
+```
+
+專案快照：AI 撰寫的前置條件。沒讀過專案就寫出來的變更文件是編的。
+
+**`scanProject` 的三道上限不可省**：400 個檔、1.2 MB 總量、單檔 200 KB，
+外加副檔名白名單與略過 `node_modules` / `target` / `dist` 之類的目錄。
+沒有上限的話，一個帶 build 產物的專案會讓這個呼叫吃到記憶體爆掉，
+而使用者只會看到 App 卡死。任一道觸發就把 `truncated` 設為 `true`，畫面必須講出來。
+
+**`writeSnapshot` 是第二個會寫進使用者專案的 action**（第一個是 `openspecInit`）。
+限制比它更緊：
+
+| | |
+|---|---|
+| 位置 | 只能寫 `<root>/.anchorline/context/` |
+| 副檔名 | 只接受 `.md` |
+| 檔名 | 前端給，但 Rust 端擋路徑穿越（`/`、`\`、`..` 一律拒絕），長度上限 120 |
+| 覆寫 | **不覆寫**。同名存在直接回 `Missing` |
+
+不覆寫是設計而不是保守：快照是「當時的專案長這樣」，蓋掉就沒有東西可以
+回答「這中間變了什麼」，而那正是畫面上「落後多少」的來源。
 
 ### 4.8 `ghStatus`
 

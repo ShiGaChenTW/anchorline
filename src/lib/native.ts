@@ -196,6 +196,16 @@ export const native = {
    * 呼叫端要先跟使用者確認。
    */
   openspecInit: (folderPath: string) => callMaybe<{ raw: string }>("openspec_init", { folderPath }),
+  /** 專案快照用的資料夾掃描。副檔名白名單 + 三道上限，`truncated` 要顯示出來。 */
+  scanProject: (folderPath: string) =>
+    callMaybe<{ files: { path: string; text: string }[]; truncated: boolean }>("scan_project", {
+      folderPath,
+    }),
+  listSnapshots: (folderPath: string) =>
+    call<{ name: string; mtimeMs: number }[]>("list_snapshots", { folderPath }),
+  /** **不覆寫**：同名存在就回 Missing。快照蓋掉就沒有東西可以比對變化。 */
+  writeSnapshot: (folderPath: string, name: string, text: string) =>
+    callMaybe<{ path: string }>("write_snapshot", { folderPath, name, text }),
   ghStatus: () => callMaybe<{ raw: string; fetchedAt: string }>("gh_status"),
   onefetch: (folderPath: string) => callMaybe<{ raw: string }>("onefetch", { folderPath }),
   fastfetch: () => callMaybe<{ raw: string }>("fastfetch"),
