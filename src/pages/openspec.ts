@@ -32,6 +32,13 @@ import {
 import { AiError, chatCompletion, extractJsonObject, getAiReadiness } from "../lib/ai-client";
 import { projectDisplayName } from "../data/types";
 import { isNative, isUnavailable, native } from "../lib/native";
+import {
+  buildSnapshot,
+  latestSnapshot,
+  snapshotFileName,
+  staleness,
+} from "../lib/project-snapshot";
+import { sinceLabel as since } from "../lib/time-format";
 import { canQueryStatus, requestOpenspecStatus } from "../lib/status-bridge";
 import { nextArtifact, type OpenspecChange, type OpenspecResult } from "../lib/openspec-status";
 import { sinceLabel } from "../lib/time-format";
@@ -66,6 +73,11 @@ if (requireAuth()) {
    * 留著會讓下載到的東西跟畫面上填的對不起來。
    */
   let draftFiles: ChangeFile[] | null = null;
+  /** 這個專案最新的快照。null = 沒有，AI 撰寫要擋住 */
+  let snapAt: Date | null = null;
+  let snapName = "";
+  /** 勾了要寫哪幾份。key 是檔名 */
+  const picked = new Set<string>();
 
   function projects(): Project[] {
     const st = store.get();
@@ -275,6 +287,7 @@ if (requireAuth()) {
     step3?.classList.toggle("is-locked", !files);
 
     renderPreview(files);
+    renderPicks();
   }
 
   /** 目前預覽的是第幾個檔。換一組檔案時要夾住，否則切到不存在的索引會空白 */
@@ -418,6 +431,7 @@ if (requireAuth()) {
     renderProjectPicker();
     renderReleasePicker();
     void checkInit();
+    void refreshSnapshot();
     void refresh();
   });
 
@@ -461,6 +475,31 @@ if (requireAuth()) {
 
   // ── AI 撰寫 ───────────────────────────────────────────────────
 
+  /**
+   * 給模型的背景。
+   *
+   * 新專案沒有資料夾可讀，用使用者填的問答；既有專案用**快照**加 PRD。
+   * 快照是那份「完整讀過資料夾」的東西 —— 少了它，模型只有一個標題，
+   * 而它會很流暢地寫出一份跟這個 repo 沒有關係的提案。
+   */
+  async function aiContext(): Promise<string> {
+    if (isNewProject()) {
+      const brief = (el("os-ai-brief") as HTMLTextAreaElement | null)?.value.trim() ?? "";
+      return [brief && `使用者說明：\n${brief}`, prdContext()].filter(Boolean).join("\n\n");
+    }
+    const root = currentProject()?.importSummary?.rootPath;
+    let snap = "";
+    if (root && snapName && isNative()) {
+      try {
+        const r = await native.readFile(`${root}/.anchorline/context/${snapName}`);
+        snap = r.text;
+      } catch {
+        /* 讀不到就只給 PRD */
+      }
+    }
+    return [snap && `專案快照（${snapName}）：\n${snap}`, prdContext()].filter(Boolean).join("\n\n");
+  }
+
   /** 專案的 PRD 內容，給模型當背景。沒有就是空字串，prompt 會明講。 */
   function prdContext(): string {
     const p = currentProject();
@@ -479,6 +518,142 @@ if (requireAuth()) {
       .join("\n\n");
   }
 
+  // ── 專案快照：AI 撰寫的前置條件 ──────────────────────────────
+
+  /** 新專案＝沒有綁定資料夾。沒有資料夾可讀，所以不要求快照，改走問答。 */
+  function isNewProject(): boolean {
+    return !currentProject()?.importSummary?.rootPath;
+  }
+
+  async function refreshSnapshot() {
+    snapAt = null;
+    snapName = "";
+    const root = currentProject()?.importSummary?.rootPath;
+    if (root && isNative()) {
+      try {
+        const latest = latestSnapshot(await native.listSnapshots(root));
+        if (latest) {
+          snapAt = latest.at;
+          snapName = latest.name;
+        }
+      } catch {
+        /* 讀不到就當沒有 */
+      }
+    }
+    renderSnapshotLine();
+  }
+
+  /**
+   * 快照狀態。三種話各自不同，因為下一步不同：
+   * 新專案（不需要快照）· 有快照且新（可以寫）· 沒有或落後（要先讀）。
+   */
+  function renderSnapshotLine() {
+    const line = el("os-ai-snap");
+    const scanBtn = el("os-ai-scan") as HTMLButtonElement | null;
+    const qa = el("os-ai-qa");
+    const aiBtn = el("os-ai") as HTMLButtonElement | null;
+    if (!line || !scanBtn || !aiBtn) return;
+
+    if (isNewProject()) {
+      qa && (qa.hidden = false);
+      scanBtn.hidden = true;
+      aiBtn.disabled = false;
+      line.textContent = "新專案，沒有資料夾可讀 —— 用下面的問答提供背景。";
+      line.className = "os-ai-snap";
+      return;
+    }
+    qa && (qa.hidden = true);
+    scanBtn.hidden = false;
+
+    if (!snapAt) {
+      aiBtn.disabled = true;
+      line.textContent = "還沒讀過這個專案 —— 先讀一次資料夾才能撰寫。";
+      line.className = "os-ai-snap is-block";
+      return;
+    }
+
+    const commits = (statsCommitTimes() ?? []) as string[];
+    const st = staleness(snapAt, commits, Date.now());
+    aiBtn.disabled = false;
+    line.className = `os-ai-snap${st.stale ? " is-stale" : ""}`;
+    const age = since(snapAt.toISOString(), Date.now());
+    line.textContent = st.stale
+      ? `快照是 ${age}做的${st.commitsBehind ? `，之後又有 ${st.commitsBehind} 筆 commit` : ""}。要不要重讀？`
+      : `快照 ${age}（${snapName}）`;
+  }
+
+  /** 快照之後有幾筆 commit —— 從已讀到的 openspec 報告拿不到，改用 store 的專案統計 */
+  function statsCommitTimes(): string[] {
+    return commitTimes;
+  }
+  let commitTimes: string[] = [];
+
+  el("os-ai-scan")?.addEventListener("click", async () => {
+    const p = currentProject();
+    const root = p?.importSummary?.rootPath;
+    const line = el("os-ai-snap");
+    if (!root) return;
+    const btn = el("os-ai-scan") as HTMLButtonElement;
+    btn.disabled = true;
+    if (line) line.textContent = "讀取中…";
+    try {
+      const scan = await native.scanProject(root);
+      if (isUnavailable(scan)) {
+        if (line) line.textContent = scan.message;
+        return;
+      }
+      const at = new Date();
+      const md = buildSnapshot({
+        projectName: projectDisplayName(p!),
+        rootPath: root,
+        at,
+        files: scan.files,
+        gitLine: "",
+        truncated: scan.truncated,
+      });
+      const w = await native.writeSnapshot(root, snapshotFileName(projectDisplayName(p!), at), md);
+      if (isUnavailable(w)) {
+        if (line) line.textContent = w.message;
+        return;
+      }
+      toast(
+        scan.truncated
+          ? `已讀 ${scan.files.length} 個檔（有上限，未讀完）`
+          : `已讀 ${scan.files.length} 個檔`,
+      );
+      await refreshSnapshot();
+    } catch (e) {
+      if (line) line.textContent = e instanceof Error ? e.message : String(e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  /** 要寫哪幾份。預設全勾 —— 多數情況是整組寫，勾選是給要局部重寫的人用的。 */
+  function renderPicks() {
+    const host = el("os-ai-picks");
+    if (!host) return;
+    const files = filesFromForm();
+    if (!files) {
+      host.innerHTML = `<p class="os-ai-hint">填完標題與 change id 之後，這裡會列出可以寫的檔案。</p>`;
+      return;
+    }
+    const names = files.map((f) => f.path.split("/").pop() ?? f.path);
+    for (const n of names) if (!picked.has(n)) picked.add(n);
+    host.innerHTML = names
+      .map(
+        (n) =>
+          `<label class="os-ai-check"><input type="checkbox" data-pick="${escapeHtml(n)}"${picked.has(n) ? " checked" : ""} /> ${escapeHtml(n)}</label>`,
+      )
+      .join("");
+    host.querySelectorAll<HTMLInputElement>("[data-pick]").forEach((c) => {
+      c.onchange = () => {
+        const n = c.dataset.pick!;
+        c.checked ? picked.add(n) : picked.delete(n);
+      };
+    });
+  }
+
   el("os-ai")?.addEventListener("click", async () => {
     const status = el("os-ai-status");
     const say = (m: string, bad = false) => {
@@ -494,6 +669,11 @@ if (requireAuth()) {
       say(ready.reason, true);
       return;
     }
+    // 既有專案沒有快照就不給寫 —— 沒讀過專案寫出來的文件是編的
+    if (!isNewProject() && !snapAt) {
+      say("先按「讀取專案資料夾」建立快照。", true);
+      return;
+    }
     const title = val("os-title").trim();
     const slug = deriveChangeSlug(val("os-slug")) ?? deriveChangeSlug(title);
     if (!kind || !title || !slug) {
@@ -506,11 +686,24 @@ if (requireAuth()) {
     say("撰寫中…");
     try {
       const base = buildChangeFiles(kind, { title, slug, date: new Date().toISOString().slice(0, 10) });
+      // 只送勾到的那幾份給模型 —— 沒勾的不必花 token，也不會被動到
+      const want = base.filter((f) => picked.has(f.path.split("/").pop() ?? f.path));
+      if (!want.length) {
+        say("至少勾一份要寫的檔案。", true);
+        return;
+      }
       const raw = await chatCompletion(
         buildDraftSystem(kind),
-        buildDraftUser({ kind, title, slug, prdContext: prdContext(), files: base }),
+        buildDraftUser({ kind, title, slug, prdContext: await aiContext(), files: want }),
       );
-      const { files, filled } = applyDraft(base, extractJsonObject(raw));
+      const applied = applyDraft(want, extractJsonObject(raw));
+      // 沒勾的沿用目前內容（可能是骨架，也可能是上一輪的初稿）
+      const current = draftFiles ?? base;
+      const files = base.map((f, i) => {
+        const hit = applied.files.find((x) => x.path === f.path);
+        return hit && hit.content !== f.content ? hit : current[i]!;
+      });
+      const filled = applied.filled;
       if (!filled) {
         say("模型沒有回傳可用的內容，再試一次。", true);
         return;
@@ -519,9 +712,9 @@ if (requireAuth()) {
       renderSteps();
       // 說出填了幾份 —— 少填的那幾份仍然是骨架，使用者有權知道
       say(
-        filled === base.length
+        filled === want.length
           ? `已產生 ${filled} 份初稿`
-          : `已產生 ${filled} / ${base.length} 份，其餘保留骨架`,
+          : `已產生 ${filled} / ${want.length} 份，其餘保留原內容`,
       );
     } catch (e) {
       say(e instanceof AiError ? e.message : String(e), true);
@@ -584,6 +777,7 @@ if (requireAuth()) {
   renderSteps();
   renderOpenLoops();
   void checkInit();
+  void refreshSnapshot();
   void refresh();
 
   store.subscribe(() => {
@@ -596,6 +790,7 @@ if (requireAuth()) {
       renderProjectPicker();
       renderReleasePicker();
       void checkInit();
+      void refreshSnapshot();
       void refresh();
       return;
     }

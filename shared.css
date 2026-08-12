@@ -14104,6 +14104,71 @@ p.gd-warn {
   font-weight: var(--weight-em);
 }
 
+/* AI 撰寫區塊 —— 快照狀態、勾選、動作。三層在視覺上要分得出來，
+   因為它們是「能不能寫／寫哪些／開始寫」三個不同的問題。 */
+.os-ai {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.os-ai-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.os-ai-snap {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+/* 「沒讀過」是擋住的狀態，跟「落後了」不同 —— 前者不能寫，後者可以但該重讀 */
+.os-ai-snap.is-block {
+  color: var(--warn, #d9534f);
+  font-weight: var(--weight-em);
+}
+.os-ai-snap.is-stale {
+  color: var(--accent);
+}
+.os-ai-pick {
+  margin: 0 0 10px;
+  padding: 0;
+  border: 0;
+}
+.os-ai-pick legend {
+  padding: 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+.os-ai-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 12px 0 0;
+  color: var(--fg-2, var(--fg));
+  font-size: var(--fs-2);
+  font-family: var(--mono);
+  cursor: pointer;
+}
+.os-ai-hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+.os-ai-qa textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: var(--fs-3);
+  line-height: 1.6;
+  resize: vertical;
+}
 .os-ai-row {
   display: flex;
   align-items: center;
