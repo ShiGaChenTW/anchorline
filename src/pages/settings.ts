@@ -19,6 +19,13 @@ import {
 import { authorDomainPack, validate as validatePack } from "../lib/domain-pack-author";
 import { chatCompletion, isAiConfigured } from "../lib/ai-client";
 import { suggestWriteProfile } from "../lib/ai-coach";
+import {
+  clearPromptOverride,
+  isPromptOverridden,
+  promptDef,
+  PROMPTS,
+  setPromptOverride,
+} from "../lib/prompt-registry";
 import TEMPLATE_MD from "../data/domains/_template.md?raw";
 import {
   addUserPack,
@@ -774,6 +781,91 @@ document.getElementById("btn-ai-fetch-models")?.addEventListener("click", async 
     btn.textContent = prev;
   }
 });
+
+// ── AI 按鈕與 Prompt（prompt-registry）────────────────────────────
+// 名冊是資料，這裡只負責畫表與收表單。一次只展開一列 —— 同時編兩份 prompt
+// 沒有正當用途，只會讓「儲存了哪一份」變得不確定。
+
+let openPromptId: string | null = null;
+
+function renderPromptRegistry(): void {
+  const host = document.getElementById("prompt-registry-root");
+  if (!host) return;
+  const ov = store.get().settings.promptOverrides ?? {};
+
+  host.innerHTML = `<table class="pr-table">
+    <thead><tr>
+      <th>按鈕／流程</th><th>使用位置</th><th>溫度</th><th>回傳</th><th>狀態</th><th></th>
+    </tr></thead>
+    <tbody>
+      ${PROMPTS.map((p) => {
+        const o = ov[p.id];
+        const temp = typeof o?.temperature === "number" ? o.temperature : p.temperature;
+        const custom = isPromptOverridden(p.id);
+        const open = openPromptId === p.id;
+        const row = `<tr class="pr-row${open ? " is-open" : ""}" data-pr-id="${escapeHtml(p.id)}">
+          <td class="pr-label">${escapeHtml(p.label)}</td>
+          <td class="pr-where">${escapeHtml(p.where)}</td>
+          <td class="mono">${temp === null ? "預設" : temp}</td>
+          <td>${p.jsonMode ? "JSON" : "純文字"}</td>
+          <td>${custom ? `<span class="pr-badge is-custom">已自訂</span>` : `<span class="pr-badge">預設</span>`}</td>
+          <td><button type="button" class="btn btn-sm" data-pr-edit="${escapeHtml(p.id)}">${open ? "收合" : "編輯"}</button></td>
+        </tr>`;
+        if (!open) return row;
+        const effective = o?.system?.trim() || p.system;
+        return `${row}<tr class="pr-editor-row"><td colspan="6">
+          <div class="pr-editor">
+            <p class="hint">可用變數：${p.vars.length ? p.vars.map((v) => `<code>{{${escapeHtml(v)}}}</code>`).join(" ") : "（無）"}
+              ${p.jsonMode ? "　·　⚠️ 這份 prompt 的回傳接 JSON 解析器，改動時保留輸出格式段落" : ""}</p>
+            <textarea id="pr-system" rows="14" spellcheck="false">${escapeHtml(effective)}</textarea>
+            <div class="pr-editor-foot">
+              <label>溫度
+                <input type="number" id="pr-temp" min="0" max="1" step="0.05"
+                       value="${typeof o?.temperature === "number" ? o.temperature : p.temperature ?? ""}"
+                       placeholder="${p.temperature === null ? "provider 預設" : String(p.temperature)}" />
+              </label>
+              <span style="flex:1"></span>
+              ${custom ? `<button type="button" class="btn btn-sm btn-ghost" data-pr-reset="${escapeHtml(p.id)}">還原預設</button>` : ""}
+              <button type="button" class="btn btn-sm btn-primary" data-pr-save="${escapeHtml(p.id)}">儲存</button>
+            </div>
+          </div>
+        </td></tr>`;
+      }).join("")}
+    </tbody>
+  </table>`;
+
+  host.querySelectorAll<HTMLButtonElement>("[data-pr-edit]").forEach((b) => {
+    b.onclick = () => {
+      openPromptId = openPromptId === b.dataset.prEdit ? null : b.dataset.prEdit!;
+      renderPromptRegistry();
+    };
+  });
+  host.querySelectorAll<HTMLButtonElement>("[data-pr-save]").forEach((b) => {
+    b.onclick = () => {
+      const id = b.dataset.prSave!;
+      const system = (document.getElementById("pr-system") as HTMLTextAreaElement).value;
+      const tempRaw = (document.getElementById("pr-temp") as HTMLInputElement).value.trim();
+      const temperature = tempRaw === "" ? (promptDef(id).temperature ?? undefined) : Number(tempRaw);
+      if (tempRaw !== "" && (!Number.isFinite(temperature) || temperature! < 0 || temperature! > 1)) {
+        toast("溫度要在 0–1 之間");
+        return;
+      }
+      setPromptOverride(id, { system, temperature });
+      toast(isPromptOverridden(id) ? `已自訂「${promptDef(id).label}」` : "內容與預設相同 —— 維持預設");
+      renderPromptRegistry();
+    };
+  });
+  host.querySelectorAll<HTMLButtonElement>("[data-pr-reset]").forEach((b) => {
+    b.onclick = () => {
+      if (!confirm(`把「${promptDef(b.dataset.prReset!).label}」還原成內建 prompt 與參數？`)) return;
+      clearPromptOverride(b.dataset.prReset!);
+      toast("已還原預設");
+      renderPromptRegistry();
+    };
+  });
+}
+
+renderPromptRegistry();
 
 document.getElementById("btn-ai-test")?.addEventListener("click", async () => {
   const out = document.getElementById("ai-test-result");

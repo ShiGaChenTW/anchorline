@@ -13,6 +13,7 @@
 import type { Project } from "../data/types";
 import { projectDisplayName } from "../data/types";
 import { chatCompletion, extractJsonObject, getAiReadiness } from "./ai-client";
+import { promptSystem, promptTemperature } from "./prompt-registry";
 import { formatBytes, frameworks, languageBreakdown, type ProjectStats } from "./project-stats";
 
 export type SuggestField = "name" | "description";
@@ -128,18 +129,7 @@ function factsBlock(p: Project, s: ProjectStats | null): string {
   ].join("\n");
 }
 
-const SYSTEM = `你是一位協助整理專案中繼資料的助理。
-你只能建議修改兩個欄位：專案名稱（name）與專案介紹（description）。
-git 狀態、容量、語言佔比都是實際量測結果，是你的判斷依據，絕對不可以建議修改它們，也不可以在介紹裡寫入你無法從事實推出的內容。
-
-回傳純 JSON，不要有其他文字：
-{"suggestions":[{"field":"name"|"description","proposed":"建議的新內容","why":"為什麼要這樣改，一句話"}]}
-
-規則：
-- 沒有需要改的就回 {"suggestions":[]}。不要為了交差而硬提建議。
-- proposed 必須是可以直接存進欄位的最終文字，不要包含「建議改成」之類的話。
-- 介紹寫一到兩句，說清楚「這個專案在解決什麼問題、給誰用」。
-- 用繁體中文。`;
+// SYSTEM prompt 已搬進 prompt-registry（id: dashboard-suggest），使用者可覆寫
 
 /** AI 建議。沒設定金鑰就丟錯，由呼叫端決定要不要只用本機規則。 */
 export async function aiSuggestions(
@@ -151,9 +141,10 @@ export async function aiSuggestions(
   if (!ready.ok) throw new Error(ready.reason);
 
   const raw = await chatCompletion(
-    SYSTEM + (agentBrief ? `\n\n這次由這位 agent 執行，請採用它的視角：${agentBrief}` : ""),
+    promptSystem("dashboard-suggest") +
+      (agentBrief ? `\n\n這次由這位 agent 執行，請採用它的視角：${agentBrief}` : ""),
     factsBlock(p, s),
-    { temperature: 0.2, jsonMode: true },
+    { temperature: promptTemperature("dashboard-suggest"), jsonMode: true },
   );
   const obj = extractJsonObject(raw);
   const list = (obj?.suggestions ?? []) as { field?: string; proposed?: string; why?: string }[];

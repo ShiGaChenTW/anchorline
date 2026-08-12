@@ -20,7 +20,7 @@ import {
 import { initHelpOverlay } from "../lib/help-overlay";
 import { diagnoseGit, hasActionableIssue, usesConventionalCommits } from "../lib/git-doctor";
 import {
-  buildCommitSystem,
+  commitSystemVars,
   buildCommitUser,
   commitCommand,
   isUsableDraft,
@@ -28,6 +28,7 @@ import {
   parsePorcelain,
   summarizeChanges,
 } from "../lib/commit-message";
+import { promptSystem, promptTemperature } from "../lib/prompt-registry";
 import { AiError, chatCompletion, getAiReadiness } from "../lib/ai-client";
 import { policyOf } from "../lib/release";
 import { isNative, isUnavailable, native } from "../lib/native";
@@ -816,7 +817,11 @@ if (!requireAuth()) {
           conventional,
           language: store.get().settings.language,
         };
-        const raw = await chatCompletion(buildCommitSystem(input), buildCommitUser(input));
+        const raw = await chatCompletion(
+          promptSystem("commit-message", commitSystemVars(input)),
+          buildCommitUser(input),
+          { temperature: promptTemperature("commit-message") },
+        );
         const draft = parseCommitDraft(raw);
         if (!isUsableDraft(draft)) {
           say("模型沒有回傳可用的主旨，再試一次。", "error");

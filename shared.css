@@ -10715,6 +10715,81 @@ p.gd-warn {
   background: var(--bg);
 }
 
+/* AI 按鈕與 Prompt 名冊（設定頁） */
+.pr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-2);
+}
+.pr-table th,
+.pr-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.pr-table th {
+  font-size: var(--fs-1);
+  color: var(--muted);
+  font-weight: 600;
+}
+.pr-label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pr-where {
+  color: var(--fg-2, var(--fg));
+}
+.pr-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-1);
+  background: var(--inset);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.pr-badge.is-custom {
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+}
+.pr-row.is-open td {
+  border-bottom: 0;
+}
+.pr-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0 12px;
+}
+.pr-editor textarea {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--inset);
+  color: var(--fg);
+  resize: vertical;
+}
+.pr-editor-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pr-editor-foot label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-2);
+  color: var(--fg-2, var(--fg));
+}
+.pr-editor-foot input[type="number"] {
+  width: 90px;
+}
+
 /* 軟體說明 modal（overview） */
 .ovh .body {
   display: flex;

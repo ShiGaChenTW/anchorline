@@ -53,6 +53,7 @@ const VAGUE_TERMS = ["優化", "儘快", "盡快", "大幅", "適當", "良好",
 import { gradeFromScore } from "./ai-shared";
 export { gradeFromScore };
 import { aiTellFindings, DEFAULT_STYLE_SAMPLE, WRITING_DISCIPLINE } from "./ai-tells";
+import { promptSystem, promptTemperature } from "./prompt-registry";
 
 function langHint(settings: AISettings): string {
   return settings.language === "en-US" ? "English" : "Traditional Chinese (zh-TW)";
@@ -165,11 +166,10 @@ export async function critiqueSectionWithAI(
     const fields = section.fields
       .map((f) => `### ${f.label} (${f.key})\n${(values[f.key] || "").trim() || "（空）"}`)
       .join("\n\n");
-    const system = `You are a PRD quality reviewer. Language: ${langHint(settings)}. Style: ${personaHint(settings)}.
-Reply ONLY with JSON:
-{"score":0-100,"summary":"...","strengths":["..."],"warnings":["..."],"suggestions":["..."]}
-No markdown fences. Be specific to the given content; never invent unrelated product demos.
-Each warning/suggestion must point at a concrete gap in the given content; 3-7 items; no generic advice.`;
+    const system = promptSystem("critique-section", {
+      lang: langHint(settings),
+      persona: personaHint(settings),
+    });
     // 本機結果為空時會塞佔位句（「本機規則未發現明顯問題」），那不是 finding，
     // 不進 AI 的參考清單、也不進聯集——否則每份 AI 結果都拖著一句空話。
     const isPlaceholder = (x: string) =>
@@ -186,7 +186,10 @@ Each warning/suggestion must point at a concrete gap in the given content; 3-7 i
 
 Local rule findings (expand or refine; do not contradict without stating why):
 ${findings}`;
-    const raw = await chatCompletion(withDomain(system), user, { temperature: 0.2, jsonMode: true });
+    const raw = await chatCompletion(withDomain(system), user, {
+      temperature: promptTemperature("critique-section"),
+      jsonMode: true,
+    });
     const obj = extractJsonObject(raw);
     if (!obj) {
       return {
@@ -264,24 +267,13 @@ export async function generateAIDraft(
       ? `{"${exKeys[0]}":"...","${exKeys[1]}":"- ...\\n- ..."}`
       : `{"${exKeys[0] ?? "field"}":"..."}`;
 
-  const system = `You are a PRD co-author for Anchorline / 產品規格。
-Write in ${langHint(settings)}. Style: ${personaHint(settings)}.
-Return ONLY a JSON object whose keys are exactly the field keys listed.
-Values are markdown-friendly plain text for each field.
-Stay on-topic with the section title and existing draft.
-Fill policy:
-- Empty fields: fill from section guide, tips, project context, and existing draft.
-- Non-empty fields: keep substance; only refine clarity unless User instruction asks a rewrite.
-- Do not invent product features, vendors, metrics, or regulations not grounded in the provided context; write 【待補】 for unknowns.
-${WRITING_DISCIPLINE}
-Example output (keys must match exactly):
-${example}
-JSON only, no markdown fences.
-
-Match the tone and rhythm of this sample (structure only — never copy its content or domain terms):
-"""
-${(writing.styleSample.trim() || DEFAULT_STYLE_SAMPLE).slice(0, 1500)}
-"""`;
+  const system = promptSystem("draft-section", {
+    lang: langHint(settings),
+    persona: personaHint(settings),
+    discipline: WRITING_DISCIPLINE,
+    example,
+    styleSample: (writing.styleSample.trim() || DEFAULT_STYLE_SAMPLE).slice(0, 1500),
+  });
 
   const user = `Section ${section.n} ${section.title}
 Guide: ${section.guide}
@@ -305,12 +297,10 @@ Return JSON with keys: ${section.fields.map((f) => f.key).join(", ")}`;
 
   // 串流只影響「怎麼拿到文字」，不影響之後的解析 —— 模型輸出是一份 JSON，
   // 逐字時還不是合法 JSON，所以邊收邊顯示、收完才 parse。
+  const draftOpts = { temperature: promptTemperature("draft-section"), jsonMode: true };
   const raw = stream?.onDelta
-    ? await chatCompletionStream(withDomain(system), user, stream.onDelta, stream.signal, {
-        temperature: 0.2,
-        jsonMode: true,
-      })
-    : await chatCompletion(withDomain(system), user, { temperature: 0.2, jsonMode: true });
+    ? await chatCompletionStream(withDomain(system), user, stream.onDelta, stream.signal, draftOpts)
+    : await chatCompletion(withDomain(system), user, draftOpts);
   const obj = extractJsonObject(raw);
   if (!obj) {
     // 若模型只回一段文字且只有單一主欄位，塞進第一個 textarea
@@ -359,18 +349,12 @@ export async function polishTextWithAI(
 
   // 潤色刻意不疊 withDomain()：整包法遵知識疊上來，欄位會越潤越像合規說明書。
   // 只留一句守住領域術語的底線。
-  const system = `You polish PRD prose. Language: ${langHint(settings)}.
-${modeHint}
-Preserve numbers, proper nouns, regulation citations, and markdown structure.
-Do not add claims, metrics, or requirements not in the source.
-If the text is already good, return it unchanged.
-Preserve domain terminology; do not expand compliance content.
-Return ONLY the polished text, no preamble.`;
+  const system = promptSystem("polish", { lang: langHint(settings), modeHint });
   const user =
     ctx?.sectionTitle || ctx?.fieldLabel
       ? `Section: ${ctx.sectionTitle || "（未知）"} / Field: ${ctx.fieldLabel || "（未知）"}\n\n${text}`
       : text;
-  return await chatCompletion(system, user, { temperature: 0.5 });
+  return await chatCompletion(system, user, { temperature: promptTemperature("polish") });
 }
 
 /** Agent 進場：依 role/prompt 產出結果文字（真實模型） */
@@ -387,20 +371,14 @@ export async function runAgentTask(opts: {
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
   const settings = store.get().settings;
   // 「System prompt:」嵌套會讓模型把 agent 指令當成被引用的資料而非指令；
-  // 改成層級化的 Standing instructions，並按 task type 給明確的輸出契約——
-  // 「Deliver a concise operational result」對三種任務都太空泛。
-  const system = `You are ${opts.agentName}, a PRD collaborator.
-Role: ${opts.agentRole || "PRD collaborator"}
-Standing instructions:
-${opts.agentPrompt || "（未設定 prompt，請以專業 PM/工程審閱者身份回覆）"}
-
-Language: ${langHint(settings)}.
-Task type: ${opts.task}
-Output contract by task:
-- edit: propose concrete field-level rewrites as markdown; never claim files were changed
-- coach: strengths, risks, next 3 actions; cite section titles
-- approve: APPROVE or REJECT with reasons; if the current content is already OK, say so; no invented signatures
-- review: your FIRST line must be exactly 「建議核准」 or 「建議修改」 (nothing else on that line), then concrete reasons; the reviewer reads the first line as your verdict`;
+  // 層級化的 Standing instructions ＋按 task type 的輸出契約，模板在 prompt-registry
+  const system = promptSystem("agent-task", {
+    agentName: opts.agentName,
+    agentRole: opts.agentRole || "PRD collaborator",
+    standing: opts.agentPrompt || "（未設定 prompt，請以專業 PM/工程審閱者身份回覆）",
+    lang: langHint(settings),
+    task: opts.task,
+  });
 
   const user = `Project: ${opts.projectTitle}
 Note: ${opts.note || "（無）"}
@@ -410,7 +388,9 @@ ${opts.contextSnippet.slice(0, 6000) || "（無內文）"}
 
 Deliver the output your task type's contract asks for.`;
 
-  return await chatCompletion(withDomain(system), user);
+  return await chatCompletion(withDomain(system), user, {
+    temperature: promptTemperature("agent-task"),
+  });
 }
 
 export { getAiReadiness, isAiConfigured, AiError };
@@ -562,23 +542,13 @@ export async function suggestWriteProfile(brief: string): Promise<SuggestedProfi
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
   const settings = store.get().settings;
 
-  const system = `You design "writing personas" for a PRD authoring tool.
-Write in ${langHint(settings)}.
-Given a short brief about who the document is for and what tone is wanted,
-produce a reusable persona.
-
-Return ONLY a JSON object with these keys:
-- name: short label, 2-8 characters, no punctuation
-- description: one sentence on when to use this persona
-- globalInstruction: 3-6 concrete directives the model should follow every time.
-  Be specific and testable ("每個主張要指到一份資料來源"), never vague ("寫得專業一點").
-  Include at least one thing to AVOID.
-- styleSample: a 60-120 word excerpt of PRD prose written IN this persona,
-  so the model can imitate tone and structure.
-JSON only, no markdown fences.`;
+  const system = promptSystem("profile-suggest", { lang: langHint(settings) });
 
   const user = `Brief: ${brief.trim()}`;
-  const raw = await chatCompletion(system, user, { temperature: 0.2, jsonMode: true });
+  const raw = await chatCompletion(system, user, {
+    temperature: promptTemperature("profile-suggest"),
+    jsonMode: true,
+  });
   const obj = extractJsonObject(raw);
   if (!obj) throw new AiError("模型沒有回傳可用的角色 JSON，請換個說法再試", "parse");
 

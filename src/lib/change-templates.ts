@@ -15,6 +15,7 @@
  */
 import { WRITING_DISCIPLINE } from "./ai-tells";
 import { mintMissingIds } from "./plan-parser";
+import { fillTemplate } from "./template";
 
 export type ChangeKind = "feature" | "bug" | "maintenance";
 
@@ -209,40 +210,49 @@ export type DraftInput = {
   files: readonly ChangeFile[];
 };
 
-export function buildDraftSystem(kind: ChangeKind): string {
-  const shared = [
-    "你在替一個開發專案填寫變更文件。用繁體中文書寫。",
-    "",
-    "規則：",
-    "- 你拿到的是骨架，方括號 `[…]` 是要被替換掉的提示，不是要保留的內容。",
-    "- 只寫你從輸入推得出來的事。推不出來的段落寫「待補」並說明缺什麼，",
-    "  不要編造需求、指標或技術細節。",
-    "- 不要宣稱效果（「提升效能」「修好了」）—— 這份文件是在動工之前寫的。",
-    "- 保持骨架原有的標題結構與層級，不要新增或刪除 `##` 段落。",
-  ];
+/**
+ * OpenSpec 初稿的共用模板。`{{kindRules}}` 由類型決定，`{{discipline}}` 是
+ * 跟 PRD 撰寫同一套寫作紀律 —— AI 味的病灶在 change 文件裡一樣會發作。
+ *
+ * 抽成常數是為了讓 prompt-registry 能拿它當「可覆寫的預設值」；
+ * `buildDraftSystem` 仍是純函式，測試不需要 store。
+ */
+export const DRAFT_SHARED_TEMPLATE = `你在替一個開發專案填寫變更文件。用繁體中文書寫。
+
+規則：
+- 你拿到的是骨架，方括號 \`[…]\` 是要被替換掉的提示，不是要保留的內容。
+- 只寫你從輸入推得出來的事。推不出來的段落寫「待補」並說明缺什麼，
+  不要編造需求、指標或技術細節。
+- 不要宣稱效果（「提升效能」「修好了」）—— 這份文件是在動工之前寫的。
+- 保持骨架原有的標題結構與層級，不要新增或刪除 \`##\` 段落。
+{{kindRules}}
+
+{{discipline}}
+
+輸出格式：一個 JSON 物件，key 是檔名（例如 \`proposal.md\`、\`tasks.md\`），
+value 是那一份檔案的完整內容字串。不要加任何說明文字或程式碼圍欄以外的東西。`;
+
+/** 類型專屬的規則段。餵給 `{{kindRules}}` */
+export function draftKindRules(kind: ChangeKind): string {
   if (kind === "feature") {
-    shared.push(
+    return [
       "- `proposal.md` 的 Non-goals **一定要寫實質內容**：範圍沒有邊界的提案",
       "  會在實作途中一路長大。",
       "- `tasks.md` 每一步要能單獨驗證，而且**寫成單行**（追蹤工具只讀第一行）。",
       "  不要出現「實作 X」這種驗不了的步驟。",
-    );
-  } else {
-    shared.push(
-      "- Plan Steps 每一步寫成單行、能單獨驗證。",
-      "- 這一份走 `plans/`，不是 OpenSpec change，不要加 proposal／spec 的段落。",
-    );
+    ].join("\n");
   }
-  shared.push(
-    "",
-    // 跟 PRD 撰寫同一套寫作紀律 —— AI 味的病灶（長句、不分段、超長條列）
-    // 在 change 文件裡一樣會發作
-    WRITING_DISCIPLINE,
-    "",
-    "輸出格式：一個 JSON 物件，key 是檔名（例如 `proposal.md`、`tasks.md`），",
-    "value 是那一份檔案的完整內容字串。不要加任何說明文字或程式碼圍欄以外的東西。",
-  );
-  return shared.join("\n");
+  return [
+    "- Plan Steps 每一步寫成單行、能單獨驗證。",
+    "- 這一份走 `plans/`，不是 OpenSpec change，不要加 proposal／spec 的段落。",
+  ].join("\n");
+}
+
+export function buildDraftSystem(kind: ChangeKind): string {
+  return fillTemplate(DRAFT_SHARED_TEMPLATE, {
+    kindRules: draftKindRules(kind),
+    discipline: WRITING_DISCIPLINE,
+  });
 }
 
 export function buildDraftUser(input: DraftInput): string {
