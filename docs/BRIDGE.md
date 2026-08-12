@@ -303,6 +303,18 @@ App 打死。任一道觸發就把 `truncated` 設為 `true`，畫面必須講�
 不覆寫是設計而不是保守：報告是「當時的專案長這樣」，蓋掉就沒有東西可以
 回答「這中間變了什麼」，而那正是畫面上「落後多少」的來源。
 
+```ts
+writeExport(folderPath, name, text)     -> Maybe<{ path: string }>
+```
+
+匯出檔（PRD.md / HTML / 備份 JSON）寫進 `<root>/.anchorline/exports/`。
+存在的理由：桌面殼沒有掛 `on_download`，WKWebView 對 `<a download>` 無聲失敗 ——
+按了匯出沒有檔案也沒有錯誤。改寫進專案自己的 `.anchorline/`，路徑講得出口。
+
+與 `writeSnapshot` 相反，**允許覆寫**：報告是「當時的樣子」不可蓋，
+匯出是可重生的成品，同名重匯就是要新的那份。副檔名白名單 `.md`/`.html`/`.json`，
+檔名一樣擋路徑穿越。
+
 ### 4.8 `ghStatus`
 
 | | |

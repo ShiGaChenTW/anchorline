@@ -746,17 +746,14 @@ document.getElementById("btn-comments-toggle")?.addEventListener("click", () => 
 
 document.getElementById("btn-export")?.addEventListener("click", () => {
   exportMarkdownFile(store.get(), activeProject());
-  toast("已下載 Markdown 檔");
 });
 
 document.getElementById("btn-export-json")?.addEventListener("click", () => {
   exportJsonFile(store.get());
-  toast("已下載 JSON");
 });
 
 document.getElementById("btn-export-html")?.addEventListener("click", () => {
   exportHtmlFile(store.get(), activeProject());
-  toast("已下載 HTML");
 });
 
 document.getElementById("btn-post")?.addEventListener("click", () => {

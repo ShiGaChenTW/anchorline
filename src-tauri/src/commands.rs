@@ -939,6 +939,54 @@ pub fn write_snapshot(
     }
 }
 
+/// 匯出檔（PRD.md / HTML / JSON）寫進 `<root>/.anchorline/exports/`。
+///
+/// 為什麼不用瀏覽器下載：桌面殼沒有掛 `on_download`，WKWebView 對
+/// `<a download>` **無聲失敗** —— 使用者按了匯出，沒有檔案、沒有錯誤、
+/// 沒有任何訊息。與其接下載委派讓檔案落進不知道哪裡的「下載項目」，
+/// 不如寫進專案自己的 `.anchorline/`，路徑講得出口、跟著專案走。
+///
+/// 與 `write_snapshot` 的差別：**允許覆寫**。快照是「當時的樣子」，
+/// 蓋掉就沒有東西可比；匯出是可重生的成品，同名重匯就是要新的那份。
+#[tauri::command]
+pub fn write_export(
+    folder_path: String,
+    name: String,
+    text: String,
+    roots: State<RegisteredRoots>,
+) -> R<Maybe<FilePath>> {
+    let dir = PathBuf::from(&folder_path);
+    if !roots.contains_ancestor_of(&dir) && !roots.contains_ancestor_of(&dir.join("x")) {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "這個資料夾沒有註冊為專案根目錄".to_string(),
+        )));
+    }
+    // 沿用快照的檔名規則，但放寬副檔名：匯出有 .md / .html / .json 三種
+    if name.contains('/') || name.contains('\\') || name.contains("..") || name.len() > 120 {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "檔名不合法（不能包含路徑）".to_string(),
+        )));
+    }
+    if !(name.ends_with(".md") || name.ends_with(".html") || name.ends_with(".json")) {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "只接受 .md / .html / .json".to_string(),
+        )));
+    }
+    let target_dir = dir.join(".anchorline").join("exports");
+    if std::fs::create_dir_all(&target_dir).is_err() {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "無法建立 .anchorline/exports/".to_string(),
+        )));
+    }
+    let target = target_dir.join(&name);
+    match std::fs::write(&target, text) {
+        Ok(_) => Ok(Maybe::Ok(FilePath {
+            path: target.to_string_lossy().to_string(),
+        })),
+        Err(e) => Ok(Maybe::Missing(Unavailable::new(format!("寫入失敗：{e}")))),
+    }
+}
+
 /// 這個資料夾有沒有 openspec 骨架。
 ///
 /// 判準是 `openspec/` 目錄存在 —— 不呼叫 CLI，因為「CLI 不在」與

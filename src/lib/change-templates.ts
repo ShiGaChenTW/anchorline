@@ -13,6 +13,7 @@
  * **而且不會報錯**。一個產生自家工具讀不懂的檔案的產生器，比沒有產生器更糟。
  * `tests/change-templates.test.ts` 用真的 parser 鎖住這件事，不用字串比對。
  */
+import { WRITING_DISCIPLINE } from "./ai-tells";
 import { mintMissingIds } from "./plan-parser";
 
 export type ChangeKind = "feature" | "bug" | "maintenance";
@@ -233,6 +234,10 @@ export function buildDraftSystem(kind: ChangeKind): string {
     );
   }
   shared.push(
+    "",
+    // 跟 PRD 撰寫同一套寫作紀律 —— AI 味的病灶（長句、不分段、超長條列）
+    // 在 change 文件裡一樣會發作
+    WRITING_DISCIPLINE,
     "",
     "輸出格式：一個 JSON 物件，key 是檔名（例如 `proposal.md`、`tasks.md`），",
     "value 是那一份檔案的完整內容字串。不要加任何說明文字或程式碼圍欄以外的東西。",
