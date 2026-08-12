@@ -153,6 +153,7 @@ export async function aiSuggestions(
   const raw = await chatCompletion(
     SYSTEM + (agentBrief ? `\n\n這次由這位 agent 執行，請採用它的視角：${agentBrief}` : ""),
     factsBlock(p, s),
+    { temperature: 0.2, jsonMode: true },
   );
   const obj = extractJsonObject(raw);
   const list = (obj?.suggestions ?? []) as { field?: string; proposed?: string; why?: string }[];
