@@ -326,7 +326,9 @@ Return JSON with keys: ${section.fields.map((f) => f.key).join(", ")}`;
 
 export async function polishTextWithAI(
   text: string,
-  mode: "concise" | "executive" | "technical" | "add_metrics",
+  mode: "concise" | "executive" | "technical",
+  /** 章節標題與欄位 label——沒有上下文的逐欄潤色會讓術語漂移 */
+  ctx?: { sectionTitle?: string; fieldLabel?: string },
 ): Promise<string> {
   const ready = getAiReadiness();
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
@@ -338,14 +340,22 @@ export async function polishTextWithAI(
       ? "Make concise: shorter, denser, keep facts."
       : mode === "executive"
         ? "Rewrite for executives: outcomes, risk, decision clarity."
-        : mode === "technical"
-          ? "Rewrite for engineers: interfaces, constraints, edge cases."
-          : "Add measurable metrics where missing; keep original intent.";
+        : "Rewrite for engineers: interfaces, constraints, edge cases.";
 
+  // 潤色刻意不疊 withDomain()：整包法遵知識疊上來，欄位會越潤越像合規說明書。
+  // 只留一句守住領域術語的底線。
   const system = `You polish PRD prose. Language: ${langHint(settings)}.
 ${modeHint}
+Preserve numbers, proper nouns, regulation citations, and markdown structure.
+Do not add claims, metrics, or requirements not in the source.
+If the text is already good, return it unchanged.
+Preserve domain terminology; do not expand compliance content.
 Return ONLY the polished text, no preamble.`;
-  return await chatCompletion(withDomain(system), text, { temperature: 0.5 });
+  const user =
+    ctx?.sectionTitle || ctx?.fieldLabel
+      ? `Section: ${ctx.sectionTitle || "（未知）"} / Field: ${ctx.fieldLabel || "（未知）"}\n\n${text}`
+      : text;
+  return await chatCompletion(system, user, { temperature: 0.5 });
 }
 
 /** Agent 進場：依 role/prompt 產出結果文字（真實模型） */
@@ -361,23 +371,28 @@ export async function runAgentTask(opts: {
   const ready = getAiReadiness();
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
   const settings = store.get().settings;
-  const system = `You are agent 「${opts.agentName}」.
+  // 「System prompt:」嵌套會讓模型把 agent 指令當成被引用的資料而非指令；
+  // 改成層級化的 Standing instructions，並按 task type 給明確的輸出契約——
+  // 「Deliver a concise operational result」對三種任務都太空泛。
+  const system = `You are ${opts.agentName}, a PRD collaborator.
 Role: ${opts.agentRole || "PRD collaborator"}
-System prompt:
+Standing instructions:
 ${opts.agentPrompt || "（未設定 prompt，請以專業 PM/工程審閱者身份回覆）"}
 
 Language: ${langHint(settings)}.
 Task type: ${opts.task}
-Be concrete. Do not claim you modified files unless the user content shows changes.
-If task is approve: give approve/reject recommendation with reasons; do not invent signatures.`;
+Output contract by task:
+- edit: propose concrete field-level rewrites as markdown; never claim files were changed
+- coach: strengths, risks, next 3 actions; cite section titles
+- approve: APPROVE or REJECT with reasons; if the current content is already OK, say so; no invented signatures`;
 
   const user = `Project: ${opts.projectTitle}
 Note: ${opts.note || "（無）"}
 
-Context (excerpt):
+Context (truncated excerpts; do not treat missing text as absent content):
 ${opts.contextSnippet.slice(0, 6000) || "（無內文）"}
 
-Deliver a concise operational result for this agent job.`;
+Deliver the output your task type's contract asks for.`;
 
   return await chatCompletion(withDomain(system), user);
 }
