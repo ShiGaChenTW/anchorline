@@ -11552,58 +11552,6 @@ p.gd-warn {
   box-shadow: 0 -6px 16px -8px rgb(0 0 0 / 0.5);
 }
 
-/* ─── AI 撰寫（寫作教練面板）───
-   逐節進度而非轉圈圈：串流 UI 的價值不是快，是證明系統在動、
-   並且讓人能在看到方向不對時提早喊停。 */
-.ai-write-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.ai-write-actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.ai-write-progress {
-  max-height: 160px;
-  overflow: auto;
-  padding: 8px 10px;
-  background: var(--inset, var(--bg));
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 6px);
-  font-size: var(--fs-2);
-  line-height: 1.6;
-}
-.ai-write-line {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.ai-write-count {
-  margin-left: auto;
-  color: var(--meta);
-  font-variant-numeric: tabular-nums;
-}
-.ai-write-line.is-running {
-  color: var(--accent);
-}
-.ai-write-line.is-done {
-  color: var(--success);
-}
-.ai-write-line.is-skip {
-  color: var(--meta);
-}
-.ai-write-line.is-fail {
-  color: var(--danger, #f85149);
-}
-.ai-write-note {
-  margin: 0;
-  font-size: var(--fs-1);
-  color: var(--meta);
-  line-height: 1.5;
-}
-
 /* ─── 設定：各章節 prompt 覆寫 ─── */
 .aw-sections {
   display: flex;
@@ -11650,36 +11598,6 @@ p.gd-warn {
   outline: none;
   border-color: var(--accent);
   box-shadow: var(--focus-ring);
-}
-
-/* 逐字視窗：顯示模型正在吐的原始文字尾段。
-   內容是尚未解析的 JSON —— 目的不是讓人讀，是證明它在動、而且動得對不對。 */
-.ai-write-live {
-  margin: 0;
-  max-height: 92px;
-  overflow: auto;
-  padding: 8px 10px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 6px);
-  font-family: var(--mono);
-  font-size: var(--fs-1);
-  line-height: 1.5;
-  color: var(--meta);
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-.ai-write-live[hidden] {
-  display: none;
-}
-.ai-write-profile {
-  margin-left: 8px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--accent) 16%, transparent);
-  color: var(--accent);
-  font-size: var(--fs-1);
-  font-weight: 600;
 }
 
 /* 設定：角色列與 AI 建議 */

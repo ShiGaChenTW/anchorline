@@ -442,13 +442,6 @@ function renderOpenSpec() {
  * 孤兒提示是這裡的重點：換領域**不刪任何正文**，但不屬於新領域的章節
  * 會從清單上消失。沒有這行提示，那看起來就跟資料掉了一模一樣。
  */
-/** 目前專案的領域顯示名 —— AI 撰寫用哪一組設定，看這個 */
-function currentDomainLabel(): string {
-  const st = store.get();
-  const d = st.projects.find((p) => p.id === st.activeProjectId)?.domain ?? DEFAULT_DOMAIN;
-  return listDomains().find((o) => o.name === d)?.displayName ?? d;
-}
-
 function renderDomainBar() {
   const sel = document.getElementById("domain-select") as HTMLSelectElement | null;
   const orphanBox = document.getElementById("domain-orphans");
@@ -1407,13 +1400,6 @@ function renderCoach() {
           ? `<p class="adhd-coach-more-count">另外還有 ${failing.length - 1} 項稍後再補</p>`
           : ""
       }
-    </div>
-
-    <div class="card ai-write-card" data-od-id="ai-write-card">
-      <p class="adhd-coach-kicker">AI 撰寫<span class="ai-write-profile">${escapeHtml(currentDomainLabel())}</span></p>
-      <p class="ai-write-note">整份 PRD 的 AI 撰寫已經獨立成一頁 —— 那裡看得到適用模板、逐章評分、
-        簽核狀態與修復建議，也放得下全部章節的產出。本欄留下的是「只針對這一節」的 AI 助教。</p>
-      <a class="btn btn-sm btn-primary" href="write.html" data-od-id="btn-goto-write">開啟 PRD 審閱監控 →</a>
     </div>
 
     <div class="card adhd-score-card" data-od-id="score-card">
