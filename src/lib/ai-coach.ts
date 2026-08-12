@@ -49,6 +49,10 @@ function suppressed(findingId: string, settings: AISettings): boolean {
 
 const VAGUE_TERMS = ["優化", "儘快", "盡快", "大幅", "適當", "良好", "提升體驗", "更好", "儘可能"];
 
+// 分級門檻的唯一出處在 ai-shared.ts（純函式才測得到）；本機與 AI 兩軌都用它
+import { gradeFromScore } from "./ai-shared";
+export { gradeFromScore };
+
 function langHint(settings: AISettings): string {
   return settings.language === "en-US" ? "English" : "Traditional Chinese (zh-TW)";
 }
@@ -125,7 +129,7 @@ export function critiqueSectionLocal(
   if (warnings.length > 0) baseScore -= warnings.length * 7;
   if (strengths.length > 0) baseScore += strengths.length * 5;
   const score = Math.max(25, Math.min(96, baseScore));
-  const grade = score >= 90 ? "S" : score >= 80 ? "A" : score >= 65 ? "B" : "C";
+  const grade = gradeFromScore(score);
 
   return {
     score,
@@ -159,10 +163,26 @@ export async function critiqueSectionWithAI(
       .join("\n\n");
     const system = `You are a PRD quality reviewer. Language: ${langHint(settings)}. Style: ${personaHint(settings)}.
 Reply ONLY with JSON:
-{"score":0-100,"grade":"S|A|B|C","summary":"...","strengths":["..."],"warnings":["..."],"suggestions":["..."]}
-No markdown fences. Be specific to the given content; never invent unrelated product demos.`;
-    const user = `Section: ${section.n} ${section.title}\nGuide: ${section.guide}\n\nContent:\n${fields}`;
-    const raw = await chatCompletion(withDomain(system), user);
+{"score":0-100,"summary":"...","strengths":["..."],"warnings":["..."],"suggestions":["..."]}
+No markdown fences. Be specific to the given content; never invent unrelated product demos.
+Each warning/suggestion must point at a concrete gap in the given content; 3-7 items; no generic advice.`;
+    // 本機結果為空時會塞佔位句（「本機規則未發現明顯問題」），那不是 finding，
+    // 不進 AI 的參考清單、也不進聯集——否則每份 AI 結果都拖著一句空話。
+    const isPlaceholder = (x: string) =>
+      ["本機規則未發現明顯問題", "已可讀", "可進下一節或使用已設定 API 的 AI 助教深化"].includes(x);
+    const localWarnings = local.warnings.filter((w) => !isPlaceholder(w));
+    const localStrengths = local.strengths.filter((s) => !isPlaceholder(s));
+    const localSuggestions = local.suggestions.filter((s) => !isPlaceholder(s));
+    const findings =
+      [
+        ...localWarnings.map((w) => `- warn: ${w}`),
+        ...localStrengths.map((s) => `- pass: ${s}`),
+      ].join("\n") || "（本機規則未發現問題）";
+    const user = `Section: ${section.n} ${section.title}\nGuide: ${section.guide}\n\nContent:\n${fields}
+
+Local rule findings (expand or refine; do not contradict without stating why):
+${findings}`;
+    const raw = await chatCompletion(withDomain(system), user, { temperature: 0.2, jsonMode: true });
     const obj = extractJsonObject(raw);
     if (!obj) {
       return {
@@ -173,17 +193,21 @@ No markdown fences. Be specific to the given content; never invent unrelated pro
       };
     }
     const score = Math.max(0, Math.min(100, Number(obj.score) || local.score));
-    const gradeRaw = String(obj.grade || local.grade).toUpperCase();
-    const grade = (["S", "A", "B", "C"].includes(gradeRaw) ? gradeRaw : local.grade) as AICritique["grade"];
     const asList = (v: unknown) =>
       Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+    // 聯集去重：本機規則的 warn 是決定性檢查的結果，AI 說什麼都不能讓它消失。
+    const union = (base: string[], extra: string[]) => {
+      const seen = new Set(base.map((x) => x.trim()));
+      return [...base, ...extra.filter((x) => !seen.has(x.trim()))];
+    };
     return {
       score,
-      grade,
+      // grade 一律由程式用與本機同一套門檻計算，模型不再回答這一欄
+      grade: gradeFromScore(score),
       summary: `【AI · ${settings.model}】${String(obj.summary || "").trim() || local.summary}`,
       strengths: asList(obj.strengths).length ? asList(obj.strengths) : local.strengths,
-      warnings: asList(obj.warnings).length ? asList(obj.warnings) : local.warnings,
-      suggestions: asList(obj.suggestions).length ? asList(obj.suggestions) : local.suggestions,
+      warnings: union(localWarnings, asList(obj.warnings)),
+      suggestions: union(localSuggestions, asList(obj.suggestions)),
       localOnly: false,
     };
   } catch (e) {
@@ -212,6 +236,8 @@ export async function generateAIDraft(
   currentValues: Record<string, string>,
   prompt?: string,
   stream?: DraftStreamOpts,
+  /** 已寫章節的摘錄（writeFullPrd 逐節累積傳入），讓後面的章節呼應前面 */
+  projectContext?: string,
 ): Promise<Record<string, string>> {
   const ready = getAiReadiness();
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
@@ -226,15 +252,28 @@ export async function generateAIDraft(
     .map((f) => `### ${f.key}\n${(currentValues[f.key] || "").trim() || "（空）"}`)
     .join("\n\n");
 
+  // 用該章實際的前兩個欄位 key 組出 mini example——few-shot 用真 key，
+  // 模型照抄結構時就不會發明自己的 key 名。
+  const exKeys = section.fields.slice(0, 2).map((f) => f.key);
+  const example =
+    exKeys.length >= 2
+      ? `{"${exKeys[0]}":"...","${exKeys[1]}":"- ...\\n- ..."}`
+      : `{"${exKeys[0] ?? "field"}":"..."}`;
+
   const system = `You are a PRD co-author for Anchorline / 產品規格。
 Write in ${langHint(settings)}. Style: ${personaHint(settings)}.
 Return ONLY a JSON object whose keys are exactly the field keys listed.
 Values are markdown-friendly plain text for each field.
-Do NOT invent unrelated SaaS/2FA demos unless the current content is about that.
 Stay on-topic with the section title and existing draft.
+Fill policy:
+- Empty fields: fill from section guide, tips, project context, and existing draft.
+- Non-empty fields: keep substance; only refine clarity unless User instruction asks a rewrite.
+- Do not invent product features, vendors, metrics, or regulations not grounded in the provided context; write 【待補】 for unknowns.
+Example output (keys must match exactly):
+${example}
 JSON only, no markdown fences.${
     writing.styleSample.trim()
-      ? `\n\nMatch the tone and structure of this sample the user provided:\n"""\n${writing.styleSample.trim().slice(0, 4000)}\n"""`
+      ? `\n\nMatch the tone and structure of this sample the user provided:\n"""\n${writing.styleSample.trim().slice(0, 1500)}\n"""`
       : ""
   }`;
 
@@ -245,7 +284,14 @@ Tips: ${section.tips.join("；")}
 Fields:
 ${fieldSpec}
 
-Current draft:
+${
+    projectContext?.trim()
+      ? `Project context (already written sections, excerpts — keep new content consistent with these):
+${projectContext.trim()}
+
+`
+      : ""
+  }Current draft:
 ${current}
 
 ${writing.globalInstruction.trim() ? `Workspace guidance (applies to every section):\n${writing.globalInstruction.trim()}\n\n` : ""}${prompt ? `User instruction:\n${prompt}\n` : "User instruction: improve and fill empty fields based on existing context.\n"}
@@ -254,8 +300,11 @@ Return JSON with keys: ${section.fields.map((f) => f.key).join(", ")}`;
   // 串流只影響「怎麼拿到文字」，不影響之後的解析 —— 模型輸出是一份 JSON，
   // 逐字時還不是合法 JSON，所以邊收邊顯示、收完才 parse。
   const raw = stream?.onDelta
-    ? await chatCompletionStream(withDomain(system), user, stream.onDelta, stream.signal)
-    : await chatCompletion(withDomain(system), user);
+    ? await chatCompletionStream(withDomain(system), user, stream.onDelta, stream.signal, {
+        temperature: 0.2,
+        jsonMode: true,
+      })
+    : await chatCompletion(withDomain(system), user, { temperature: 0.2, jsonMode: true });
   const obj = extractJsonObject(raw);
   if (!obj) {
     // 若模型只回一段文字且只有單一主欄位，塞進第一個 textarea
@@ -277,7 +326,9 @@ Return JSON with keys: ${section.fields.map((f) => f.key).join(", ")}`;
 
 export async function polishTextWithAI(
   text: string,
-  mode: "concise" | "executive" | "technical" | "add_metrics",
+  mode: "concise" | "executive" | "technical",
+  /** 章節標題與欄位 label——沒有上下文的逐欄潤色會讓術語漂移 */
+  ctx?: { sectionTitle?: string; fieldLabel?: string },
 ): Promise<string> {
   const ready = getAiReadiness();
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
@@ -289,14 +340,22 @@ export async function polishTextWithAI(
       ? "Make concise: shorter, denser, keep facts."
       : mode === "executive"
         ? "Rewrite for executives: outcomes, risk, decision clarity."
-        : mode === "technical"
-          ? "Rewrite for engineers: interfaces, constraints, edge cases."
-          : "Add measurable metrics where missing; keep original intent.";
+        : "Rewrite for engineers: interfaces, constraints, edge cases.";
 
+  // 潤色刻意不疊 withDomain()：整包法遵知識疊上來，欄位會越潤越像合規說明書。
+  // 只留一句守住領域術語的底線。
   const system = `You polish PRD prose. Language: ${langHint(settings)}.
 ${modeHint}
+Preserve numbers, proper nouns, regulation citations, and markdown structure.
+Do not add claims, metrics, or requirements not in the source.
+If the text is already good, return it unchanged.
+Preserve domain terminology; do not expand compliance content.
 Return ONLY the polished text, no preamble.`;
-  return await chatCompletion(withDomain(system), text);
+  const user =
+    ctx?.sectionTitle || ctx?.fieldLabel
+      ? `Section: ${ctx.sectionTitle || "（未知）"} / Field: ${ctx.fieldLabel || "（未知）"}\n\n${text}`
+      : text;
+  return await chatCompletion(system, user, { temperature: 0.5 });
 }
 
 /** Agent 進場：依 role/prompt 產出結果文字（真實模型） */
@@ -312,24 +371,29 @@ export async function runAgentTask(opts: {
   const ready = getAiReadiness();
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
   const settings = store.get().settings;
-  const system = `You are agent 「${opts.agentName}」.
+  // 「System prompt:」嵌套會讓模型把 agent 指令當成被引用的資料而非指令；
+  // 改成層級化的 Standing instructions，並按 task type 給明確的輸出契約——
+  // 「Deliver a concise operational result」對三種任務都太空泛。
+  const system = `You are ${opts.agentName}, a PRD collaborator.
 Role: ${opts.agentRole || "PRD collaborator"}
-System prompt:
+Standing instructions:
 ${opts.agentPrompt || "（未設定 prompt，請以專業 PM/工程審閱者身份回覆）"}
 
 Language: ${langHint(settings)}.
 Task type: ${opts.task}
-Be concrete. Do not claim you modified files unless the user content shows changes.
-If task is approve: give approve/reject recommendation with reasons; do not invent signatures.
-If task is review: your FIRST line must be exactly 「建議核准」 or 「建議修改」 (nothing else on that line), followed by concrete reasons. The reviewer reads the first line as your verdict.`;
+Output contract by task:
+- edit: propose concrete field-level rewrites as markdown; never claim files were changed
+- coach: strengths, risks, next 3 actions; cite section titles
+- approve: APPROVE or REJECT with reasons; if the current content is already OK, say so; no invented signatures
+- review: your FIRST line must be exactly 「建議核准」 or 「建議修改」 (nothing else on that line), then concrete reasons; the reviewer reads the first line as your verdict`;
 
   const user = `Project: ${opts.projectTitle}
 Note: ${opts.note || "（無）"}
 
-Context (excerpt):
+Context (truncated excerpts; do not treat missing text as absent content):
 ${opts.contextSnippet.slice(0, 6000) || "（無內文）"}
 
-Deliver a concise operational result for this agent job.`;
+Deliver the output your task type's contract asks for.`;
 
   return await chatCompletion(withDomain(system), user);
 }
@@ -397,6 +461,21 @@ export async function writeFullPrd(
   let failed = 0;
   let skipped = 0;
 
+  // 跨章上下文：每寫完（或跳過但已有內容的）一節，留一段摘錄給後面的章節，
+  // 讓「目標要呼應問題陳述」真的發生。每節截 300 字、總預算 3000 字，
+  // 超過就丟最舊的——最近的章節對下一節最有參考價值。
+  const ctxParts: string[] = [];
+  const pushContext = (section: Section, values: Record<string, string>) => {
+    const excerpt = Object.values(values)
+      .map((v) => (v || "").trim())
+      .filter(Boolean)
+      .join("\n")
+      .slice(0, 300);
+    if (!excerpt) return;
+    ctxParts.push(`## ${section.n} ${section.title}\n${excerpt}`);
+    while (ctxParts.join("\n\n").length > 3000 && ctxParts.length > 1) ctxParts.shift();
+  };
+
   for (let i = 0; i < targets.length; i++) {
     if (opts.signal?.aborted) break;
     const section = targets[i]!;
@@ -406,6 +485,7 @@ export async function writeFullPrd(
     const overwrite = opts.overwriteFilled ?? store.get().settings.aiWriting?.overwriteFilled ?? false;
     if (!overwrite && sectionHasContent(current)) {
       skipped++;
+      pushContext(section, current);
       opts.onProgress?.({ ...base, phase: "skipped" });
       continue;
     }
@@ -414,12 +494,19 @@ export async function writeFullPrd(
     try {
       // 每節覆寫優先於本次的一次性指令；兩者都沒有就用內建 prompt
       const perSection = store.activeWriting().sectionPrompts[section.id]?.trim();
-      const patch = await generateAIDraft(section, current, perSection || opts.instruction, {
-        onDelta: opts.onDelta ? (c, f) => opts.onDelta!(c, f, section) : undefined,
-        signal: opts.signal,
-      });
+      const patch = await generateAIDraft(
+        section,
+        current,
+        perSection || opts.instruction,
+        {
+          onDelta: opts.onDelta ? (c, f) => opts.onDelta!(c, f, section) : undefined,
+          signal: opts.signal,
+        },
+        ctxParts.join("\n\n") || undefined,
+      );
       if (opts.signal?.aborted) break;
       written++;
+      pushContext(section, { ...current, ...patch });
       opts.onProgress?.({ ...base, phase: "done", patch });
     } catch (e) {
       // 單節失敗不中斷整批 —— 一個章節寫壞不該讓另外六節也沒得寫
@@ -476,7 +563,7 @@ Return ONLY a JSON object with these keys:
 JSON only, no markdown fences.`;
 
   const user = `Brief: ${brief.trim()}`;
-  const raw = await chatCompletion(system, user);
+  const raw = await chatCompletion(system, user, { temperature: 0.2, jsonMode: true });
   const obj = extractJsonObject(raw);
   if (!obj) throw new AiError("模型沒有回傳可用的角色 JSON，請換個說法再試", "parse");
 
