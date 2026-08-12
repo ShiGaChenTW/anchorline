@@ -320,7 +320,8 @@ ${opts.agentPrompt || "（未設定 prompt，請以專業 PM/工程審閱者身�
 Language: ${langHint(settings)}.
 Task type: ${opts.task}
 Be concrete. Do not claim you modified files unless the user content shows changes.
-If task is approve: give approve/reject recommendation with reasons; do not invent signatures.`;
+If task is approve: give approve/reject recommendation with reasons; do not invent signatures.
+If task is review: your FIRST line must be exactly 「建議核准」 or 「建議修改」 (nothing else on that line), followed by concrete reasons. The reviewer reads the first line as your verdict.`;
 
   const user = `Project: ${opts.projectTitle}
 Note: ${opts.note || "（無）"}

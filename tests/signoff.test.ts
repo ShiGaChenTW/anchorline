@@ -379,3 +379,66 @@ describe("決策紀錄（log）", () => {
     expect(t[0]!.round).toBe(0);
   });
 });
+
+// ── 關卡上的 Agent 分析 ─────────────────────────────────────────
+
+import { analysisVerdict, stageAnalysis } from "../src/lib/signoff";
+import type { AgentJob } from "../src/data/types";
+
+function job(p: Partial<AgentJob> = {}): AgentJob {
+  return {
+    id: "j1",
+    agentId: "a1",
+    agentName: "Claude · 核准",
+    projectId: "p1",
+    projectTitle: "案子",
+    stageId: "s1",
+    task: "review",
+    status: "done",
+    note: "",
+    result: "建議核准\n理由如下",
+    createdAt: "2026-08-12T02:00:00Z",
+    finishedAt: "2026-08-12T02:01:00Z",
+    ...p,
+  };
+}
+
+describe("stageAnalysis", () => {
+  test("取這一關最新的一筆 —— agentJobs 新的在前", () => {
+    // 重跑是常態：舊結果屬於舊內容，貼在關卡上的必須是最新那筆
+    const jobs = [job({ id: "j2", result: "建議修改\n新的" }), job({ id: "j1" })];
+    expect(stageAnalysis(jobs, "p1", "s1")?.id).toBe("j2");
+  });
+
+  test("別關、別專案、沒綁關卡的工作單都不算", () => {
+    const jobs = [
+      job({ stageId: "s2" }),
+      job({ projectId: "p2" }),
+      job({ stageId: undefined }),
+    ];
+    expect(stageAnalysis(jobs, "p1", "s1")).toBeNull();
+  });
+});
+
+describe("analysisVerdict", () => {
+  test("第一行照規矩就直接讀出來", () => {
+    expect(analysisVerdict("建議核准\n內容完整")).toBe("approve");
+    expect(analysisVerdict("建議修改\n成功指標缺量測")).toBe("fix");
+  });
+
+  test("模型加了 markdown 裝飾也認得", () => {
+    expect(analysisVerdict("**建議核准**\n理由")).toBe("approve");
+    expect(analysisVerdict("# 建議修改：三點\n…")).toBe("fix");
+    expect(analysisVerdict("「建議核准」\n…")).toBe("approve");
+  });
+
+  test("認不出來回 null，不猜 —— 猜錯的章比沒有章糟", () => {
+    expect(analysisVerdict("這份 PRD 大致完整，但風險段落略薄。")).toBeNull();
+    expect(analysisVerdict("")).toBeNull();
+  });
+
+  test("結論不在前幾行就當沒有 —— 埋在文末的結論人也看不到", () => {
+    const buried = ["a", "b", "c", "d", "e", "f", "建議核准"].join("\n");
+    expect(analysisVerdict(buried)).toBeNull();
+  });
+});

@@ -24,6 +24,11 @@ export type AgentJob = {
   agentName: string;
   projectId: string;
   projectTitle: string;
+  /**
+   * 綁定的簽核關卡。有值代表這一單是「替某一關做的分析」，
+   * 簽核頁會把結果貼在那一關上。沒有 stageId 的是一般進場（Agent 管理頁）。
+   */
+  stageId?: string;
   task: AgentTaskType;
   status: AgentJobStatus;
   note: string;
