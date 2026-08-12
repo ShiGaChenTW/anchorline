@@ -374,7 +374,9 @@ function mergeTemplates(stored: Template[] | undefined, seed: Template[]): Templ
   return [...builtin, ...custom];
 }
 
-function migrateProject(raw: Record<string, unknown>, employees: Employee[]): Project {
+// export 是給測試用的：load() 只在模組第一次 import 時跑，測試檔共用進程
+// 搶不到那個時機，只能直接對這個函式驗「存進去的欄位讀得回來」。
+export function migrateProject(raw: Record<string, unknown>, employees: Employee[]): Project {
   const owner = String(raw.owner ?? "未知");
   const match = employees.find((e) => e.name === owner);
   return {
@@ -408,6 +410,9 @@ function migrateProject(raw: Record<string, unknown>, employees: Employee[]): Pr
     // 章節與 gate 一起退回通用版，而使用者寫的內容還在——看起來像資料掉了。
     // 上面那行註解（tags）就是同一個坑，這是第二次。
     domain: raw.domain ? String(raw.domain) : undefined,
+    // 第三次踩同一個坑：漏了這行，改採 vX.YY.ZZ 每次重新載入就退回 loose，
+    // 版號紀錄卡又重新問一次 —— 選擇「存了」但被這裡吃掉。
+    versionPolicy: raw.versionPolicy === "strict" ? "strict" : undefined,
   };
 }
 
