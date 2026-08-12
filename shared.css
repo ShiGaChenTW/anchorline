@@ -10823,6 +10823,22 @@ p.gd-warn {
   font-size: var(--fs-1);
   color: var(--meta);
 }
+/* 閱讀模式：排版後的內容取代等寬原始碼。
+   量體與 .fv-stack 一致（flex:1 + 自己捲），切換時整塊高度不會跳。
+   限寬 76ch 是為了讀 —— 滿版的行長在 1400px 的視窗裡會讀丟行。 */
+.fv-read {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 28px 40px;
+  background: var(--bg);
+}
+.fv-read > * {
+  max-width: 76ch;
+}
+.fv-read table {
+  max-width: 100%;
+}
 .fv-note {
   flex: 0 0 auto;
   margin: 0;

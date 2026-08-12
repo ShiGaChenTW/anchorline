@@ -25,6 +25,7 @@ import {
 } from "../lib/beginner-flow";
 import { exportMarkdownFile } from "../lib/export";
 import { bindMdField, mdFieldHtml } from "../lib/markamd";
+import { renderMarkdown } from "../lib/markamd/markdown";
 import { canEditContent } from "../lib/permissions";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
 import {
@@ -660,6 +661,21 @@ function renderOutline() {
  */
 let openFile: { path: string; original: string } | null = null;
 
+/**
+ * 閱讀模式：把 Markdown 原始碼換成排版後的內容。
+ *
+ * 大部分時候點開 `proposal.md` 是為了**讀**，不是為了改一個字。等寬字 +
+ * 滿版 `|---|---|` 表格 + 一堆反引號，讀起來要自己在腦裡跑一次 Markdown。
+ *
+ * 狀態放在模組層而不是每個檔各自記：換檔時模式要留著 —— 一路讀下來的人
+ * 不該每點一個檔就被丟回原始碼。非 `.md` 的檔不給切（渲染出來會是一坨）。
+ */
+let fileReadMode = false;
+
+function isMarkdownPath(path: string): boolean {
+  return /\.(md|markdown|mdx)$/i.test(path);
+}
+
 function fileIsDirty(): boolean {
   if (!openFile) return false;
   const ta = document.getElementById("fv-text") as HTMLTextAreaElement | null;
@@ -764,6 +780,11 @@ function renderHighlightBackdrop() {
 
   renderDiffPane();
 
+  // 內容變動的唯一漏斗（還原、還原快照、儲存都會走到這）。閱讀模式開著時
+  // 順手重畫排版 —— 不然按「還原」之後畫面上還是還原前的內容，而且沒有徵兆。
+  const readPane = document.getElementById("fv-read-pane");
+  if (readPane && !readPane.hidden) readPane.innerHTML = renderMarkdown(ta.value);
+
   const state = document.getElementById("fv-state");
   if (state) {
     const n = marks.length;
@@ -798,7 +819,10 @@ function renderDiffPane() {
 
   const marks = markChangedLines(openFile.original, ta.value);
   const hidden = wrap.dataset.forceHidden === "1";
-  wrap.hidden = hidden || marks.length === 0;
+  // 對比欄是給編輯用的。閱讀模式下它會從排版內容底下冒出來一整片等寬字 ——
+  // 使用者剛按的是「不要看原始碼」。
+  const reading = document.getElementById("fv-read-pane")?.hidden === false;
+  wrap.hidden = hidden || reading || marks.length === 0;
   if (wrap.hidden) return;
 
   // removed 沒有對應的「改之後」行，用 index 當插入點掛在那一行之前。
@@ -940,6 +964,8 @@ function renderFileView(): boolean {
       <div class="fv-bar">
         <span class="fv-path mono" title="${escapeHtml(openFile.path)}">${escapeHtml(shortPath(openFile.path))}</span>
         <span class="fv-state" id="fv-state"></span>
+        <button type="button" class="btn btn-sm" id="fv-read" aria-pressed="false"
+                ${isMarkdownPath(openFile.path) ? "" : "hidden"}>閱讀模式</button>
         <button type="button" class="btn btn-sm" id="fv-hist">版本紀錄</button>
         <button type="button" class="btn btn-sm" id="fv-revert">還原</button>
         <button type="button" class="btn btn-sm btn-primary" id="fv-save">儲存</button>
@@ -951,6 +977,7 @@ function renderFileView(): boolean {
                   data-path="${escapeHtml(openFile.path)}"
                   aria-label="${escapeHtml(shortPath(openFile.path))}">${escapeHtml(openFile.original)}</textarea>
       </div>
+      <div class="fv-read mdv-prose" id="fv-read-pane" hidden></div>
       <div class="fv-diff-wrap" id="fv-diff-wrap" hidden>
         <p class="fv-diff-head">
           對比 · <span class="fv-add">新增</span> / <span class="fv-del">刪除</span>
@@ -959,7 +986,7 @@ function renderFileView(): boolean {
         <div class="fv-review" id="fv-review" aria-label="含刪除內容的字級對比"></div>
       </div>
       <div class="fv-hist" id="fv-hist-panel" hidden></div>
-      <p class="fv-note">改過但還沒存的行會標成橘色，滑過去看得到改前／改後與修改人。儲存前會自動留一份快照。</p>
+      <p class="fv-note" id="fv-note">改過但還沒存的行會標成橘色，滑過去看得到改前／改後與修改人。儲存前會自動留一份快照。</p>
     </div>
   `;
 
@@ -1038,6 +1065,38 @@ function renderFileView(): boolean {
     histPanel.hidden = !histPanel.hidden;
     if (!histPanel.hidden) refreshHist();
   });
+
+  // ── 閱讀模式 ────────────────────────────────────────────────────
+  // 渲染的是 `ta.value` 而不是 `openFile.original`：還沒存的修改也要看得到，
+  // 否則「改完切過去確認排版」會拿到磁碟上的舊內容 —— 而且完全看不出來。
+  const stack = body.querySelector(".fv-stack") as HTMLElement;
+  const readPane = document.getElementById("fv-read-pane") as HTMLElement;
+  const readBtn = document.getElementById("fv-read") as HTMLButtonElement | null;
+  const note = document.getElementById("fv-note") as HTMLElement | null;
+  const applyReadMode = () => {
+    const on = fileReadMode && isMarkdownPath(openFile!.path);
+    stack.hidden = on;
+    readPane.hidden = !on;
+    if (on) readPane.innerHTML = renderMarkdown(ta.value);
+    if (readBtn) {
+      readBtn.textContent = on ? "原始碼" : "閱讀模式";
+      readBtn.setAttribute("aria-pressed", String(on));
+      readBtn.classList.toggle("btn-primary", on);
+    }
+    if (note) {
+      note.textContent = on
+        ? "閱讀模式顯示排版後的內容（含未儲存的修改）。要改字請切回原始碼。"
+        : "改過但還沒存的行會標成橘色，滑過去看得到改前／改後與修改人。儲存前會自動留一份快照。";
+    }
+    // 對比欄是給編輯看的；閱讀時收起來，切回去再由 renderDiffPane 決定要不要出現
+    if (on) diffWrap.hidden = true;
+    else renderHighlightBackdrop();
+  };
+  readBtn?.addEventListener("click", () => {
+    fileReadMode = !fileReadMode;
+    applyReadMode();
+  });
+  applyReadMode();
   ta.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
       e.preventDefault();
