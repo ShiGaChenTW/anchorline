@@ -10715,6 +10715,42 @@ p.gd-warn {
   background: var(--bg);
 }
 
+/* 軟體說明 modal（overview） */
+.ovh .body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-height: min(72vh, 640px);
+  overflow: auto;
+}
+.ovh-sec h4 {
+  margin: 0 0 6px;
+  font-size: var(--fs-3);
+  letter-spacing: 0.02em;
+}
+.ovh-sec p,
+.ovh-sec li {
+  margin: 0;
+  font-size: var(--fs-3);
+  line-height: 1.7;
+  color: var(--fg-2, var(--fg));
+}
+.ovh-sec ul {
+  margin: 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ovh-sec code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--inset);
+  border: 1px solid var(--border);
+}
+
 /* 前後對比浮層 */
 .fv-tip {
   position: fixed;

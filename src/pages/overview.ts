@@ -22,7 +22,7 @@ import {
 } from "../lib/project-stats";
 import { syncRailContext } from "../lib/rail-projects";
 import { initTheme } from "../lib/theme";
-import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+import { bindModalDismiss, closeModal, escapeHtml, initMobileNav, openModal, toast, updateUserRailFooter } from "../lib/ui";
 import { buildFocusCard, type FocusCard } from "../lib/focus-card";
 import { fetchStaleLabel, GH_REFRESH_MS, prRadarLine, type GhResult } from "../lib/gh-status";
 import { canQueryStatus, getGhStatusCached, requestOpenspecStatus } from "../lib/status-bridge";
@@ -37,6 +37,14 @@ if (!requireAuth()) {
   initMobileNav("overview");
   bindLogout();
   initHelpOverlay();
+  // 軟體說明：內容是靜態事實，寫在 overview.html 的 #about-modal 裡
+  bindModalDismiss("about-modal");
+  document.getElementById("btn-about")?.addEventListener("click", () => {
+    // 每日問候是晚到的 async（等 fastfetch），會疊在說明上面 —— 開說明就把它收掉
+    document.getElementById("welcome-root")?.remove();
+    openModal("about-modal");
+  });
+  document.getElementById("ovh-close")?.addEventListener("click", () => closeModal("about-modal"));
 
   /** 量測結果只留記憶體：磁碟隨時在變 */
   const statsCache = new Map<string, ProjectStats>();

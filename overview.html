@@ -86,6 +86,7 @@
         <div class="context-frame-bottom">
           <span class="context-path">workspace / overview</span>
           <div class="context-actions">
+            <button type="button" class="btn btn-sm" id="btn-about">說明</button>
             <button type="button" class="btn btn-sm" id="btn-measure-all">量測全部</button>
             <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout>登出</button>
           </div>
@@ -97,6 +98,66 @@
     </main>
   </div>
 </div>
+<!-- 軟體說明：用途、監控目的／方式、檔案位置。內容是靜態事實，直接寫在 HTML -->
+<div class="modal-back" id="about-modal" data-od-id="modal-about">
+  <div class="modal ovh" role="dialog" aria-labelledby="ovh-title" style="width:min(680px,100%)">
+    <header>
+      <h3 id="ovh-title">這個軟體在做什麼</h3>
+      <button type="button" class="btn btn-ghost btn-sm" id="ovh-close">關閉</button>
+    </header>
+    <div class="body">
+      <section class="ovh-sec">
+        <h4>用途</h4>
+        <p>Anchorline 是本機優先的開發專案工作台：寫 PRD、跑簽核、產 OpenSpec 變更文件、
+          取版號，並追蹤「文件說的」與「repo 做的」有沒有對上。
+          資料存在這台機器上，不上傳任何伺服器。</p>
+      </section>
+
+      <section class="ovh-sec">
+        <h4>監控目的</h4>
+        <p>PRD 與程式碼會分岔——規格說 A、實作變成 B，而且沒有人發現。
+          監控的唯一目的就是讓分岔<strong>當下可見</strong>：
+          哪個計劃步驟沒勾、哪個 OpenSpec change 沒收完、哪些 commit 沒有對應的計劃步驟。</p>
+      </section>
+
+      <section class="ovh-sec">
+        <h4>監控方式</h4>
+        <ul>
+          <li><strong>唯讀掃描</strong>你綁定的專案資料夾：<code>plans/*.md</code> 的勾選狀態、
+            <code>openspec</code> CLI 的 JSON 輸出、git 的唯讀查詢（status／log／diff）。</li>
+          <li>commit 訊息裡的 <code>anc:t=編號</code> 錨點把 commit 對回計劃步驟——
+            對不上的算「未治理」。</li>
+          <li>App <strong>不會代你執行任何 git 寫入</strong>（commit／push 都是產生指令給你自己跑）。
+            寫入你專案的只有兩件事：你按「一鍵 openspec init」、以及下面列的 <code>.anchorline/</code>。</li>
+        </ul>
+      </section>
+
+      <section class="ovh-sec">
+        <h4>監控的檔案位置</h4>
+        <ul>
+          <li><code>專案/plans/*.md</code> — 計劃與勾選進度</li>
+          <li><code>專案/openspec/</code> — 變更提案與規格（僅讀 CLI 輸出與 tasks 勾選）</li>
+          <li>git 狀態 — 未提交變更、commit 歷史（唯讀）</li>
+          <li>App 自己寫入的：<code>專案/.anchorline/log/</code>（稽核軌跡）、
+            <code>專案/.anchorline/context/</code>（專案分析報告，AI 撰寫的前置）</li>
+        </ul>
+      </section>
+
+      <section class="ovh-sec">
+        <h4>檔案匯出位置</h4>
+        <ul>
+          <li>PRD 內容平時存在 <strong>App 內部的專案資料</strong>，不落地為檔案。</li>
+          <li>按「匯出 MD／HTML／備份」：桌面版寫到
+            <code>專案/.anchorline/exports/</code>（匯出完會顯示完整路徑）；
+            瀏覽器版落在瀏覽器的下載資料夾。</li>
+          <li>AI 撰寫產生的 OpenSpec 文件：下載後由你放回
+            <code>openspec/changes/&lt;id&gt;/</code>。</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status"></div>
 
 <script type="module" src="/src/pages/overview.ts"></script>
