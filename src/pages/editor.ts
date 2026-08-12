@@ -1588,7 +1588,10 @@ function renderCoach() {
       for (const key of Object.keys(current)) {
         const v = current[key];
         if (!v?.trim()) continue;
-        const polished = await polishTextWithAI(v, mode);
+        const polished = await polishTextWithAI(v, mode, {
+          sectionTitle: s.title,
+          fieldLabel: s.fields.find((f) => f.key === key)?.label,
+        });
         store.setSectionDraft(s.id, key, polished);
         n++;
       }
