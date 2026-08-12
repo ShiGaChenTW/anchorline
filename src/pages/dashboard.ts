@@ -122,18 +122,28 @@ if (!requireAuth()) {
         <textarea id="d-desc" class="d-ident-desc" rows="1" aria-label="專案介紹"
                   placeholder="一句話說明這個專案在做什麼">${escapeHtml(desc)}</textarea>
         <div class="d-ident-tags" id="d-tags">${tagsInnerHtml(p)}</div>
-        ${policyHtml(p)}
       </section>`;
   }
 
   /**
-   * 版號政策。放在專案設定而不是版本取號頁：這是專案層級的**一次性**決定，
-   * 不是每次取號要碰的東西。
+   * 版號政策 —— 放在**版號紀錄卡**裡。
    *
-   * 選了 vX.YY.ZZ 之後這裡只剩一段說明，沒有切回去的按鈕 ——
-   * 不是把按鈕變灰，是整個拿掉。一顆按下去只會告訴你「不行」的按鈕，
-   * 每次看到都要重新想一次為什麼。
+   * 它原本掛在專案身分卡（名稱／介紹／標籤）底下，但那張卡講的是
+   * 「這個專案是什麼」，而政策講的是「這個專案的版號長什麼樣」。
+   * 跟版號清單放在一起，看到清單的當下就知道它為什麼是那個形狀。
+   *
+   * 選了 vX.YY.ZZ 之後只剩一段說明，切回去的按鈕整個拿掉而不是變灰 ——
+   * 一顆按下去只會告訴你「不行」的按鈕，每次看到都要重新想一次為什麼。
    */
+  /**
+   * 沒有 git 統計的兩條路徑（沒綁資料夾、瀏覽器版）也要留住政策入口 ——
+   * 版號政策跟綁不綁資料夾無關，藏起來只會讓人以為功能消失了。
+   */
+  function policyCard(p: Project | null): string {
+    if (!p) return "";
+    return `<section class="d-card"><p class="d-eyebrow">版號紀錄</p>${policyHtml(p)}</section>`;
+  }
+
   function policyHtml(p: Project | null): string {
     if (!p) return "";
     if (policyOf(p) === "strict") {
@@ -290,6 +300,7 @@ if (!requireAuth()) {
         <p class="d-eyebrow">版號紀錄</p>
         <p class="d-figure">不是 git 專案</p>
         <p class="d-figure-sub">起了版控之後這裡會列出版號。</p>
+        ${policyHtml(activeProject())}
       </section>`;
     }
     const tags = g.tags ?? [];
@@ -335,6 +346,7 @@ if (!requireAuth()) {
               .join("")}</ul>`
           : `<p class="d-note-empty">用 <code>git tag v1.0.0</code> 標一版之後，這裡會列出版號與它的說明。</p>`
       }
+      ${policyHtml(activeProject())}
     </section>`;
   }
 
@@ -528,7 +540,8 @@ if (!requireAuth()) {
           <p>「${escapeHtml(projectDisplayName(p))}」還沒有對應磁碟上的資料夾，所以量不到 git、技術線與容量。</p>
           <button type="button" class="btn btn-primary" id="dash-bind">指定專案資料夾</button>
           <p class="dash-note">綁定只記錄對應關係，不會動到你已經寫好的章節內容。</p>
-        </div>`,
+        </div>
+        ${policyCard(p)}`,
       );
       bindIdentEditing();
       document.getElementById("dash-bind")?.addEventListener("click", () => {
@@ -542,7 +555,8 @@ if (!requireAuth()) {
          <div class="dash-empty">
           <p>這一頁需要桌面版 App。瀏覽器看不到磁碟，也跑不了 git。</p>
           <p class="dash-note mono">${escapeHtml(path)}</p>
-        </div>`,
+        </div>
+        ${policyCard(p)}`,
       );
       bindIdentEditing();
       return;
