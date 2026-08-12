@@ -17,6 +17,7 @@
  * 「沒有紀錄」等於「沒發生過」。
  */
 import type {
+  AgentJob,
   CaseDecision,
   CaseRecord,
   CaseStage,
@@ -215,6 +216,47 @@ export function signoffSummary(
         : "審閱中",
     detail: waiting.length > 1 ? `後面還有 ${waiting.length - 1} 關。` : "簽完這一關就可以合併。",
   };
+}
+
+// ── 關卡上的 Agent 分析 ─────────────────────────────────────────
+
+/**
+ * 這一關最新的一筆分析工作單。
+ *
+ * 指派 Agent 到關卡原本**只是寫個名字** —— 沒有任何東西會因此執行，
+ * 而畫面上看起來跟「已安排分析」一模一樣。接起來之後，關卡要能回答
+ * 「我指派的 Agent 做了沒、結果是什麼」，資料就從這裡拿。
+ *
+ * 取最新一筆而不是全部：重跑是常態（改完再分析一次），舊結果屬於
+ * 舊內容，列出來只會跟現況混在一起。
+ */
+export function stageAnalysis(
+  jobs: readonly AgentJob[],
+  projectId: string,
+  stageId: string,
+): AgentJob | null {
+  // agentJobs 新的在前（invokeAgent 是 [job, ...prev]），順序掃第一筆就是最新
+  return jobs.find((j) => j.projectId === projectId && j.stageId === stageId) ?? null;
+}
+
+export type AnalysisVerdict = "approve" | "fix" | null;
+
+/**
+ * 從分析全文抽出結論。
+ *
+ * prompt 要求第一行只寫「建議核准」或「建議修改」；模型不一定守規矩，
+ * 所以往前幾行找，找不到就回 null —— **畫面顯示「看全文」而不是猜一個**。
+ * 猜錯的結論比沒有結論糟：人會信任那個章。
+ */
+export function analysisVerdict(result: string): AnalysisVerdict {
+  const lines = result.split("\n").slice(0, 5);
+  for (const raw of lines) {
+    const line = raw.replace(/[*#>\s：:「」]/g, "");
+    if (!line) continue;
+    if (line.startsWith("建議核准")) return "approve";
+    if (line.startsWith("建議修改") || line.startsWith("建議退回")) return "fix";
+  }
+  return null;
 }
 
 // ── 簽核紀錄 ────────────────────────────────────────────────────

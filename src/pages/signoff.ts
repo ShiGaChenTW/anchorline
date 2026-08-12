@@ -18,7 +18,14 @@ import { projectDisplayName, type Project } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { syncRailContext } from "../lib/rail-projects";
-import { groupTimelineByRound, signoffSummary, signoffTimeline, stageRows } from "../lib/signoff";
+import {
+  analysisVerdict,
+  groupTimelineByRound,
+  signoffSummary,
+  signoffTimeline,
+  stageAnalysis,
+  stageRows,
+} from "../lib/signoff";
 import { initTheme } from "../lib/theme";
 import { sinceLabel } from "../lib/time-format";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
@@ -81,11 +88,14 @@ if (!requireAuth()) {
     const cta =
       sum.state === "needs_fix"
         ? `<a class="btn btn-primary btn-lg" href="editor.html">去編輯台修改 →</a>`
-        : sum.mine.length
-          ? `<button type="button" class="btn btn-primary btn-lg" data-sg-act="approved" data-sg-stage="${escapeHtml(sum.mine[0]!.id)}">核准「${escapeHtml(sum.mine[0]!.name)}」→</button>`
-          : sum.state === "draft"
-            ? `<a class="btn btn-primary btn-lg" href="editor.html">去編輯台送審 →</a>`
-            : "";
+        : sum.state === "approved"
+          ? // 全過之後路不能斷在句號上 —— 下一步是拿這份簽核紀錄去取版號
+            `<a class="btn btn-primary btn-lg" href="releases.html">前往版本取號 →</a>`
+          : sum.mine.length
+            ? `<button type="button" class="btn btn-primary btn-lg" data-sg-act="approved" data-sg-stage="${escapeHtml(sum.mine[0]!.id)}">核准「${escapeHtml(sum.mine[0]!.name)}」→</button>`
+            : sum.state === "draft"
+              ? `<a class="btn btn-primary btn-lg" href="editor.html">去編輯台送審 →</a>`
+              : "";
 
     return `<section class="ov-hero aiw-hero" data-od-id="sg-hero">
       <p class="ov-hero-kicker">現在卡在誰身上</p>
@@ -133,6 +143,40 @@ if (!requireAuth()) {
         const who = (settled && s.decidedByName) || s.assigneeName || "待指派";
         const when = settled && s.decidedAt ? sinceLabel(s.decidedAt, Date.now()) : "";
 
+        // ── Agent 分析 ──────────────────────────────────────────
+        // 指派 Agent 原本只是寫個名字，沒有任何東西會因此執行 ——
+        // 這一關看起來「已安排」，實際上什麼都沒發生。這裡把兩套接起來：
+        // 指派了 Agent 的關卡有「執行分析」，結果貼回關卡上。
+        // 執行是手動的（Scott 2026-08-12）：何時燒 API 是使用者的決定。
+        const assignee = st.employees.find((e) => e.id === s.assigneeId);
+        const isAgent = assignee?.kind === "agent";
+        const job = isAgent ? stageAnalysis(st.agentJobs, p.id, s.id) : null;
+        const busy = job?.status === "queued" || job?.status === "running";
+        const analyzeBtn =
+          isAgent && !settled && !c?.withdrawn && !c?.locked
+            ? `<button type="button" class="btn btn-sm" data-sg-analyze="${escapeHtml(s.id)}"
+                 data-sg-agent="${escapeHtml(assignee!.id)}"${busy ? " disabled" : ""}>
+                 ${busy ? "分析中…" : job ? "重新分析" : "執行分析"}</button>`
+            : "";
+        const verdict = job?.status === "done" ? analysisVerdict(job.result) : null;
+        const analysisHtml = !job
+          ? ""
+          : busy
+            ? `<p class="sg-analysis sg-analysis--busy">⏳ ${escapeHtml(job.agentName)} 分析中 —— 完成後結果會出現在這裡。</p>`
+            : job.status === "failed"
+              ? `<p class="sg-analysis sg-analysis--failed">分析失敗：${escapeHtml(job.result || "沒有留下原因")}　—— 可按「重新分析」再試。</p>`
+              : `<details class="sg-analysis sg-analysis--done">
+                   <summary>
+                     <span class="sg-verdict sg-verdict--${verdict ?? "none"}">${
+                       verdict === "approve" ? "建議核准" : verdict === "fix" ? "建議修改" : "無明確結論"
+                     }</span>
+                     ${escapeHtml(job.agentName)} · ${escapeHtml(job.finishedAt ? sinceLabel(job.finishedAt, Date.now()) : "")}
+                     <span class="aiw-fold-meta">看全文</span>
+                   </summary>
+                   <pre class="sg-analysis-body">${escapeHtml(job.result)}</pre>
+                   <p class="aiw-note">這是 Agent 的建議，不是簽章 —— 核准仍然要人按。</p>
+                 </details>`;
+
         // 三顆動作等重。以前只有「核准」，發現問題時唯一能做的是不按 ——
         // 而那在畫面上跟「還沒輪到他」一模一樣。
         const actions = ability.can
@@ -173,8 +217,10 @@ if (!requireAuth()) {
             <span class="sg-stage-who">${escapeHtml(who)}${when ? ` · ${escapeHtml(when)}` : ""}</span>
             <span class="sg-pill sg-pill--${s.state}">${escapeHtml(label)}</span>
             ${reassign}
+            ${analyzeBtn}
             ${actions}
           </div>
+          ${analysisHtml}
           ${
             // **只在意見還代表現況時才貼在列上。** 重送之後關卡退回待簽核，
             // 上一輪的意見卻還掛在那裡，看起來像「這一輪已經有人講過話了」——
@@ -299,6 +345,21 @@ if (!requireAuth()) {
   }
 
   function bind(p: Project) {
+    document.querySelectorAll<HTMLElement>("[data-sg-analyze]").forEach((b) => {
+      b.addEventListener("click", () => {
+        const stageId = b.dataset.sgAnalyze!;
+        const stage = store.get().cases[p.id]?.stages.find((s) => s.id === stageId);
+        const r = store.invokeAgent({
+          agentId: b.dataset.sgAgent!,
+          projectId: p.id,
+          task: "review",
+          note: `簽核關卡「${stage?.name ?? stageId}」的審閱分析：請針對這一關的關注點檢視 PRD，第一行給出「建議核准」或「建議修改」。`,
+          stageId,
+        });
+        if (!r.ok) toast(r.reason ?? "無法呼叫 Agent");
+        // 成功不用 toast：關卡上會立刻出現「分析中…」，那就是回饋
+      });
+    });
     document.querySelectorAll<HTMLElement>("[data-sg-act]").forEach((b) => {
       b.addEventListener("click", () => {
         pending = {
