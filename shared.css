@@ -7078,37 +7078,50 @@ html.adhd-calm .coach-body {
   margin-bottom: 6px;
   font-size: var(--fs-2);
 }
+/* 「要你判斷的 N 件事」是這一條的全部工作。原本它還重述一次 gate 摘要，
+   而同一句話在 #approve-hint 與底部狀態列各有一份 —— 三個常駐渲染點講同一件事。 */
 .review-focus-head strong {
-  font-size: var(--fs-1);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: color-mix(in oklab, var(--warn) 40%, var(--fg));
-}
-.review-focus-block {
-  font-size: var(--fs-2);
-  color: var(--danger);
-  font-weight: 600;
-}
-.review-focus-ok {
-  font-size: var(--fs-2);
-  color: var(--success);
-  font-weight: 600;
+  font-size: var(--fs-3);
+  font-weight: 700;
+  color: var(--fg);
 }
 .review-focus-list {
   margin: 0;
-  padding-left: 1.15em;
-  font-size: var(--fs-3);
-  line-height: 1.45;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+/* 每一條都要走得過去 —— 讀得到卻跳不過去，等於還要自己再找一次 */
+.review-focus-jump {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--fg);
+  font-family: inherit;
+  font-size: var(--fs-3);
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
 }
-.review-focus-list li {
-  margin: 3px 0;
+.review-focus-jump:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
-.review-focus-more,
-.review-focus-empty {
-  margin: 0;
+.review-focus-jump:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.review-focus-sec {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-family: var(--mono);
   font-size: var(--fs-2);
-  color: var(--muted);
+  font-weight: 700;
 }
 
 .review-sec-nav {
