@@ -14046,12 +14046,19 @@ p.gd-warn {
 }
 
 /* ── OpenSpec：專案範圍列 ───────────────────────────────────── */
+/* 專案列在步驟一裡面 —— 它是這一步的前半段（先確定範圍），
+   不是頁面層級的另一條列。放在外面會變成第四個要讀的區塊。 */
 .os-scope {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
+}
+.os-scope-field select {
+  min-width: 180px;
 }
 .os-scope-field {
   display: inline-flex;
