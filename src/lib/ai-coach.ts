@@ -49,6 +49,10 @@ function suppressed(findingId: string, settings: AISettings): boolean {
 
 const VAGUE_TERMS = ["優化", "儘快", "盡快", "大幅", "適當", "良好", "提升體驗", "更好", "儘可能"];
 
+// 分級門檻的唯一出處在 ai-shared.ts（純函式才測得到）；本機與 AI 兩軌都用它
+import { gradeFromScore } from "./ai-shared";
+export { gradeFromScore };
+
 function langHint(settings: AISettings): string {
   return settings.language === "en-US" ? "English" : "Traditional Chinese (zh-TW)";
 }
@@ -125,7 +129,7 @@ export function critiqueSectionLocal(
   if (warnings.length > 0) baseScore -= warnings.length * 7;
   if (strengths.length > 0) baseScore += strengths.length * 5;
   const score = Math.max(25, Math.min(96, baseScore));
-  const grade = score >= 90 ? "S" : score >= 80 ? "A" : score >= 65 ? "B" : "C";
+  const grade = gradeFromScore(score);
 
   return {
     score,
@@ -159,9 +163,25 @@ export async function critiqueSectionWithAI(
       .join("\n\n");
     const system = `You are a PRD quality reviewer. Language: ${langHint(settings)}. Style: ${personaHint(settings)}.
 Reply ONLY with JSON:
-{"score":0-100,"grade":"S|A|B|C","summary":"...","strengths":["..."],"warnings":["..."],"suggestions":["..."]}
-No markdown fences. Be specific to the given content; never invent unrelated product demos.`;
-    const user = `Section: ${section.n} ${section.title}\nGuide: ${section.guide}\n\nContent:\n${fields}`;
+{"score":0-100,"summary":"...","strengths":["..."],"warnings":["..."],"suggestions":["..."]}
+No markdown fences. Be specific to the given content; never invent unrelated product demos.
+Each warning/suggestion must point at a concrete gap in the given content; 3-7 items; no generic advice.`;
+    // 本機結果為空時會塞佔位句（「本機規則未發現明顯問題」），那不是 finding，
+    // 不進 AI 的參考清單、也不進聯集——否則每份 AI 結果都拖著一句空話。
+    const isPlaceholder = (x: string) =>
+      ["本機規則未發現明顯問題", "已可讀", "可進下一節或使用已設定 API 的 AI 助教深化"].includes(x);
+    const localWarnings = local.warnings.filter((w) => !isPlaceholder(w));
+    const localStrengths = local.strengths.filter((s) => !isPlaceholder(s));
+    const localSuggestions = local.suggestions.filter((s) => !isPlaceholder(s));
+    const findings =
+      [
+        ...localWarnings.map((w) => `- warn: ${w}`),
+        ...localStrengths.map((s) => `- pass: ${s}`),
+      ].join("\n") || "（本機規則未發現問題）";
+    const user = `Section: ${section.n} ${section.title}\nGuide: ${section.guide}\n\nContent:\n${fields}
+
+Local rule findings (expand or refine; do not contradict without stating why):
+${findings}`;
     const raw = await chatCompletion(withDomain(system), user, { temperature: 0.2, jsonMode: true });
     const obj = extractJsonObject(raw);
     if (!obj) {
@@ -173,17 +193,21 @@ No markdown fences. Be specific to the given content; never invent unrelated pro
       };
     }
     const score = Math.max(0, Math.min(100, Number(obj.score) || local.score));
-    const gradeRaw = String(obj.grade || local.grade).toUpperCase();
-    const grade = (["S", "A", "B", "C"].includes(gradeRaw) ? gradeRaw : local.grade) as AICritique["grade"];
     const asList = (v: unknown) =>
       Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+    // 聯集去重：本機規則的 warn 是決定性檢查的結果，AI 說什麼都不能讓它消失。
+    const union = (base: string[], extra: string[]) => {
+      const seen = new Set(base.map((x) => x.trim()));
+      return [...base, ...extra.filter((x) => !seen.has(x.trim()))];
+    };
     return {
       score,
-      grade,
+      // grade 一律由程式用與本機同一套門檻計算，模型不再回答這一欄
+      grade: gradeFromScore(score),
       summary: `【AI · ${settings.model}】${String(obj.summary || "").trim() || local.summary}`,
       strengths: asList(obj.strengths).length ? asList(obj.strengths) : local.strengths,
-      warnings: asList(obj.warnings).length ? asList(obj.warnings) : local.warnings,
-      suggestions: asList(obj.suggestions).length ? asList(obj.suggestions) : local.suggestions,
+      warnings: union(localWarnings, asList(obj.warnings)),
+      suggestions: union(localSuggestions, asList(obj.suggestions)),
       localOnly: false,
     };
   } catch (e) {
@@ -228,15 +252,28 @@ export async function generateAIDraft(
     .map((f) => `### ${f.key}\n${(currentValues[f.key] || "").trim() || "（空）"}`)
     .join("\n\n");
 
+  // 用該章實際的前兩個欄位 key 組出 mini example——few-shot 用真 key，
+  // 模型照抄結構時就不會發明自己的 key 名。
+  const exKeys = section.fields.slice(0, 2).map((f) => f.key);
+  const example =
+    exKeys.length >= 2
+      ? `{"${exKeys[0]}":"...","${exKeys[1]}":"- ...\\n- ..."}`
+      : `{"${exKeys[0] ?? "field"}":"..."}`;
+
   const system = `You are a PRD co-author for Anchorline / 產品規格。
 Write in ${langHint(settings)}. Style: ${personaHint(settings)}.
 Return ONLY a JSON object whose keys are exactly the field keys listed.
 Values are markdown-friendly plain text for each field.
-Do NOT invent unrelated SaaS/2FA demos unless the current content is about that.
 Stay on-topic with the section title and existing draft.
+Fill policy:
+- Empty fields: fill from section guide, tips, project context, and existing draft.
+- Non-empty fields: keep substance; only refine clarity unless User instruction asks a rewrite.
+- Do not invent product features, vendors, metrics, or regulations not grounded in the provided context; write 【待補】 for unknowns.
+Example output (keys must match exactly):
+${example}
 JSON only, no markdown fences.${
     writing.styleSample.trim()
-      ? `\n\nMatch the tone and structure of this sample the user provided:\n"""\n${writing.styleSample.trim().slice(0, 4000)}\n"""`
+      ? `\n\nMatch the tone and structure of this sample the user provided:\n"""\n${writing.styleSample.trim().slice(0, 1500)}\n"""`
       : ""
   }`;
 
