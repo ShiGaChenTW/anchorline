@@ -187,6 +187,15 @@ export const native = {
       "git_changeset",
       { folderPath },
     ),
+  /** 這個資料夾有沒有 openspec 骨架。純檔案系統檢查，不呼叫 CLI —— 
+      「CLI 不在」與「沒 init 過」是兩件事。 */
+  openspecProbe: (folderPath: string) =>
+    call<{ initialized: boolean }>("openspec_probe", { folderPath }),
+  /**
+   * `openspec init`。**這是唯一會寫入使用者專案的 action**（BRIDGE.md §4.7c）。
+   * 呼叫端要先跟使用者確認。
+   */
+  openspecInit: (folderPath: string) => callMaybe<{ raw: string }>("openspec_init", { folderPath }),
   ghStatus: () => callMaybe<{ raw: string; fetchedAt: string }>("gh_status"),
   onefetch: (folderPath: string) => callMaybe<{ raw: string }>("onefetch", { folderPath }),
   fastfetch: () => callMaybe<{ raw: string }>("fastfetch"),

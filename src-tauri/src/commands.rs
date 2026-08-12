@@ -741,6 +741,46 @@ pub fn openspec_status(
 /// **全部唯讀。** 這裡跑的是 `status --porcelain` 與兩種 `diff`，
 /// 沒有任何會改動 repo 的子指令。commit 仍然由使用者自己在終端機執行，
 /// 那是 `git-doctor.ts` 立過兩次的界線，這個功能不越過它。
+/// 這個資料夾有沒有 openspec 骨架。
+///
+/// 判準是 `openspec/` 目錄存在 —— 不呼叫 CLI，因為「CLI 不在」與
+/// 「沒 init 過」是兩件事，混在一起會讓畫面對沒裝 CLI 的人說「請 init」。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenspecProbe {
+    initialized: bool,
+}
+
+#[tauri::command]
+pub fn openspec_probe(folder_path: String) -> R<OpenspecProbe> {
+    let dir = PathBuf::from(&folder_path).join("openspec");
+    Ok(OpenspecProbe {
+        initialized: dir.is_dir(),
+    })
+}
+
+/// `openspec init` —— **這個 App 唯一會寫入使用者專案的 CLI 呼叫。**
+///
+/// 界線的例外，理由寫在 `exec::openspec_init`：可逆、不外流、參數寫死。
+/// 路徑仍然要過已註冊根目錄的守衛，而且前端要先跟使用者確認。
+#[tauri::command]
+pub fn openspec_init(
+    folder_path: String,
+    roots: State<RegisteredRoots>,
+    overrides: State<CliOverrides>,
+) -> R<Maybe<RawOut>> {
+    let dir = PathBuf::from(&folder_path);
+    if !roots.contains_ancestor_of(&dir) && !roots.contains_ancestor_of(&dir.join("x")) {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "這個資料夾沒有註冊為專案根目錄".to_string(),
+        )));
+    }
+    match exec::openspec_init(&dir, &overrides) {
+        CliResult::Ok(raw) => Ok(Maybe::Ok(RawOut { raw })),
+        CliResult::Missing(m) => Ok(Maybe::Missing(Unavailable::new(m))),
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitChangeset {

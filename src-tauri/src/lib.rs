@@ -52,6 +52,8 @@ pub fn run() {
             commands::open_path,
             commands::openspec_status,
             commands::git_changeset,
+            commands::openspec_probe,
+            commands::openspec_init,
             commands::gh_status,
             commands::onefetch,
             commands::fastfetch,
