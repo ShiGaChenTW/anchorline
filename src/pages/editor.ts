@@ -24,6 +24,7 @@ import {
   setBeginnerMode,
 } from "../lib/beginner-flow";
 import { exportMarkdownFile } from "../lib/export";
+import { fieldNo, numberedFieldLabel } from "../lib/field-number";
 import { bindMdField, mdFieldHtml } from "../lib/markamd";
 import { renderMarkdown } from "../lib/markamd/markdown";
 import { canEditContent } from "../lib/permissions";
@@ -603,9 +604,10 @@ function renderOutline() {
       e.stopPropagation();
       const sid = btn.dataset.fldRename!;
       const key = btn.dataset.key!;
-      const f = sections().find((x) => x.id === sid)?.fields.find((x) => x.key === key);
-      if (!f) return;
-      const label = window.prompt(`子章節名稱（現在是 ${f.label}）`, f.label);
+      const sec = sections().find((x) => x.id === sid);
+      const f = sec?.fields.find((x) => x.key === key);
+      if (!sec || !f) return;
+      const label = window.prompt(`子章節名稱（現在是 ${numberedFieldLabel(sec, key)}）`, f.label);
       if (label === null) return;
       structOp(() => store.renameField(sid, key, label), "已改子章節");
     };
@@ -616,9 +618,9 @@ function renderOutline() {
       e.stopPropagation();
       const sid = btn.dataset.fldDel!;
       const key = btn.dataset.key!;
-      const f = sections().find((x) => x.id === sid)?.fields.find((x) => x.key === key);
-      if (!f) return;
-      if (!window.confirm(`刪掉子章節「${f.label}」？裡面的內容會一起刪掉。`)) return;
+      const sec = sections().find((x) => x.id === sid);
+      if (!sec?.fields.find((x) => x.key === key)) return;
+      if (!window.confirm(`刪掉子章節「${numberedFieldLabel(sec, key)}」？裡面的內容會一起刪掉。`)) return;
       structOp(() => store.removeField(sid, key), "已刪掉子章節");
     };
   });
@@ -1222,11 +1224,13 @@ function renderEditor() {
   if (label) label.textContent = `${s.n} · ${s.title}`;
 
   const fields = s.fields
-    .map((f) => {
+    .map((f, i) => {
       const val = values[f.key] ?? "";
+      // 編號跟大綱同一套（011、012…）—— 座標在每個顯示點都要長一樣
+      const numbered = `${fieldNo(s.n, i)} ${f.label}`;
       if (f.type === "text") {
         return `<div class="field" data-od-id="field-${f.key}">
-        <label>${escapeHtml(f.label)}<span>${escapeHtml(f.hint || "")}</span></label>
+        <label>${escapeHtml(numbered)}<span>${escapeHtml(f.hint || "")}</span></label>
         <input type="text" data-key="${f.key}" value="${escapeHtml(val)}" />
       </div>`;
       }
@@ -1234,7 +1238,7 @@ function renderEditor() {
       const rows = Math.max(f.rows || 6, 8);
       return mdFieldHtml({
         key: f.key,
-        label: f.label,
+        label: numbered,
         hint: f.hint || "Markdown",
         value: val,
         rows,
