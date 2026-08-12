@@ -14206,3 +14206,101 @@ p.gd-warn {
   border-color: var(--accent);
   box-shadow: var(--focus-ring);
 }
+
+/* ── PRD 撰寫的前置面板 ──────────────────────────────────────
+ *
+ * 兩件事在這裡決定，因為它們都會影響「寫出來的東西對不對」：
+ * 有沒有讀過專案，以及要寫哪幾節。
+ */
+.awp-snap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.awp-snap-line {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+/* 「沒讀過」是擋住的狀態，跟「落後了」不同 —— 前者不能寫，後者可以但該重讀 */
+.awp-snap-line.is-block {
+  color: var(--warn, #d9534f);
+  font-weight: var(--weight-em);
+}
+.awp-snap-line.is-stale {
+  color: var(--accent);
+}
+.awp-qa {
+  display: block;
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+.awp-qa textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: var(--fs-3);
+  line-height: 1.6;
+  resize: vertical;
+}
+.awp-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.awp-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+.awp-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 42vh;
+  overflow: auto;
+}
+.awp-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--border-muted, var(--border));
+}
+.awp-item label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.awp-n {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--fs-2);
+}
+.awp-t {
+  color: var(--fg);
+  font-size: var(--fs-3);
+}
+/* 已有內容只標記，不變灰 —— 它是可選的，不是不能選 */
+.awp-flag {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: var(--fs-1);
+}

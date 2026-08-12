@@ -32,13 +32,14 @@ import {
 import { AiError, chatCompletion, extractJsonObject, getAiReadiness } from "../lib/ai-client";
 import { projectDisplayName } from "../data/types";
 import { isNative, isUnavailable, native } from "../lib/native";
+import { clampForContext } from "../lib/project-snapshot";
 import {
-  buildSnapshot,
-  clampForContext,
-  latestSnapshot,
-  snapshotFileName,
-  staleness,
-} from "../lib/project-snapshot";
+  makeSnapshot,
+  NO_SNAPSHOT,
+  readSnapshotState,
+  readSnapshotText,
+  snapshotLine,
+} from "../lib/snapshot-bridge";
 import { sinceLabel as since } from "../lib/time-format";
 import { canQueryStatus, requestOpenspecStatus } from "../lib/status-bridge";
 import { nextArtifact, type OpenspecChange, type OpenspecResult } from "../lib/openspec-status";
@@ -74,9 +75,8 @@ if (requireAuth()) {
    * 留著會讓下載到的東西跟畫面上填的對不起來。
    */
   let draftFiles: ChangeFile[] | null = null;
-  /** 這個專案最新的快照。null = 沒有，AI 撰寫要擋住 */
-  let snapAt: Date | null = null;
-  let snapName = "";
+  /** 這個專案的快照狀態。判定與文案共用 `snapshot-bridge` */
+  let snapState = NO_SNAPSHOT;
   /** 勾了要寫哪幾份。key 是檔名 */
   const picked = new Set<string>();
 
@@ -490,18 +490,16 @@ if (requireAuth()) {
     }
     const root = currentProject()?.importSummary?.rootPath;
     let snap = "";
-    if (root && snapName && isNative()) {
-      try {
-        const r = await native.readFile(`${root}/.anchorline/context/${snapName}`);
+    if (root && snapState.name) {
+      const raw = await readSnapshotText(root, snapState.name);
+      if (raw) {
         // 存的是全部，送的是一段 —— 整份丟進 prompt 會撐爆 context window
-        const c = clampForContext(r.text);
+        const c = clampForContext(raw);
         snap = c.text;
         if (c.clamped) toast("快照較長，只送出前段給模型");
-      } catch {
-        /* 讀不到就只給 PRD */
       }
     }
-    return [snap && `專案快照（${snapName}）：\n${snap}`, prdContext()].filter(Boolean).join("\n\n");
+    return [snap && `專案快照（${snapState.name}）：\n${snap}`, prdContext()].filter(Boolean).join("\n\n");
   }
 
   /** 專案的 PRD 內容，給模型當背景。沒有就是空字串，prompt 會明講。 */
@@ -530,20 +528,8 @@ if (requireAuth()) {
   }
 
   async function refreshSnapshot() {
-    snapAt = null;
-    snapName = "";
     const root = currentProject()?.importSummary?.rootPath;
-    if (root && isNative()) {
-      try {
-        const latest = latestSnapshot(await native.listSnapshots(root));
-        if (latest) {
-          snapAt = latest.at;
-          snapName = latest.name;
-        }
-      } catch {
-        /* 讀不到就當沒有 */
-      }
-    }
+    snapState = await readSnapshotState(root, commitTimes);
     renderSnapshotLine();
   }
 
@@ -558,39 +544,21 @@ if (requireAuth()) {
     const aiBtn = el("os-ai") as HTMLButtonElement | null;
     if (!line || !scanBtn || !aiBtn) return;
 
-    if (isNewProject()) {
-      qa && (qa.hidden = false);
-      scanBtn.hidden = true;
-      aiBtn.disabled = false;
-      line.textContent = "新專案，沒有資料夾可讀 —— 用下面的問答提供背景。";
-      line.className = "os-ai-snap";
-      return;
-    }
-    qa && (qa.hidden = true);
-    scanBtn.hidden = false;
-
-    if (!snapAt) {
-      aiBtn.disabled = true;
-      line.textContent = "還沒讀過這個專案 —— 先讀一次資料夾才能撰寫。";
-      line.className = "os-ai-snap is-block";
-      return;
-    }
-
-    const commits = (statsCommitTimes() ?? []) as string[];
-    const st = staleness(snapAt, commits, Date.now());
-    aiBtn.disabled = false;
-    line.className = `os-ai-snap${st.stale ? " is-stale" : ""}`;
-    const age = since(snapAt.toISOString(), Date.now());
-    line.textContent = st.stale
-      ? `快照是 ${age}做的${st.commitsBehind ? `，之後又有 ${st.commitsBehind} 筆 commit` : ""}。要不要重讀？`
-      : `快照 ${age}（${snapName}）`;
+    // 文案與判定跟 PRD 撰寫共用 `snapshot-bridge` —— 兩邊各寫一份的話，
+    // 同一個專案會在兩頁顯示不同的快照狀態
+    const age = snapState.at ? since(snapState.at.toISOString(), Date.now()) : "";
+    line.textContent = snapshotLine(snapState, age);
+    line.className = `os-ai-snap${
+      !snapState.required ? "" : snapState.unavailable || !snapState.at ? " is-block" : snapState.stale?.stale ? " is-stale" : ""
+    }`;
+    qa && (qa.hidden = snapState.required);
+    scanBtn.hidden = !snapState.required || snapState.unavailable;
+    aiBtn.disabled = snapState.required && !snapState.unavailable && !snapState.at;
   }
 
-  /** 快照之後有幾筆 commit —— 從已讀到的 openspec 報告拿不到，改用 store 的專案統計 */
-  function statsCommitTimes(): string[] {
-    return commitTimes;
-  }
-  let commitTimes: string[] = [];
+  /** 快照落後判定要用的 commit 時間。這一頁沒有專案統計，先留空 —— 
+      年齡那一半的判定仍然有效（超過 7 天照樣提醒）。 */
+  const commitTimes: string[] = [];
 
   el("os-ai-scan")?.addEventListener("click", async () => {
     const p = currentProject();
@@ -600,37 +568,14 @@ if (requireAuth()) {
     const btn = el("os-ai-scan") as HTMLButtonElement;
     btn.disabled = true;
     if (line) line.textContent = "讀取中…";
-    try {
-      const scan = await native.scanProject(root);
-      if (isUnavailable(scan)) {
-        if (line) line.textContent = scan.message;
-        return;
-      }
-      const at = new Date();
-      const md = buildSnapshot({
-        projectName: projectDisplayName(p!),
-        rootPath: root,
-        at,
-        files: scan.files,
-        gitLine: "",
-        truncated: scan.truncated,
-      });
-      const w = await native.writeSnapshot(root, snapshotFileName(projectDisplayName(p!), at), md);
-      if (isUnavailable(w)) {
-        if (line) line.textContent = w.message;
-        return;
-      }
-      toast(
-        scan.truncated
-          ? `已讀 ${scan.files.length} 個檔（有上限，未讀完）`
-          : `已讀 ${scan.files.length} 個檔`,
-      );
+    const r = await makeSnapshot(root, projectDisplayName(p!));
+    if (!r.ok) {
+      if (line) line.textContent = r.reason;
+    } else {
+      toast(r.truncated ? `已讀 ${r.files} 個檔（有上限，未讀完）` : `已讀 ${r.files} 個檔`);
       await refreshSnapshot();
-    } catch (e) {
-      if (line) line.textContent = e instanceof Error ? e.message : String(e);
-    } finally {
-      btn.disabled = false;
     }
+    btn.disabled = false;
   });
 
   /** 要寫哪幾份。預設全勾 —— 多數情況是整組寫，勾選是給要局部重寫的人用的。 */
@@ -674,7 +619,7 @@ if (requireAuth()) {
       return;
     }
     // 既有專案沒有快照就不給寫 —— 沒讀過專案寫出來的文件是編的
-    if (!isNewProject() && !snapAt) {
+    if (snapState.required && !snapState.unavailable && !snapState.at) {
       say("先按「讀取專案資料夾」建立快照。", true);
       return;
     }

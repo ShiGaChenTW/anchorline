@@ -21,6 +21,16 @@ import { getAiReadiness, writeFullPrd } from "../lib/ai-coach";
 import { openOptimizeWorkbench } from "../lib/ai-optimize";
 import { openWriteConsole } from "../lib/ai-write-console";
 import { restorePlan, snapshotDrafts, type TouchedField } from "../lib/draft-snapshot";
+import {
+  makeSnapshot,
+  NO_SNAPSHOT,
+  readSnapshotState,
+  readSnapshotText,
+  snapshotLine,
+} from "../lib/snapshot-bridge";
+import { clampForContext } from "../lib/project-snapshot";
+import { isDesktop, requestProjectStats } from "../lib/project-stats";
+import { sinceLabel } from "../lib/time-format";
 import { chatCompletion } from "../lib/ai-client";
 import { runSectionCoach } from "../lib/gate-rules";
 import {
@@ -43,13 +53,14 @@ import { CHARS_PER_MIN, DEFAULT_TARGET } from "../lib/focus-mode";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { syncRailContext } from "../lib/rail-projects";
 import { initTheme } from "../lib/theme";
-import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+import { bindModalDismiss, closeModal, escapeHtml, initMobileNav, openModal, toast, updateUserRailFooter } from "../lib/ui";
 import { starterScaffold } from "../lib/writing-assist";
 
 if (!requireAuth()) {
   /* redirected */
 } else {
   initTheme();
+  bindModalDismiss("aiw-plan");
   initMobileNav("write");
   bindLogout();
   initHelpOverlay();
@@ -170,11 +181,159 @@ if (!requireAuth()) {
    * 全程在工作台視窗裡逐字播。**產出仍然只進草稿** —— 視窗的三個出口才決定
    * 它的去向：存檔寫進正文、暫存留在草稿、取消還原成執行前的樣子。
    */
-  async function runWrite(opts: { instruction?: string; overwriteFilled?: boolean } = {}) {
+  // ── 撰寫前的選擇 ────────────────────────────────────────────
+
+  /** 這一節有沒有已儲存的正文。草稿不算 —— 草稿是「AI 寫了你還沒收下」 */
+  function sectionHasContent(sec: Section): boolean {
+    const saved = store.get().sectionValues[sec.id] ?? {};
+    return Object.values(saved).some((v) => String(v).trim().length > 0);
+  }
+
+  let snapState = NO_SNAPSHOT;
+  /**
+   * 快照落後判定要用的 commit 時間。開面板時取一次 ——
+   * 這一頁本來沒有專案統計，為了一個數字常駐輪詢不值得。
+   */
+  async function commitTimes(root: string | undefined): Promise<string[]> {
+    if (!root || !isDesktop()) return [];
+    try {
+      const s = await requestProjectStats(root);
+      return (s.git?.commits ?? []).map((c: { at: string }) => c.at);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * 撰寫前的選擇面板。
+   *
+   * 兩件事在這裡決定，因為它們都會影響「寫出來的東西對不對」：
+   *
+   * 1. **快照** —— 既有專案沒讀過資料夾就不給寫。模型手上只有章節骨架時，
+   *    它會很流暢地寫出一份跟這個專案沒有關係的 PRD。
+   * 2. **要寫哪幾節** —— 取代原本的「已有內容自動略過」。自動略過看起來
+   *    貼心，但它替使用者做了決定：想重寫某一節的人得先去把它清空。
+   *    已有內容的章節標出來、預設不勾，勾了才問要不要覆寫。
+   */
+  async function openWritePlan(): Promise<{ list: Section[]; brief: string } | null> {
+    const back = document.getElementById("aiw-plan");
+    if (!back) return null;
+    const p = store.get().projects.find((x) => x.id === store.get().activeProjectId);
+    const root = p?.importSummary?.rootPath;
+    const all = sections();
+    const chosen = new Set(all.filter((s) => !sectionHasContent(s)).map((s) => s.id));
+
+    const line = document.getElementById("awp-snap-line")!;
+    const scanBtn = document.getElementById("awp-scan") as HTMLButtonElement;
+    const qa = document.getElementById("awp-qa")!;
+    const goBtn = document.getElementById("awp-go") as HTMLButtonElement;
+    const listEl = document.getElementById("awp-list")!;
+    const countEl = document.getElementById("awp-count")!;
+
+    const paintSnap = () => {
+      line.textContent = snapshotLine(snapState, snapState.at ? sinceLabel(snapState.at.toISOString(), Date.now()) : "");
+      line.className = `awp-snap-line${!snapState.required ? "" : !snapState.at ? " is-block" : snapState.stale?.stale ? " is-stale" : ""}`;
+      scanBtn.hidden = !snapState.required || snapState.unavailable;
+      qa.hidden = snapState.required;
+      paintCount();
+    };
+    const paintCount = () => {
+      const blocked = snapState.required && !snapState.unavailable && !snapState.at;
+      countEl.textContent = blocked ? "先讀過資料夾才能撰寫" : `已選 ${chosen.size} / ${all.length} 節`;
+      goBtn.disabled = blocked || chosen.size === 0;
+    };
+
+    const paintList = () => {
+      listEl.innerHTML = all
+        .map((sec) => {
+          const filled = sectionHasContent(sec);
+          return `<li class="awp-item${filled ? " has-content" : ""}">
+            <label>
+              <input type="checkbox" data-sec="${escapeHtml(sec.id)}"${chosen.has(sec.id) ? " checked" : ""} />
+              <span class="awp-n">${escapeHtml(sec.n)}</span>
+              <span class="awp-t">${escapeHtml(sec.title)}</span>
+            </label>
+            ${filled ? `<span class="awp-flag">已有內容</span>` : ""}
+          </li>`;
+        })
+        .join("");
+      listEl.querySelectorAll<HTMLInputElement>("[data-sec]").forEach((cb) => {
+        cb.onchange = () => {
+          const sec = all.find((x) => x.id === cb.dataset.sec)!;
+          if (cb.checked && sectionHasContent(sec)) {
+            // 勾了已有內容的章節就問一次 —— 覆寫掉的是使用者自己寫的東西
+            if (!confirm(`「${sec.n} ${sec.title}」已經有內容。要讓 AI 覆寫嗎？`)) {
+              cb.checked = false;
+              return;
+            }
+          }
+          cb.checked ? chosen.add(sec.id) : chosen.delete(sec.id);
+          paintCount();
+        };
+      });
+      paintCount();
+    };
+
+    const commits = await commitTimes(root);
+    snapState = await readSnapshotState(root, commits);
+    paintSnap();
+    paintList();
+    openModal("aiw-plan");
+
+    return new Promise((resolve) => {
+      const done = (v: { list: Section[]; brief: string } | null) => {
+        closeModal("aiw-plan");
+        resolve(v);
+      };
+      document.getElementById("awp-close")!.onclick = () => done(null);
+      document.getElementById("awp-cancel")!.onclick = () => done(null);
+      document.getElementById("awp-all")!.onclick = () => {
+        // 全選會包含已有內容的章節，所以整批問一次而不是逐節問
+        const filled = all.filter(sectionHasContent);
+        if (filled.length && !confirm(`其中 ${filled.length} 節已經有內容，要一起覆寫嗎？`)) {
+          all.filter((s) => !sectionHasContent(s)).forEach((s) => chosen.add(s.id));
+        } else {
+          all.forEach((s) => chosen.add(s.id));
+        }
+        paintList();
+      };
+      document.getElementById("awp-none")!.onclick = () => {
+        chosen.clear();
+        paintList();
+      };
+      scanBtn.onclick = async () => {
+        if (!root) return;
+        scanBtn.disabled = true;
+        line.textContent = "讀取中…";
+        const r = await makeSnapshot(root, projectDisplayName(p!));
+        if (!r.ok) {
+          line.textContent = r.reason;
+        } else {
+          toast(r.truncated ? `已讀 ${r.files} 個檔（有上限，未讀完）` : `已讀 ${r.files} 個檔`);
+          snapState = await readSnapshotState(root, commits);
+        }
+        scanBtn.disabled = false;
+        paintSnap();
+      };
+      document.getElementById("awp-go")!.onclick = () => {
+        const brief = (document.getElementById("awp-brief") as HTMLTextAreaElement | null)?.value.trim() ?? "";
+        done({ list: all.filter((s) => chosen.has(s.id)), brief });
+      };
+    });
+  }
+
+  /** 先開前置面板，選完才真的跑。取消就什麼都不做。 */
+  async function startWrite(instruction?: string) {
+    const plan = await openWritePlan();
+    if (!plan) return;
+    await runWrite({ instruction, only: plan.list, brief: plan.brief });
+  }
+
+  async function runWrite(opts: { instruction?: string; overwriteFilled?: boolean; only?: Section[]; brief?: string } = {}) {
     if (!editable()) return void toast("目前身分無法編輯內文");
     const ready = getAiReadiness();
     if (!ready.ok) return void toast(ready.reason);
-    const list = sections();
+    const list = opts.only ?? sections();
     if (!list.length) return void toast("這個領域沒有可寫的章節");
 
     // 執行前的草稿快照。「取消」要還原成這個樣子，而不是把草稿全部清掉 ——
@@ -182,6 +341,20 @@ if (!requireAuth()) {
     const pid = store.get().activeProjectId;
     const before = snapshotDrafts(store.get().prdDrafts[pid]);
     const touched: TouchedField[] = [];
+
+    // 快照當背景。既有專案在前置面板已經擋過「沒有快照」，這裡只負責取用
+    const root = store.get().projects.find((x) => x.id === pid)?.importSummary?.rootPath;
+    let snapContext = "";
+    if (root && snapState.name) {
+      const raw = await readSnapshotText(root, snapState.name);
+      if (raw) {
+        const c = clampForContext(raw);
+        snapContext = `專案快照（${snapState.name}）：\n${c.text}`;
+        if (c.clamped) toast("快照較長，只送出前段給模型");
+      }
+    } else if (opts.brief) {
+      snapContext = `使用者說明：\n${opts.brief}`;
+    }
 
     abort = new AbortController();
 
@@ -199,7 +372,8 @@ if (!requireAuth()) {
 
     const con = openWriteConsole({
       title: "AI 撰寫",
-      subtitle: `${list.length} 節 · ${opts.overwriteFilled ? "已有內容也會重寫" : "已有內容的章節會略過"}`,
+      // 使用者已經在前置面板逐節決定過，這裡不再自作主張略過
+      subtitle: `${list.length} 節 · 你選的那幾節`,
       skills: skillsInPlay(),
       onStop: () => {
         abort?.abort();
@@ -246,8 +420,9 @@ Do not claim you have modified anything — you cannot write here, the user re-r
 
     try {
       const res = await writeFullPrd(list, valuesFor, {
-        instruction: opts.instruction,
-        overwriteFilled: opts.overwriteFilled,
+        instruction: [opts.instruction, snapContext].filter(Boolean).join("\n\n") || undefined,
+        // 勾了就是要寫 —— 略過的判斷已經在前置面板做過，這裡再判一次會推翻使用者
+        overwriteFilled: true,
         signal: abort.signal,
         onDelta: (chunk) => con.delta(chunk),
         onProgress: (p) => {
@@ -790,7 +965,7 @@ Do not claim you have modified anything — you cannot write here, the user re-r
     if (prefilled) toast(`先對應了 ${prefilled} 個欄位，其餘交給模型`);
     const digest = folderDigest(c);
     folder = null;
-    await runWrite({ instruction: digest });
+    await startWrite(digest);
   }
 
   function scanFiles(files: FileList | null) {
@@ -893,7 +1068,7 @@ Do not claim you have modified anything — you cannot write here, the user re-r
       });
     });
 
-    on("btn-aiw-hero-write", () => void runWrite());
+    on("btn-aiw-hero-write", () => void startWrite());
 
     on("btn-aiw-interview", () => {
       interview = { turns: [], question: null, why: "", busy: true, finished: false };
@@ -947,7 +1122,7 @@ Do not claim you have modified anything — you cannot write here, the user re-r
     render();
     toast("已重新整理");
   });
-  document.getElementById("btn-aiw-write")?.addEventListener("click", () => void runWrite());
+  document.getElementById("btn-aiw-write")?.addEventListener("click", () => void startWrite());
   document.getElementById("aiw-folder-input")?.addEventListener("change", (e) => {
     scanFiles((e.target as HTMLInputElement).files);
   });
