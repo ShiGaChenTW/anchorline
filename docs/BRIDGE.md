@@ -93,7 +93,7 @@ canonicalize(path) 仍位於某個「已註冊專案根目錄」之內   ← 擋
 
 ---
 
-## 4. 十四個 action
+## 4. 十六個 action
 
 ### 4.1 `pickFolder` / `pickProjectFolder`
 
@@ -237,6 +237,31 @@ commit 本身仍由使用者在終端機執行 —— 那是 `git-doctor.ts` 立
   與 `appendFile` 共用同一道守衛。
 
 非 git 專案或找不到 `git` 一律回 `Missing`，不是錯誤。
+
+### 4.7c `openspecProbe` / `openspecInit`
+
+```ts
+openspecProbe(folderPath: string) -> { initialized: boolean }
+openspecInit(folderPath: string)  -> Maybe<{ raw: string }>
+```
+
+**`openspecInit` 是這座橋唯一會寫進使用者專案資料夾的 action。**
+
+其餘全部唯讀。放行它的理由跟 `git push` 不同，三點都要成立才算數：
+
+| | |
+|---|---|
+| 可逆 | 它建立的是 `openspec/` 骨架，刪掉資料夾就還原 |
+| 不外流 | 只動本機檔案，沒有任何東西送出去 |
+| 參數寫死 | Rust 端跑的是常數 `["init"]`，前端只能說「對哪個資料夾做」 |
+
+守衛與 `appendFile` 相同：`folderPath` 必須是已註冊的專案根目錄，
+否則回 `Missing`。**前端還要再跟使用者確認一次** —— 那是界線的例外，
+不是界線消失了。
+
+`openspecProbe` 用**檔案系統檢查**（`openspec/` 目錄在不在），刻意不呼叫 CLI：
+「CLI 沒裝」與「沒 init 過」是兩件事，混在一起會讓畫面對沒裝 CLI 的人說
+「請 init」，而他 init 不了。
 
 ### 4.8 `ghStatus`
 

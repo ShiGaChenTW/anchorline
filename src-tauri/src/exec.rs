@@ -172,6 +172,23 @@ pub fn openspec_list(dir: &Path, overrides: &CliOverrides) -> CliResult {
 /// `status --change <name>`。
 ///
 /// **`name` 只能來自 `list --json` 自己的輸出**，不經過前端 —— 呼叫端負責保證。
+/// `openspec init` —— **這是這個檔案裡唯一會寫入使用者專案的 CLI 呼叫。**
+///
+/// 其餘全部唯讀。放行它的理由跟 git push 不同：建立 `openspec/` 骨架是
+/// 可逆的（刪掉資料夾就沒了）、不外流、參數在這裡寫死。
+/// 呼叫端仍然要先跟使用者確認。
+pub fn openspec_init(dir: &Path, overrides: &CliOverrides) -> CliResult {
+    match locate("openspec", overrides) {
+        Some(bin) => match run(&bin, &["init"], Some(dir)) {
+            Some(out) => CliResult::Ok(out),
+            None => CliResult::Missing("openspec init 執行失敗".to_string()),
+        },
+        None => CliResult::Missing(
+            "找不到 openspec。安裝：npm i -g @fission-ai/openspec，或在設定裡指定路徑。".into(),
+        ),
+    }
+}
+
 pub fn openspec_status(dir: &Path, name: &str, overrides: &CliOverrides) -> Option<String> {
     let bin = locate("openspec", overrides)?;
     run(&bin, &["status", "--change", name, "--json"], Some(dir))
