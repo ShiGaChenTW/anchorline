@@ -3,6 +3,7 @@ import type { Comment, Section } from "../data/types";
 import { projectDisplayName } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
+import { fieldNo } from "../lib/field-number";
 import { canApproveProject, canEditContent, canPeerReview } from "../lib/permissions";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
 import { initHelpOverlay } from "../lib/help-overlay";
@@ -132,14 +133,15 @@ function syncProjectChrome() {
 /** 章節欄位 → Markdown 字串 */
 function fieldsToMarkdown(s: Section, values: Record<string, string>): string {
   const parts: string[] = [];
-  for (const f of s.fields) {
+  for (const [i, f] of s.fields.entries()) {
     const v = (values[f.key] ?? "").trim();
     if (!v) continue;
-    // 單欄章節直接輸出；多欄加小標
+    // 單欄章節直接輸出；多欄加小標。小標帶編號（011、012…）——
+    // 審閱意見要能講「012 給誰太籠統」，座標得先出現在審閱者眼前
     if (s.fields.length === 1) {
       parts.push(v);
     } else {
-      parts.push(`**${f.label}**\n\n${v}`);
+      parts.push(`**${fieldNo(s.n, i)} ${f.label}**\n\n${v}`);
     }
   }
   return parts.join("\n\n");

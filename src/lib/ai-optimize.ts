@@ -20,6 +20,7 @@ import { AiError, critiqueSectionWithAI, generateAIDraft, getAiReadiness } from 
 import { canEditContent } from "./permissions";
 import type { AICritique } from "./ai-coach";
 import { diffRowsHtml } from "./diff-summary";
+import { fieldNo, numberedFieldLabel } from "./field-number";
 import type { GateSpec } from "./gate-rules";
 import { escapeHtml, toast } from "./ui";
 
@@ -47,10 +48,10 @@ function directionsFrom(c: AICritique): string {
 
 function fieldScopeHtml(section: Section, values: Record<string, string>): string {
   return `<ul class="aiopt-scope">${section.fields
-    .map((f) => {
+    .map((f, i) => {
       const n = (values[f.key] ?? "").trim().length;
       return `<li class="${n ? "" : "is-empty"}">
-        <span>${escapeHtml(f.label)}</span>
+        <span>${escapeHtml(`${fieldNo(section.n, i)} ${f.label}`)}</span>
         <b class="mono">${n ? `${n} 字` : "空"}</b>
       </li>`;
     })
@@ -158,7 +159,7 @@ export function openOptimizeWorkbench(opts: OptimizeOptions) {
            ${changed
              .map(
                (r) => `<div class="aiopt-diff">
-                 <p class="aiopt-sub">${escapeHtml(r.f.label)}</p>
+                 <p class="aiopt-sub">${escapeHtml(numberedFieldLabel(section, r.f.key))}</p>
                  <div class="field-diff"><div class="field-diff-body">${diffRowsHtml(r.before, r.after) || `<span class="fv-line fv-changed"><span class="fv-add">${escapeHtml(r.after)}</span></span>`}</div></div>
                </div>`,
              )
