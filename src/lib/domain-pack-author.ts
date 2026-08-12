@@ -132,12 +132,19 @@ ${input.brief}
  * 只修一次：修兩次以上通常代表 brief 本身有問題，繼續燒 token 不會變好，
  * 讓使用者看到錯誤自己調描述比較快。
  */
-export type Complete = (system: string, user: string) => Promise<string>;
+export type Complete = (
+  system: string,
+  user: string,
+  opts?: { temperature?: number; jsonMode?: boolean },
+) => Promise<string>;
+
+// YAML 是縮排敏感的結構輸出，降溫減少格式漂移；但它不是 JSON，不開 jsonMode。
+const AUTHOR_OPTS = { temperature: 0.2 };
 
 export async function authorDomainPack(input: AuthorInput, complete: Complete): Promise<AuthorResult> {
   let raw: string;
   try {
-    raw = stripFence(await complete(SCHEMA, userPrompt(input)));
+    raw = stripFence(await complete(SCHEMA, userPrompt(input), AUTHOR_OPTS));
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
   }
@@ -162,6 +169,7 @@ ${first.reason}
 ${raw}
 
 修正這個問題，輸出完整的新版檔案。不要解釋，只輸出檔案內容。`,
+        AUTHOR_OPTS,
       ),
     );
   } catch (e) {

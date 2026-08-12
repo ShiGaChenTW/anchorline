@@ -26,6 +26,27 @@ function settings(): AISettings {
   return store.get().settings;
 }
 
+/**
+ * 每次呼叫可覆寫的採樣選項。
+ *
+ * 為什麼存在：預設 temperature 0.7 對散文合理，對「輸出必須能被 JSON.parse」
+ * 的任務只是提高格式漂移的機率。呼叫端最知道自己要的是結構還是文采，
+ * 所以讓它逐次指定，而不是動全域設定。
+ */
+export type ChatOpts = {
+  /** 覆寫設定頁的 temperature；不給就沿用 `s.temperature ?? 0.7` */
+  temperature?: number;
+  /**
+   * 要求 provider 層級的 JSON 輸出。OpenAI 相容帶 response_format、
+   * Gemini 帶 responseMimeType；Anthropic 無原生 JSON mode，忽略此旗標。
+   */
+  jsonMode?: boolean;
+};
+
+function resolveTemp(s: AISettings, opts?: ChatOpts): number {
+  return Math.min(1, Math.max(0, opts?.temperature ?? s.temperature ?? 0.7));
+}
+
 function detectProvider(s: AISettings): AiReady["ok"] extends true
   ? AiReady
   : AiReady {
@@ -103,7 +124,7 @@ function normalizeOpenAiBase(endpoint: string, isLocal: boolean): string {
   return base;
 }
 
-async function callGemini(system: string, user: string, s: AISettings): Promise<string> {
+async function callGemini(system: string, user: string, s: AISettings, opts?: ChatOpts): Promise<string> {
   const model = s.model.startsWith("gemini") ? s.model : "gemini-2.5-flash";
   const base = geminiBase(s.endpoint);
   const url = `${base}/models/${model}:generateContent?key=${encodeURIComponent(s.apiKey.trim())}`;
@@ -111,7 +132,8 @@ async function callGemini(system: string, user: string, s: AISettings): Promise<
     systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts: [{ text: user }] }],
     generationConfig: {
-      temperature: Math.min(1, Math.max(0, s.temperature ?? 0.7)),
+      temperature: resolveTemp(s, opts),
+      ...(opts?.jsonMode ? { responseMimeType: "application/json" } : {}),
     },
   };
   const res = await fetch(url, {
@@ -138,7 +160,7 @@ async function callGemini(system: string, user: string, s: AISettings): Promise<
   return text.trim();
 }
 
-async function callOpenAICompat(system: string, user: string, s: AISettings): Promise<string> {
+async function callOpenAICompat(system: string, user: string, s: AISettings, opts?: ChatOpts): Promise<string> {
   const isLocal =
     s.model === "local-smart" || /localhost|127\.0\.0\.1|11434/i.test(s.endpoint || "");
   const base = normalizeOpenAiBase(s.endpoint, isLocal);
@@ -149,22 +171,28 @@ async function callOpenAICompat(system: string, user: string, s: AISettings): Pr
   if (!key && !isLocal) {
     throw new AiError("OpenAI 相容端點需要 API Key", "not_configured");
   }
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
+  const body = (withJsonMode: boolean) =>
+    JSON.stringify({
       model,
-      temperature: Math.min(1, Math.max(0, s.temperature ?? 0.7)),
+      temperature: resolveTemp(s, opts),
+      ...(withJsonMode ? { response_format: { type: "json_object" } } : {}),
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
       ],
-    }),
-  });
-  const raw = await res.text();
+    });
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${key}`,
+  };
+  let res = await fetch(url, { method: "POST", headers, body: body(!!opts?.jsonMode) });
+  let raw = await res.text();
+  // Ollama／自訂端點不一定支援 response_format——失敗就降級重送不帶，
+  // 沿用 Anthropic temperature 被打回重試的既有模式。
+  if (!res.ok && opts?.jsonMode && (res.status === 400 || /response_format/i.test(raw))) {
+    res = await fetch(url, { method: "POST", headers, body: body(false) });
+    raw = await res.text();
+  }
   if (!res.ok) {
     throw new AiError(
       parseHttpError(isLocal ? "Ollama" : "OpenAI", res.status, raw) +
@@ -186,7 +214,7 @@ async function callOpenAICompat(system: string, user: string, s: AISettings): Pr
   return text.trim();
 }
 
-async function callAnthropic(system: string, user: string, s: AISettings): Promise<string> {
+async function callAnthropic(system: string, user: string, s: AISettings, opts?: ChatOpts): Promise<string> {
   const url = anthropicMessagesUrl(s.endpoint);
   const model = s.model.startsWith("claude") ? s.model : "claude-sonnet-4-5";
   const headers = {
@@ -203,7 +231,7 @@ async function callAnthropic(system: string, user: string, s: AISettings): Promi
       // 章節與法規引用的包會被切在半句話。而截斷的症狀不是「內容變短」，是
       // 下游解析器說「缺少 frontmatter」，完全指不到真正的原因。
       max_tokens: 16384,
-      ...(withTemp ? { temperature: Math.min(1, Math.max(0, s.temperature ?? 0.7)) } : {}),
+      ...(withTemp ? { temperature: resolveTemp(s, opts) } : {}),
       system,
       messages: [{ role: "user", content: user }],
     });
@@ -259,14 +287,14 @@ function parseHttpError(provider: string, status: number, raw: string): string {
 }
 
 /** 系統 + 使用者訊息 → 模型純文字回覆 */
-export async function chatCompletion(system: string, user: string): Promise<string> {
+export async function chatCompletion(system: string, user: string, opts?: ChatOpts): Promise<string> {
   const ready = getAiReadiness();
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
   const s = settings();
   try {
-    if (ready.provider === "gemini") return await callGemini(system, user, s);
-    if (ready.provider === "anthropic") return await callAnthropic(system, user, s);
-    return await callOpenAICompat(system, user, s);
+    if (ready.provider === "gemini") return await callGemini(system, user, s, opts);
+    if (ready.provider === "anthropic") return await callAnthropic(system, user, s, opts);
+    return await callOpenAICompat(system, user, s, opts);
   } catch (e) {
     if (e instanceof AiError) throw e;
     const msg = e instanceof Error ? e.message : String(e);
@@ -372,15 +400,16 @@ export async function chatCompletionStream(
   user: string,
   onDelta: (chunk: string, full: string) => void,
   signal?: AbortSignal,
+  opts?: ChatOpts,
 ): Promise<string> {
   const ready = getAiReadiness();
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
   const s = settings();
   try {
-    if (ready.provider === "gemini") return await streamGemini(system, user, s, onDelta, signal);
+    if (ready.provider === "gemini") return await streamGemini(system, user, s, onDelta, signal, opts);
     if (ready.provider === "anthropic")
-      return await streamAnthropic(system, user, s, onDelta, signal);
-    return await streamOpenAICompat(system, user, s, onDelta, signal);
+      return await streamAnthropic(system, user, s, onDelta, signal, opts);
+    return await streamOpenAICompat(system, user, s, onDelta, signal, opts);
   } catch (e) {
     if (e instanceof AiError) throw e;
     if ((e as Error)?.name === "AbortError") throw new AiError("已取消", "aborted");
@@ -433,6 +462,7 @@ async function streamGemini(
   s: AISettings,
   onDelta: (chunk: string, full: string) => void,
   signal?: AbortSignal,
+  opts?: ChatOpts,
 ): Promise<string> {
   const model = s.model.startsWith("gemini") ? s.model : "gemini-2.5-flash";
   const base = geminiBase(s.endpoint);
@@ -445,7 +475,10 @@ async function streamGemini(
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: "user", parts: [{ text: user }] }],
-      generationConfig: { temperature: Math.min(1, Math.max(0, s.temperature ?? 0.7)) },
+      generationConfig: {
+        temperature: resolveTemp(s, opts),
+        ...(opts?.jsonMode ? { responseMimeType: "application/json" } : {}),
+      },
     }),
   });
   if (!res.ok) throw new AiError(parseHttpError("Gemini", res.status, await res.text()), "http");
@@ -473,6 +506,7 @@ async function streamAnthropic(
   s: AISettings,
   onDelta: (chunk: string, full: string) => void,
   signal?: AbortSignal,
+  opts?: ChatOpts,
 ): Promise<string> {
   const url = anthropicMessagesUrl(s.endpoint);
   const model = s.model.startsWith("claude") ? s.model : "claude-sonnet-4-5";
@@ -487,7 +521,7 @@ async function streamAnthropic(
       model,
       max_tokens: 16384,
       stream: true,
-      ...(withTemp ? { temperature: Math.min(1, Math.max(0, s.temperature ?? 0.7)) } : {}),
+      ...(withTemp ? { temperature: resolveTemp(s, opts) } : {}),
       system,
       messages: [{ role: "user", content: user }],
     });
@@ -523,6 +557,7 @@ async function streamOpenAICompat(
   s: AISettings,
   onDelta: (chunk: string, full: string) => void,
   signal?: AbortSignal,
+  opts?: ChatOpts,
 ): Promise<string> {
   const isLocal =
     s.model === "local-smart" || /localhost|127\.0\.0\.1|11434/i.test(s.endpoint || "");
@@ -532,20 +567,27 @@ async function streamOpenAICompat(
   const key = (s.apiKey || "").trim() || (isLocal ? "ollama" : "");
   if (!key && !isLocal) throw new AiError("OpenAI 相容端點需要 API Key", "not_configured");
 
-  const res = await fetch(url, {
-    method: "POST",
-    signal,
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
+  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${key}` };
+  const body = (withJsonMode: boolean) =>
+    JSON.stringify({
       model,
       stream: true,
-      temperature: Math.min(1, Math.max(0, s.temperature ?? 0.7)),
+      temperature: resolveTemp(s, opts),
+      ...(withJsonMode ? { response_format: { type: "json_object" } } : {}),
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
       ],
-    }),
-  });
+    });
+  let res = await fetch(url, { method: "POST", signal, headers, body: body(!!opts?.jsonMode) });
+  if (!res.ok && opts?.jsonMode) {
+    // 與非串流版同一個坑：端點不支援 response_format 就降級重送不帶
+    const raw = await res.text();
+    if (res.status !== 400 && !/response_format/i.test(raw)) {
+      throw new AiError(parseHttpError(isLocal ? "Ollama" : "OpenAI", res.status, raw), "http");
+    }
+    res = await fetch(url, { method: "POST", signal, headers, body: body(false) });
+  }
   if (!res.ok) {
     throw new AiError(
       parseHttpError(isLocal ? "Ollama" : "OpenAI", res.status, await res.text()),

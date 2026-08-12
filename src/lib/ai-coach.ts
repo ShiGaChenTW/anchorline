@@ -162,7 +162,7 @@ Reply ONLY with JSON:
 {"score":0-100,"grade":"S|A|B|C","summary":"...","strengths":["..."],"warnings":["..."],"suggestions":["..."]}
 No markdown fences. Be specific to the given content; never invent unrelated product demos.`;
     const user = `Section: ${section.n} ${section.title}\nGuide: ${section.guide}\n\nContent:\n${fields}`;
-    const raw = await chatCompletion(withDomain(system), user);
+    const raw = await chatCompletion(withDomain(system), user, { temperature: 0.2, jsonMode: true });
     const obj = extractJsonObject(raw);
     if (!obj) {
       return {
@@ -212,6 +212,8 @@ export async function generateAIDraft(
   currentValues: Record<string, string>,
   prompt?: string,
   stream?: DraftStreamOpts,
+  /** 已寫章節的摘錄（writeFullPrd 逐節累積傳入），讓後面的章節呼應前面 */
+  projectContext?: string,
 ): Promise<Record<string, string>> {
   const ready = getAiReadiness();
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
@@ -245,7 +247,14 @@ Tips: ${section.tips.join("；")}
 Fields:
 ${fieldSpec}
 
-Current draft:
+${
+    projectContext?.trim()
+      ? `Project context (already written sections, excerpts — keep new content consistent with these):
+${projectContext.trim()}
+
+`
+      : ""
+  }Current draft:
 ${current}
 
 ${writing.globalInstruction.trim() ? `Workspace guidance (applies to every section):\n${writing.globalInstruction.trim()}\n\n` : ""}${prompt ? `User instruction:\n${prompt}\n` : "User instruction: improve and fill empty fields based on existing context.\n"}
@@ -254,8 +263,11 @@ Return JSON with keys: ${section.fields.map((f) => f.key).join(", ")}`;
   // 串流只影響「怎麼拿到文字」，不影響之後的解析 —— 模型輸出是一份 JSON，
   // 逐字時還不是合法 JSON，所以邊收邊顯示、收完才 parse。
   const raw = stream?.onDelta
-    ? await chatCompletionStream(withDomain(system), user, stream.onDelta, stream.signal)
-    : await chatCompletion(withDomain(system), user);
+    ? await chatCompletionStream(withDomain(system), user, stream.onDelta, stream.signal, {
+        temperature: 0.2,
+        jsonMode: true,
+      })
+    : await chatCompletion(withDomain(system), user, { temperature: 0.2, jsonMode: true });
   const obj = extractJsonObject(raw);
   if (!obj) {
     // 若模型只回一段文字且只有單一主欄位，塞進第一個 textarea
@@ -296,7 +308,7 @@ export async function polishTextWithAI(
   const system = `You polish PRD prose. Language: ${langHint(settings)}.
 ${modeHint}
 Return ONLY the polished text, no preamble.`;
-  return await chatCompletion(withDomain(system), text);
+  return await chatCompletion(withDomain(system), text, { temperature: 0.5 });
 }
 
 /** Agent 進場：依 role/prompt 產出結果文字（真實模型） */
@@ -396,6 +408,21 @@ export async function writeFullPrd(
   let failed = 0;
   let skipped = 0;
 
+  // 跨章上下文：每寫完（或跳過但已有內容的）一節，留一段摘錄給後面的章節，
+  // 讓「目標要呼應問題陳述」真的發生。每節截 300 字、總預算 3000 字，
+  // 超過就丟最舊的——最近的章節對下一節最有參考價值。
+  const ctxParts: string[] = [];
+  const pushContext = (section: Section, values: Record<string, string>) => {
+    const excerpt = Object.values(values)
+      .map((v) => (v || "").trim())
+      .filter(Boolean)
+      .join("\n")
+      .slice(0, 300);
+    if (!excerpt) return;
+    ctxParts.push(`## ${section.n} ${section.title}\n${excerpt}`);
+    while (ctxParts.join("\n\n").length > 3000 && ctxParts.length > 1) ctxParts.shift();
+  };
+
   for (let i = 0; i < targets.length; i++) {
     if (opts.signal?.aborted) break;
     const section = targets[i]!;
@@ -405,6 +432,7 @@ export async function writeFullPrd(
     const overwrite = opts.overwriteFilled ?? store.get().settings.aiWriting?.overwriteFilled ?? false;
     if (!overwrite && sectionHasContent(current)) {
       skipped++;
+      pushContext(section, current);
       opts.onProgress?.({ ...base, phase: "skipped" });
       continue;
     }
@@ -413,12 +441,19 @@ export async function writeFullPrd(
     try {
       // 每節覆寫優先於本次的一次性指令；兩者都沒有就用內建 prompt
       const perSection = store.activeWriting().sectionPrompts[section.id]?.trim();
-      const patch = await generateAIDraft(section, current, perSection || opts.instruction, {
-        onDelta: opts.onDelta ? (c, f) => opts.onDelta!(c, f, section) : undefined,
-        signal: opts.signal,
-      });
+      const patch = await generateAIDraft(
+        section,
+        current,
+        perSection || opts.instruction,
+        {
+          onDelta: opts.onDelta ? (c, f) => opts.onDelta!(c, f, section) : undefined,
+          signal: opts.signal,
+        },
+        ctxParts.join("\n\n") || undefined,
+      );
       if (opts.signal?.aborted) break;
       written++;
+      pushContext(section, { ...current, ...patch });
       opts.onProgress?.({ ...base, phase: "done", patch });
     } catch (e) {
       // 單節失敗不中斷整批 —— 一個章節寫壞不該讓另外六節也沒得寫
@@ -475,7 +510,7 @@ Return ONLY a JSON object with these keys:
 JSON only, no markdown fences.`;
 
   const user = `Brief: ${brief.trim()}`;
-  const raw = await chatCompletion(system, user);
+  const raw = await chatCompletion(system, user, { temperature: 0.2, jsonMode: true });
   const obj = extractJsonObject(raw);
   if (!obj) throw new AiError("模型沒有回傳可用的角色 JSON，請換個說法再試", "parse");
 
