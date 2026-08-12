@@ -433,6 +433,12 @@ export type AISettings = {
     /** 減少注意力導引動畫（亦尊重系統 prefers-reduced-motion） */
     reduceMotion: boolean;
   };
+  /**
+   * AI prompt 覆寫。key = prompt-registry 的 id。
+   * 只存「與預設不同」的部分 —— 存回預設值等於清掉覆寫。
+   * jsonMode 刻意不在這裡：回傳格式接的是解析器，不是偏好。
+   */
+  promptOverrides?: Record<string, { system?: string; temperature?: number }>;
 };
 
 export type Employee = {

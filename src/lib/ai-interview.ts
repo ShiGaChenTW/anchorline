@@ -9,6 +9,7 @@
  * （C3 的分心點），而且後面的問題本來就該看得到前面的答案。
  */
 import type { Section } from "../data/types";
+import { promptSystem, promptTemperature } from "./prompt-registry";
 import { AiError, chatCompletion, extractJsonObject, getAiReadiness } from "./ai-client";
 import { store } from "../data/store";
 
@@ -48,15 +49,10 @@ export async function nextInterviewQuestion(
   const settings = store.get().settings;
   const outline = sections.map((s) => `${s.n} ${s.title} — ${s.desc || s.guide}`).join("\n");
 
-  const system = `You interview a product manager to gather facts before drafting a PRD.
-Language: ${settings.language === "en-US" ? "English" : "Traditional Chinese (zh-TW)"}.
-Ask exactly ONE question at a time, the highest-value fact still missing.
-Questions must be answerable in 1-3 sentences and concrete
-(who / what breaks today / what number defines success / what is explicitly out of scope).
-Never ask something already answered. Never ask more than one thing in a question.
-Stop (done=true) once you could write a specific, non-generic PRD.
-Return ONLY JSON: {"done":false,"question":"...","why":"..."} or {"done":true,"question":null,"why":"..."}
-No markdown fences.`;
+  const system = promptSystem("interview", {
+    lang: settings.language === "en-US" ? "English" : "Traditional Chinese (zh-TW)",
+    maxTurns: String(MAX_INTERVIEW_TURNS),
+  });
 
   const user = `PRD sections to be filled:
 ${outline}
@@ -68,7 +64,7 @@ Asked ${turns.length} of at most ${MAX_INTERVIEW_TURNS} questions.`;
 
   let obj: Record<string, unknown> | null = null;
   try {
-    obj = extractJsonObject(await chatCompletion(system, user));
+    obj = extractJsonObject(await chatCompletion(system, user, { temperature: promptTemperature("interview") }));
   } catch (e) {
     if (e instanceof AiError && e.code === "not_configured") throw e;
     return { done: true, question: null, why: e instanceof Error ? e.message : "提問失敗" };

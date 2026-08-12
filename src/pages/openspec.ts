@@ -21,17 +21,19 @@ import {
   buildChangeFiles,
   CHANGE_KIND_LABEL,
   deriveChangeSlug,
+  draftKindRules,
   type ChangeFile,
   type ChangeKind,
 } from "../lib/change-templates";
 import {
   applyDraft,
-  buildDraftSystem,
   buildDraftUser,
 } from "../lib/change-templates";
 import { AiError, chatCompletion, extractJsonObject, getAiReadiness } from "../lib/ai-client";
 import { projectDisplayName } from "../data/types";
 import { isNative, isUnavailable, native } from "../lib/native";
+import { WRITING_DISCIPLINE } from "../lib/ai-tells";
+import { promptSystem, promptTemperature } from "../lib/prompt-registry";
 import { clampForContext } from "../lib/project-snapshot";
 import {
   makeSnapshot,
@@ -650,8 +652,10 @@ if (requireAuth()) {
         return;
       }
       const raw = await chatCompletion(
-        buildDraftSystem(kind),
+        // 模板走 registry（id: openspec-draft），使用者可在設定覆寫
+        promptSystem("openspec-draft", { kindRules: draftKindRules(kind), discipline: WRITING_DISCIPLINE }),
         buildDraftUser({ kind, title, slug, prdContext: await aiContext(), files: want }),
+        { temperature: promptTemperature("openspec-draft") },
       );
       const applied = applyDraft(want, extractJsonObject(raw));
       // 沒勾的沿用目前內容（可能是骨架，也可能是上一輪的初稿）

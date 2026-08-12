@@ -15,6 +15,7 @@
  *
  * 純函式、零 I/O、零 DOM。
  */
+import { fillTemplate } from "./template";
 
 /** porcelain 的狀態碼收斂成人看得懂的四類 */
 export type FileChangeKind = "added" | "modified" | "deleted" | "renamed" | "untracked";
@@ -125,27 +126,35 @@ export type PromptInput = {
  * 2. **不確定就說不確定。** 模型看不到執行結果，寫「修正了登入失敗」是在
  *    宣稱一件它沒驗證過的事。要它描述改動本身，不要描述效果。
  */
+/** 可覆寫的模板本體（prompt-registry 拿它當預設值）。builder 仍是純函式。 */
+export const COMMIT_SYSTEM_TEMPLATE = `你在替一個 git repo 寫 commit 訊息。用{{lang}}書寫。
+{{style}}
+
+規則：
+- 主旨一行，{{subjectLimit}} 字以內，講「這次改了什麼」。
+- 內文說明為什麼要改、以及重要的取捨。沒有值得說的就不要寫內文。
+- 只描述 diff 裡看得到的改動。你沒有執行過這份程式碼，
+  所以不要宣稱「修好了」「效能提升」這類你驗證不了的結果。
+- 不要用檔案數量造句。「更新多個檔案」「調整若干設定」這類訊息一律不接受，
+  它們從 git status 就看得到，寫進訊息等於沒寫。
+- 改動橫跨多個不相關的主題時，主旨挑最主要的那一個，其餘寫進內文。
+
+輸出格式：第一行是主旨，空一行之後是內文。不要加引號、不要加程式碼圍欄、
+不要寫任何說明你在做什麼的句子。`;
+
+/** 餵給 `{{lang}}`／`{{style}}`／`{{subjectLimit}}` 的值，讓呼叫端與 registry 共用 */
+export function commitSystemVars(input: Pick<PromptInput, "language" | "conventional">): Record<string, string> {
+  return {
+    lang: input.language === "en-US" ? "English" : "繁體中文",
+    style: input.conventional
+      ? "這個 repo 使用 conventional commits，主旨要以 feat/fix/docs/refactor/test/chore 等前綴開頭。"
+      : "這個 repo 不使用 conventional commits 前綴，主旨直接描述改動。",
+    subjectLimit: String(SUBJECT_LIMIT),
+  };
+}
+
 export function buildCommitSystem(input: PromptInput): string {
-  const lang = input.language === "en-US" ? "English" : "繁體中文";
-  const style = input.conventional
-    ? "這個 repo 使用 conventional commits，主旨要以 feat/fix/docs/refactor/test/chore 等前綴開頭。"
-    : "這個 repo 不使用 conventional commits 前綴，主旨直接描述改動。";
-  return [
-    `你在替一個 git repo 寫 commit 訊息。用${lang}書寫。`,
-    style,
-    "",
-    "規則：",
-    `- 主旨一行，${SUBJECT_LIMIT} 字以內，講「這次改了什麼」。`,
-    "- 內文說明為什麼要改、以及重要的取捨。沒有值得說的就不要寫內文。",
-    "- 只描述 diff 裡看得到的改動。你沒有執行過這份程式碼，",
-    "  所以不要宣稱「修好了」「效能提升」這類你驗證不了的結果。",
-    "- 不要用檔案數量造句。「更新多個檔案」「調整若干設定」這類訊息一律不接受，",
-    "  它們從 git status 就看得到，寫進訊息等於沒寫。",
-    "- 改動橫跨多個不相關的主題時，主旨挑最主要的那一個，其餘寫進內文。",
-    "",
-    "輸出格式：第一行是主旨，空一行之後是內文。不要加引號、不要加程式碼圍欄、",
-    "不要寫任何說明你在做什麼的句子。",
-  ].join("\n");
+  return fillTemplate(COMMIT_SYSTEM_TEMPLATE, commitSystemVars(input));
 }
 
 /** User prompt：檔案清單 + stat + patch（可能已截斷） */

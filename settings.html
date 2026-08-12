@@ -407,6 +407,16 @@
             </div>
           </div>
 
+          <!-- AI 按鈕與 Prompt：系統裡每一顆會叫模型的按鈕，prompt 與參數都列在這、可覆寫。
+               名冊本體在 src/lib/prompt-registry.ts，這裡由 settings.ts 渲染。 -->
+          <div class="settings-section" data-cat="ai">
+            <h2>📜 AI 按鈕與 Prompt</h2>
+            <p class="sub">系統內每一顆會呼叫 AI 的按鈕，背後的 system prompt 與參數都列在這裡，可以直接修改。
+              <code>{{變數}}</code> 是執行時代入的內容 —— 打錯變數名會原樣送給模型，看得到就修得掉。
+              「回傳 JSON」的 prompt 改動時請保留輸出格式段落，那接的是程式的解析器。</p>
+            <div id="prompt-registry-root"></div>
+          </div>
+
           <!-- Section 2: Multi-Employee / Agent RBAC -->
           <div class="settings-section" data-cat="people">
             <h2>👥 人員簽核與角色管理</h2>

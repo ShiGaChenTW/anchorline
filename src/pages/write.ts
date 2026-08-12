@@ -33,6 +33,7 @@ import { clampForContext } from "../lib/project-snapshot";
 import { isDesktop, requestProjectStats } from "../lib/project-stats";
 import { sinceLabel } from "../lib/time-format";
 import { chatCompletion } from "../lib/ai-client";
+import { promptSystem, promptTemperature } from "../lib/prompt-registry";
 import { runSectionCoach } from "../lib/gate-rules";
 import {
   interviewInstruction,
@@ -393,14 +394,13 @@ if (!requireAuth()) {
         con.line("note", "已送出停止 —— 目前這一節寫完就會收手。");
       },
       onChat: async (msg) => {
-        const sys = `You are helping a PM review an in-progress PRD draft.
-Answer in ${store.get().settings.language === "en-US" ? "English" : "Traditional Chinese"}.
-Be concrete and short. If the user asks for a change, say exactly which sections and fields it affects.
-Do not claim you have modified anything — you cannot write here, the user re-runs the draft to apply changes.`;
+        const sys = promptSystem("write-chat", {
+          lang: store.get().settings.language === "en-US" ? "English" : "Traditional Chinese",
+        });
         const ctx = list
           .map((sec) => `## ${sec.n} ${sec.title}\n${Object.values(valuesFor(sec)).join("\n").slice(0, 600)}`)
           .join("\n\n");
-        return await chatCompletion(sys, `目前草稿：\n${ctx}\n\n使用者：${msg}`);
+        return await chatCompletion(sys, `目前草稿：\n${ctx}\n\n使用者：${msg}`, { temperature: promptTemperature("write-chat") });
       },
       onSave: () => {
         const r = store.saveSections();
