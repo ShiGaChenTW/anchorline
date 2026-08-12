@@ -98,21 +98,27 @@ function syncProjectChrome() {
     meta: p ? `負責人 ${owner}` : undefined,
   });
 
+  // 標題用文件名，不用「審閱規格」。kicker 的 `03 / REVIEW` 已經說明這是哪一頁，
+  // 再放一個通用標題就會跟下面文件卡的大標互相競爭 —— 兩個標題同框，
+  // 讀的人得自己決定哪一個才是「這一份」。
   const h1 = document.querySelector<HTMLElement>('[data-od-id="page-title"]');
-  if (h1) h1.textContent = "審閱規格";
+  if (h1) h1.textContent = p ? name : "未選擇專案";
 
   const sub = document.querySelector<HTMLElement>('[data-od-id="page-sub"], .toolbar .sub');
   if (sub) {
-    sub.textContent = p
-      ? `${name} · ${meta}`
-      : "回總覽選一個專案";
+    // 資料夾匯入的專案，sourceFolder 就等於專案名 —— 照印會變成「X · X」
+    sub.textContent = p ? (meta && meta !== name ? `${meta} · ${owner}` : owner) : "回總覽選一個專案";
   }
 
+  // 文件卡不再重複大標 —— 頁標題已經是文件名，兩者相距不到 40px
   const docTitle = document.querySelector<HTMLElement>('[data-od-id="doc-title"]');
-  if (docTitle) docTitle.textContent = name;
+  if (docTitle) docTitle.hidden = true;
 
   const docSlug = document.querySelector<HTMLElement>('[data-od-id="doc-slug"]');
-  if (docSlug) docSlug.textContent = meta;
+  if (docSlug) {
+    docSlug.textContent = meta === name ? "" : meta;
+    docSlug.hidden = meta === name;
+  }
 
   const docStatus = document.querySelector<HTMLElement>('[data-od-id="doc-status"]');
   if (docStatus && p) {
@@ -184,75 +190,96 @@ function deriveMeta(): { label: string; value: string }[] {
   return items;
 }
 
-function extractOpenItems(text: string): string[] {
-  const lines = text.split("\n");
-  const out: string[] = [];
-  for (const raw of lines) {
+/** 一條待決，帶著它是從哪一節掃出來的 —— 沒有出處就跳不過去 */
+type OpenItem = { text: string; sectionId: string };
+
+/**
+ * 掃出「這一段還沒有結論」的句子。
+ *
+ * **標題一律跳過。** 原本的判準會把 `## Why Parallel Code?` 當成待決，
+ * 因為它以問號結尾；`## 阻塞 / 待決議` 也一樣，因為它含「待決」。
+ * 結果是審閱焦點列出兩個章節標題，讀的人點不下去也讀不出要決什麼 ——
+ * 標題是「這一節在講什麼」，不是「這一節有什麼沒決定」。
+ */
+function extractOpenItems(text: string, sectionId: string): OpenItem[] {
+  const out: OpenItem[] = [];
+  for (const raw of text.split("\n")) {
     const line = raw.trim();
     if (!line) continue;
-    if (/待決|待定|TBD|TODO|開放|未定|？\s*$|\?\s*$/i.test(line)) {
-      const clean = line
-        .replace(/^[-*•]\s+/, "")
-        .replace(/^\d+\.\s+/, "")
-        .replace(/\*\*/g, "")
-        .slice(0, 120);
-      if (clean) out.push(clean);
-    }
+    if (/^#{1,6}\s/.test(line)) continue;
+    if (!/待決|待定|TBD|TODO|未定|？\s*$|\?\s*$/i.test(line)) continue;
+    const clean = line
+      .replace(/^[-*•]\s+/, "")
+      .replace(/^\d+\.\s+/, "")
+      .replace(/\*\*/g, "")
+      .slice(0, 120);
+    if (clean) out.push({ text: clean, sectionId });
   }
-  return out.slice(0, 5);
+  return out;
 }
 
+/**
+ * 審閱焦點 —— 只回答一個問題：**這一份要你判斷什麼。**
+ *
+ * 原本這裡還重述一次 gate 摘要，而同一句話在 `#approve-hint`（距離約 80px）
+ * 與底部狀態列各有一份。三個常駐渲染點講同一個事實，讀的人會以為那是三件
+ * 不同的事，去找差別、找不到，然後開始不信任畫面上的字。
+ *
+ * gate 的理由留在 `#approve-hint`：它貼著核准鈕，而那是決定發生的地方。
+ */
 function renderFocusBar() {
   const bar = document.getElementById("review-focus-bar");
   if (!bar) return;
   const st = store.get();
-  const openVals = reviewDocs()["open"] ?? {};
-  const openText = Object.values(openVals).join("\n");
-  const items = extractOpenItems(openText);
-  // 也掃其他章節的待決
-  if (items.length < 3) {
-    for (const s of st.sections) {
-      if (s.id === "open") continue;
-      const t = Object.values(reviewDocs()[s.id] ?? {}).join("\n");
-      for (const it of extractOpenItems(t)) {
-        if (!items.includes(it)) items.push(it);
-        if (items.length >= 5) break;
-      }
-      if (items.length >= 5) break;
+
+  // 開放問題那一節優先，其餘章節補到 5 條為止
+  const items: OpenItem[] = [];
+  const push = (list: OpenItem[]) => {
+    for (const it of list) {
+      if (items.length >= 5) return;
+      if (!items.some((x) => x.text === it.text)) items.push(it);
     }
+  };
+  push(extractOpenItems(Object.values(reviewDocs()["open"] ?? {}).join("\n"), "open"));
+  for (const s of st.sections) {
+    if (s.id === "open" || items.length >= 5) continue;
+    push(extractOpenItems(Object.values(reviewDocs()[s.id] ?? {}).join("\n"), s.id));
   }
 
-  const gate = evaluatePrdGates(st, store.activeGateSpec());
-  if (!items.length && gate.canApprove) {
+  // 沒有待決就整條收起來。一條空的焦點列仍然佔注意力，而它什麼都沒在說。
+  if (!items.length) {
     bar.hidden = true;
     bar.innerHTML = "";
     return;
   }
-
   bar.hidden = false;
-  const gateLine = gate.canApprove
-    ? `<span class="review-focus-ok">結構 gate 可核准</span>`
-    : `<span class="review-focus-block">${escapeHtml(gateSummaryLine(gate))}</span>`;
 
-  const list =
-    items.length > 0
-      ? `<ul class="review-focus-list">${items
-          .slice(0, 3)
-          .map((t) => `<li>${escapeHtml(t)}</li>`)
-          .join("")}${
-          items.length > 3
-            ? `<li class="review-focus-more">另有 ${items.length - 3} 項待決</li>`
-            : ""
-        }</ul>`
-      : `<p class="review-focus-empty">沒有掃到「待決」句，請人工掃過開放問題章節。</p>`;
-
+  const label = (id: string) => st.sections.find((x) => x.id === id)?.n ?? "";
   bar.innerHTML = `
     <div class="review-focus-head">
-      <strong>審閱焦點</strong>
-      ${gateLine}
+      <strong>要你判斷的 ${items.length} 件事</strong>
     </div>
-    ${list}
+    <ul class="review-focus-list">${items
+      .map(
+        (it) =>
+          `<li><button type="button" class="review-focus-jump" data-jump="${escapeHtml(it.sectionId)}">
+             <span class="review-focus-sec">${escapeHtml(label(it.sectionId))}</span>
+             <span>${escapeHtml(it.text)}</span>
+           </button></li>`,
+      )
+      .join("")}</ul>
   `;
+
+  // 點一條就跳到它所在的章節 —— 讀得到卻走不過去，等於還要自己再找一次
+  bar.querySelectorAll<HTMLButtonElement>("[data-jump]").forEach((btn) => {
+    btn.onclick = () => {
+      const id = btn.dataset.jump!;
+      focusSectionId = id;
+      renderSecNav();
+      renderDoc();
+      document.getElementById(`review-sec-${id}`)?.scrollIntoView({ block: "start" });
+    };
+  });
 }
 
 function renderSecNav() {
@@ -325,9 +352,12 @@ function renderDoc() {
     if (sectionFilled(s, reviewDocs()[s.id] ?? {})) filledN++;
   }
 
-  html += `<p class="review-doc-progress">${filledN} / ${st.sections.length} 章節有內容${
-    focusSectionId ? " · 正在聚焦單一章節" : ""
-  }</p>`;
+  // 講缺的那幾節而不是有的那幾節 —— 「5/8 有內容」要自己減，
+  // 而審閱者要處理的是那 3 節
+  const missing = st.sections.length - filledN;
+  html += `<p class="review-doc-progress">${
+    missing ? `${missing} 節還沒寫` : "章節都寫了"
+  }${focusSectionId ? " · 正在聚焦單一章節" : ""}</p>`;
 
   for (const s of sections) {
     const values = reviewDocs()[s.id] ?? {};
@@ -340,7 +370,7 @@ function renderDoc() {
       <header class="review-sec-head">
         <span class="review-sec-n">${escapeHtml(s.n)}</span>
         <h2>${escapeHtml(s.title)}</h2>
-        <span class="review-sec-st">${filled ? "有內容" : "未填"}</span>
+        ${filled ? "" : `<span class="review-sec-st">還沒寫</span>`}
       </header>`;
 
     if (!filled) {
