@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anchorline 下一版規劃書</title>
+<link rel="stylesheet" href="../shared.css" />
+<script>(function(){try{var t=localStorage.getItem("anchorline:theme")||localStorage.getItem("specforge:theme");if(t==="warp")t="terminal";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"],terminal:["dark","#0d0b08"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
+<style>
+  body { background: var(--bg); color: var(--fg); }
+  .doc {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+    font-size: var(--fs-4);
+    line-height: 1.75;
+  }
+  .doc h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .doc .sub { color: var(--muted); margin: 0 0 32px; font-size: var(--fs-3); }
+  .doc h2 {
+    font-size: 20px;
+    margin: 44px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .doc h3 { font-size: var(--fs-5); margin: 24px 0 8px; }
+  .doc p { margin: 0 0 12px; }
+  .doc .lede {
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: var(--inset);
+    margin: 0 0 24px;
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface, var(--inset));
+    padding: 16px 18px;
+    margin: 0 0 14px;
+  }
+  .card h4 { margin: 0 0 6px; font-size: var(--fs-4); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card p { margin: 0; font-size: var(--fs-3); color: var(--fg-2, var(--fg)); }
+  .tag {
+    font-size: var(--fs-1);
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--inset);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .tag.p0 { background: color-mix(in oklab, var(--danger, #e5534b) 20%, transparent); color: var(--danger, #e5534b); border-color: color-mix(in oklab, var(--danger, #e5534b) 45%, var(--border)); }
+  .tag.p1 { background: color-mix(in oklab, var(--warn, #d29922) 18%, transparent); color: var(--warn, #d29922); border-color: color-mix(in oklab, var(--warn, #d29922) 45%, var(--border)); }
+  .tag.cut { text-decoration: line-through; }
+  .why { color: var(--muted); font-size: var(--fs-2); }
+  .doc table { width: 100%; border-collapse: collapse; font-size: var(--fs-3); margin: 0 0 16px; }
+  .doc th, .doc td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .doc th { color: var(--muted); font-size: var(--fs-1); }
+  .quote { color: var(--muted); font-style: normal; border-left: 3px solid var(--border); padding-left: 12px; margin: 8px 0 0; font-size: var(--fs-2); }
+  .foot { margin-top: 48px; color: var(--muted); font-size: var(--fs-2); }
+  code { font-family: var(--mono); font-size: 0.9em; background: var(--inset); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+</style>
+</head>
+<body>
+<main class="doc">
+  <h1>Anchorline 下一版規劃書</h1>
+  <p class="sub">2026-08-14 · Grok（使用者價值）× Codex/GPT-5.4（工程）圓桌彙整 · 工程細目見 <code>docs/NEXT-VERSION-PLAN.md</code></p>
+
+  <div class="lede">
+    <strong>一句話總結：</strong>UAT 功能鏈已經上線，但迴圈還沒閉合——這一版先修四個「安靜的錯」
+    （打的字會消失、指標反向計分、報告永遠不結案、別的專案的題看不見），再把更新通道接上，
+    讓「換裝驗證」不再是每天的手工活。
+  </div>
+
+  <h2>為什麼是這幾件事</h2>
+  <p>兩位評審獨立讀碼後，共同指向一個模式：這個 App 最近的問題都<strong>不是紅字錯誤，
+  是安靜的錯誤</strong>——數字慢慢變得沒人信、輸入無聲消失。這種錯不修，使用者會先學會「不看那個數字」，
+  然後功能就等於死了。</p>
+
+  <h2>第一波 — 止血（正確性）</h2>
+
+  <div class="card">
+    <h4><span class="tag p0">P0</span>勾選時打的說明可能無聲消失</h4>
+    <p>在 A 題打完失敗說明、直接按 B 題的結果按鈕——A 的說明會被磁碟舊值蓋掉，沒有任何提示。
+    失敗說明是整條「修復迴圈」唯一的輸入，它消失等於整條鏈白做。</p>
+    <p class="quote">Grok 原判「不會痛」；Codex 讀碼找到上一輪修 blur 競態時製造的新競態。採 Codex，動手前先實機重現。</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="tag p0">P0</span>愈認真用 OpenSpec，治理覆蓋率愈難看</h4>
+    <p>OpenSpec 步驟的完成事件永遠對不上治理判準——每勾完一步，覆蓋率就掉一格。
+    App 的核心指標在對自己最推薦的工作流反向計分。修好之後歷史數字會跳一次，畫面會講清楚原因。</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="tag p0">P0</span>別的專案的待實測，你看不見</h4>
+    <p>待實測清單只算「目前選中的專案」。Agent 幫 B 專案出的題，你人在 A 專案時 badge 顯示 0——
+    錯過那一次自動喚醒，那份報告就從系統裡消失了。改成跨專案收件匣。</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="tag p1">P1</span>報告要能「收工」</h4>
+    <p>現在報告只有「全部題目都測完」才算完成。測了 5/8 就先走的報告永遠掛在「進行中」，
+    待實測數字只進不出，兩週後就沒人信了。加一個人工收工／歸檔動作。</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="tag p1">P1</span>重測第二輪不再兩份並存</h4>
+    <p>同一個功能測第二輪，新舊兩份報告都掛著、都算待實測。新報告標「重測自哪一份」，
+    舊的自動退場。順帶修中文標題檔名——現在全中文標題的報告檔名全變時間戳，
+    列表和 git 紀錄裡認不出誰是誰。</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="tag p1">P1</span>幾個小而準的修</h4>
+    <p>側欄數字勾完就更新（現在要切走再切回）· 送出按鈕補上打字保護（同族競態）·
+    對話框原生層加防當機保險 · CRLF 檔案不再產生假的「檔案被改過」衝突。</p>
+  </div>
+
+  <h2>第二波 — 平台</h2>
+
+  <div class="card">
+    <h4><span class="tag p1">P1</span>自動更新通道</h4>
+    <p>真正的痛不是「別人裝不了」——是<strong>你每次驗證都要手動換裝</strong>，
+    這件事今天一天就重複了四次，還產生過一次「功能沒出現」的假 bug 報告（其實是舊版）。
+    先接 Tauri 的更新器（不需要 Apple 簽名），簽名等真的要對外發布再說。</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="tag p1">P1</span>版號流程自己用一輪</h4>
+    <p>版本取號做完還沒真的走過一輪。這一版就拿它自己取號、編列、放行、PUSH——
+    dogfood 是唯一有時間成本的帳：愈晚開始，錯的版號愈多。</p>
+  </div>
+
+  <h2>明確不做的（跟做什麼一樣重要）</h2>
+  <table>
+    <tr><th>項目</th><th>為什麼不做</th></tr>
+    <tr><td><span class="tag cut">失敗截圖／語音捕捉</span></td><td>語音要開麥克風權限、音檔還得送出機器，抵觸「資料不外流」底線；截圖會是原生橋上第一個媒體擷取權限。便宜替代：說明欄提示「⌘⇧4 截圖、貼路徑」。</td></tr>
+    <tr><td><span class="tag cut">一鍵複製失敗交接</span></td><td>翻帳發現<strong>已經做完上線了</strong>，清單上是陳帳。</td></tr>
+    <tr><td><span class="tag cut">草稿存 localStorage</span></td><td>會殘留跨報告的陳舊草稿；第一波的記憶體草稿層已覆蓋真實遺失路徑。</td></tr>
+    <tr><td>掃描快取（完整版）</td><td>現在每秒 364 KB 還不痛，快取誤判反而會讓畫面停在舊內容。先只撿免費的（刪一次重複的檔案查詢）。</td></tr>
+    <tr><td>Apple 簽名</td><td>單機單人，簽名解的是散佈問題——那個場景還不存在。</td></tr>
+    <tr><td>011 願景欄位擋送審</td><td>單人簽核下 gate 是自我約束；等你裁決要不要多這道門。</td></tr>
+  </table>
+
+  <h2>建議順序</h2>
+  <p>說明遺失 → 按鈕保護 → 中文檔名 → 重測退場 → 收工歸檔 → 跨專案收件匣 → 治理計分修正 →
+  側欄數字 → 可測性（AX）→ 對話框保險 → CRLF → 更新通道。<strong>版號 dogfood 從第一個 commit 就開始</strong>，
+  整波結束正好放行一版。</p>
+
+  <p class="foot">評審分歧與裁決依據、每一項的檔案行號與風險，都在 <code>docs/NEXT-VERSION-PLAN.md</code>。
+  本規劃書由 Miles 彙整；Grok 與 Codex 的原始報告可向 Miles 調閱。</p>
+</main>
+</body>
+</html>
