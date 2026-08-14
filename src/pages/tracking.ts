@@ -13,6 +13,7 @@ import {
 import { buildHandoff, HANDOFF_NOTE, type AgentFamilyId } from "../lib/agent-handoff";
 import { uatFixTask, uatProjectRoot } from "../lib/uat-fix-handoff";
 import { initTheme } from "../lib/theme";
+import { invalidateUatBadge } from "../lib/rail-nav";
 import { sortByRecency, trackingTarget } from "../lib/tracking";
 import {
   canScanPlans,
@@ -631,6 +632,9 @@ if (__authed) {
         });
       }
     }
+    // 這一下可能剛改變待辦分子（推成已完成／整份出清）——側欄 badge 立即
+    // 失效重掃，不然它停在舊數字直到下次導頁（W1-5）。
+    invalidateUatBadge();
     await refresh(true);
   }
 
@@ -1412,6 +1416,9 @@ if (__authed) {
         });
       }
     }
+    // 這一下可能剛改變待辦分子（推成已完成／整份出清）——側欄 badge 立即
+    // 失效重掃，不然它停在舊數字直到下次導頁（W1-5）。
+    invalidateUatBadge();
     await refresh(true);
   }
 
