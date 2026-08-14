@@ -27,6 +27,7 @@ import {
   setPromptOverride,
 } from "../lib/prompt-registry";
 import TEMPLATE_MD from "../data/domains/_template.md?raw";
+import { initUatFormatPanel } from "../lib/uat-format-panel";
 import {
   addUserPack,
   autoRescanEnabled,
@@ -1169,6 +1170,10 @@ document.getElementById("btn-clear-domains")?.addEventListener("click", () => {
 
 populateSettings();
 renderDomainPacks();
+// UAT 格式區塊自成一體：它的真相在 ~/.anchorline 的檔案裡，不在 store，
+// 所以不掛進 populateSettings 的重繪迴圈 —— 那會在每次設定變動時重讀磁碟，
+// 並且把使用者正在編輯的 textarea 內容洗掉。
+initUatFormatPanel();
 store.subscribe(populateSettings);
 } // end __authed
 

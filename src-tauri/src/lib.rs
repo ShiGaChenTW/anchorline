@@ -14,7 +14,7 @@ mod paths;
 /// 所以把可測的核心抽出來從這裡露出去。**只給測試用**——正式流程一律走
 /// command，那裡才有守門。
 pub mod testing {
-    pub use crate::commands::{append_line, scan_plans};
+    pub use crate::commands::{append_line, scan_plans, valid_history_name};
     pub use crate::exec::strip_ansi;
     pub use crate::paths::{
         append_allowed, domain_pack_writable, editable, normalize_line, RegisteredRoots,
@@ -44,6 +44,11 @@ pub fn run() {
             commands::project_stats,
             commands::tracking_scan,
             commands::uat_handoff_take,
+            commands::uat_format_read,
+            commands::uat_format_write,
+            commands::uat_format_history,
+            commands::uat_format_history_read,
+            commands::uat_format_log,
             commands::read_file,
             commands::write_file,
             commands::write_domain_pack,

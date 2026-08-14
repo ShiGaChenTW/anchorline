@@ -483,6 +483,15 @@ pub fn scan_plans(plans_dirs: &[String], openspec_roots: &[String]) -> TrackingS
 /// 但什麼都沒發生」—— 那種靜默失效查起來很貴。位置固定成
 /// `~/.anchorline/uat-handoff.json`，兩邊照抄同一句。
 fn uat_handoff_base() -> Option<PathBuf> {
+    anchorline_home()
+}
+
+/// `~/.anchorline` —— App 與 CLI 共用的家目錄側資料夾。
+///
+/// 交件檔、UAT 格式規格、格式變更紀錄都住在這裡。抽成一個函式而不是三份
+/// 各自推導：三份推導只要有一份寫得不一樣，症狀就是「App 讀不到 CLI 寫的東西」，
+/// 而兩邊都覺得自己是對的。
+fn anchorline_home() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(|h| PathBuf::from(h).join(".anchorline"))
@@ -543,6 +552,264 @@ pub async fn uat_handoff_take() -> R<Option<String>> {
         return Ok(Some(text));
     }
     Ok(None)
+}
+
+// ── UAT 報告格式規格 ─────────────────────────────────────────────────
+//
+// 單一真相是 `~/.anchorline/uat-format.md`。出題 skill 在出題前會讀它，
+// 所以「在設定頁存檔」與「skill 跟著改」之間不需要任何同步機制 —— 沒有副本
+// 就沒有不一致。這一組指令做的事只有：讀那一個檔、寫那一個檔、把舊版留下來。
+//
+// **路徑全部在這裡寫死。** 唯一收前端字串的是 `uat_format_history_read` 的
+// 檔名，而它必須先過 `valid_history_name`。
+
+/// 規格檔上限。256KB 對一份 markdown 規格是綽綽有餘的天花板，存在的理由是
+/// 讓最壞情況有界 —— 沒有上限的話，一次貼錯（例如整包 base64）就會把
+/// 快照目錄撐爆，而且每一次存檔都再複製一份。
+const MAX_UAT_FORMAT_BYTES: usize = 256 * 1024;
+/// 快照讀取上限。比寫入上限寬一格，舊檔是在別的規則下寫進去的，
+/// 用今天的上限把昨天的快照鎖在門外沒有道理。
+const MAX_UAT_FORMAT_READ_BYTES: u64 = 1024 * 1024;
+
+fn uat_format_path() -> Option<PathBuf> {
+    anchorline_home().map(|d| d.join("uat-format.md"))
+}
+
+fn uat_format_history_dir() -> Option<PathBuf> {
+    anchorline_home().map(|d| d.join("uat-format-history"))
+}
+
+fn uat_format_log_path() -> Option<PathBuf> {
+    anchorline_home().map(|d| d.join("uat-format-log.jsonl"))
+}
+
+/// 普通檔案而且不過大才讀。跟 `uat_handoff_readable` 同一個理由（Cato F4）：
+/// 路徑寫死擋掉的是「前端指定要讀哪個檔」，擋不掉「那個路徑被換成 symlink」。
+fn uat_format_readable(p: &Path) -> bool {
+    fs::symlink_metadata(p)
+        .map(|m| m.file_type().is_file() && m.len() <= MAX_UAT_FORMAT_READ_BYTES)
+        .unwrap_or(false)
+}
+
+/// 快照檔名驗證 —— `^[0-9]{8}-[0-9]{6}(-[0-9]+)?\.md$` 的手寫版。
+///
+/// 手寫而不是拉 `regex` 進來：這是全 crate 唯一需要正規式的地方，為了一條
+/// 規則多一個相依（與它的編譯時間）不划算。**規則本身是硬性的**，因為
+/// `uat_format_history_read` 是這一組指令裡唯一收前端字串的入口 —— 少了它，
+/// 前端就能用 `../../..` 把它變成任意檔案讀取。
+///
+/// 全數字的段落順帶保證了不含 `/`、`\`、`.`，所以不必再單獨檢查路徑分隔符。
+pub fn valid_history_name(name: &str) -> bool {
+    let Some(stem) = name.strip_suffix(".md") else {
+        return false;
+    };
+    let mut parts = stem.split('-');
+    let all_digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+
+    match parts.next() {
+        Some(d) if d.len() == 8 && all_digits(d) => {}
+        _ => return false,
+    }
+    match parts.next() {
+        Some(d) if d.len() == 6 && all_digits(d) => {}
+        _ => return false,
+    }
+    match parts.next() {
+        // `20260814-120000.md`
+        None => true,
+        // `20260814-120000-2.md`，且後面不能再有第四段
+        Some(d) => all_digits(d) && parts.next().is_none(),
+    }
+}
+
+/// 快照檔名用的時間戳。與 `now_iso` 同源（UTC），但格式是可以當檔名的那種。
+///
+/// UTC 而不是本地時間：本地時間需要時區資料庫，為了一個檔名拉 `chrono`
+/// 進來不划算。畫面上顯示的時間走 `mtime_ms` 由前端轉本地時區 —— 檔名只是
+/// 一個會排序的識別碼，不是要給人讀的時鐘。
+fn uat_format_stamp() -> String {
+    let d = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = d.as_secs() as i64;
+    let (y, mo, da) = civil_from_days(secs / 86400);
+    let rem = secs % 86400;
+    format!(
+        "{y:04}{mo:02}{da:02}-{:02}{:02}{:02}",
+        rem / 3600,
+        (rem % 3600) / 60,
+        rem % 60
+    )
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UatFormatWritten {
+    path: String,
+    /// 這次存檔把舊內容留成哪一份快照。第一次存檔（本來沒有檔）是 `None` ——
+    /// 沒有舊內容就沒有東西可以快照，那不是失敗。
+    snapshot: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UatFormatSnapshot {
+    name: String,
+    mtime_ms: f64,
+}
+
+/// 讀規格檔。**不存在回 `None`，而且不自動建檔。**
+///
+/// 不自動建檔是刻意的：檔案存在與否本身就是「使用者有沒有自訂過」的答案。
+/// 一載入設定頁就把預設值寫進去，會讓每個人的檔案內容都變成「當時那一版的
+/// 預設」，之後升級預設種子就再也推不動任何一台機器。
+#[tauri::command]
+pub async fn uat_format_read() -> R<Option<String>> {
+    let Some(p) = uat_format_path() else {
+        return Ok(None);
+    };
+    if !uat_format_readable(&p) {
+        return Ok(None);
+    }
+    Ok(fs::read_to_string(&p).ok())
+}
+
+/// 寫規格檔。**寫之前先把舊內容留成快照**，然後追加一行變更紀錄。
+///
+/// 順序是「快照 → 寫入 → 記錄」。快照失敗就整個中止（Err），因為
+/// 「存檔成功但上一版沒留下」正是變更紀錄要防的那件事；記錄失敗只吞掉不擋，
+/// 內容已經落地了，讓 log 去否決一次成功的存檔沒有道理。
+#[tauri::command]
+pub async fn uat_format_write(
+    content: String,
+    source: String,
+    note: String,
+) -> R<UatFormatWritten> {
+    if content.len() > MAX_UAT_FORMAT_BYTES {
+        return Err(format!(
+            "規格太大（{} KB），上限 {} KB",
+            content.len() / 1024,
+            MAX_UAT_FORMAT_BYTES / 1024
+        ));
+    }
+    let (Some(home), Some(target)) = (anchorline_home(), uat_format_path()) else {
+        return Err("找不到家目錄，無法定位 ~/.anchorline".into());
+    };
+    fs::create_dir_all(&home).map_err(|e| format!("建不了 ~/.anchorline：{e}"))?;
+
+    // 舊版快照。只有在既有檔真的讀得到內容時才做 —— 讀不到就沒有東西可留，
+    // 硬留一份空檔會在變更紀錄裡插入一個從來不存在的版本。
+    let mut snapshot: Option<String> = None;
+    if uat_format_readable(&target) {
+        if let Ok(prev) = fs::read_to_string(&target) {
+            let dir = uat_format_history_dir().ok_or("找不到家目錄")?;
+            fs::create_dir_all(&dir).map_err(|e| format!("建不了快照目錄：{e}"))?;
+            let stamp = uat_format_stamp();
+            // 同一秒內連存兩次會撞名。加序號往後找，找不到就放棄快照而不是
+            // 覆寫 —— 覆寫等於把同一秒的前一版靜靜吃掉。
+            let mut name = format!("{stamp}.md");
+            let mut n = 2;
+            while dir.join(&name).exists() && n <= 50 {
+                name = format!("{stamp}-{n}.md");
+                n += 1;
+            }
+            if dir.join(&name).exists() {
+                return Err("同一秒內存檔太多次，請稍候再試".into());
+            }
+            fs::write(dir.join(&name), prev).map_err(|e| format!("快照寫不進去：{e}"))?;
+            snapshot = Some(name);
+        }
+    }
+
+    fs::write(&target, &content).map_err(|e| format!("寫不進去：{e}"))?;
+
+    // 變更紀錄。**source 只認兩個值**，其他一律當手動 —— 這個欄位是拿來
+    // 回答「這一版是誰改的」的，收下任意字串等於讓它可以說謊。
+    let src = if source == "ai" { "ai" } else { "manual" };
+    // note 進 JSON 走 serde_json 轉義（換行會變 `\n`，jsonl 的一行一筆不會破）。
+    // 長度砍在這裡而不是只在前端：前端的截斷是體貼，這裡的截斷才是保證。
+    let note: String = note.chars().take(500).collect();
+    let line = serde_json::json!({ "ts": now_iso(), "source": src, "note": note }).to_string();
+    if let Some(log) = uat_format_log_path() {
+        // 刻意不用 `append_line`：那支會在 `路徑的祖父目錄` 種一份 `.gitattributes`，
+        // 對這個檔來說祖父目錄是**使用者的家目錄**。稽核軌跡的便利設定不該
+        // 變成往 `~/` 丟檔案。
+        let _ = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&log)
+            .and_then(|mut f| f.write_all(format!("{line}\n").as_bytes()));
+    }
+
+    Ok(UatFormatWritten {
+        path: target.to_string_lossy().to_string(),
+        snapshot,
+    })
+}
+
+/// 快照清單，新到舊。目錄不存在回空陣列 —— 還沒改過格式不是錯誤。
+#[tauri::command]
+pub async fn uat_format_history() -> R<Vec<UatFormatSnapshot>> {
+    let Some(dir) = uat_format_history_dir() else {
+        return Ok(Vec::new());
+    };
+    let Ok(rd) = fs::read_dir(&dir) else {
+        return Ok(Vec::new());
+    };
+    let mut out: Vec<UatFormatSnapshot> = rd
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            // 清單只列認得出來的名字。認不出來的檔即使列出去，
+            // `uat_format_history_read` 也會拒讀 —— 那就會變成一個點不開的項目。
+            if !valid_history_name(&name) {
+                return None;
+            }
+            let mtime_ms = e
+                .metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as f64)
+                .unwrap_or(0.0);
+            Some(UatFormatSnapshot { name, mtime_ms })
+        })
+        .collect();
+    // 檔名本身是時間戳，字典序即時間序。用檔名而不是 mtime 排序：複製、還原
+    // 這類操作會刷新 mtime，但那一版「是什麼時候的」不會因此改變。
+    out.sort_by(|a, b| b.name.cmp(&a.name));
+    Ok(out)
+}
+
+/// 讀一份快照。**`name` 是這一組指令裡唯一的前端輸入，驗證是硬性的。**
+/// 不合格一律 `None`，不解釋為什麼 —— 合法呼叫端的名字都來自
+/// `uat_format_history()`，會走到這裡的不合格名字不是打錯，是在試探。
+#[tauri::command]
+pub async fn uat_format_history_read(name: String) -> R<Option<String>> {
+    if !valid_history_name(&name) {
+        return Ok(None);
+    }
+    let Some(dir) = uat_format_history_dir() else {
+        return Ok(None);
+    };
+    let p = dir.join(&name);
+    if !uat_format_readable(&p) {
+        return Ok(None);
+    }
+    Ok(fs::read_to_string(&p).ok())
+}
+
+/// 變更紀錄原文。**回原始字串，JSON 判讀留在 TS**（見檔頭約定 2）。
+/// 壞行由前端跳過 —— 一行壞掉不該讓整份紀錄消失。
+#[tauri::command]
+pub async fn uat_format_log() -> R<Option<String>> {
+    let Some(p) = uat_format_log_path() else {
+        return Ok(None);
+    };
+    if !uat_format_readable(&p) {
+        return Ok(None);
+    }
+    Ok(fs::read_to_string(&p).ok())
 }
 
 // ── 檔案讀寫 ─────────────────────────────────────────────────────────
