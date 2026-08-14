@@ -53,6 +53,7 @@ import {
   type UatReport,
   type UatVerdict,
 } from "../lib/uat-parser";
+import { canonUatPath } from "../lib/uat-pending";
 import { reconcileNoteDraft, setNoteDraft } from "../lib/uat-note-draft";
 import { UAT_HANDOFF_EVENT, UAT_QUERY_KEY } from "../lib/uat-handoff";
 import { renderMarkdown } from "../lib/markamd";
@@ -494,8 +495,14 @@ if (__authed) {
                 const n = r.items.filter((x) => x.id && x.verdict === "pending").length;
                 if (!n) return "";
                 const armed = closeoutArmedFor === (r.path ?? "");
+                // 無錨點題寫不回去——按鈕不能承諾「離開待實測」卻做不到
+                // （Grok C3）：title 把限制講在按下去之前。
+                const tip =
+                  r.unanchored > 0
+                    ? `把 ${n} 題標成「暫時跳過」；另有 ${r.unanchored} 題無錨點寫不回去，報告仍會留在待實測`
+                    : `把剩下 ${n} 題標成「暫時跳過」，報告轉為已完成並離開待實測`;
                 return `<button type="button" class="tk-uat-send-btn" id="uat-closeout" data-n="${n}"
-                     title="把剩下 ${n} 題標成「暫時跳過」，報告轉為已完成並離開待實測">${
+                     title="${tip}">${
                        armed ? `確認收工：${n} 題標「暫時跳過」` : "本輪收工"
                      }</button>`;
               })()
@@ -600,7 +607,14 @@ if (__authed) {
       return;
     }
 
-    toast(`已收工：${pending.length} 題標為「暫時跳過」`);
+    // toast 跟著實際結果走，不跟著願望走（Grok C3）：混有無錨點題的報告
+    // 收不成「已完成」，說「已收工」會讓人以為它離開待實測了。
+    const afterAll = parseUatReport(r.text, p.path);
+    toast(
+      afterAll.status === "已完成"
+        ? `已收工：${pending.length} 題標為「暫時跳過」`
+        : `已標 ${pending.length} 題暫時跳過；另有 ${afterAll.unanchored} 題無錨點寫不回去，報告仍在進行中`,
+    );
     const st = store.get();
     const proj = st.projects.find((x) => x.id === st.activeProjectId);
     const root = proj?.importSummary?.rootPath;
@@ -1553,9 +1567,13 @@ if (__authed) {
    */
   function alignProjectForUat(path: string): boolean {
     const st = store.get();
+    // 與收件匣歸屬（attributePendingUats）同一套路徑正規化（Grok C6）：
+    // 這邊裸比對的話，NFD 路徑的專案會出現「總覽掛得上專案名、點進去
+    // 卻說還沒匯入」的分裂。
+    const want = canonUatPath(path);
     const hit = st.projects.find((p) => {
-      const root = (p.importSummary?.rootPath ?? "").replace(/\/+$/, "");
-      return root && path.startsWith(`${root}/`);
+      const root = canonUatPath((p.importSummary?.rootPath ?? "").replace(/\/+$/, ""));
+      return root && want.startsWith(`${root}/`);
     });
     if (hit) {
       if (hit.id !== st.activeProjectId) {

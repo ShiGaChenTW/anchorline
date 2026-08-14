@@ -194,6 +194,8 @@ function syncActive(nav: Element, active: RailPage) {
 let uatPending = 0;
 let uatScanned = false;
 let uatScanning = false;
+/** 掃描進行中又有人要求失效——掃完立刻補掃一次，不能把要求吞掉（Grok C5） */
+let uatDirty = false;
 
 /**
  * 掃一次待實測。**桌面版才算得出來**（`loadPendingUats` 自己會判），
@@ -203,7 +205,12 @@ let uatScanning = false;
  * 沒有理由讓每一頁的首屏都等這幾個模組先解析完。
  */
 function refreshUatBadge() {
-  if (uatScanning) return;
+  if (uatScanning) {
+    // 飛行中的那次掃描讀的是舊磁碟；直接 return 會讓 invalidate 被吞掉、
+    // finally 又把 uatScanned 蓋回 true——連續勾兩題就重現 W1-5 要修的 bug。
+    uatDirty = true;
+    return;
+  }
   uatScanning = true;
   void Promise.all([import("./uat-pending"), import("./tracking-bridge")])
     .then(([uat, bridge]) => {
@@ -222,6 +229,10 @@ function refreshUatBadge() {
       uatScanned = true;
       uatScanning = false;
       setNavCount("tracking", uatPending, true);
+      if (uatDirty) {
+        uatDirty = false;
+        refreshUatBadge();
+      }
     });
 }
 

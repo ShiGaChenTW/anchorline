@@ -218,21 +218,17 @@ describe("佔位字串不是錨點", () => {
 });
 
 describe("openspec 第二形狀（W1-3）", () => {
-  const LIVE = new Set([
-    "openspec-change:add-login",
-    "openspec:add-login/1.1",
-    "openspec:add-login/2.3",
-  ]);
+  const LIVE = new Set<string>([]);
 
-  test("活著的 change + 真實步驟 → 已治理", () => {
+  test("openspec 形狀合格 → 已治理（形狀認定，不驗存在）", () => {
     expect(isGoverned(ev("openspec:add-login/1.1", "2026-08-15T00:00:00Z"), LIVE)).toBe(true);
   });
 
-  test("活著的 change + 捏造的步驟編號 → 未治理（存在驗證跟錨點同規矩）", () => {
-    expect(isGoverned(ev("openspec:add-login/9.9", "2026-08-15T00:00:00Z"), LIVE)).toBe(false);
+  test("步驟編號重編不影響歷史——任何數字編號都以形狀放行（Grok C7：N.M 是位置編號不是鑄造 id）", () => {
+    expect(isGoverned(ev("openspec:add-login/9.9", "2026-08-15T00:00:00Z"), LIVE)).toBe(true);
   });
 
-  test("歸檔／不在掃描裡的 change → 形狀合格就放行（歸檔是正常生命週期，不倒扣）", () => {
+  test("歸檔／已刪的 change → 照樣放行（歸檔是正常生命週期，不倒扣）", () => {
     expect(isGoverned(ev("openspec:archived-change/3.2", "2026-08-15T00:00:00Z"), LIVE)).toBe(true);
   });
 

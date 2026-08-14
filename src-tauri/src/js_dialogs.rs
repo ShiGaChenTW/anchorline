@@ -66,13 +66,17 @@ unsafe extern "C-unwind" fn run_alert(
 ) {
     eprintln!("[js-dialogs] alert() 被呼叫");
     // WKWebView 契約：completionHandler 沒被呼叫＝WebKit 丟 ObjC 例外直接
-    // 終止 App。所以對話框邏輯整段包 catch_unwind，不管裡面發生什麼，
-    // handler 一定在最後被呼叫恰好一次。
+    // 終止 App。兩層防護（Grok C8）：Rust panic 由 catch_unwind 攔，
+    // AppKit 丟的 NSException（foreign exception 穿過 catch_unwind 是
+    // abort，不是 Err）由 objc2::exception::catch 先收斂成 Result。
+    // 不管裡面發生什麼，handler 一定在最後被呼叫恰好一次。
     let _ = catch_unwind(AssertUnwindSafe(|| {
-        let Some(m) = mtm() else { return };
-        let alert = make_alert(unsafe { message.as_ref() }, m);
-        alert.addButtonWithTitle(&NSString::from_str("確定"));
-        let _ = alert.runModal();
+        let _ = objc2::exception::catch(|| {
+            let Some(m) = mtm() else { return };
+            let alert = make_alert(unsafe { message.as_ref() }, m);
+            alert.addButtonWithTitle(&NSString::from_str("確定"));
+            let _ = alert.runModal();
+        });
     }));
     if let Some(h) = unsafe { handler.as_ref() } {
         h.call(());
@@ -89,13 +93,17 @@ unsafe extern "C-unwind" fn run_confirm(
     handler: *mut Block<dyn Fn(Bool)>,
 ) {
     eprintln!("[js-dialogs] confirm() 被呼叫");
-    // 同 alert：錯誤路徑一律收斂成「取消」（false），handler 必達。
+    // 同 alert：錯誤路徑（Rust panic 或 ObjC 例外）一律收斂成「取消」
+    // （false），handler 必達。
     let ok = catch_unwind(AssertUnwindSafe(|| {
-        let Some(m) = mtm() else { return false };
-        let alert = make_alert(unsafe { message.as_ref() }, m);
-        alert.addButtonWithTitle(&NSString::from_str("確定"));
-        alert.addButtonWithTitle(&NSString::from_str("取消"));
-        alert.runModal() == NSAlertFirstButtonReturn
+        objc2::exception::catch(|| {
+            let Some(m) = mtm() else { return false };
+            let alert = make_alert(unsafe { message.as_ref() }, m);
+            alert.addButtonWithTitle(&NSString::from_str("確定"));
+            alert.addButtonWithTitle(&NSString::from_str("取消"));
+            alert.runModal() == NSAlertFirstButtonReturn
+        })
+        .unwrap_or(false)
     }))
     .unwrap_or(false);
     eprintln!("[js-dialogs] confirm() -> {ok}");
@@ -119,6 +127,7 @@ unsafe extern "C-unwind" fn run_prompt(
     // Retained 值拿到 catch_unwind 外面再交給 handler——WebKit 會自己 copy。
     let value: Option<objc2::rc::Retained<NSString>> =
         catch_unwind(AssertUnwindSafe(|| {
+            objc2::exception::catch(|| {
             let m = mtm()?;
             let alert = make_alert(unsafe { message.as_ref() }, m);
             alert.addButtonWithTitle(&NSString::from_str("確定"));
@@ -141,6 +150,8 @@ unsafe extern "C-unwind" fn run_prompt(
             } else {
                 None
             }
+            })
+            .unwrap_or(None)
         }))
         .unwrap_or(None);
     if let Some(h) = unsafe { handler.as_ref() } {

@@ -150,11 +150,16 @@ function defaultRand(): number {
  *
  * mutator 一律 `split(/\r?\n/)` 再用這個值 join：CRLF 檔就地轉 LF 的話，
  * 下一次 safeApply 的位元組級 hash 比對必失敗，回報「檔案被改過」拒寫——
- * 症狀長得像併發衝突，其實是自己上一次寫入改了行尾。混用的檔案以
- * 「出現過 CRLF 就整份 CRLF」收斂——確定性比保留混亂重要。
+ * 症狀長得像併發衝突，其實是自己上一次寫入改了行尾。
+ *
+ * 混用行尾採**多數決**（Grok C9）：純 LF 檔沾到一行 CRLF 就整份翻成
+ * CRLF 的話，第一次寫入的 git diff 是全檔改動、併發持有 pre-image 的
+ * 寫入者必衝突。多數決讓收斂方向跟檔案的實際慣例一致；平手取 LF。
  */
 export function eolOf(text: string): "\r\n" | "\n" {
-  return text.includes("\r\n") ? "\r\n" : "\n";
+  const crlf = (text.match(/\r\n/g) ?? []).length;
+  const lf = (text.match(/[^\r]\n|^\n/g) ?? []).length;
+  return crlf > lf ? "\r\n" : "\n";
 }
 
 /**

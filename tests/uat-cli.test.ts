@@ -1,5 +1,6 @@
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -428,21 +429,28 @@ describe("UAT CLI：真的走 subprocess 時也要守住輸出契約", () => {
 describe("重測 --supersedes 旗標（W2-3）", () => {
   test("帶旗標 → 報告檔頭寫出重測標記，parser round-trip 讀得回", async () => {
     await withSandbox(async ({ rootDir, handoffDir }) => {
+      const oldReport = join(rootDir, "plans", "uat-舊輪.md");
+      mkdirSync(join(rootDir, "plans"), { recursive: true });
+      writeFileSync(oldReport, "# UAT: 舊輪\n");
       const run = await runCli(sampleSpec("重測輪"), {
         rootDir,
         handoffDir,
-        extraArgs: ["--supersedes", "/w/plans/uat-舊輪.md"],
+        extraArgs: ["--supersedes", oldReport],
       });
       expect(run.exitCode).toBe(0);
       const reportPath = reportPathFrom(run.stdout);
       const text = readFileSync(reportPath, "utf8");
-      expect(text).toContain("> 重測自：/w/plans/uat-舊輪.md");
-      expect(parseUatReport(text).supersedes).toBe("/w/plans/uat-舊輪.md");
+      expect(text).toContain(`> 重測自：${oldReport}`);
+      expect(parseUatReport(text).supersedes).toBe(oldReport);
     });
   });
 
-  test("相對路徑 → 解析成絕對路徑再寫入", async () => {
+  test("相對路徑對 --root 解析（不是 cwd），且寫入絕對路徑", async () => {
     await withSandbox(async ({ rootDir, handoffDir }) => {
+      // 檔案放在 root 底下；CLI 的 cwd 是 repo root——若對 cwd 解析，
+      // 這條相對路徑會指到 repo 裡不存在的檔而被存在驗證擋下。
+      mkdirSync(join(rootDir, "plans"), { recursive: true });
+      writeFileSync(join(rootDir, "plans", "uat-舊輪.md"), "# UAT: 舊輪\n");
       const run = await runCli(sampleSpec("重測輪"), {
         rootDir,
         handoffDir,
@@ -453,6 +461,19 @@ describe("重測 --supersedes 旗標（W2-3）", () => {
       const m = text.match(/^> 重測自：(.+)$/m);
       expect(m).not.toBeNull();
       expect(m![1]!.startsWith("/")).toBe(true);
+      expect(m![1]!).toContain(rootDir);
+    });
+  });
+
+  test("指向不存在的檔 → 可讀錯誤擋下（Grok C2）", async () => {
+    await withSandbox(async ({ rootDir, handoffDir }) => {
+      const run = await runCli(sampleSpec("重測輪"), {
+        rootDir,
+        handoffDir,
+        extraArgs: ["--supersedes", "/w/plans/uat-不存在.md"],
+      });
+      expect(run.exitCode).toBe(1);
+      expect(run.stderr).toContain("不存在");
     });
   });
 

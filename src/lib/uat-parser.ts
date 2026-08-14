@@ -227,6 +227,14 @@ export function parseUatReport(text: string, path?: string): UatReport {
       continue;
     }
     if (!cur) {
+      // 重測標記只認**圍欄外**的檔頭行：這個分支到得了就代表不在 fence 裡
+      // （fence 行走的是上面 routeContent 那條路）。Cato F5 的規矩——圍欄裡
+      // 的東西是內容不是結構——supersede reader 也要遵守，不然 dogfood
+      // 寫 supersede 功能的 UAT 報告時，示範用的程式碼區塊會殺掉真報告。
+      if (out.supersedes === undefined) {
+        const sm = s.match(SUPERSEDES_RE);
+        if (sm) out.supersedes = sm[1]!.trim();
+      }
       preambleBuf.push(raw);
       continue;
     }
@@ -256,16 +264,6 @@ export function parseUatReport(text: string, path?: string): UatReport {
   }
   flushItem();
   out.preamble = preambleBuf.join("\n").trim();
-
-  // 重測標記住在 preamble 裡（原樣保存的合約不變），這裡只是多讀一眼。
-  // 取第一個命中：一份報告只會重測自一份；出現多行是人手誤貼，聽第一行。
-  for (const line of preambleBuf) {
-    const m = line.trim().match(SUPERSEDES_RE);
-    if (m) {
-      out.supersedes = m[1]!.trim();
-      break;
-    }
-  }
 
   out.unanchored = out.items.filter((x) => !x.id).length;
   // 手改出來的「失敗／不測但沒說明」不算已測 —— 必填規則在寫入端執法，
@@ -369,7 +367,9 @@ export function setVerdict(
   // 說明區塊：從標籤行到「下一個首次出現的標籤」或區段尾。整塊換掉 ——
   // 舊說明裡的假標籤行不在 firstAt 裡，所以會連同舊說明一起被換掉，
   // 不會殘留在新說明後面。尾端補一個空行當區段分隔。
-  const noteLines = note.trim() ? note.trim().split("\n") : [EMPTY_NOTE];
+  // split 吃 \r?\n：note 若來自未來的 CLI 回填可能帶 CRLF，裸 split("\n")
+  // 會把 \r 帶進 LF 檔、自己製造混用行尾（Grok C10）。
+  const noteLines = note.trim() ? note.trim().split(/\r?\n/) : [EMPTY_NOTE];
   if (noteLabelAt >= 0) {
     let blockEnd = ei;
     for (const at of firstAt.values()) {
