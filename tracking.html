@@ -197,6 +197,23 @@
   }
   .tk-uat-send { margin: -10px 0 20px; }
   .tk-uat-send-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  /* 檔頭脈絡：測試前必讀的重要資訊（目的/環境/免測/編號） */
+  .tk-uat-pre { margin: -6px 0 18px; font-size: var(--fs-3); color: var(--fg-2); }
+  .tk-uat-pre blockquote {
+    margin: 0 0 8px;
+    padding: 10px 14px;
+    border-left: 3px solid var(--border);
+    background: var(--inset);
+    border-radius: 0 8px 8px 0;
+  }
+  .tk-uat-pre p { margin: 4px 0; line-height: 1.65; }
+  .tk-uat-pre code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--surface);
+    font-family: var(--mono);
+    font-size: var(--fs-2);
+  }
   .tk-diff-modal { width: min(640px, 100%); }
   .tk-diff-body { max-height: 60vh; overflow: auto; }
   .tk-diff-row { padding: 10px 0; border-bottom: 1px solid var(--border-muted); }

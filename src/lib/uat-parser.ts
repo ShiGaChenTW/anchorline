@@ -75,11 +75,24 @@ export type UatReport = {
   path?: string;
   /** 沒錨點的題數。> 0 時 UI 要警告 —— 這些題勾不了 */
   unanchored: number;
+  /**
+   * 檔頭脈絡：H1 與第一題之間、三行已知 meta 以外的**全部**內容（原樣，
+   * 含 blockquote 記號）。目的/環境/已通過免測/測試編號這類欄位都住在這裡 ——
+   * 它們是自由生長的（實測第一天就長出「測試次數」這種自創欄位），
+   * 逐欄 schema 會永遠追著加，原樣保存＋原樣呈現才是穩定的合約。
+   * setVerdict 只動題目區段與 狀態/最後更新 行，檔頭天然不會被寫回破壞。
+   */
+  preamble: string;
 };
 
 /** CLI／skill 端的出題規格。序列化前先過 validateUatSpec。 */
 export type UatSpecItem = { title: string; steps: string[]; expected: string };
-export type UatSpec = { title: string; items: UatSpecItem[] };
+export type UatSpec = {
+  title: string;
+  items: UatSpecItem[];
+  /** 檔頭脈絡自由文字（目的/環境/免測/編號…），序列化成 blockquote */
+  context?: string;
+};
 
 const H1_RE = /^#\s+UAT[:：]\s*(.*)$/;
 const SECTION_RE = /^##\s+/;
@@ -114,6 +127,7 @@ export function parseUatReport(text: string, path?: string): UatReport {
     items: [],
     path,
     unanchored: 0,
+    preamble: "",
   };
   if (!text) return out;
 
@@ -145,9 +159,12 @@ export function parseUatReport(text: string, path?: string): UatReport {
     cur?.steps.push(s.replace(/^\d+[.)]\s*/, "").replace(/^-\s+/, ""));
   };
 
-  /** 把一行當「目前欄位的內容」收下。沒有開著的欄位就丟棄。 */
+  const preambleBuf: string[] = [];
+
+  /** 把一行當「目前欄位的內容」收下。第一題出現前的內容屬於檔頭脈絡。 */
   const routeContent = (raw: string) => {
-    if (field === "steps") pushStep(raw);
+    if (!cur) preambleBuf.push(raw);
+    else if (field === "steps") pushStep(raw);
     else if (field === "expected") expectedBuf.push(raw);
     else if (field === "note") noteBuf.push(raw);
   };
@@ -178,6 +195,9 @@ export function parseUatReport(text: string, path?: string): UatReport {
       out.updated = s.replace(/\*\*最後更新[：:]\*\*/, "").trim();
       continue;
     }
+    if (s.startsWith("**狀態：**") || s.startsWith("**狀態:**")) {
+      continue;
+    }
 
     if (SECTION_RE.test(s)) {
       flushItem();
@@ -189,7 +209,10 @@ export function parseUatReport(text: string, path?: string): UatReport {
       if (id) cur.id = id;
       continue;
     }
-    if (!cur) continue;
+    if (!cur) {
+      preambleBuf.push(raw);
+      continue;
+    }
 
     const label = s.match(LABEL_RE);
     if (label && !seenLabels.has(label[1]!)) {
@@ -215,6 +238,7 @@ export function parseUatReport(text: string, path?: string): UatReport {
     routeContent(raw);
   }
   flushItem();
+  out.preamble = preambleBuf.join("\n").trim();
 
   out.unanchored = out.items.filter((x) => !x.id).length;
   // 手改出來的「失敗／不測但沒說明」不算已測 —— 必填規則在寫入端執法，
@@ -370,9 +394,17 @@ export function serializeUatReport(
     `**最後更新：** ${now}`,
     `**狀態：** 進行中`,
     "",
+  ];
+  // 檔頭脈絡（目的/環境/免測/編號…）序列化成 blockquote。空行也要帶 `>`，
+  // 不然 markdown 會把一段 quote 切成兩段。
+  const ctx = spec.context?.trim();
+  if (ctx) {
+    out.push(...ctx.split("\n").map((l) => (l.trim() ? `> ${l}` : ">")), "");
+  }
+  out.push(
     `> 在 Anchorline 的 Task Tracking 開這一份逐題勾選。「失敗」與「不測」必須填說明。`,
     "",
-  ];
+  );
 
   spec.items.forEach((item, i) => {
     out.push(
@@ -409,6 +441,9 @@ export function validateUatSpec(
   }
   if (typeof o.title !== "string" || !o.title.trim()) {
     errors.push("title：必填，一句話的報告標題");
+  }
+  if (o.context !== undefined && typeof o.context !== "string") {
+    errors.push("context：選填，但給了就必須是字串（檔頭脈絡自由文字）");
   }
   if (!Array.isArray(o.items) || o.items.length === 0) {
     errors.push("items：至少要有一題");

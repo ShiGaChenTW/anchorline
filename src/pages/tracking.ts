@@ -53,6 +53,7 @@ import {
   type UatVerdict,
 } from "../lib/uat-parser";
 import { UAT_HANDOFF_EVENT, UAT_QUERY_KEY } from "../lib/uat-handoff";
+import { renderMarkdown } from "../lib/markamd";
 
 /** 壞行由 parseLog 跳過，不會毀掉整份。 */
 let auditEvents: LogEvent[] = [];
@@ -667,6 +668,13 @@ if (__authed) {
     if (sum) {
       sum.innerHTML = `
         <h2 class="tk-title">${escapeHtml(r.title)}</h2>
+        ${
+          // 檔頭脈絡（目的/環境/免測/編號…）原樣呈現 —— 這些是測試前必讀的
+          // 重要資訊，藏起來的代價是使用者對著錯的 build 測完一整輪
+          r.preamble
+            ? `<div class="tk-uat-pre">${renderMarkdown(r.preamble)}</div>`
+            : ""
+        }
         <div class="tk-do">
           <p class="tk-do-k">現在該做什麼</p>
           ${nextUatHtml(r)}
