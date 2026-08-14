@@ -10,7 +10,8 @@ import {
   stripAnchor,
   type PlanMeta,
 } from "../lib/plan-parser";
-import { buildHandoff, type AgentFamilyId } from "../lib/agent-handoff";
+import { buildHandoff, HANDOFF_NOTE, type AgentFamilyId } from "../lib/agent-handoff";
+import { uatFixTask, uatProjectRoot } from "../lib/uat-fix-handoff";
 import { initTheme } from "../lib/theme";
 import { sortByRecency, trackingTarget } from "../lib/tracking";
 import {
@@ -434,6 +435,130 @@ if (__authed) {
       <p class="tk-do-why">結果已經寫回這份 markdown，agent 直接讀得到。</p>`;
   }
 
+  /**
+   * 交接族系四選一。**id 照抄 `agent-handoff.ts` 的 `RUNNER`** ——
+   * 那一份對照表才是「哪個族系怎麼跑」的真相，這裡多寫一個沒有 runner 的族系，
+   * 症狀會是 `RUNNER[family]` 拿到 undefined 而整支炸掉。
+   */
+  const HANDOFF_FAMILIES: { id: AgentFamilyId; label: string }[] = [
+    { id: "claude", label: "Claude" },
+    { id: "codex", label: "Codex" },
+    { id: "gemini", label: "Gemini" },
+    // 「其他」不包 runner，只給 prompt —— 講在按鈕上而不是等使用者貼完才發現
+    { id: "other", label: "其他（只給 prompt）" },
+  ];
+
+  /**
+   * 「送出給 agent」——**只複製指令，不執行**，與 per-step 交接同一條界線。
+   *
+   * 啟用條件兩個，而且要說得出為什麼被擋：
+   *   1. 至少有一題有結果 —— 一題都沒測就送出，agent 收到的是一張空工單
+   *   2. 報告路徑推得出專案根 —— 推不出來就 `cd` 不到正確的地方
+   *
+   * 擋住時給 disabled + title，不是把按鈕藏起來：藏起來的話使用者不知道
+   * 這裡本來有東西，也就不知道要做什麼才會出現。
+   */
+  function uatSubmitHtml(r: UatReport): string {
+    const closed = uatProgress(r).closed;
+    const root = uatProjectRoot(r.path ?? "");
+    const why = !closed
+      ? "還沒有任何一題有結果 —— 先測幾題，失敗題的說明就是工單內容。"
+      : !root
+        ? "這份報告不在專案的 plans/ 底下，推不出專案根目錄，組不出指令。"
+        : "";
+
+    return `<div class="tk-uat-send">
+      <button type="button" class="tk-uat-send-btn" id="uat-send"${
+        why ? ` disabled title="${escapeHtml(why)}"` : ""
+      } aria-expanded="false" aria-controls="uat-fams">送出給 agent</button>
+      <div class="tk-uat-fams" id="uat-fams" role="group" aria-label="交給哪一種 agent" hidden>
+        ${HANDOFF_FAMILIES.map(
+          (f) =>
+            `<button type="button" class="tk-vb" data-fam="${f.id}">${escapeHtml(f.label)}</button>`,
+        ).join("")}
+      </div>
+      <p class="tk-uat-send-note">${escapeHtml(HANDOFF_NOTE)}</p>
+      ${why ? `<p class="tk-uat-send-note">${escapeHtml(why)}</p>` : ""}
+    </div>`;
+  }
+
+  /**
+   * 綁「送出給 agent」。族系選完才組指令 —— 指令內容取決於族系，
+   * 先組好再挑等於組四份丟掉三份。
+   */
+  function bindUatSubmit(r: UatReport) {
+    const btn = document.getElementById("uat-send") as HTMLButtonElement | null;
+    const fams = document.getElementById("uat-fams");
+    if (!btn || !fams) return;
+    btn.onclick = () => {
+      const open = !fams.hidden;
+      fams.hidden = open;
+      btn.setAttribute("aria-expanded", String(!open));
+    };
+    fams.querySelectorAll<HTMLButtonElement>("[data-fam]").forEach((b) => {
+      b.onclick = () => void onSubmitUat(r, b.dataset.fam as AgentFamilyId);
+    });
+  }
+
+  /**
+   * 產生修復指令並複製。**事件記在複製成功之後**，跟 `onToggleStep` 同一條規矩：
+   * 順序反過來的話，剪貼簿被拒的那一次會在稽核軌跡留下一筆沒發生的送出。
+   */
+  async function onSubmitUat(r: UatReport, family: AgentFamilyId) {
+    // 指令的 cd 目標用報告自己的路徑推 —— 掃描範圍雖然限定當前專案，
+    // 但「這份報告屬於哪個專案」的答案寫在它的路徑裡，不在 store 的選取狀態裡。
+    const root = uatProjectRoot(r.path ?? "");
+    if (!root) {
+      toast("推不出專案根目錄，組不出指令");
+      return;
+    }
+    const { command, blocked } = buildHandoff({
+      projectRoot: root,
+      task: uatFixTask(r),
+      family,
+    });
+    if (blocked) {
+      toast(blocked);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(command);
+    } catch {
+      // 剪貼簿被拒是常見的（權限、非安全來源）。不要吞掉 —— 使用者會以為
+      // 複製成功然後貼到一個空的東西。
+      toast("複製失敗，請手動從主控台取得指令");
+      console.log(command);
+      return;
+    }
+    toast("指令已複製，貼進終端執行");
+    // 選單收回去，按鈕的 aria-expanded 也要跟著收 —— 只藏 DOM 的話，
+    // 螢幕閱讀器會繼續說「已展開」，那是一個沒有畫面症狀的謊
+    const famsEl = document.getElementById("uat-fams");
+    if (famsEl) famsEl.hidden = true;
+    document.getElementById("uat-send")?.setAttribute("aria-expanded", "false");
+
+    // 稽核軌跡寫在**專案的** log 目錄，所以要 store 那一份 root 與 project id。
+    // 沒綁資料夾就沒有地方可寫 —— 複製照樣成立，只是這一筆記不下來。
+    const st = store.get();
+    const proj = st.projects.find((x) => x.id === st.activeProjectId);
+    const logRoot = proj?.importSummary?.rootPath;
+    if (!logRoot) return;
+    const u = st.currentUser;
+    logEvent(logRoot, {
+      project: proj!.id,
+      actor: {
+        kind: u.kind === "agent" ? "agent" : "human",
+        family: u.agentFamily ?? null,
+        name: u.name,
+      },
+      kind: "uat.report.submitted",
+      // 形狀對齊 `uat.report.done`：報告不是一個錨點，它是一個檔
+      subject: `uat:${plans[idx]?.name ?? (r.path ?? "").split("/").pop() ?? ""}`,
+      payload: { title: r.title, family },
+    });
+  }
+
   /** 一題一張卡。沒有錨點的題勾不了 —— 跟 plan 步驟同一條規矩。 */
   function uatCard(it: UatItem): string {
     const editable = canEditFiles();
@@ -505,6 +630,7 @@ if (__authed) {
             · 更新 ${escapeHtml(r.updated)}
           </p>
         </div>
+        ${uatSubmitHtml(r)}
         ${
           r.unanchored && r.items.some((x) => x.id)
             ? `<p class="tk-uat-warn">有 ${r.unanchored} 題沒有錨點，那些題勾不了。</p>`
@@ -516,6 +642,8 @@ if (__authed) {
             : `<p class="tk-uat-warn">瀏覽器只能看。勾選要寫回 <code>plans/</code> 底下的檔案，那需要桌面版。</p>`
         }
       `;
+      // innerHTML 換過就得重綁 —— 這一段每次重繪都會跑
+      bindUatSubmit(r);
     }
     if (!steps) return;
     // 「沒有題目」與「有題但全部沒錨點」走同一條路：後者一題都勾不了，

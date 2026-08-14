@@ -276,11 +276,13 @@ function ensureWorkspaceNav(nav: Element) {
 }
 
 function projActionsHtml(): string {
-  const items = [
+  const items: { href: string; label: string; icon: string; count?: string }[] = [
     { href: "write.html", label: "PRD 審閱監控", icon: IC.write },
     { href: "signoff.html", label: "簽核管理", icon: IC.signoff },
     { href: "editor.html", label: "編輯工作台", icon: IC.editor },
-    { href: "tracking.html", label: "Task Tracking", icon: IC.tracking },
+    // 計數 = 未測完的實測報告。由 rail-nav 的 refreshNavCounts 填值（0 不顯示），
+    // 走的是「審閱佇列／範本」早就在用的 data-nav-count 機制，不另做一套。
+    { href: "tracking.html", label: "Task Tracking", icon: IC.tracking, count: "tracking" },
   ];
   // 現在站在哪一頁要標出來。上面的「工作區」那一組早就這麼做了，這三個沒有 ——
   // 結果是在編輯台跟在 PRD 審閱監控看到的側欄長得一模一樣，位置感全靠記憶。
@@ -293,7 +295,11 @@ function projActionsHtml(): string {
         // 橫枝佔著，底色畫在外層會把那兩條線一起框進去，看起來像框歪了。
         return `<a class="rail-proj-action${on ? " on" : ""}" href="${it.href}"${
           on ? ' aria-current="page"' : ""
-        }><span class="rail-proj-action-in"><svg class="ic" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${it.icon}</svg><span>${it.label}</span></span></a>`;
+        }><span class="rail-proj-action-in"><svg class="ic" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${it.icon}</svg><span>${it.label}</span>${
+          it.count
+            ? `<span class="count" data-nav-count="${it.count}" title="未測完的實測報告">0</span>`
+            : ""
+        }</span></a>`;
       })
       .join("")}
   </div>`;

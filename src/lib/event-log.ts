@@ -56,7 +56,11 @@ export type EventKind =
   // 實測結果不併進 `task.done`：一題判「失敗」在治理鏈上與「完成」是相反的
   // 事件，共用同一個 kind 會讓任何依 kind 聚合的統計把兩者算成同一件事。
   | "uat.verdict"
-  | "uat.report.done";
+  | "uat.report.done"
+  // 「把這份報告的結果交給 agent 去修」。與 `uat.report.done`（測完了）分開：
+  // 一份報告可以測完卻從來沒被送修，也可以測到一半就先送出前幾題的失敗 ——
+  // 兩者共用同一個 kind 會讓「修復迴圈開過幾次」這個問題永遠答不出來。
+  | "uat.report.submitted";
 
 export type LogEvent = {
   /** schema_version —— append-only 格式的唯一逃生口 */
@@ -111,6 +115,10 @@ export const PAYLOAD_ALLOW = new Set([
   // 不是使用者輸入 —— **說明欄刻意不進 payload**，那是自由文字，
   // 而稽核軌跡是 append-only：寫進去就刪不掉了。
   "verdict",
+  // 交接給哪一種 agent（claude／codex／gemini／other）。四選一的固定字彙，
+  // 不是使用者輸入 —— **指令原文與 prompt 刻意不進 payload**：那裡面有
+  // 專案絕對路徑與失敗題的自由文字說明，而稽核軌跡是 append-only。
+  "family",
 ]);
 
 /** 命令原文只留前 16 字元 —— 足以認出是哪一類指令，不足以外洩參數。 */

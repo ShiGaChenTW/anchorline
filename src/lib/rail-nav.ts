@@ -180,24 +180,84 @@ function syncActive(nav: Element, active: RailPage) {
   }
 }
 
-/** 更新側欄 count（專案數／範本數／待審） */
+/**
+ * 未測完的實測報告數，與**它是哪個專案算出來的**。
+ *
+ * 分開存這兩個值是必要的：計數只在頁面載入時算一次（掃磁碟，不輪詢），
+ * 但使用者可以在側欄直接換專案。少了 `uatPendingFor`，換完專案之後那個
+ * badge 會繼續顯示上一個專案的數字 —— 一個說謊的計數比沒有計數更糟，
+ * 因為它看起來還是在正常運作。
+ */
+let uatPending = 0;
+let uatPendingFor: string | null = null;
+let uatScanning = false;
+
+/**
+ * 掃一次待實測。**桌面版才算得出來**（`loadPendingUats` 自己會判），
+ * 失敗一律當 0 —— 一個 badge 不值得讓側欄噴錯。
+ *
+ * 動態 import：這條路徑會拉進原生橋與 UAT parser，而側欄在每一頁都會建，
+ * 沒有理由讓每一頁的首屏都等這幾個模組先解析完。
+ */
+function refreshUatBadge(projectId: string) {
+  if (uatScanning) return;
+  uatScanning = true;
+  void Promise.all([import("./uat-pending"), import("./tracking-bridge")])
+    .then(([uat, bridge]) => {
+      const st = store.get();
+      return uat.loadPendingUats(bridge.plansDirsOf(st.projects, projectId));
+    })
+    .then((list) => {
+      uatPending = list.length;
+    })
+    .catch(() => {
+      uatPending = 0;
+    })
+    .finally(() => {
+      uatPendingFor = projectId;
+      uatScanning = false;
+      setNavCount("tracking", uatPending, true);
+    });
+}
+
+/**
+ * 貼一個計數到側欄。
+ *
+ * querySelectorAll：同一個 page 的計數現在可能同時出現在主導覽與
+ * 「工作區」那一組，只更新第一個會讓另一個永遠停在 0。
+ *
+ * `hideAtZero` 給實測 badge 用 —— 專案數是「這裡有幾個」，0 是有意義的答案；
+ * 待實測是「有事要你做」，沒事就不該在側欄留一個永遠寫著 0 的圓點。
+ * 用 inline style 而不是 class：`.count` 自己有 display 規則，靠 class 藏
+ * 會被它蓋掉，而症狀是「badge 藏不起來」這種查半天的小事。
+ */
+function setNavCount(page: string, n: number, hideAtZero = false) {
+  document.querySelectorAll<HTMLElement>(`[data-nav-count="${page}"]`).forEach((el) => {
+    el.textContent = String(n);
+    el.classList.toggle("is-zero", n === 0);
+    el.style.display = hideAtZero && n === 0 ? "none" : "";
+  });
+}
+
+/** 更新側欄 count（專案數／範本數／待審／待實測） */
 export function refreshNavCounts() {
   const st = store.get();
   const projects = st.projects.filter((p) => (st.showSamples ? true : !p.isSample));
   const pending = projects.filter((p) => p.status === "review").length;
-  // querySelectorAll：同一個 page 的計數現在可能同時出現在主導覽與
-  // 「工作區」那一組，只更新第一個會讓另一個永遠停在 0
-  const set = (page: string, n: number) => {
-    document.querySelectorAll(`[data-nav-count="${page}"]`).forEach((el) => {
-      el.textContent = String(n);
-      el.classList.toggle("is-zero", n === 0);
-    });
-  };
-  set("projects", projects.length);
-  set("templates", st.templates.length);
-  set("review", pending);
-  // 「工作區」那一組用的是同一個 data-nav-count 機制，set() 已經涵蓋 ——
+  setNavCount("projects", projects.length);
+  setNavCount("templates", st.templates.length);
+  setNavCount("review", pending);
+  // 「工作區」那一組用的是同一個 data-nav-count 機制，setNavCount() 已經涵蓋 ——
   // 之前另外掛一個 id 的做法退休了，兩套計數只會有一套先過期
+
+  // 待實測：專案沒換就重貼快取值（側欄每次重建都會把 badge 洗回 0）；
+  // 換了才重掃一次。這不是輪詢 —— 觸發源是使用者換專案，不是計時器。
+  const activeId = st.activeProjectId ?? "";
+  if (uatPendingFor !== activeId) {
+    uatPending = 0;
+    refreshUatBadge(activeId);
+  }
+  setNavCount("tracking", uatPending, true);
 }
 
 /** 從 pathname 推斷目前頁 */
