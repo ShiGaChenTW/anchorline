@@ -21,6 +21,8 @@
 #![cfg(target_os = "macos")]
 
 use std::ffi::CStr;
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use block2::Block;
 use objc2::ffi::{class_addMethod, object_getClass};
@@ -29,10 +31,20 @@ use objc2::{msg_send, sel, MainThreadMarker};
 use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn, NSTextField, NSView};
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
-/// modal 只能在主執行緒跑；delegate callback 本來就到主執行緒，
-/// 這裡的 unwrap 掛掉代表 WebKit 的執行緒模型變了，值得直接炸出來。
-fn mtm() -> MainThreadMarker {
-    MainThreadMarker::new().expect("WKUIDelegate callback 不在主執行緒")
+/// install() 的自檢結果。ping 的 capabilities 讀它——wry 升版改 delegate
+/// 結構讓補丁失效時，前端能偵測降級（改走頁內確認），而不是又一輪
+/// 「按了沒反應」的無聲失敗。
+pub static READY: AtomicBool = AtomicBool::new(false);
+
+pub fn ready() -> bool {
+    READY.load(Ordering::Relaxed)
+}
+
+/// modal 只能在主執行緒跑；delegate callback 本來就到主執行緒。
+/// 這裡回 None 而不是 panic：呼叫端在 completionHandler 契約下，
+/// 任何 panic 都必須先收斂成「取消」語意，不能讓例外穿出 delegate。
+fn mtm() -> Option<MainThreadMarker> {
+    MainThreadMarker::new()
 }
 
 fn make_alert(message: Option<&NSString>, m: MainThreadMarker) -> objc2::rc::Retained<NSAlert> {
@@ -53,10 +65,15 @@ unsafe extern "C-unwind" fn run_alert(
     handler: *mut Block<dyn Fn()>,
 ) {
     eprintln!("[js-dialogs] alert() 被呼叫");
-    let m = mtm();
-    let alert = make_alert(unsafe { message.as_ref() }, m);
-    alert.addButtonWithTitle(&NSString::from_str("確定"));
-    let _ = alert.runModal();
+    // WKWebView 契約：completionHandler 沒被呼叫＝WebKit 丟 ObjC 例外直接
+    // 終止 App。所以對話框邏輯整段包 catch_unwind，不管裡面發生什麼，
+    // handler 一定在最後被呼叫恰好一次。
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let Some(m) = mtm() else { return };
+        let alert = make_alert(unsafe { message.as_ref() }, m);
+        alert.addButtonWithTitle(&NSString::from_str("確定"));
+        let _ = alert.runModal();
+    }));
     if let Some(h) = unsafe { handler.as_ref() } {
         h.call(());
     }
@@ -72,11 +89,15 @@ unsafe extern "C-unwind" fn run_confirm(
     handler: *mut Block<dyn Fn(Bool)>,
 ) {
     eprintln!("[js-dialogs] confirm() 被呼叫");
-    let m = mtm();
-    let alert = make_alert(unsafe { message.as_ref() }, m);
-    alert.addButtonWithTitle(&NSString::from_str("確定"));
-    alert.addButtonWithTitle(&NSString::from_str("取消"));
-    let ok = alert.runModal() == NSAlertFirstButtonReturn;
+    // 同 alert：錯誤路徑一律收斂成「取消」（false），handler 必達。
+    let ok = catch_unwind(AssertUnwindSafe(|| {
+        let Some(m) = mtm() else { return false };
+        let alert = make_alert(unsafe { message.as_ref() }, m);
+        alert.addButtonWithTitle(&NSString::from_str("確定"));
+        alert.addButtonWithTitle(&NSString::from_str("取消"));
+        alert.runModal() == NSAlertFirstButtonReturn
+    }))
+    .unwrap_or(false);
     eprintln!("[js-dialogs] confirm() -> {ok}");
     if let Some(h) = unsafe { handler.as_ref() } {
         h.call((Bool::from(ok),));
@@ -94,31 +115,38 @@ unsafe extern "C-unwind" fn run_prompt(
     handler: *mut Block<dyn Fn(*mut NSString)>,
 ) {
     eprintln!("[js-dialogs] prompt() 被呼叫");
-    let m = mtm();
-    let alert = make_alert(unsafe { message.as_ref() }, m);
-    alert.addButtonWithTitle(&NSString::from_str("確定"));
-    alert.addButtonWithTitle(&NSString::from_str("取消"));
+    // 同 alert：錯誤路徑一律收斂成「取消」（null），handler 必達。
+    // Retained 值拿到 catch_unwind 外面再交給 handler——WebKit 會自己 copy。
+    let value: Option<objc2::rc::Retained<NSString>> =
+        catch_unwind(AssertUnwindSafe(|| {
+            let m = mtm()?;
+            let alert = make_alert(unsafe { message.as_ref() }, m);
+            alert.addButtonWithTitle(&NSString::from_str("確定"));
+            alert.addButtonWithTitle(&NSString::from_str("取消"));
 
-    let field = {
-        let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(260.0, 24.0));
-        let field = NSTextField::initWithFrame(m.alloc::<NSTextField>(), frame);
-        if let Some(d) = unsafe { default_text.as_ref() } {
-            field.setStringValue(d);
-        }
-        field
-    };
-    alert.setAccessoryView(Some(&field as &NSView));
-    // 打開就能直接打字，不用先點輸入框
-    alert.window().setInitialFirstResponder(Some(&field));
+            let field = {
+                let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(260.0, 24.0));
+                let field = NSTextField::initWithFrame(m.alloc::<NSTextField>(), frame);
+                if let Some(d) = unsafe { default_text.as_ref() } {
+                    field.setStringValue(d);
+                }
+                field
+            };
+            alert.setAccessoryView(Some(&field as &NSView));
+            // 打開就能直接打字，不用先點輸入框
+            alert.window().setInitialFirstResponder(Some(&field));
 
-    let ok = alert.runModal() == NSAlertFirstButtonReturn;
+            if alert.runModal() == NSAlertFirstButtonReturn {
+                Some(field.stringValue())
+            } else {
+                None
+            }
+        }))
+        .unwrap_or(None);
     if let Some(h) = unsafe { handler.as_ref() } {
-        if ok {
-            let value = field.stringValue();
-            // Retained 在 call 期間都活著；WebKit 會自己 copy 這個字串
-            h.call((objc2::rc::Retained::as_ptr(&value) as *mut NSString,));
-        } else {
-            h.call((std::ptr::null_mut(),));
+        match &value {
+            Some(v) => h.call((objc2::rc::Retained::as_ptr(v) as *mut NSString,)),
+            None => h.call((std::ptr::null_mut(),)),
         }
     }
 }
@@ -191,6 +219,9 @@ pub unsafe fn install(webview: *mut AnyObject) -> usize {
             "[js-dialogs] 已補上 {added}/3（重掛完成）responds: alert={} confirm={} prompt={}",
             a.as_bool(), c.as_bool(), p.as_bool()
         );
+        // 三個 selector 都掛上才算 ready——ping 的 capabilities 讀這個旗標，
+        // 讓前端在 wry 升版弄壞補丁時偵測得到降級。
+        READY.store(a.as_bool() && c.as_bool() && p.as_bool(), Ordering::Relaxed);
     }
     added
 }
