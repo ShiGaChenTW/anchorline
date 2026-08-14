@@ -22,3 +22,4 @@ vendor/markamd/src-tauri/target/
 # 第三方原始碼參考樹（19MB）。不進版控：推上去之後要移除得改寫歷史，
 # 而它只是拿來對照的參考資料，不是本專案的程式碼。
 fokr_source/
+.claude/worktrees/
