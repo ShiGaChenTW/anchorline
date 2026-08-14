@@ -2791,6 +2791,8 @@ export const store = {
     note?: string;
     /** 綁定簽核關卡：結果會貼在那一關上（簽核頁的「執行分析」走這裡） */
     stageId?: string;
+    /** 綁定版號：送交執行的進度會貼回那一版（版本取號頁） */
+    releaseId?: string;
   }): { ok: boolean; reason?: string; jobId?: string } {
     const agent = state.employees.find((e) => e.id === opts.agentId && e.kind === "agent");
     if (!agent) return { ok: false, reason: "找不到 Agent" };
@@ -2835,6 +2837,7 @@ export const store = {
       projectId: project.id,
       projectTitle: project.title,
       ...(opts.stageId ? { stageId: opts.stageId } : {}),
+      ...(opts.releaseId ? { releaseId: opts.releaseId } : {}),
       task: opts.task,
       status: "queued",
       note: opts.note?.trim() || `呼叫執行：${opts.task}`,

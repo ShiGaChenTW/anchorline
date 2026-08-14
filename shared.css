@@ -13940,6 +13940,40 @@ p.gd-warn {
   border-radius: var(--radius-md);
   background: var(--bg);
 }
+/* 放行的第二段確認：紅一點，講清楚這一下是不可逆的那一下 */
+.rl-arm {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+.rl-arm-go {
+  background: color-mix(in oklab, var(--danger, #e5534b) 24%, transparent);
+  border-color: color-mix(in oklab, var(--danger, #e5534b) 55%, var(--border));
+  color: var(--fg);
+  font-weight: 600;
+}
+/* 交辦之後的去向：Agent 跑到哪、下一步是什麼 */
+.rl-next {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--inset);
+}
+.rl-next p {
+  margin: 0;
+  font-size: var(--fs-2);
+  line-height: 1.7;
+  color: var(--fg-2, var(--fg));
+}
+.rl-next-job {
+  font-weight: 600;
+  color: var(--fg);
+}
+.rl-next a {
+  color: var(--accent);
+}
 .rl-push.is-ready {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
 }
