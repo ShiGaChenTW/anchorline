@@ -39,13 +39,30 @@ export type PendingUat = {
  * 「沒有步驟的檔案」，這裡的判定要跟它一致。
  */
 export function pendingUatsFrom(files: ScannedPlan[]): PendingUat[] {
+  // 兩份路徑要能對上：CLI 寫進檔頭的路徑與 Rust 掃描回來的路徑，可能一個走了
+  // symlink 一個沒走（/tmp 與 /private/tmp 是最常見的一對，consumePendingUat
+  // 已為同一原因設過保險絲），也可能正規化形式不同（NFC/NFD）。
+  const canon = (p: string) =>
+    p.normalize("NFC").replace(/^\/private(?=\/(?:tmp|var)\/)/, "");
+
+  const reports = files
+    .filter((f) => f.kind !== "openspec")
+    .filter((f) => isUatText(f.text) || /^uat-/i.test(f.name))
+    .map((f) => ({ f, r: parseUatReport(f.text, f.path) }));
+
+  // 先收整份掃描裡所有「被重測取代」的舊報告路徑。取代者自己測完與否無關——
+  // 新一輪存在的那一刻，舊報告就不再是待辦。
+  const superseded = new Set<string>();
+  for (const { r } of reports) {
+    if (r.supersedes) superseded.add(canon(r.supersedes));
+  }
+
   const out: PendingUat[] = [];
-  for (const f of files) {
-    if (f.kind === "openspec") continue;
-    if (!isUatText(f.text) && !/^uat-/i.test(f.name)) continue;
-    const r = parseUatReport(f.text, f.path);
+  for (const { f, r } of reports) {
     if (r.status !== "進行中") continue;
     if (!r.items.some((x) => x.id)) continue;
+    // 被新一輪取代的檔踢出待辦。兩輪並存都算待實測的話，badge 的分母只進不出。
+    if (superseded.has(canon(f.path))) continue;
     const prog = uatProgress(r);
     out.push({
       path: f.path,

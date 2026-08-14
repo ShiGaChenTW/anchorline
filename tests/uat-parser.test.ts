@@ -843,3 +843,75 @@ describe("UAT 檔頭脈絡／context 契約", () => {
     expect(good.spec.context).toBe("目的：驗證 context");
   });
 });
+
+describe("重測輪次 supersede 標記（W2-3）", () => {
+  const BASE = [
+    "# UAT: 新輪",
+    "",
+    "**建立時間：** 2026-08-15 03:00",
+    "**最後更新：** 2026-08-15 03:00",
+    "**狀態：** 進行中",
+    "",
+  ];
+  const ITEM = [
+    "## T1 題 <!-- anc:t=AAAA1111 -->",
+    "",
+    "**流程：**",
+    "1. 步",
+    "",
+    "**預期：**",
+    "果",
+    "",
+    "**結果：** 未測",
+    "",
+    "**說明：**",
+    "（無）",
+  ];
+
+  test("讀出 blockquote 形式的重測標記", () => {
+    const text = [...BASE, "> 重測自：/w/plans/uat-舊.md", "", ...ITEM].join("\n");
+    expect(parseUatReport(text).supersedes).toBe("/w/plans/uat-舊.md");
+  });
+
+  test("人手剝掉 > 記號也讀得出", () => {
+    const text = [...BASE, "重測自: /w/plans/uat-舊.md", "", ...ITEM].join("\n");
+    expect(parseUatReport(text).supersedes).toBe("/w/plans/uat-舊.md");
+  });
+
+  test("多行誤貼 → 聽第一行", () => {
+    const text = [...BASE, "> 重測自：/a.md", "> 重測自：/b.md", "", ...ITEM].join("\n");
+    expect(parseUatReport(text).supersedes).toBe("/a.md");
+  });
+
+  test("沒有標記 → 欄位缺席，不是空字串", () => {
+    const text = [...BASE, ...ITEM].join("\n");
+    expect(parseUatReport(text).supersedes).toBeUndefined();
+  });
+
+  test("題目區段裡出現同字樣不算標記——只認檔頭", () => {
+    const item = ITEM.map((l) => (l === "（無）" ? "重測自：/not-a-marker.md" : l));
+    const text = [...BASE, ...item].join("\n");
+    expect(parseUatReport(text).supersedes).toBeUndefined();
+  });
+
+  test("serializeUatReport 帶 supersedes → 寫出重測標記，且能 round-trip", () => {
+    const md = serializeUatReport(
+      {
+        title: "重測輪",
+        supersedes: "/w/plans/uat-舊.md",
+        items: [{ title: "題", steps: ["步"], expected: "果" }],
+      },
+      { now: "2026-08-15 03:00" },
+    );
+    expect(md).toContain("> 重測自：/w/plans/uat-舊.md");
+    const back = parseUatReport(md);
+    expect(back.supersedes).toBe("/w/plans/uat-舊.md");
+    // preamble 原樣保存的合約不變：標記仍留在 preamble 裡
+    expect(back.preamble).toContain("重測自");
+  });
+
+  test("validateUatSpec：supersedes 給了空字串要擋", () => {
+    const r = validateUatSpec({ title: "t", supersedes: "  ", items: [{ title: "a", steps: ["s"], expected: "e" }] });
+    expect(r.ok).toBe(false);
+  });
+});

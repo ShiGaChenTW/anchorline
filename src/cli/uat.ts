@@ -11,10 +11,12 @@ type CliOptions = {
   specSource: string;
   root: string;
   noOpen: boolean;
+  /** 重測：被本輪取代的舊報告路徑，寫進檔頭 `> 重測自：` */
+  supersedes: string | null;
 };
 
 const USAGE =
-  "用法：bun src/cli/uat.ts --spec <file.json|-> --root <projectRoot> [--no-open]";
+  "用法：bun src/cli/uat.ts --spec <file.json|-> --root <projectRoot> [--supersedes <舊報告路徑>] [--no-open]";
 
 function fail(message: string): never {
   console.error(message);
@@ -78,6 +80,7 @@ function parseArgs(argv: string[]): CliOptions {
   // 那句「App 會顯示這份報告」對一條永遠不會被掃到的路徑是假話。
   let root: string | null = null;
   let noOpen = false;
+  let supersedes: string | null = null;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -96,6 +99,14 @@ function parseArgs(argv: string[]): CliOptions {
       i++;
       continue;
     }
+    if (arg === "--supersedes") {
+      const value = argv[i + 1];
+      if (!value || value.startsWith("--"))
+        fail(`${USAGE}\n--supersedes 後面必須接被取代舊報告的路徑。`);
+      supersedes = value;
+      i++;
+      continue;
+    }
     if (arg === "--no-open") {
       noOpen = true;
       continue;
@@ -105,7 +116,9 @@ function parseArgs(argv: string[]): CliOptions {
 
   if (specSource === null) fail(`${USAGE}\n缺少必填參數 --spec。`);
   if (root === null) fail(`${USAGE}\n缺少必填參數 --root（被測專案的根目錄，報告會寫進它的 plans/）。`);
-  return { specSource, root: resolve(root), noOpen };
+  // 解析成絕對路徑：檔頭標記是給另一台程式（App 的掃描）比對用的，
+  // 相對路徑會隨 cwd 漂移，對不上的症狀是「舊報告一直留在待辦」。
+  return { specSource, root: resolve(root), noOpen, supersedes: supersedes ? resolve(supersedes) : null };
 }
 
 function readSpecText(specSource: string): string {
@@ -193,6 +206,8 @@ function main(): void {
   const now = new Date();
   const specText = readSpecText(opts.specSource);
   const spec = parseSpec(specText, opts.specSource === "-" ? "stdin" : resolve(opts.specSource));
+  // 旗標優先於 spec 內欄位：出題的是 skill，知道「這是重測」的是叫 CLI 的那一端
+  if (opts.supersedes) spec.supersedes = opts.supersedes;
   const reportPath = nextReportPath(opts.root, spec.title, now);
   const report = serializeUatReport(spec, { now: formatLocalMinute(now) });
   writeFileSync(reportPath, report);

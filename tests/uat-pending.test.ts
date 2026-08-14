@@ -93,3 +93,73 @@ describe("pendingUatsFrom", () => {
     expect(pendingUatsFrom([])).toEqual([]);
   });
 });
+
+describe("重測輪次 supersede（W2-3）", () => {
+  const OLD = "uat-舊輪.md";
+  const NEW = "uat-新輪.md";
+  const supersedeLine = (p: string) => `> 重測自：${p}\n`;
+
+  function reportWithPreamble(title: string, preamble: string, verdicts: string[]): string {
+    const base = report(title, verdicts);
+    // preamble 插在狀態行之後、第一題之前
+    return base.replace("**狀態：** 進行中\n", `**狀態：** 進行中\n\n${preamble}`);
+  }
+
+  test("新一輪指到舊報告 → 舊報告踢出待辦，新報告留著", () => {
+    const oldFile = file(OLD, report("舊輪", ["未測", "未測"]));
+    const newFile = file(
+      NEW,
+      reportWithPreamble("新輪", supersedeLine(`/w/proj/plans/${OLD}`), ["未測"]),
+    );
+    const got = pendingUatsFrom([oldFile, newFile]);
+    expect(got.map((x) => x.name)).toEqual([NEW]);
+  });
+
+  test("取代者自己已測完，舊報告一樣被踢——新一輪存在即取代", () => {
+    const oldFile = file(OLD, report("舊輪", ["未測"]));
+    const newFile = file(
+      NEW,
+      reportWithPreamble("新輪", supersedeLine(`/w/proj/plans/${OLD}`), ["通過"]),
+    );
+    expect(pendingUatsFrom([oldFile, newFile]).map((x) => x.name)).toEqual([]);
+  });
+
+  test("/tmp 與 /private/tmp 指同一份檔 → 仍然對得上", () => {
+    const oldFile = file(OLD, report("舊輪", ["未測"]), {
+      path: `/private/tmp/proj/plans/${OLD}`,
+    });
+    const newFile = file(
+      NEW,
+      reportWithPreamble("新輪", supersedeLine(`/tmp/proj/plans/${OLD}`), ["未測"]),
+    );
+    expect(pendingUatsFrom([oldFile, newFile]).map((x) => x.name)).toEqual([NEW]);
+  });
+
+  test("NFD 路徑（macOS 檔案系統回報）對 NFC 標記 → 仍然對得上", () => {
+    const nfdName = "uat-é.md"; // e + 結合重音（NFD）
+    const nfcName = "uat-é.md"; // é 合成形（NFC）
+    const oldFile = file(nfdName, report("舊輪", ["未測"]), {
+      path: `/w/proj/plans/${nfdName}`,
+    });
+    const newFile = file(
+      NEW,
+      reportWithPreamble("新輪", supersedeLine(`/w/proj/plans/${nfcName}`), ["未測"]),
+    );
+    expect(pendingUatsFrom([oldFile, newFile]).map((x) => x.name)).toEqual([NEW]);
+  });
+
+  test("標記指到不存在的檔 → 不影響任何現存報告", () => {
+    const a = file("uat-a.md", report("A", ["未測"]));
+    const b = file(
+      NEW,
+      reportWithPreamble("新輪", supersedeLine("/w/proj/plans/uat-不存在.md"), ["未測"]),
+    );
+    expect(pendingUatsFrom([a, b]).map((x) => x.name).sort()).toEqual([NEW, "uat-a.md"].sort());
+  });
+
+  test("沒有標記 → 兩輪並存都算待辦（現狀行為，不誤殺）", () => {
+    const a = file("uat-a.md", report("A", ["未測"]));
+    const b = file("uat-b.md", report("B", ["未測"]));
+    expect(pendingUatsFrom([a, b]).length).toBe(2);
+  });
+});
