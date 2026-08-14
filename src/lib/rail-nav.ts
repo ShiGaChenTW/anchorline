@@ -181,15 +181,18 @@ function syncActive(nav: Element, active: RailPage) {
 }
 
 /**
- * 未測完的實測報告數，與**它是哪個專案算出來的**。
+ * 未測完的實測報告數 —— **全部專案合計**。
  *
- * 分開存這兩個值是必要的：計數只在頁面載入時算一次（掃磁碟，不輪詢），
- * 但使用者可以在側欄直接換專案。少了 `uatPendingFor`，換完專案之後那個
- * badge 會繼續顯示上一個專案的數字 —— 一個說謊的計數比沒有計數更糟，
- * 因為它看起來還是在正常運作。
+ * 這個 badge 回答的是「有幾份報告在等我動手」，而那個「我」不分專案：
+ * agent 幫 B 專案出的實測題，人正在 A 專案工作時如果數不進來，那份報告
+ * 就只剩喚醒導頁那一次曝光，錯過一次就從系統裡消失了。
+ *
+ * 以前還存了一個 `uatPendingFor`（這個數字是哪個專案算的），因為分母是
+ * 當前專案，換專案就得作廢重掃。分母改成全專案之後那個作廢條件不存在了 ——
+ * 換專案不會改變答案，所以只留一個「掃過了沒」的旗標。
  */
 let uatPending = 0;
-let uatPendingFor: string | null = null;
+let uatScanned = false;
 let uatScanning = false;
 
 /**
@@ -199,13 +202,15 @@ let uatScanning = false;
  * 動態 import：這條路徑會拉進原生橋與 UAT parser，而側欄在每一頁都會建，
  * 沒有理由讓每一頁的首屏都等這幾個模組先解析完。
  */
-function refreshUatBadge(projectId: string) {
+function refreshUatBadge() {
   if (uatScanning) return;
   uatScanning = true;
   void Promise.all([import("./uat-pending"), import("./tracking-bridge")])
     .then(([uat, bridge]) => {
       const st = store.get();
-      return uat.loadPendingUats(bridge.plansDirsOf(st.projects, projectId));
+      // plansDirsOfAll 而不是 plansDirsOf：收件匣與 badge 的範圍是全部專案，
+      // tracking 頁的「只看當前專案」限定不適用於這裡。
+      return uat.loadPendingUats(bridge.plansDirsOfAll(st.projects));
     })
     .then((list) => {
       uatPending = list.length;
@@ -214,7 +219,7 @@ function refreshUatBadge(projectId: string) {
       uatPending = 0;
     })
     .finally(() => {
-      uatPendingFor = projectId;
+      uatScanned = true;
       uatScanning = false;
       setNavCount("tracking", uatPending, true);
     });
@@ -250,13 +255,11 @@ export function refreshNavCounts() {
   // 「工作區」那一組用的是同一個 data-nav-count 機制，setNavCount() 已經涵蓋 ——
   // 之前另外掛一個 id 的做法退休了，兩套計數只會有一套先過期
 
-  // 待實測：專案沒換就重貼快取值（側欄每次重建都會把 badge 洗回 0）；
-  // 換了才重掃一次。這不是輪詢 —— 觸發源是使用者換專案，不是計時器。
-  const activeId = st.activeProjectId ?? "";
-  if (uatPendingFor !== activeId) {
-    uatPending = 0;
-    refreshUatBadge(activeId);
-  }
+  // 待實測：整個 App 載入期間掃一次就夠 —— 分母是全部專案，換專案不會改變
+  // 這個數字，所以沒有「作廢重掃」的條件了（以前那條是換專案就作廢）。
+  // 掃完之後每次側欄重建都只是重貼快取值，因為重建會把 badge 洗回 0。
+  // 這不是輪詢：導頁會整頁重載，下一頁自然重掃一次。
+  if (!uatScanned) refreshUatBadge();
   setNavCount("tracking", uatPending, true);
 }
 
