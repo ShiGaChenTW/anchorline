@@ -158,7 +158,10 @@ function defaultRand(): number {
  */
 export function eolOf(text: string): "\r\n" | "\n" {
   const crlf = (text.match(/\r\n/g) ?? []).length;
-  const lf = (text.match(/[^\r]\n|^\n/g) ?? []).length;
+  // 零寬斷言精確計數（Cato-04）：`[^\r]\n` 會吃掉前一個字元，連續空行時
+  // 每兩個 LF 只數得到一個——markdown 全是空行分段，LF 為主的混用檔會被
+  // 系統性誤判成 CRLF。
+  const lf = (text.match(/(?<!\r)\n/g) ?? []).length;
   return crlf > lf ? "\r\n" : "\n";
 }
 

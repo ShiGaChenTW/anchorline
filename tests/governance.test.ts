@@ -244,7 +244,17 @@ describe("openspec 第二形狀（W1-3）", () => {
     expect(isGoverned(ev("anc:t=XXXXXXXX", "2026-08-15T00:00:00Z"), LIVE)).toBe(false);
   });
 
-  test("uat 報告層級 subject（uat:檔名）不是治理形狀 → 未治理", () => {
-    expect(isGoverned(ev("uat:uat-w1-1.md", "2026-08-15T00:00:00Z"), LIVE)).toBe(false);
+  test("uat 報告層級 subject（uat:檔名）依 Cato-01 裁決屬治理形狀", () => {
+    expect(isGoverned(ev("uat:uat-w1-1.md", "2026-08-15T00:00:00Z"), LIVE)).toBe(true);
+  });
+});
+
+describe("uat 報告層級事件（Cato-01）", () => {
+  const NONE = new Set<string>([]);
+  test("收工／完成／送出的 uat:<檔名> subject 算已治理——收工不能反向計分", () => {
+    expect(isGoverned(ev("uat:uat-結帳改版.md", "2026-08-15T00:00:00Z"), NONE)).toBe(true);
+  });
+  test("不是 .md 結尾的 uat: 字串不放行", () => {
+    expect(isGoverned(ev("uat:something-else", "2026-08-15T00:00:00Z"), NONE)).toBe(false);
   });
 });

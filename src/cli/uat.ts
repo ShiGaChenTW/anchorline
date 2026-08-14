@@ -41,6 +41,10 @@ function formatMinuteSlug(at: Date): string {
 }
 
 const FILE_NAME_DANGER_RE = /[\u0000-\u001F\u007F/\\:*?"<>|]+/g;
+// 只折 ASCII 大寫是刻意的：全 Unicode 的 .toLowerCase() 會把土耳其文 İ 拆出
+// 結合附加符號等驚喜；非 ASCII 大寫（É、Ω）原樣進檔名。代價（Cato-09）：
+// 只差大小寫的非 ASCII 標題在 APFS（大小寫不敏感）上依 existsSync 撞名邏輯
+// 處理，與 ASCII 標題的折疊行為不同源——接受，撞名後綴 -2 仍會兜住。
 const ASCII_UPPER_RE = /[A-Z]/g;
 const WHITESPACE_RE = /\s+/gu;
 const DUPLICATE_HYPHEN_RE = /-+/g;

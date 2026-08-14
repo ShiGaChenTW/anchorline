@@ -305,7 +305,7 @@ describe("待修視圖 openFixesFrom（W2-4）", () => {
       "**狀態：** 進行中",
       "",
       ...(opts.extra ?? []),
-      "## T1 失敗的題 <!-- anc:t=FAIL0001 -->",
+      "## T1 失敗的題 <!-- anc:t=FA240001 -->",
       "",
       "**流程：**",
       "1. 步",
@@ -318,7 +318,7 @@ describe("待修視圖 openFixesFrom（W2-4）", () => {
       "**說明：**",
       opts.failNote ?? "壞掉的原因",
       "",
-      "## T2 通過的題 <!-- anc:t=PASS0001 -->",
+      "## T2 通過的題 <!-- anc:t=PA550001 -->",
       "",
       "**流程：**",
       "1. 步",
@@ -398,5 +398,63 @@ describe("supersede 循環防護（Grok C1）", () => {
     // 三角互殺下每份都被「別人」指到且不構成互指——單向規則會全滅。
     // 防護的最低要求：至少留一份，不能零。
     expect(pendingUatsFrom([a, b, c]).length).toBeGreaterThan(0);
+  });
+});
+
+describe("Cato 收尾釘子", () => {
+  test("Cato-02：無錨點的失敗題不進待修（改判不了、清不掉），債留在報告檔", () => {
+    const text = [
+      "# UAT: 混合",
+      "",
+      "**狀態：** 進行中",
+      "",
+      "## T1 無錨點的失敗題",
+      "",
+      "**流程：**",
+      "1. 步",
+      "",
+      "**預期：**",
+      "果",
+      "",
+      "**結果：** 失敗",
+      "",
+      "**說明：**",
+      "原因",
+      "",
+      "## T2 有錨點的失敗題 <!-- anc:t=CAT20002 -->",
+      "",
+      "**流程：**",
+      "1. 步",
+      "",
+      "**預期：**",
+      "果",
+      "",
+      "**結果：** 失敗",
+      "",
+      "**說明：**",
+      "原因",
+      "",
+    ].join("\n");
+    const got = openFixesFrom([file("uat-mixed.md", text)]);
+    expect(got.length).toBe(1);
+    expect(got[0]!.itemId).toBe("CAT20002");
+  });
+
+  test("Cato-10：兩個視圖對同一組 files 的 supersede 過濾一致（成員資格本就不同：待實測看未測、待修看失敗）", () => {
+    // 新報告一題失敗一題未測 → 同時具備進兩個視圖的資格；舊報告同樣資格
+    // 但被 supersede——兩個視圖都必須把它踢掉。
+    const both = (title: string, pre = "") =>
+      report(title, ["失敗", "未測"]).replace("**狀態：** 進行中\n", `**狀態：** 進行中\n\n${pre}`);
+    const oldF = file("uat-old.md", both("舊"));
+    const newF = file("uat-new.md", both("新", "> 重測自：/w/proj/plans/uat-old.md\n"));
+    const files = [oldF, newF];
+    expect(pendingUatsFrom(files).map((x) => x.name)).toEqual(["uat-new.md"]);
+    expect([...new Set(openFixesFrom(files).map((x) => x.name))]).toEqual(["uat-new.md"]);
+  });
+
+  test("Cato-03 前提：取代者不在掃描集裡 → 舊報告不被過濾（呼叫端必須餵全集）", () => {
+    const oldF = file("uat-old.md", report("舊", ["失敗"]));
+    // 取代者存在於世界上，但不在這次掃描的 files 裡
+    expect(openFixesFrom([oldF]).length).toBe(1);
   });
 });
