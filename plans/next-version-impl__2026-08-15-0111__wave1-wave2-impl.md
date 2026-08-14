@@ -1,8 +1,8 @@
 # 下一版實作 — Wave 1（正確性止血）＋ Wave 2（UAT 迴圈補全）
 
 **建立時間：** 2026-08-15 01:11
-**最後更新：** 2026-08-15 05:15
-**狀態：** 進行中
+**最後更新：** 2026-08-15 05:25
+**狀態：** 已完成（等 PR #7 審閱與 principal 實測）
 
 ## 目標
 
@@ -86,4 +86,14 @@ Cato（收尾審計）。完成後開 PR 回 main，並用 Uat skill 出實測�
 
 ## 結束摘要
 
-（工作結束時補上）
+**做了什麼**：Wave 1 全部八項＋Wave 2 全部五項（W2-4 經 main session 設計核准），16 commits → **PR #7**。
+雙審查閉環：GrokResearcher 14 挑戰 12 成立（修 10 緩 2）＋ Cato 10 findings（修 8 緩 1）。
+閘門：tsc 綠、bun test **1126** 綠（基準 1048，+78）、cargo 38 綠；UI 項全部 Interceptor 實機驗證。
+W3-2 dogfood：安裝版取號 v0.01.01（ZZ 草稿），四項摩擦入帳。
+實測清單：主 repo `plans/uat-下一版實作驗收（wave1+2）.md`（10 題，含 2 項 DEFERRED-VERIFY）。
+
+**未完成／留下輪**：W3-1 updater（無餘裕）；W3-3（等 principal 裁決）；緩辦帳：Grok C12/C13、
+Cato-05（併「掃描快取」）；疑似既有 bug：非 git 專案 dashboard「改採 vX.YY.ZZ」按鈕無反應（實測清單第 9 題請 principal 重現）。
+
+**後續建議**：PR 合併後 → principal 重建安裝版跑實測清單 → v0.01.01 編列本輪 commits、放行、PUSH（完成 W3-2 全鏈）→
+失敗題走修復迴圈（重測報告會首次真實使用 supersede 鏈）。
