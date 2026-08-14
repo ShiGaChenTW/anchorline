@@ -52,6 +52,7 @@ import {
   type UatReport,
   type UatVerdict,
 } from "../lib/uat-parser";
+import { reconcileNoteDraft, setNoteDraft } from "../lib/uat-note-draft";
 import { UAT_HANDOFF_EVENT, UAT_QUERY_KEY } from "../lib/uat-handoff";
 import { renderMarkdown } from "../lib/markamd";
 
@@ -732,6 +733,13 @@ if (__authed) {
           Number(a.it.verdict !== "pending") - Number(b.it.verdict !== "pending") ||
           a.n - b.n,
       );
+    // 重繪會摧毀聚焦中的說明欄。草稿層（uat-note-draft）保住字，這裡保住焦點：
+    // 沒有這一步，勾完別題之後說明欄只剩畫面上的字，blur 永遠不會再發生，
+    // 草稿就永遠寫不回檔案。
+    const focusedNote =
+      document.activeElement instanceof HTMLTextAreaElement
+        ? document.activeElement.dataset["note"]
+        : undefined;
     steps.innerHTML = sorted.map(({ it }) => uatCard(it)).join("");
 
     steps.querySelectorAll<HTMLButtonElement>("[data-verdict]").forEach((btn) => {
@@ -751,16 +759,34 @@ if (__authed) {
     steps
       .querySelectorAll<HTMLTextAreaElement>("textarea[data-note]")
       .forEach((ta) => {
-        const original = ta.value;
+        const it = r.items.find((x) => x.id === ta.dataset.note);
+        if (!it?.id) return;
+        const id = it.id;
+        // 重繪之間的草稿層（W1-1）：結果鈕的 mousedown guard 擋掉 blur 之後，
+        // 任何 render(true)（別題寫檔成功、或衝突後拉回磁碟）都會重建 DOM——
+        // 沒有這一層，還沒存的說明就無聲消失。磁碟追上草稿時 reconcile 自清。
+        const draft = reconcileNoteDraft(r.path ?? "", id, it.note);
+        if (draft !== undefined) ta.value = draft;
+        ta.oninput = () => setNoteDraft(r.path ?? "", id, ta.value);
+        // 比對基準是磁碟值而不是 textarea 當下值：草稿被 seed 回來時，兩者不同
+        // 代表「有沒存的字」，blur 就該寫回。沒草稿時兩者相同——「點進去看一眼」
+        // 依然不會動到 mtime，不會把報告推上 live tracking 的追蹤位。
+        const original = it.note;
         ta.onblur = () => {
-          // 只在真的改過時寫回。每次失焦都寫一次的話，「點進去看一眼」也會動到
-          // mtime，把這份報告一路推上 live tracking 的追蹤位。
           if (ta.value === original) return;
-          const it = r.items.find((x) => x.id === ta.dataset.note);
-          if (!it?.id) return;
-          void onSetVerdict(it.id, it.verdict, ta.value);
+          void onSetVerdict(id, it.verdict, ta.value);
         };
       });
+
+    if (focusedNote) {
+      const ta = steps.querySelector<HTMLTextAreaElement>(
+        `textarea[data-note="${CSS.escape(focusedNote)}"]`,
+      );
+      if (ta) {
+        ta.focus({ preventScroll: true });
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+      }
+    }
   }
 
   function renderMain() {
