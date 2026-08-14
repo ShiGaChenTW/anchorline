@@ -178,7 +178,43 @@
      位置在進度條下方：它是「測完之後要做的下一件事」，順序就是閱讀順序。
      族系選單預設收著 —— 四顆按鈕常駐會跟結果鈕搶同一種視覺重量，
      而這是一次性的動作，不是每一題都要看到的東西。 */
+  /* 同一份報告收在同一個框（2026-08-14 principal 指示）：框掛在 .tk-body，
+     摘要、送出、每一題都是框內段落，題目之間用分隔線，不再一題一張浮卡。 */
+  .tk-body.tk-uat-frame {
+    margin: 18px 22px 36px;
+    padding: 18px 20px 10px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  .tk-uat-frame .tk-uat {
+    border: 0;
+    border-top: 1px solid var(--border-muted);
+    border-radius: 0;
+    background: none;
+    margin: 0;
+    padding: 16px 0;
+  }
   .tk-uat-send { margin: -10px 0 20px; }
+  .tk-uat-send-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tk-diff-modal { width: min(640px, 100%); }
+  .tk-diff-body { max-height: 60vh; overflow: auto; }
+  .tk-diff-row { padding: 10px 0; border-bottom: 1px solid var(--border-muted); }
+  .tk-diff-hd { display: flex; align-items: baseline; gap: 10px; }
+  .tk-diff-t { flex: 1 1 auto; font-weight: 600; font-size: var(--fs-3); }
+  .tk-diff-v { font-size: var(--fs-2); color: var(--muted); }
+  .tk-diff-v b { font-weight: 600; }
+  .tk-diff-note {
+    margin: 6px 0 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--inset);
+    font-family: inherit;
+    font-size: var(--fs-2);
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .tk-diff-sum { margin: 10px 0 0; font-size: var(--fs-2); color: var(--muted); }
   .tk-uat-send-btn {
     padding: 6px 14px;
     border: 1px solid var(--border);
