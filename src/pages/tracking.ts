@@ -468,9 +468,14 @@ if (__authed) {
         : "";
 
     return `<div class="tk-uat-send">
-      <button type="button" class="tk-uat-send-btn" id="uat-send"${
-        why ? ` disabled title="${escapeHtml(why)}"` : ""
-      } aria-expanded="false" aria-controls="uat-fams">送出給 agent</button>
+      <div class="tk-uat-send-row">
+        <button type="button" class="tk-uat-send-btn" id="uat-send"${
+          why ? ` disabled title="${escapeHtml(why)}"` : ""
+        } aria-expanded="false" aria-controls="uat-fams">送出給 agent</button>
+        <button type="button" class="tk-uat-send-btn" id="uat-diff"${
+          closed ? "" : ` disabled title="還沒有任何一題有結果，沒有變更可看"`
+        }>看 UAT DIFF</button>
+      </div>
       <div class="tk-uat-fams" id="uat-fams" role="group" aria-label="交給哪一種 agent" hidden>
         ${HANDOFF_FAMILIES.map(
           (f) =>
@@ -498,6 +503,49 @@ if (__authed) {
     fams.querySelectorAll<HTMLButtonElement>("[data-fam]").forEach((b) => {
       b.onclick = () => void onSubmitUat(r, b.dataset.fam as AgentFamilyId);
     });
+    const diffBtn = document.getElementById("uat-diff") as HTMLButtonElement | null;
+    if (diffBtn) diffBtn.onclick = () => openUatDiff(r);
+  }
+
+  /**
+   * 「看 UAT DIFF」—— 語意層的變更檢視：哪些題被答了、答成什麼、原因是什麼。
+   * 不做逐行文字 diff：setVerdict 的外科手術保證結果／說明以外的行不會變，
+   * 逐行 diff 只會把三行有意義的變更淹沒在上下文裡。
+   */
+  function openUatDiff(r: UatReport) {
+    document.getElementById("uat-diff-back")?.remove();
+    const answered = r.items.filter((x) => x.verdict !== "pending");
+    const rows = answered
+      .map(
+        (it) => `<div class="tk-diff-row">
+          <div class="tk-diff-hd">
+            <span class="tk-diff-t">${escapeHtml(it.title)}</span>
+            <span class="tk-diff-v">未測 → <b class="tk-v--${it.verdict}">${VERDICT_LABELS[it.verdict]}</b></span>
+          </div>
+          ${it.note ? `<pre class="tk-diff-note">${escapeHtml(it.note)}</pre>` : ""}
+        </div>`,
+      )
+      .join("");
+    const pending = r.items.length - answered.length;
+    const back = document.createElement("div");
+    back.id = "uat-diff-back";
+    back.className = "modal-back open";
+    back.innerHTML = `
+      <div class="modal tk-diff-modal" role="dialog" aria-modal="true" aria-label="UAT 變更">
+        <header><h3>UAT DIFF — ${escapeHtml(r.title)}</h3>
+          <button type="button" class="btn btn-sm btn-ghost" id="uat-diff-close">關閉</button></header>
+        <div class="body tk-diff-body">
+          ${rows || `<p class="tk-uat-send-note">還沒有任何變更。</p>`}
+          <p class="tk-diff-sum">已答 ${answered.length}/${r.items.length}${
+            pending ? ` · 未測 ${pending} 題` : " · 全部已答"
+          }</p>
+        </div>
+      </div>`;
+    back.addEventListener("click", (e) => {
+      const t = e.target as HTMLElement;
+      if (t === back || t.id === "uat-diff-close") back.remove();
+    });
+    document.body.appendChild(back);
   }
 
   /**
@@ -720,6 +768,9 @@ if (__authed) {
       return;
     }
     if (hd) hd.innerHTML = `<span class="mono">${escapeHtml(p.name)}</span>`;
+    // 同一份報告收在同一個框（2026-08-14 principal 指示）：框掛在 .tk-body 上，
+    // 摘要、送出、每一題都變成框內段落。切回一般 plan 時要拿掉。
+    sum?.parentElement?.classList.toggle("tk-uat-frame", Boolean(p.uat));
     if (p.uat) {
       renderUat(p.uat, sum, steps);
       return;
