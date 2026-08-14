@@ -7,6 +7,8 @@ import MarkdownIt from "markdown-it";
 import mark from "markdown-it-mark";
 // @ts-expect-error task-lists types optional
 import taskLists from "markdown-it-task-lists";
+// CJK 全形標點旁的 **粗體** 依 CommonMark flanking 規則會關不掉（如 `**專案：**內容`）
+import cjkFriendly from "markdown-it-cjk-friendly";
 
 function escapeHtml(value: string): string {
   return value
@@ -28,6 +30,7 @@ const md = new MarkdownIt({
 
 md.use(taskLists, { enabled: false, label: true });
 md.use(mark);
+md.use(cjkFriendly);
 
 // 標題 slug（TOC / 錨點）
 const slugify = (text: string): string =>
