@@ -275,24 +275,53 @@ function pushGateHtml(r: Release): string {
   </div>`;
 }
 
+const RUN_ICON: Record<string, string> = {
+  queued: "⏳",
+  running: "⏳",
+  done: "✅",
+  failed: "❌",
+  cancelled: "⊘",
+};
+const RUN_LABEL: Record<string, string> = {
+  queued: "排隊中",
+  running: "執行中",
+  done: "已完成",
+  failed: "失敗",
+  cancelled: "已取消",
+};
+
 /**
- * 交辦之後的去向。沒有這一段，「送交執行」按完畫面只多一行時間戳 ——
- * Agent 到底跑了沒、跑完之後要幹嘛，全都要使用者自己猜（2026-08-14 回報）。
+ * 這一版的執行紀錄 —— 每一次送交都留一筆，結果全文就地展開。
+ *
+ * 「送交執行」按完只多一行時間戳、結果要跳去 Agent 管理翻，
+ * 是 2026-08-14 被點名的兩個問題。紀錄不另外造表：`agentJobs`
+ * 本來就隨 App 資料持久化，這裡只是把 releaseId 對得上的撈出來。
  */
-function handoffStatusHtml(r: Release): string {
-  if (!r.handedAt) return "";
-  const job = store.get().agentJobs.find((j) => j.releaseId === r.id);
-  const jobLine = !job
-    ? `交辦單已產生（當時沒有可派工的 Agent，或由人工接手）。`
-    : job.status === "queued" || job.status === "running"
-      ? `⏳ ${escapeHtml(job.agentName)} 執行中 —— 結果會出現在 <a href="agents.html">Agent 管理</a> 的進場紀錄。`
-      : job.status === "failed"
-        ? `❌ ${escapeHtml(job.agentName)} 執行失敗：${escapeHtml(job.result.slice(0, 120) || "沒有留下原因")}　可再按一次「送交執行」重派。`
-        : `✅ ${escapeHtml(job.agentName)} 已完成 —— 全文在 <a href="agents.html">Agent 管理</a> 的進場紀錄。`;
-  return `<div class="rl-next">
-    <p class="rl-next-job">${jobLine}</p>
-    <p class="rl-next-steps">下一步：實作完成後回這裡把「待開發」項目勾成完成 → 按「正式放行」→ 複製 PUSH 指令到終端機執行。</p>
-  </div>`;
+function runsHtml(r: Release): string {
+  const jobs = store.get().agentJobs.filter((j) => j.releaseId === r.id);
+  if (!r.handedAt && !jobs.length) return "";
+
+  const rows = jobs
+    .map((j, i) => {
+      const when = j.createdAt.slice(5, 16).replace("T", " ");
+      const body =
+        j.status === "queued" || j.status === "running"
+          ? `<p class="rl-run-wait">執行中 —— 跑完結果會直接出現在這裡。</p>`
+          : `<pre class="rl-run-out">${escapeHtml(j.result || "（沒有輸出）")}</pre>`;
+      return `<details class="rl-run"${i === 0 ? " open" : ""}>
+        <summary>${RUN_ICON[j.status] ?? "·"} ${escapeHtml(j.agentName)} · ${escapeHtml(when)} · ${RUN_LABEL[j.status] ?? j.status}${
+          j.status === "failed" ? " —— 可再按「送交執行」重派" : ""
+        }</summary>
+        ${body}
+      </details>`;
+    })
+    .join("");
+
+  return `<details class="aiw-fold rl-runs" open>
+    <summary>執行紀錄 <span class="aiw-fold-meta">${jobs.length || "0"} 筆</span></summary>
+    ${rows || `<p class="rl-run-wait">交辦單已產生（沒有派給 App 內的 Agent，或由人工接手）。</p>`}
+    <p class="rl-next-steps">下一步：實作完成後把「待開發」項目勾成完成 → 按「正式放行」→ 複製 PUSH 指令到終端機執行。</p>
+  </details>`;
 }
 
 function candidateHtml(r: Release): string {
@@ -354,16 +383,17 @@ function renderDetail() {
       <p class="rl-sub">從既有資料挑（章節狀態與 commit 都是實際量到的）</p>
       ${candidateHtml(r)}
     </div>
+    ${pushGateHtml(r)}
+    ${runsHtml(r)}
     <div class="rl-foot">
       <span class="rl-prog">${p.done}/${p.total} 完成 · ${p.pct}%</span>
-      ${pushGateHtml(r)}
       ${r.handedAt ? `<span class="rl-handed">已於 ${escapeHtml(r.handedAt.slice(0, 16).replace("T", " "))} 交辦</span>` : ""}
       <span class="sp"></span>
-      <button type="button" class="btn btn-sm" id="rl-copy">複製交辦單</button>
       <button type="button" class="btn btn-sm btn-ghost" id="rl-del">刪除這一版</button>
+      <button type="button" class="btn btn-sm" id="rl-copy">複製交辦單</button>
       <button type="button" class="btn btn-primary" id="rl-hand">送交執行</button>
     </div>
-    ${handoffStatusHtml(r)}
+    <div class="rl-hand-pick" id="rl-hand-pick" hidden></div>
   `;
 
   bindDetail(r);
@@ -511,7 +541,35 @@ function bindDetail(r: Release) {
     }
   });
 
-  document.getElementById("rl-hand")?.addEventListener("click", () => void hand(r));
+  // 送交執行 = 先挑派給誰。誰執行是使用者的決定，不是清單順序的決定
+  document.getElementById("rl-hand")?.addEventListener("click", () => {
+    if (!handGate(r)) return;
+    const pick = document.getElementById("rl-hand-pick");
+    if (!pick) return;
+    if (!pick.hidden) {
+      pick.hidden = true;
+      return;
+    }
+    const agents = eligibleAgents();
+    pick.innerHTML = `
+      <p class="rl-hand-pick-head">派給誰執行？</p>
+      ${agents
+        .map(
+          (a) =>
+            `<button type="button" class="btn btn-sm" data-rl-agent="${escapeHtml(a.id)}">${escapeHtml(a.name)} · ${a.accessRole === "admin" ? "管理" : "編輯"}</button>`,
+        )
+        .join("")}
+      <button type="button" class="btn btn-sm btn-ghost" data-rl-agent="">只複製交辦單（貼給外部工具或人）</button>
+      ${agents.length ? "" : `<p class="rl-hand-pick-none">沒有啟用中的編輯 Agent —— 到 <a href="agents.html">Agent 管理</a> 啟用，或直接用複製的交辦單。</p>`}
+    `;
+    pick.hidden = false;
+    pick.querySelectorAll<HTMLButtonElement>("[data-rl-agent]").forEach((b) => {
+      b.addEventListener("click", () => {
+        pick.hidden = true;
+        void hand(r, b.dataset.rlAgent || null);
+      });
+    });
+  });
 }
 
 /**
@@ -520,25 +578,37 @@ function bindDetail(r: Release) {
  * 2. 把交辦單丟進 Agent 佇列（store.invokeAgent，跟其他呼叫走同一條路）
  * 3. 順手複製到剪貼簿，讓你也能貼給人
  */
-async function hand(r: Release) {
-  const v = validateVersion(r.version, r.projectId, store.get().releases, r.id);
-  if (!v.ok) {
-    toast(`還不能送：${v.reason}`);
-    return;
-  }
-  if (!r.items.length) {
-    toast("這一版還沒有任何項目，先編列內容");
-    return;
-  }
-  const p = activeProject();
-  const md = buildHandoff(r, p ? projectDisplayName(p) : "—");
-
-  const agent = store
+/** 有資格接單的 Agent：啟用中、編輯或管理角色 */
+function eligibleAgents() {
+  return store
     .get()
-    .employees.find(
+    .employees.filter(
       (e) => e.kind === "agent" && e.active !== false && e.agentEnabled !== false &&
         (e.accessRole === "editor" || e.accessRole === "admin"),
     );
+}
+
+/**
+ * 送交前先過一次共同閘門；過了才讓使用者挑要派給誰。
+ * 原本是**自動拿第一個啟用的 Agent** —— 使用者沒選過 Claude Code，
+ * 畫面卻顯示 Claude Code 執行中（2026-08-14 回報「很怪」，確實很怪）。
+ */
+function handGate(r: Release): boolean {
+  const v = validateVersion(r.version, r.projectId, store.get().releases, r.id);
+  if (!v.ok) {
+    toast(`還不能送：${v.reason}`);
+    return false;
+  }
+  if (!r.items.length) {
+    toast("這一版還沒有任何項目，先編列內容");
+    return false;
+  }
+  return true;
+}
+
+async function hand(r: Release, agentId: string | null) {
+  const p = activeProject();
+  const md = buildHandoff(r, p ? projectDisplayName(p) : "—");
 
   try {
     await navigator.clipboard.writeText(md);
@@ -546,10 +616,18 @@ async function hand(r: Release) {
     /* 剪貼簿失敗不影響主流程 */
   }
 
-  if (!agent) {
+  // agentId null = 只複製交辦單，不派給 App 內的 Agent ——
+  // 貼給終端機裡真的會寫 code 的東西（Claude Code CLI、Codex…）
+  if (!agentId) {
     store.markReleaseHanded(r.id);
     render();
-    toast("交辦單已複製。沒有可用的 Agent —— 到 Agent 管理啟用一個就能直接派工");
+    toast("交辦單已複製 —— 貼給你要的執行者（CLI agent 或人）");
+    return;
+  }
+
+  const agent = eligibleAgents().find((e) => e.id === agentId);
+  if (!agent) {
+    toast("這個 Agent 已停用，換一個吧");
     return;
   }
 
@@ -645,8 +723,11 @@ let lastJobKey = "";
 store.subscribe(() => {
   const r = selected();
   if (!r?.handedAt) return;
-  const j = store.get().agentJobs.find((x) => x.releaseId === r.id);
-  const key = j ? `${j.id}:${j.status}` : "";
+  const key = store
+    .get()
+    .agentJobs.filter((x) => x.releaseId === r.id)
+    .map((x) => `${x.id}:${x.status}`)
+    .join("|");
   if (key !== lastJobKey) {
     lastJobKey = key;
     render();

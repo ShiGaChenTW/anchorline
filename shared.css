@@ -13952,6 +13952,81 @@ p.gd-warn {
   color: var(--fg);
   font-weight: 600;
 }
+/* 送交執行的「派給誰」選擇列 */
+.rl-hand-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--inset);
+}
+.rl-hand-pick-head {
+  margin: 0;
+  font-size: var(--fs-2);
+  font-weight: 600;
+  color: var(--fg);
+}
+.rl-hand-pick-none {
+  margin: 0;
+  font-size: var(--fs-2);
+  color: var(--muted);
+}
+.rl-hand-pick-none a {
+  color: var(--accent);
+}
+
+/* 執行紀錄：每次送交一筆，結果全文就地展開 */
+.rl-runs {
+  margin-top: 14px;
+}
+.rl-run {
+  margin: 8px 0 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--inset);
+}
+.rl-run > summary {
+  cursor: pointer;
+  padding: 9px 12px;
+  font-size: var(--fs-2);
+  font-weight: 600;
+  color: var(--fg);
+  list-style: none;
+}
+.rl-run > summary::-webkit-details-marker {
+  display: none;
+}
+.rl-run-out {
+  margin: 0;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: var(--fs-2);
+  line-height: 1.65;
+  color: var(--fg-2, var(--fg));
+}
+.rl-run-wait {
+  margin: 0;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-2);
+  color: var(--muted);
+}
+.rl-next-steps {
+  margin: 12px 0 0;
+  font-size: var(--fs-2);
+  line-height: 1.7;
+  color: var(--fg-2, var(--fg));
+}
+
 /* 交辦之後的去向：Agent 跑到哪、下一步是什麼 */
 .rl-next {
   margin-top: 12px;
