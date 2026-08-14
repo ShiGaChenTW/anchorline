@@ -28,8 +28,10 @@
 - [x] 第二輪 Skill：Uat 加「修復迴圈」合約（agent 端接收處理五步驟） <!-- anc:t=NWYH5B7D -->
 - [x] 第三輪（principal 截圖指示）：報告同框呈現（.tk-uat-frame）＋「看 UAT DIFF」語意變更 modal；實機截圖驗證同框與按鈕；commit 251987b <!-- anc:t=QYAK7D9F -->
 - [x] 第四輪 A＋B（PM 親做）：parser `preamble`（檔頭原樣保存）＋ renderUat 以 markamd 呈現；spec `context` 選填欄位序列化成 blockquote；skill 解除留白＋接上格式檔；Border Loom 報告檔頭移植（回報格式改方言詞彙、前置收進引用區） <!-- anc:t=RZBL8E0G -->
-- [ ] 第四輪 Forge：preamble/context 測試（獨立驗證 PM 方言改動）＋ CLI e2e <!-- anc:t=SACM9F1H -->
-- [ ] 第四輪 Engineer：設定頁「UAT 報告格式」——單一真相 `~/.anchorline/uat-format.md`、Rust 四指令（read/write+快照+log/history/history_read）、編輯存檔、AI 調整對話（ai-client，無 key 不假成功）、變更紀錄（快照+jsonl） <!-- anc:t=TBDN0G2J -->
+- [x] 第四輪 Forge：preamble/context 測試——抓到 2 個真 bug（狀態行漏進 preamble；說明貼 log 污染真檔頭），red-before-fix 驗證後修復（584d7b0） <!-- anc:t=SACM9F1H -->
+- [x] 第四輪 Engineer：設定頁「UAT 格式」全功能落地（62a6f0b）：Rust 五指令＋白名單合約測試、快照＋jsonl 紀錄、AI 調整（stripFence 防圍欄嵌套）、prompt-registry 註冊、文件↔parser 詞彙一致性測試；採用其 uat-format.ts 取代 PM 種子版 <!-- anc:t=TBDN0G2J -->
+- [x] commit＋PR（principal 指示）：PR #6 → main，四個 commit 已推；安裝版已更新至 22:07 build <!-- anc:t=VCEP1H3K -->
+- [x] 收尾：安裝版換裝＋設定頁載入無誤（AI 區渲染正常）。[DEFERRED-VERIFY] 設定頁「UAT 格式」13 項互動清單（存檔/快照/AI 調整需 principal 的 key 與操作）併入 principal 實測；視窗部分在螢幕外，不代為移動 <!-- anc:t=WDFQ2J4L -->
 - [x] 第二輪整合驗證＋重建安裝版：tsc／1011 測試／vite build 全綠；安裝版 21:16 build 實機截圖驗證 tracking 送出鈕（0/8 正確 disabled＋原因文案）、overview「待實測 1 份」列、幽靈檔已降組。[DEFERRED-VERIFY] 送出 enabled 路徑（族系選擇→剪貼簿）與側欄 badge 併入 principal 首輪實測；AX 樹看不到待實測列（a11y 曝露）記後續 <!-- anc:t=PXZJ6C8E -->
 
 ## 決策紀錄
