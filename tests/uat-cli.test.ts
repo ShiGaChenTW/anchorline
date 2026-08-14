@@ -50,13 +50,14 @@ async function runCli(
     rootDir?: string;
     handoffDir?: string;
     viaStdin?: boolean;
+    extraArgs?: string[];
   } = {},
 ): Promise<CliRun> {
   const rootDir = opts.rootDir ?? mkdtempSync(join(tmpdir(), "uat-cli-root-"));
   const handoffDir = opts.handoffDir ?? mkdtempSync(join(tmpdir(), "uat-cli-handoff-"));
   const specText = typeof spec === "string" ? spec : JSON.stringify(spec, null, 2);
   const specPath = join(rootDir, "spec.json");
-  const args = ["bun", "src/cli/uat.ts", "--spec", opts.viaStdin ? "-" : specPath, "--root", rootDir, "--no-open"];
+  const args = ["bun", "src/cli/uat.ts", "--spec", opts.viaStdin ? "-" : specPath, "--root", rootDir, "--no-open", ...(opts.extraArgs ?? [])];
 
   if (!opts.viaStdin) writeFileSync(specPath, specText);
 
@@ -420,6 +421,59 @@ describe("UAT CLI：真的走 subprocess 時也要守住輸出契約", () => {
           "> 在 Anchorline 的 Task Tracking 開這一份逐題勾選。「失敗」與「不測」必須填說明。",
         ].join("\n"),
       );
+    });
+  });
+});
+
+describe("重測 --supersedes 旗標（W2-3）", () => {
+  test("帶旗標 → 報告檔頭寫出重測標記，parser round-trip 讀得回", async () => {
+    await withSandbox(async ({ rootDir, handoffDir }) => {
+      const run = await runCli(sampleSpec("重測輪"), {
+        rootDir,
+        handoffDir,
+        extraArgs: ["--supersedes", "/w/plans/uat-舊輪.md"],
+      });
+      expect(run.exitCode).toBe(0);
+      const reportPath = reportPathFrom(run.stdout);
+      const text = readFileSync(reportPath, "utf8");
+      expect(text).toContain("> 重測自：/w/plans/uat-舊輪.md");
+      expect(parseUatReport(text).supersedes).toBe("/w/plans/uat-舊輪.md");
+    });
+  });
+
+  test("相對路徑 → 解析成絕對路徑再寫入", async () => {
+    await withSandbox(async ({ rootDir, handoffDir }) => {
+      const run = await runCli(sampleSpec("重測輪"), {
+        rootDir,
+        handoffDir,
+        extraArgs: ["--supersedes", "plans/uat-舊輪.md"],
+      });
+      expect(run.exitCode).toBe(0);
+      const text = readFileSync(reportPathFrom(run.stdout), "utf8");
+      const m = text.match(/^> 重測自：(.+)$/m);
+      expect(m).not.toBeNull();
+      expect(m![1]!.startsWith("/")).toBe(true);
+    });
+  });
+
+  test("旗標沒接路徑 → 可讀錯誤，不是 stack trace", async () => {
+    await withSandbox(async ({ rootDir, handoffDir }) => {
+      const run = await runCli(sampleSpec("重測輪"), {
+        rootDir,
+        handoffDir,
+        extraArgs: ["--supersedes"],
+      });
+      expect(run.exitCode).toBe(1);
+      expect(run.stderr).toContain("--supersedes");
+    });
+  });
+
+  test("沒帶旗標 → 檔頭沒有重測標記", async () => {
+    await withSandbox(async ({ rootDir, handoffDir }) => {
+      const run = await runCli(sampleSpec("普通輪"), { rootDir, handoffDir });
+      expect(run.exitCode).toBe(0);
+      const text = readFileSync(reportPathFrom(run.stdout), "utf8");
+      expect(text.includes("重測自")).toBe(false);
     });
   });
 });

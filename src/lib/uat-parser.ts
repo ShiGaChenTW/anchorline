@@ -83,6 +83,12 @@ export type UatReport = {
    * setVerdict 只動題目區段與 狀態/最後更新 行，檔頭天然不會被寫回破壞。
    */
   preamble: string;
+  /**
+   * 重測輪次（W2-3 限縮版）：檔頭 `> 重測自：<路徑>` 指向被本輪取代的舊報告。
+   * 只有這一個欄位、不建 round 資料模型——anchor 每輪重鑄，題目層級對不起來
+   * 是已承認的上限。消費者只有 uat-pending：把被指到的檔踢出待實測清單。
+   */
+  supersedes?: string;
 };
 
 /** CLI／skill 端的出題規格。序列化前先過 validateUatSpec。 */
@@ -92,11 +98,15 @@ export type UatSpec = {
   items: UatSpecItem[];
   /** 檔頭脈絡自由文字（目的/環境/免測/編號…），序列化成 blockquote */
   context?: string;
+  /** 重測時填：被取代的舊報告絕對路徑，序列化成 `> 重測自：<路徑>` */
+  supersedes?: string;
 };
 
 const H1_RE = /^#\s+UAT[:：]\s*(.*)$/;
 const SECTION_RE = /^##\s+/;
 const LABEL_RE = /^\*\*(流程|預期|結果|說明)[：:]\*\*\s*(.*)$/;
+/** 檔頭的重測標記。blockquote 記號可有可無——人手剝掉 `>` 也不該讓標記失效 */
+const SUPERSEDES_RE = /^>?\s*重測自[：:]\s*(.+)$/;
 const EMPTY_NOTE = "（無）";
 
 /** 判斷一份 markdown 是不是 UAT 報告。tracking 頁靠它選 parser。 */
@@ -246,6 +256,16 @@ export function parseUatReport(text: string, path?: string): UatReport {
   }
   flushItem();
   out.preamble = preambleBuf.join("\n").trim();
+
+  // 重測標記住在 preamble 裡（原樣保存的合約不變），這裡只是多讀一眼。
+  // 取第一個命中：一份報告只會重測自一份；出現多行是人手誤貼，聽第一行。
+  for (const line of preambleBuf) {
+    const m = line.trim().match(SUPERSEDES_RE);
+    if (m) {
+      out.supersedes = m[1]!.trim();
+      break;
+    }
+  }
 
   out.unanchored = out.items.filter((x) => !x.id).length;
   // 手改出來的「失敗／不測但沒說明」不算已測 —— 必填規則在寫入端執法，
@@ -402,6 +422,11 @@ export function serializeUatReport(
     `**狀態：** 進行中`,
     "",
   ];
+  // 重測標記放在檔頭最前面：機器（uat-pending）與人都在第一眼找得到。
+  const sup = spec.supersedes?.trim();
+  if (sup) {
+    out.push(`> 重測自：${sup}`, "");
+  }
   // 檔頭脈絡（目的/環境/免測/編號…）序列化成 blockquote。空行也要帶 `>`，
   // 不然 markdown 會把一段 quote 切成兩段。
   const ctx = spec.context?.trim();
@@ -451,6 +476,12 @@ export function validateUatSpec(
   }
   if (o.context !== undefined && typeof o.context !== "string") {
     errors.push("context：選填，但給了就必須是字串（檔頭脈絡自由文字）");
+  }
+  if (
+    o.supersedes !== undefined &&
+    (typeof o.supersedes !== "string" || !o.supersedes.trim())
+  ) {
+    errors.push("supersedes：選填，但給了就必須是被取代舊報告的路徑字串");
   }
   if (!Array.isArray(o.items) || o.items.length === 0) {
     errors.push("items：至少要有一題");
