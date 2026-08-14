@@ -1,8 +1,8 @@
 # UAT 實測清單 — Task Tracking 整合
 
 **建立時間：** 2026-08-14 19:49
-**最後更新：** 2026-08-14 20:12
-**狀態：** 進行中
+**最後更新：** 2026-08-14 20:52
+**狀態：** 已完成
 
 ## 目標
 
@@ -19,10 +19,10 @@
 - [x] Engineer：tracking 頁 UAT 分組＋四狀態勾選＋必填原因＋寫回＋事件；Rust `uat_handoff_take`；喚醒導頁（於隔離 worktree 完成並驗證，待合併回本 worktree） <!-- anc:t=CKNY6R8T -->
 - [x] Skill `~/.claude/skills/Uat`（出題品質門檻 + CLI 合約） <!-- anc:t=DMPZ7S9V -->
 - [x] 整合驗證：tsc＋987 測試＋cargo check＋vite build 全綠；安裝版換裝後實機驗證喚醒鏈（自動導頁選中）與 UI 勾選寫回（暫時跳過→檔案更新→還原） <!-- anc:t=ENQA8T0W -->
-- [ ] 第二眼審查：Grok 完成（12 缺口／6 項採納並已修）；Cato（codex）進行中 <!-- anc:t=GQSC0W2Y -->
+- [x] 第二眼審查：Grok 完成（12 缺口／6 項採納並已修）；Cato 完成（6 findings 全數源碼查證，5 項已修＋3 回歸測試，F6/O1 列後續） <!-- anc:t=GQSC0W2Y -->
 - [x] Grok now-fix 六項：UAT 著陸抑制歡迎 modal；handoff 單槽改佇列（CLI＋Rust＋測試）；著陸自動切換專案（比不到給匯入指引）；全無錨點檔改列「沒有步驟的檔案」＋教學態；已完成報告移出最高優先組；CLI --root 必填 <!-- anc:t=HRTD1X3Z -->
 - [x] Skill 修訂（principal 指示，子 agent 完成）：流程必須條列式（一步一原子動作、禁「→」串接）、以 mobile-final 檔為顆粒度標竿、報告頭脈絡誠實留白；評估結論 needs_code_change=no，選配 `context` 欄位列後續 <!-- anc:t=JSVE2Y4A -->
-- [ ] 收尾：commit、結束摘要 <!-- anc:t=FPRB9V1X -->
+- [x] 收尾：commit ×2（e829a2e 功能、4754574 審計修復）、安裝版更新至含全部修復的 build、結束摘要 <!-- anc:t=FPRB9V1X -->
 
 ## 決策紀錄
 
@@ -37,6 +37,8 @@
 - 20:19 — 原表格版 `uat-2026-08-14-mobile-final.md` 保留不動（含「已通過免測」脈絡），待 principal 確認後再刪
 - 20:47 — 採納 Grok 六項 now-fix（見步驟列）；later 清單（重測輪次/supersede、一鍵複製失敗交接、側欄 badge、說明草稿持久化、快速捕捉、中文 slug、報告頭 context 欄位）掛在此檔不另開票
 - 20:47 — Grok 明確裁決：不為此補 MCP／fs watcher，1 秒輪詢＋8 秒著陸窗實測夠用
+- 21:05 — Cato 裁決 concerns（自 fail 降級：F4 非 A2 違規，指令零參數）。採納修復 F1–F5；F1 是主流程真 bug（打完原因直接按失敗會被當陳舊寫入丟棄），修法＝結果鈕 mousedown preventDefault，click 為唯一寫入者
+- 21:05 — Cato 盲點清單值得留存：綠測試套件全走乾淨路徑，fixture 與 parser 同一顆腦袋寫的，不構成對抗性證據
 
 ## 阻塞 / 待決議
 
@@ -44,4 +46,10 @@
 
 ## 結束摘要
 
-（工作結束時補上）
+**做了什麼：** UAT 實測清單全鏈上線 —— Skill 出題（條列式硬規則）→ `src/cli/uat.ts`（--root 必填、slug 修正）→ handoff 佇列 → `open -a` 喚醒 → tracking 頁「實測報告」分組＋四狀態勾選（失敗/不測必填說明）→ 寫回 markdown ＋ `uat.verdict` 稽核事件。方言 parser（PM 親寫、Forge 突變測試驗證＋修 2 bug）、Rust `uat_handoff_take`（零參數、symlink 硬化）。實機驗證：喚醒自動導頁選中、AX 實點寫回、截圖存 Downloads。Border Loom 已產出 8 題正式報告等 principal 實測。
+
+**第二眼：** Grok 12 缺口（6 項當場修：抑制歡迎 modal、handoff 佇列、自動切專案、幽靈檔降組、完成報告移出、--root 必填）；Cato 6 findings（5 項當場修，F1 blur/click 雙寫互撞是主流程真 bug）。990 測試全綠。
+
+**未完成／後續：** F6 CRLF 混行尾（nit）、O1 掃描 mtime 快取、重測輪次 supersede、一鍵複製失敗交接、側欄 badge、說明草稿持久化、報告頭 `context` 欄位、中文 slug。全掛本檔決策紀錄，等真的痛再做。
+
+**建議：** principal 實測那 8 題就是本功能的第一次真實 UAT——失敗題的說明直接餵回 agent 開修復迴圈。
