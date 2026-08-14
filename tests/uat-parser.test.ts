@@ -551,3 +551,229 @@ describe("Cato 審計回歸（F2/F3/F5）", () => {
     expect(parseUatReport(r2.text).items[0]!.verdict).toBe("later");
   });
 });
+
+describe("UAT 檔頭脈絡／context 契約", () => {
+  const instructionLine =
+    "> 在 Anchorline 的 Task Tracking 開這一份逐題勾選。「失敗」與「不測」必須填說明。";
+
+  test("serialize 再 parse 時，context 的空白行與 inline markdown 都要原樣留在 preamble", () => {
+    const text = serializeUatReport(
+      {
+        title: "context round-trip",
+        context: "目的：驗證\n\n**環境：** macOS\n保留 `code` span",
+        items: [
+          {
+            title: "唯一一題",
+            steps: ["照流程做"],
+            expected: "看到正確結果",
+          },
+        ],
+      },
+      { now: "2026-08-14 22:10", mint: mintFrom(["AAAA1111"]) },
+    );
+
+    const parsed = parseUatReport(text);
+    expect(parsed.preamble).toBe(
+      [
+        "> 目的：驗證",
+        ">",
+        "> **環境：** macOS",
+        "> 保留 `code` span",
+        "",
+        instructionLine,
+      ].join("\n"),
+    );
+  });
+
+  test("沒給 context 或只給空白時，preamble 只剩標準指示且序列化位元組完全相同", () => {
+    const spec = {
+      title: "no context",
+      items: [
+        {
+          title: "唯一一題",
+          steps: ["照流程做"],
+          expected: "看到正確結果",
+        },
+      ],
+    };
+
+    const omitted = serializeUatReport(spec, {
+      now: "2026-08-14 22:11",
+      mint: mintFrom(["BBBB2222"]),
+    });
+    const empty = serializeUatReport({ ...spec, context: "" }, {
+      now: "2026-08-14 22:11",
+      mint: mintFrom(["BBBB2222"]),
+    });
+    const blank = serializeUatReport({ ...spec, context: "   \n\t " }, {
+      now: "2026-08-14 22:11",
+      mint: mintFrom(["BBBB2222"]),
+    });
+
+    expect(empty).toBe(omitted);
+    expect(blank).toBe(omitted);
+    expect(parseUatReport(omitted).preamble).toBe(instructionLine);
+    expect(parseUatReport(empty).preamble).toBe(instructionLine);
+    expect(parseUatReport(blank).preamble).toBe(instructionLine);
+  });
+
+  test("setVerdict 只准改狀態／最後更新，rich context 檔頭其餘每一行都必須位元組不變", () => {
+    const before = serializeUatReport(
+      {
+        title: "header stable",
+        context: "目的：回歸 rich header\n\n**環境：** sandbox\n保留 `code`",
+        items: [
+          {
+            title: "唯一一題",
+            steps: ["按下按鈕"],
+            expected: "題目狀態完成",
+          },
+        ],
+      },
+      { now: "2026-08-14 22:12", mint: mintFrom(["CCCC3333"]) },
+    );
+
+    const after = setVerdict(before, "CCCC3333", "pass", "", {
+      now: "2026-08-14 22:13",
+    });
+    expect(after.ok).toBe(true);
+    if (!after.ok) return;
+
+    const a = before.split("\n");
+    const b = after.text.split("\n");
+    const firstSection = locateLine(a, (line) => line.startsWith("## "));
+    const statusAt = locateLine(a, (line) => line.startsWith("**狀態：**"));
+    const updatedAt = locateLine(a, (line) => line.startsWith("**最後更新：**"));
+
+    expect(b.findIndex((line) => line.startsWith("## "))).toBe(firstSection);
+    expect(b.slice(0, firstSection)).toHaveLength(firstSection);
+
+    const diff = a
+      .slice(0, firstSection)
+      .map((line, i) => (line === b[i] ? null : i))
+      .filter((i) => i !== null);
+    expect(diff).toEqual([updatedAt, statusAt]);
+    expect(b[statusAt]).toBe("**狀態：** 已完成");
+    expect(b[updatedAt]).toBe("**最後更新：** 2026-08-14 22:13");
+  });
+
+  test("手寫檔頭把 meta 行穿插在 blockquote 前後也照樣吃對；status 不得漏進 preamble", () => {
+    // 這裡刻意把 H1 前噪音視為 preamble，明確釘住目前「原樣保存」而不是丟棄的選擇。
+    const text = [
+      "這行在 H1 前，現在合約是保留它",
+      "# UAT: 手寫 context",
+      "",
+      "**建立時間：** 2026-08-14 09:00",
+      "> 第一段 blockquote",
+      "**最後更新：** 2026-08-14 09:30",
+      "> 第二段 blockquote",
+      "**狀態：** 已完成",
+      "",
+      "一般自由文字",
+      "",
+      "## T1 唯一一題 <!-- anc:t=DDDD4444 -->",
+      "",
+      "**流程：**",
+      "1. 手寫也能過",
+      "",
+      "**預期：** parser 不亂掉",
+      "",
+      "**結果：** 未測",
+      "",
+      "**說明：**",
+      "（無）",
+      "",
+    ].join("\n");
+
+    const parsed = parseUatReport(text);
+    expect(parsed.created).toBe("2026-08-14 09:00");
+    expect(parsed.updated).toBe("2026-08-14 09:30");
+    expect(parsed.status).toBe("進行中");
+    expect(parsed.preamble).toBe(
+      [
+        "這行在 H1 前，現在合約是保留它",
+        "",
+        "> 第一段 blockquote",
+        "> 第二段 blockquote",
+        "",
+        "一般自由文字",
+      ].join("\n"),
+    );
+  });
+
+  test("檔頭裡的假結果行與 fenced ## 只算 preamble，不會污染題目或長出幽靈題", () => {
+    const text = [
+      "# UAT: preamble guard",
+      "",
+      "**建立時間：** 2026-08-14",
+      "**最後更新：** 2026-08-14",
+      "**狀態：** 進行中",
+      "",
+      "**結果：** 通過",
+      "```md",
+      "## 這不是新題",
+      "**結果：** 失敗",
+      "```",
+      "",
+      "## T1 唯一一題 <!-- anc:t=EEEE5555 -->",
+      "",
+      "**流程：**",
+      "1. 照流程做",
+      "",
+      "**預期：** 題目仍只有一題",
+      "",
+      "**結果：** 未測",
+      "",
+      "**說明：**",
+      "（無）",
+      "",
+    ].join("\n");
+
+    const parsed = parseUatReport(text);
+    expect(parsed.items).toHaveLength(1);
+    expect(parsed.items[0]!.verdict).toBe("pending");
+    expect(parsed.preamble).toBe(
+      [
+        "**結果：** 通過",
+        "```md",
+        "## 這不是新題",
+        "**結果：** 失敗",
+        "```",
+      ].join("\n"),
+    );
+  });
+
+  test("validateUatSpec 的 context 只接受字串，合法內容要原樣留在回傳 spec", () => {
+    const bad = validateUatSpec({
+      title: "validate context",
+      context: 123,
+      items: [
+        {
+          title: "唯一一題",
+          steps: ["照流程做"],
+          expected: "看到正確結果",
+        },
+      ],
+    });
+    expect(bad.ok).toBe(false);
+    if (bad.ok) return;
+    expect(bad.errors).toEqual([
+      "context：選填，但給了就必須是字串（檔頭脈絡自由文字）",
+    ]);
+
+    const good = validateUatSpec({
+      title: "validate context",
+      context: "目的：驗證 context",
+      items: [
+        {
+          title: "唯一一題",
+          steps: ["照流程做"],
+          expected: "看到正確結果",
+        },
+      ],
+    });
+    expect(good.ok).toBe(true);
+    if (!good.ok) return;
+    expect(good.spec.context).toBe("目的：驗證 context");
+  });
+});

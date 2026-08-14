@@ -23,6 +23,7 @@ type CliRun = {
 
 type UatSpec = {
   title: string;
+  context?: string;
   items: Array<{
     title: string;
     steps: string[];
@@ -285,6 +286,55 @@ describe("UAT CLI：真的走 subprocess 時也要守住輸出契約", () => {
     await withSandbox(async ({ rootDir, handoffDir }) => {
       const run = await runCli(sampleSpec("Checkout redesign"), { rootDir, handoffDir });
       expect(basename(reportPathFrom(run.stdout))).toBe("uat-checkout-redesign.md");
+    });
+  });
+
+  test("CLI 真的寫出帶 context 的檔頭，而且 parser 讀回的 preamble 不能是空的", async () => {
+    await withSandbox(async ({ rootDir, handoffDir }) => {
+      const spec: UatSpec = {
+        title: "Context from CLI",
+        context: "目的：CLI 驗證\n\n**環境：** sandbox\n保留 `code`",
+        items: [
+          {
+            title: "唯一一題",
+            steps: ["從 CLI 產檔"],
+            expected: "檔頭帶入 context blockquote",
+          },
+        ],
+      };
+
+      const run = await runCli(spec, { rootDir, handoffDir });
+      expect(run.exitCode).toBe(0);
+      expect(run.stderr).toBe("");
+
+      const reportPath = reportPathFrom(run.stdout);
+      const text = readFileSync(reportPath, "utf8");
+      const lines = text.split("\n");
+      const statusAt = lines.findIndex((line) => line.startsWith("**狀態：**"));
+      const firstSection = lines.findIndex((line) => line.startsWith("## "));
+      expect(statusAt).toBeGreaterThanOrEqual(0);
+      expect(firstSection).toBeGreaterThan(statusAt);
+      expect(lines.slice(statusAt + 2, firstSection)).toEqual([
+        "> 目的：CLI 驗證",
+        ">",
+        "> **環境：** sandbox",
+        "> 保留 `code`",
+        "",
+        "> 在 Anchorline 的 Task Tracking 開這一份逐題勾選。「失敗」與「不測」必須填說明。",
+        "",
+      ]);
+
+      const parsed = parseUatReport(text, reportPath);
+      expect(parsed.preamble).toBe(
+        [
+          "> 目的：CLI 驗證",
+          ">",
+          "> **環境：** sandbox",
+          "> 保留 `code`",
+          "",
+          "> 在 Anchorline 的 Task Tracking 開這一份逐題勾選。「失敗」與「不測」必須填說明。",
+        ].join("\n"),
+      );
     });
   });
 });
