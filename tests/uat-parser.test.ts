@@ -646,7 +646,6 @@ describe("UAT 檔頭脈絡／context 契約", () => {
     const updatedAt = locateLine(a, (line) => line.startsWith("**最後更新：**"));
 
     expect(b.findIndex((line) => line.startsWith("## "))).toBe(firstSection);
-    expect(b.slice(0, firstSection)).toHaveLength(firstSection);
 
     const diff = a
       .slice(0, firstSection)
@@ -741,6 +740,73 @@ describe("UAT 檔頭脈絡／context 契約", () => {
         "```",
       ].join("\n"),
     );
+  });
+
+  test("題目說明內出現建立時間／最後更新／狀態樣式的行，setVerdict 後也必須位元組不丟失", () => {
+    const before = serializeUatReport(
+      {
+        title: "note meta fidelity",
+        context: "目的：驗證 note round-trip",
+        items: [
+          {
+            title: "唯一一題",
+            steps: ["貼上除錯紀錄"],
+            expected: "說明全文原樣保留",
+          },
+        ],
+      },
+      { now: "2026-08-14 22:14", mint: mintFrom(["FFFF6666"]) },
+    );
+    const note = [
+      "log 貼上來：",
+      "**建立時間：** 1999-01-01",
+      "**最後更新：** 1999-01-02",
+      "**狀態：** 進行中",
+      "完",
+    ].join("\n");
+
+    const after = setVerdict(before, "FFFF6666", "fail", note, {
+      now: "2026-08-14 22:15",
+    });
+    expect(after.ok).toBe(true);
+    if (!after.ok) return;
+
+    const parsed = parseUatReport(after.text);
+    expect(parsed.items[0]!.note).toBe(note);
+  });
+
+  test("題目說明內的假建立時間／最後更新不得回寫污染真正檔頭", () => {
+    const before = serializeUatReport(
+      {
+        title: "header immunity",
+        context: "目的：驗證 header 不被 note 汙染",
+        items: [
+          {
+            title: "唯一一題",
+            steps: ["貼上含 meta 字樣的失敗說明"],
+            expected: "真正檔頭時間維持原值",
+          },
+        ],
+      },
+      { now: "2026-08-14 22:16", mint: mintFrom(["GGGG7777"]) },
+    );
+    const note = [
+      "log 貼上來：",
+      "**建立時間：** 1999-01-01",
+      "**最後更新：** 1999-01-02",
+      "**狀態：** 進行中",
+      "完",
+    ].join("\n");
+
+    const after = setVerdict(before, "GGGG7777", "fail", note, {
+      now: "2026-08-14 22:17",
+    });
+    expect(after.ok).toBe(true);
+    if (!after.ok) return;
+
+    const parsed = parseUatReport(after.text);
+    expect(parsed.created).toBe("2026-08-14 22:16");
+    expect(parsed.updated).toBe("2026-08-14 22:17");
   });
 
   test("validateUatSpec 的 context 只接受字串，合法內容要原樣留在回傳 spec", () => {

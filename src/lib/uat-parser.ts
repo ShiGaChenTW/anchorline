@@ -187,15 +187,22 @@ export function parseUatReport(text: string, path?: string): UatReport {
       out.title = h1[1]!.trim() || out.title;
       continue;
     }
-    if (s.startsWith("**建立時間：**") || s.startsWith("**建立時間:**")) {
+    if (
+      !cur &&
+      (s.startsWith("**建立時間：**") || s.startsWith("**建立時間:**"))
+    ) {
       out.created = s.replace(/\*\*建立時間[：:]\*\*/, "").trim();
       continue;
     }
-    if (s.startsWith("**最後更新：**") || s.startsWith("**最後更新:**")) {
+    if (
+      !cur &&
+      (s.startsWith("**最後更新：**") || s.startsWith("**最後更新:**"))
+    ) {
       out.updated = s.replace(/\*\*最後更新[：:]\*\*/, "").trim();
       continue;
     }
-    if (s.startsWith("**狀態：**") || s.startsWith("**狀態:**")) {
+    if (!cur && (s.startsWith("**狀態：**") || s.startsWith("**狀態:**"))) {
+      // 狀態由題目結果推導；這行只在檔頭吞掉，避免它漏進 preamble。
       continue;
     }
 
