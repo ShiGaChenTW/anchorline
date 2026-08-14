@@ -21,7 +21,7 @@
  * 純函式、零 I/O。
  */
 
-import { ANCHOR_PREFIX, anchorOf, mintId, stripAnchor } from "./plan-parser";
+import { ANCHOR_PREFIX, anchorOf, eolOf, mintId, stripAnchor } from "./plan-parser";
 
 export type UatVerdict = "pending" | "pass" | "fail" | "wont" | "later";
 
@@ -317,7 +317,10 @@ export function setVerdict(
   }
 
   const hadTrailingNewline = text.endsWith("\n");
-  const lines = text.split("\n");
+  // CRLF 檔行尾的 \r 會讓標籤行比不中、寫回時混用行尾（W1-7）：
+  // 統一剝掉、join 時還原檔案原本的換行慣例。
+  const eol = eolOf(text);
+  const lines = text.split(/\r?\n/);
   // 區段邊界要跟 parser 同一套視角：圍欄裡的 `##` 是內容不是新題（Cato F5）
   let inFence = false;
   let si = -1;
@@ -378,7 +381,7 @@ export function setVerdict(
     lines.splice(ei, 0, "", "**說明：**", ...noteLines);
   }
 
-  let next = lines.join("\n");
+  let next = lines.join(eol);
 
   // 報告層級狀態：重讀一次算，不要在上面的迴圈裡邊改邊猜
   const parsed = parseUatReport(next);
@@ -393,7 +396,7 @@ export function setVerdict(
       `**最後更新：** ${opts.now}`,
     );
   }
-  if (hadTrailingNewline && !next.endsWith("\n")) next += "\n";
+  if (hadTrailingNewline && !next.endsWith("\n")) next += eol;
   return { ok: true, text: next };
 }
 

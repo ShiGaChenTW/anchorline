@@ -146,6 +146,18 @@ function defaultRand(): number {
 }
 
 /**
+ * 檔案的換行慣例（W1-7）。
+ *
+ * mutator 一律 `split(/\r?\n/)` 再用這個值 join：CRLF 檔就地轉 LF 的話，
+ * 下一次 safeApply 的位元組級 hash 比對必失敗，回報「檔案被改過」拒寫——
+ * 症狀長得像併發衝突，其實是自己上一次寫入改了行尾。混用的檔案以
+ * 「出現過 CRLF 就整份 CRLF」收斂——確定性比保留混亂重要。
+ */
+export function eolOf(text: string): "\r\n" | "\n" {
+  return text.includes("\r\n") ? "\r\n" : "\n";
+}
+
+/**
  * Lazy 鑄造 —— 給 Plan Steps 區段裡還沒有錨點的 checkbox 補上 id。
  *
  * 刻意**不做**一次性回填腳本：「先跑一個會改 9 個檔的腳本才能開始」是最容易
@@ -183,7 +195,7 @@ export function mintMissingIds(
     return `${raw.replace(/\s+$/, "")} <!-- ${ANCHOR_PREFIX}:t=${id} -->`;
   });
 
-  return { text: out.join("\n"), minted };
+  return { text: out.join(eolOf(text)), minted };
 }
 
 /**
