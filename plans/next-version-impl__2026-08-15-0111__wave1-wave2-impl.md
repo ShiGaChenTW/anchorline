@@ -1,7 +1,7 @@
 # 下一版實作 — Wave 1（正確性止血）＋ Wave 2（UAT 迴圈補全）
 
 **建立時間：** 2026-08-15 01:11
-**最後更新：** 2026-08-15 04:45
+**最後更新：** 2026-08-15 04:55
 **狀態：** 進行中
 
 ## 目標
@@ -76,6 +76,7 @@ Cato（收尾審計）。完成後開 PR 回 main，並用 Uat skill 出實測�
 - 03:20 — 教訓：tsc incremental 可能在剛刪檔後假綠（W1-1 首次 commit 帶進壞 import，已 amend 為 3a55c98）。每次 commit 前 `git show --stat` ＋ grep TEMP 標記。
 - 03:20 — W2-2 設計判準：「本輪收工」＝把剩餘未測題批次標「暫時跳過」。狀態推導自然轉已完成（離開待辦），零方言變更、不破 Cato F3 完成判定守門，報告誠實記錄「這輪跳過了哪些」。批次用 setVerdict 組合、safeApply 一次寫入。
 - 04:45 — **Grok 第二眼：14 條挑戰、12 成立（高 3／中 5／低 4）**，全數判讀完畢。已修：C1（supersede 循環——升級為一般化環偵測，環內並存）、C2（--supersedes 對 root 解析＋存在驗證）、C3（收工按鈕/toast 對無錨點題誠實）、C4（supersede 標記圍欄意識，Cato F5 規矩）、C5（badge invalidate 加 dirty 旗標防吞）、C6（alignProjectForUat 套 canon 正規化）、C7（openspec 治理改純形狀認定——N.M 是位置編號，存在驗證會讓編輯 tasks.md 打回未治理）、C8（js_dialogs 加 objc2::exception::catch 攔 ObjC 例外）、C9（eolOf 改多數決）、C10（note split 剝 \r）、C11（strict 取號 window.prompt 改頁內三鈕——dogfood 摩擦①正解）。**緩辦（記帳）**：C12（草稿層蓋掉外部並發寫入——草稿模型內在代價，提示 UI 留下一版）、C13（送出給 agent 帶未存補充說明——必填原因已落地，損失限於補充文字）。C14/C15 不成立。
+- 04:55 — C11（取號三鈕）與 C8（ObjC 例外攔截）標 **[DEFERRED-VERIFY]**：dev 環境驗證受阻——scratch 專案 dashboard 的「改採 vX.YY.ZZ」按鈕在「已綁資料夾＋非 git」渲染路徑下 click/AX press/鍵盤啟動皆無反應（confirm 從未被呼叫，js_dialogs 日誌零筆），疑似**既有 bug**，需在 main build 重現確認後開票。兩項已進 principal 實測清單（真安裝版驗證）。
 
 ## 阻塞 / 待決議
 
