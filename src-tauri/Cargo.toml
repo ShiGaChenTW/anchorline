@@ -21,6 +21,15 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# js-dialogs.rs 用：wry 的 WKWebView UI delegate 沒實作 alert/confirm/prompt，
+# 我們在執行期把三個方法補到它的 delegate class 上（見 src/js_dialogs.rs）。
+# 版本跟著 wry 0.55 的 dep tree，避免兩套 objc2 runtime。
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSGeometry"] }
+objc2-app-kit = { version = "0.3", features = ["NSAlert", "NSButton", "NSTextField", "NSControl", "NSView", "NSResponder", "NSWindow", "NSPanel", "NSApplication"] }
+block2 = "0.6"
+
 # 刻意不引入 tauri-plugin-shell。
 # 那個 plugin 是設計給「前端呼叫 shell」的，即使配 allowlist，
 # 參數仍然由前端組。這裡的所有外部程式呼叫都在 Rust 裡把參數寫死，

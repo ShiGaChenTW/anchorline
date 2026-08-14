@@ -6,6 +6,8 @@
 
 mod commands;
 mod exec;
+#[cfg(target_os = "macos")]
+mod js_dialogs;
 mod paths;
 
 /// 契約測試用的入口。
@@ -31,6 +33,14 @@ pub fn run() {
             if let Ok(dir) = app.path().app_data_dir() {
                 app.state::<paths::RegisteredRoots>()
                     .attach(dir.join("registered-roots.json"));
+            }
+            // wry 的 WKWebView 沒實作 alert/confirm/prompt —— 在這裡補上，
+            // 否則桌面版所有確認框都等於「永遠按取消」（見 js_dialogs.rs）
+            #[cfg(target_os = "macos")]
+            for (_label, window) in app.webview_windows() {
+                let _ = window.with_webview(|wv| unsafe {
+                    js_dialogs::install(wv.inner().cast());
+                });
             }
             Ok(())
         })

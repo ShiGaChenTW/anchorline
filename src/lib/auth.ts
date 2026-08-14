@@ -1,3 +1,20 @@
+// ── 還原原生 confirm / alert ─────────────────────────────────────
+// tauri-plugin-dialog 的注入腳本把 window.confirm 蓋成 **async 函式**：
+// 回傳 Promise、恆為 truthy，於是全 App 每一個 `if (!confirm(...)) return`
+// 守門都形同虛設 —— 刪除、放行、覆寫全部「不問直接做」（2026-08-14 實測：
+// 編輯台按 ✕ 無聲刪掉子章節，這一行就是根因）。alert 被蓋成射後不理。
+//
+// delete 自有屬性後會退回 Window prototype 的原生實作；桌面版的原生
+// 三兄弟由 Rust 端 js_dialogs.rs 的 NSAlert delegate 實作（wry 自己沒做）。
+// 瀏覽器版沒被蓋過，delete 不存在的自有屬性無害。
+// 放在 auth.ts 模組頂層：所有頁面的第一個 import 鏈都經過這裡。
+try {
+  delete (window as { confirm?: unknown }).confirm;
+  delete (window as { alert?: unknown }).alert;
+} catch {
+  /* 不可設定就算了 —— 瀏覽器版本來就是原生 */
+}
+
 import { store } from "../data/store";
 import type { Employee } from "../data/types";
 import { summarizePermissions } from "./permissions";
