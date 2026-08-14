@@ -29,8 +29,8 @@ import { canQueryStatus, getGhStatusCached, requestOpenspecStatus } from "../lib
 import { openspecProgressPct } from "../lib/openspec-status";
 import { coverageLine, rollupCoverage } from "../lib/governance";
 import { canReadCoverage, requestCoverage, type CoverageResult } from "../lib/governance-bridge";
-import { loadPendingUats, type PendingUat } from "../lib/uat-pending";
-import { plansDirsOf } from "../lib/tracking-bridge";
+import { attributePendingUats, loadPendingUats, type PendingUat } from "../lib/uat-pending";
+import { plansDirsOfAll } from "../lib/tracking-bridge";
 import { trackingUrlFor } from "../lib/uat-handoff";
 
 if (!requireAuth()) {
@@ -460,25 +460,38 @@ if (!requireAuth()) {
   }
 
   /**
-   * 待實測的報告。**等人動手的事，不是等 agent 的事** —— 這一頁其餘每一格
-   * 講的都是「專案怎麼樣」，只有這一區的下一步在使用者自己身上。
+   * 待實測的報告 —— **跨專案的收件匣**。等人動手的事，不是等 agent 的事：
+   * 這一頁其餘每一格講的都是「專案怎麼樣」，只有這一區的下一步在使用者身上。
    *
-   * 只掃當前選取專案（`plansDirsOf` 的規矩），而且**只在頁面載入時掃一次**：
-   * 這是磁碟 I/O，而它的值一分鐘內不會自己變。零份時整區不渲染 ——
-   * 一個永遠寫著「0 份」的空殼只是在首屏多佔一塊位置。
+   * 掃**全部**專案（`plansDirsOfAll`），不是當前選取的那個。收件匣的意義正是
+   * 在人還沒切到那個專案時就告訴他有事 —— agent 幫 B 專案出的實測題，人正在
+   * A 專案工作時如果這裡看不到，那份報告就只剩喚醒導頁那一次曝光機會。
+   *
+   * 一樣**只在頁面載入時掃一次**：這是磁碟 I/O，而它的值一分鐘內不會自己變。
+   * 零份時整區不渲染 —— 一個永遠寫著「0 份」的空殼只是在首屏多佔一塊位置。
    */
   let pendingUats: PendingUat[] = [];
 
   function cardPendingUat(): string {
     if (!pendingUats.length) return "";
+    const activeId = store.get().activeProjectId;
     return `<section class="ov-others ov-uat">
       <p class="ov-others-head">待實測 ${pendingUats.length} 份</p>
       <ul class="ov-rows">${pendingUats
         .map((u) => {
           const pct = u.total ? Math.round((u.closed / u.total) * 100) : 0;
+          // 專案名 chip 只掛在**別的專案**的報告上：當前專案是預設脈絡，
+          // 每一列都標一次等於把唯一需要注意的那幾列淹掉。歸屬比不到（專案
+          // 還沒匯入）時也不標 —— 那種情況點進去會由 tracking 頁講清楚。
+          const foreign = u.projectName && u.projectId !== activeId;
+          // chip 放進 .ov-row-name 裡面而不是多開一個格子：.ov-row 是固定五欄的
+          // grid，多一個孩子會把進度條擠到別的欄位去。
+          const chip = foreign
+            ? `<span class="p-tag" style="margin-right:6px">${escapeHtml(u.projectName!)}</span>`
+            : "";
           return `<li>
-            <button type="button" class="ov-row" data-uat="${escapeHtml(u.path)}" title="${escapeHtml(u.name)}">
-              <span class="ov-row-name">${escapeHtml(u.title)}</span>
+            <button type="button" class="ov-row" data-uat="${escapeHtml(u.path)}" title="${escapeHtml(foreign ? `${u.projectName} · ${u.name}` : u.name)}">
+              <span class="ov-row-name">${chip}${escapeHtml(u.title)}</span>
               <span class="ov-row-state tone-blocked">${u.closed}/${u.total} 已結</span>
               <span class="ov-bar"><i style="width:${Math.max(2, pct)}%"></i></span>
               <span class="ov-row-pct">${pct}%</span>
@@ -493,7 +506,17 @@ if (!requireAuth()) {
   /** 掃一次就好。掃完才重畫 —— 空的時候整區不存在，不需要先出一個骨架。 */
   async function loadPendingUat(): Promise<void> {
     const st = store.get();
-    pendingUats = await loadPendingUats(plansDirsOf(st.projects, st.activeProjectId));
+    const list = await loadPendingUats(plansDirsOfAll(st.projects));
+    // 顯示名在這裡算好再傳進去：`projectDisplayName` 的 fallback 鏈屬於
+    // data/types，lib/uat-pending 不該再實作一份會分岔的版本。
+    pendingUats = attributePendingUats(
+      list,
+      st.projects.map((p) => ({
+        id: p.id,
+        name: projectDisplayName(p),
+        rootPath: p.importSummary?.rootPath,
+      })),
+    );
     if (pendingUats.length) render();
   }
 
