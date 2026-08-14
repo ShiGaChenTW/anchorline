@@ -244,6 +244,18 @@ function setNavCount(page: string, n: number, hideAtZero = false) {
   });
 }
 
+/**
+ * 待實測 badge 立即失效並重掃（W1-5）。
+ *
+ * 「掃一次就夠」的前提是分母只被導頁改變——但勾結果／收工會**當場**改變
+ * 分子：一份報告在同一頁上測完，badge 卻停在舊數字，直到下次導頁。
+ * 勾選成功後呼叫這一支，badge 跟著檔案一起動。
+ */
+export function invalidateUatBadge() {
+  uatScanned = false;
+  refreshUatBadge();
+}
+
 /** 更新側欄 count（專案數／範本數／待審／待實測） */
 export function refreshNavCounts() {
   const st = store.get();
