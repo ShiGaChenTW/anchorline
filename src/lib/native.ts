@@ -152,6 +152,42 @@ export const native = {
   projectStats: (folderPath: string) => call<unknown>("project_stats", { folderPath }),
   trackingScan: (plansDirs: string[], openspecRoots: string[] = []) =>
     call<NativeTrackingScan>("tracking_scan", { plansDirs, openspecRoots }),
+  /**
+   * 取走一份 UAT 交件。**無參數** —— 交件檔的路徑在 Rust 端寫死，前端不能說
+   * 要讀哪個檔（見 `commands.rs` 的 `uat_handoff_take`）。回 `null` 代表沒有待辦。
+   *
+   * 走 `callMaybe` 而不是 `call`：這支每次視窗聚焦都會被呼叫，而「沒有待辦」
+   * 與「不在桌面版」都是狀態不是例外。用 throw 表達會讓一個背景輪詢在瀏覽器裡
+   * 每次聚焦都丟一個沒人接的 rejection。
+   */
+  uatHandoffTake: () => callMaybe<string | null>("uat_handoff_take"),
+
+  /**
+   * UAT 報告格式規格。**四支都無參數，或只收一個經 Rust 驗證的檔名** ——
+   * `~/.anchorline/uat-format.md` 與它的快照目錄都在 Rust 端寫死。
+   *
+   * 全部走 `callMaybe`：這一組在設定頁載入時就會跑，而「還沒有規格檔」與
+   * 「不在桌面版」都是狀態不是例外。用 throw 表達會讓瀏覽器版一開設定頁
+   * 就吃三個沒人接的 rejection。
+   */
+  uatFormatRead: () => callMaybe<string | null>("uat_format_read"),
+  /**
+   * 寫規格檔。Rust 端會先把舊內容快照起來，再追加一行變更紀錄。
+   * `source` 只認 `"manual"` / `"ai"`，其他值會被寫成 `"manual"`。
+   */
+  uatFormatWrite: (content: string, source: "manual" | "ai", note: string) =>
+    callMaybe<{ path: string; snapshot: string | null }>("uat_format_write", {
+      content,
+      source,
+      note,
+    }),
+  uatFormatHistory: () =>
+    callMaybe<{ name: string; mtimeMs: number }[]>("uat_format_history"),
+  /** `name` 必須是 `uat_format_history()` 給的檔名。不合格 Rust 端一律回 null。 */
+  uatFormatHistoryRead: (name: string) =>
+    callMaybe<string | null>("uat_format_history_read", { name }),
+  /** 變更紀錄原文（jsonl）。判讀在 `uat-format.ts` 的 `parseFormatLog`。 */
+  uatFormatLog: () => callMaybe<string | null>("uat_format_log"),
 
   readFile: (path: string) => call<{ path: string; text: string }>("read_file", { path }),
   writeFile: (path: string, text: string) => call<{ path: string }>("write_file", { path, text }),
