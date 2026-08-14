@@ -475,7 +475,11 @@ if (!requireAuth()) {
   function cardPendingUat(): string {
     if (!pendingUats.length) return "";
     const activeId = store.get().activeProjectId;
-    return `<section class="ov-others ov-uat">
+    // W2-5 診斷（2026-08-15，AX 實機）：這一列在 AX 樹是真 button、名稱由內容
+    // 完整算出（「W1-1 … 0/2 已結 0% 開報告」），title 沒有蓋掉名稱——計劃裡
+    // 「AX 看不到」的症狀在現行 build 不可重現，不修不存在的 bug。原本掛著的
+    // .ov-uat 沒有任何 CSS 規則對應（死 class），移除。
+    return `<section class="ov-others">
       <p class="ov-others-head">待實測 ${pendingUats.length} 份</p>
       <ul class="ov-rows">${pendingUats
         .map((u) => {
