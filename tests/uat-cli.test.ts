@@ -7,7 +7,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { parseUatReport } from "../src/lib/uat-parser";
 
@@ -272,11 +272,67 @@ describe("UAT CLI：真的走 subprocess 時也要守住輸出契約", () => {
     });
   });
 
-  test("非 ASCII 標題：檔名退回時間戳，且絕不能出現 uat-uat-", async () => {
+  test("純中文標題：檔名直接保留中文，且絕不能出現 uat-uat-", async () => {
     await withSandbox(async ({ rootDir, handoffDir }) => {
-      const run = await runCli(sampleSpec("結帳改版實測"), { rootDir, handoffDir });
+      const run = await runCli(sampleSpec("登入流程驗證"), { rootDir, handoffDir });
+      expect(run.exitCode).toBe(0);
       const reportPath = reportPathFrom(run.stdout);
-      const filename = basename(reportPath);
+      const filename = basename(reportPath).normalize("NFC");
+      expect(filename).toBe("uat-登入流程驗證.md");
+      expect(filename.includes("uat-uat-")).toBe(false);
+    });
+  });
+
+  test("混合中英標題：英文只小寫 ASCII、中文保留原樣，連續空白會收斂成單一連字號", async () => {
+    await withSandbox(async ({ rootDir, handoffDir }) => {
+      const run = await runCli(sampleSpec("  登入   Login   Flow  "), { rootDir, handoffDir });
+      expect(run.exitCode).toBe(0);
+      const filename = basename(reportPathFrom(run.stdout)).normalize("NFC");
+      expect(filename).toBe("uat-登入-login-flow.md");
+    });
+  });
+
+  test("危險字元：會從檔名移除，且 `/` 不會把報告寫出 plans/ 之外", async () => {
+    await withSandbox(async ({ rootDir, handoffDir }) => {
+      const run = await runCli(sampleSpec('登入 / Login: "Happy Path"'), { rootDir, handoffDir });
+      expect(run.exitCode).toBe(0);
+      const reportPath = reportPathFrom(run.stdout);
+      const filename = basename(reportPath).normalize("NFC");
+      expect(filename).toBe("uat-登入-login-happy-path.md");
+      expect(filename.includes("/")).toBe(false);
+      expect(filename.includes(":")).toBe(false);
+      expect(filename.includes('"')).toBe(false);
+      expect(dirname(reportPath)).toBe(join(rootDir, "plans"));
+    });
+  });
+
+  test("控制字元：會直接移除，不留下額外連字號", async () => {
+    await withSandbox(async ({ rootDir, handoffDir }) => {
+      const title = `登入${String.fromCharCode(0)}流程${String.fromCharCode(31)}驗證${String.fromCharCode(127)}`;
+      const run = await runCli(sampleSpec(title), { rootDir, handoffDir });
+      expect(run.exitCode).toBe(0);
+      const filename = basename(reportPathFrom(run.stdout)).normalize("NFC");
+      expect(filename).toBe("uat-登入流程驗證.md");
+    });
+  });
+
+  test("NFD 輸入：CLI 輸出的檔名位元組要收斂成 NFC", async () => {
+    await withSandbox(async ({ rootDir, handoffDir }) => {
+      const run = await runCli(sampleSpec("Cafe\u0301"), { rootDir, handoffDir });
+      expect(run.exitCode).toBe(0);
+      const filename = basename(reportPathFrom(run.stdout));
+      const stem = filename.replace(/^uat-/, "").replace(/\.md$/, "");
+      expect(Array.from(stem, (char) => char.codePointAt(0)!)).toEqual([0x63, 0x61, 0x66, 0xe9]);
+      expect(stem).toBe(stem.normalize("NFC"));
+      expect(stem).not.toBe(stem.normalize("NFD"));
+    });
+  });
+
+  test("全危險字元標題：slug 會變空字串，檔名退回時間戳格式", async () => {
+    await withSandbox(async ({ rootDir, handoffDir }) => {
+      const run = await runCli(sampleSpec("//::**"), { rootDir, handoffDir });
+      expect(run.exitCode).toBe(0);
+      const filename = basename(reportPathFrom(run.stdout)).normalize("NFC");
       expect(filename).toMatch(/^uat-\d{8}-\d{4}(-\d+)?\.md$/);
       expect(filename.includes("uat-uat-")).toBe(false);
     });
@@ -286,6 +342,35 @@ describe("UAT CLI：真的走 subprocess 時也要守住輸出契約", () => {
     await withSandbox(async ({ rootDir, handoffDir }) => {
       const run = await runCli(sampleSpec("Checkout redesign"), { rootDir, handoffDir });
       expect(basename(reportPathFrom(run.stdout))).toBe("uat-checkout-redesign.md");
+    });
+  });
+
+  test("頭尾句點：會被修掉，但中間句點保留", async () => {
+    await withSandbox(async ({ rootDir, handoffDir }) => {
+      const run = await runCli(sampleSpec("..版本 v1.0.."), { rootDir, handoffDir });
+      expect(run.exitCode).toBe(0);
+      const filename = basename(reportPathFrom(run.stdout)).normalize("NFC");
+      expect(filename).toBe("uat-版本-v1.0.md");
+    });
+  });
+
+  test("超長中文標題：檔名截斷到檔案系統上限內，不會拋 ENAMETOOLONG", async () => {
+    await withSandbox(async ({ rootDir, handoffDir }) => {
+      // 300 個中文字。中文放行之前這條路徑碰不到（CJK 一律退時間戳），
+      // 拿掉截斷的症狀是 writeFileSync 直接炸、exitCode 非 0。
+      const run = await runCli(sampleSpec("登入流程驗證".repeat(50)), { rootDir, handoffDir });
+      expect(run.exitCode).toBe(0);
+      expect(run.stderr).toBe("");
+
+      const reportPath = reportPathFrom(run.stdout);
+      const filename = basename(reportPath).normalize("NFC");
+      expect(Array.from(filename).length).toBeLessThanOrEqual(255);
+      expect(existsSync(reportPath)).toBe(true);
+      // 截斷過但仍要保有辨識度，而且尾巴不能停在連字號或句點上
+      expect(filename.startsWith("uat-登入流程驗證")).toBe(true);
+      const stem = filename.replace(/^uat-/, "").replace(/\.md$/, "");
+      expect(stem.endsWith("-")).toBe(false);
+      expect(stem.endsWith(".")).toBe(false);
     });
   });
 
