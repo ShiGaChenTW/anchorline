@@ -353,7 +353,11 @@ fn signal_path() -> PathBuf {
 }
 
 fn mtime_ms(p: &Path) -> Option<f64> {
-    let m = fs::metadata(p).ok()?;
+    mtime_ms_of(&fs::metadata(p).ok()?)
+}
+
+/// 掃描迴圈手上已有 metadata 時用這支——同一個 DirEntry 再 stat 一次是白繳的系統呼叫
+fn mtime_ms_of(m: &fs::Metadata) -> Option<f64> {
     let t = m.modified().ok()?;
     let d = t.duration_since(std::time::UNIX_EPOCH).ok()?;
     Some(d.as_secs_f64() * 1000.0)
@@ -400,7 +404,7 @@ fn scan_openspec(roots: &[String], files: &mut Vec<PlanStat>, seen: &mut std::co
             if !meta.is_file() || meta.len() == 0 || meta.len() > MAX_TEXT_BYTES {
                 continue;
             }
-            let (Some(ms), Ok(text)) = (mtime_ms(&p), fs::read_to_string(&p)) else {
+            let (Some(ms), Ok(text)) = (mtime_ms_of(&meta), fs::read_to_string(&p)) else {
                 continue;
             };
             files.push(PlanStat {
@@ -442,7 +446,7 @@ pub fn scan_plans(plans_dirs: &[String], openspec_roots: &[String]) -> TrackingS
             if !meta.is_file() || meta.len() == 0 || meta.len() > MAX_TEXT_BYTES {
                 continue;
             }
-            let (Some(ms), Ok(text)) = (mtime_ms(&p), fs::read_to_string(&p)) else {
+            let (Some(ms), Ok(text)) = (mtime_ms_of(&meta), fs::read_to_string(&p)) else {
                 continue;
             };
             files.push(PlanStat {
