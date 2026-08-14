@@ -38,13 +38,37 @@ function formatMinuteSlug(at: Date): string {
   return `${at.getFullYear()}${pad2(at.getMonth() + 1)}${pad2(at.getDate())}-${pad2(at.getHours())}${pad2(at.getMinutes())}`;
 }
 
+const FILE_NAME_DANGER_RE = /[\u0000-\u001F\u007F/\\:*?"<>|]+/g;
+const ASCII_UPPER_RE = /[A-Z]/g;
+const WHITESPACE_RE = /\s+/gu;
+const DUPLICATE_HYPHEN_RE = /-+/g;
+// 句點不在一般危險字元清單裡，但頭尾句點會把報告變成隱藏檔，`.` / `..` 甚至不是合法 stem。
+const EDGE_DOTS_AND_HYPHENS_RE = /^[.-]+|[.-]+$/g;
+// APFS 的單一路徑元件上限是 255 個字元（不是位元組——120 個中文字／360 bytes 實測會過）。
+// 扣掉 `uat-` 前綴與 `.md` 副檔名，再留一段給撞名時的 `-2`/`-3` 後綴。
+// 這條上限在中文放行之前碰不到：舊行為把 CJK 一律刷成時間戳，永遠是 13 個字元。
+// 不截斷的症狀是 writeFileSync 丟 ENAMETOOLONG、CLI 帶著原始 stack trace 中止——
+// 而這支 CLI 其他每一條錯誤路徑都是走 fail() 的可讀訊息。
+const MAX_SLUG_CHARS = 240;
+
 function slugOfTitle(title: string): string {
-  return title
-    .replace(/[^\x00-\x7F]+/g, " ")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-+/g, "-");
+  const cleaned = title
+    .replace(FILE_NAME_DANGER_RE, "")
+    .trim()
+    .replace(ASCII_UPPER_RE, (char) => char.toLowerCase())
+    .replace(WHITESPACE_RE, "-")
+    .replace(DUPLICATE_HYPHEN_RE, "-")
+    .replace(EDGE_DOTS_AND_HYPHENS_RE, "");
+
+  // 用碼位切而不是 .slice()：.slice() 數的是 UTF-16 單元，會把代理對（emoji、
+  // 罕用漢字）從中間劈開，留下半個字元的亂碼。
+  return Array.from(cleaned)
+    .slice(0, MAX_SLUG_CHARS)
+    .join("")
+    // 截斷可能剛好停在連字號或句點上，收尾要再修一次。
+    .replace(EDGE_DOTS_AND_HYPHENS_RE, "")
+    // NFC 必須放最後，才能讓 handoff 寫出的路徑與之後掃回來的路徑收斂成同一組位元組。
+    .normalize("NFC");
 }
 
 function parseArgs(argv: string[]): CliOptions {
