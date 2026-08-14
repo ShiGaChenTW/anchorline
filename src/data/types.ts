@@ -373,7 +373,7 @@ export type DomainWriteConfig = {
  * 自架 gateway、Azure 部署名、OpenRouter 的 `vendor/model` 寫法、任何改名過的
  * 模型，全部掉進 custom。通路是使用者知道而我們猜不到的事實，讓他直接講。
  */
-export type AIProvider = "auto" | "gemini" | "openai" | "anthropic" | "ollama" | "custom";
+export type AIProvider = "auto" | "gemini" | "openai" | "anthropic" | "openrouter" | "ollama" | "custom";
 
 export type AISettings = {
   /**
