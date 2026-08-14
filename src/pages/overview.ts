@@ -29,7 +29,13 @@ import { canQueryStatus, getGhStatusCached, requestOpenspecStatus } from "../lib
 import { openspecProgressPct } from "../lib/openspec-status";
 import { coverageLine, rollupCoverage } from "../lib/governance";
 import { canReadCoverage, requestCoverage, type CoverageResult } from "../lib/governance-bridge";
-import { attributePendingUats, loadPendingUats, type PendingUat } from "../lib/uat-pending";
+import {
+  attributePendingUats,
+  loadOpenFixes,
+  loadPendingUats,
+  type OpenFix,
+  type PendingUat,
+} from "../lib/uat-pending";
 import { plansDirsOfAll } from "../lib/tracking-bridge";
 import { trackingUrlFor } from "../lib/uat-handoff";
 
@@ -507,6 +513,56 @@ if (!requireAuth()) {
     </section>`;
   }
 
+  /**
+   * 待修的失敗題 —— 跨專案（W2-4）。
+   *
+   * 與上方「待實測」可能同時指向同一份報告，**這不是重複計數**：待實測數的
+   * 是「份」（還有題沒測的報告），待修數的是「題」（已判失敗、還沒被修掉的
+   * 題）。量詞與樣式刻意錯開。修完＝改判或被新一輪 supersede，掃描自然出清。
+   */
+  let openFixes: OpenFix[] = [];
+
+  function cardOpenFixes(): string {
+    if (!openFixes.length) return "";
+    const activeId = store.get().activeProjectId;
+    return `<section class="ov-others">
+      <p class="ov-others-head" title="以最新一輪報告為準——被重測取代的舊報告不列入">待修 ${openFixes.length} 題</p>
+      <ul class="ov-rows">${openFixes
+        .map((x) => {
+          const foreign = x.projectName && x.projectId !== activeId;
+          const chip = foreign
+            ? `<span class="p-tag" style="margin-right:6px">${escapeHtml(x.projectName!)}</span>`
+            : "";
+          // .ov-row 是固定五欄 grid：bar 與 pct 這裡沒有意義，但要留空位
+          // 佔欄，不然「開報告」會滑進進度條的欄位。
+          return `<li>
+            <button type="button" class="ov-row" data-uat="${escapeHtml(x.path)}" title="${escapeHtml(`${x.reportTitle} · ${x.name}`)}">
+              <span class="ov-row-name">${chip}${escapeHtml(x.itemTitle)}</span>
+              <span class="ov-row-state tone-blocked">失敗</span>
+              <span class="ov-bar"></span>
+              <span class="ov-row-pct"></span>
+              <span class="ov-row-flag">開報告</span>
+            </button>
+          </li>`;
+        })
+        .join("")}</ul>
+    </section>`;
+  }
+
+  async function loadOpenFixList(): Promise<void> {
+    const st = store.get();
+    const list = await loadOpenFixes(plansDirsOfAll(st.projects));
+    openFixes = attributePendingUats(
+      list,
+      st.projects.map((p) => ({
+        id: p.id,
+        name: projectDisplayName(p),
+        rootPath: p.importSummary?.rootPath,
+      })),
+    );
+    if (openFixes.length) render();
+  }
+
   /** 掃一次就好。掃完才重畫 —— 空的時候整區不存在，不需要先出一個骨架。 */
   async function loadPendingUat(): Promise<void> {
     const st = store.get();
@@ -631,6 +687,7 @@ if (!requireAuth()) {
       <div class="ov-focus">${hero(rows)}</div>
       ${prRadar()}
       ${cardPendingUat()}
+      ${cardOpenFixes()}
       <div class="ov-pair">
         <section class="d-card ov-gov" id="${GOVERNANCE_ID}">${governanceInner(rows)}</section>
         ${cardProjects(rows)}
@@ -765,6 +822,7 @@ if (!requireAuth()) {
   // 載入時掃一次就好。不進 render()、不輪詢 —— 它是磁碟 I/O，而 render 會被
   // store 訂閱觸發很多次（與 PR 雷達不進 render 是同一個理由）。
   void loadPendingUat();
+  void loadOpenFixList();
   void Promise.allSettled([refreshOpenspec(), refreshGh()]).then(() => hideLoading());
   window.setInterval(() => void refreshGh(), GH_REFRESH_MS);
 }

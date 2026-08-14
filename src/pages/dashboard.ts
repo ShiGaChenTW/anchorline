@@ -49,6 +49,7 @@ import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/u
 import { attachDiffSummary } from "../lib/diff-summary";
 import { coverageLine } from "../lib/governance";
 import { canReadCoverage, requestCoverage, type CoverageResult } from "../lib/governance-bridge";
+import { loadOpenFixes } from "../lib/uat-pending";
 
 if (!requireAuth()) {
   /* redirected */
@@ -436,6 +437,33 @@ if (!requireAuth()) {
   }
 
   /** 讀完就只換這張卡，不重畫整頁 —— 重畫會把使用者的捲動位置扔掉。 */
+  const FIXES_CARD_ID = "d-open-fixes";
+
+  /**
+   * 待修題數（W2-4）——只給一個數字，明細在總覽的「待修」收件匣。
+   * 這一頁講的是「這個專案怎麼樣」，所以只掃當前專案的 plans/。
+   * 零題整卡不渲染，跟總覽同一條「不留空殼」的規矩。
+   */
+  function openFixesInner(n: number): string {
+    if (!n) return "";
+    return `<p class="d-eyebrow">待修</p>
+      <p class="d-figure">${n} 題</p>
+      <p class="d-note" title="以最新一輪報告為準——被重測取代的舊報告不列入">失敗題明細與交辦在「專案總覽」的待修區塊</p>`;
+  }
+
+  function cardOpenFixes(): string {
+    return `<section class="d-card" id="${FIXES_CARD_ID}" hidden></section>`;
+  }
+
+  async function loadOpenFixCount(folderPath: string): Promise<void> {
+    const list = await loadOpenFixes([`${folderPath.replace(/\/+$/, "")}/plans`]);
+    const host = document.getElementById(FIXES_CARD_ID);
+    if (!host) return;
+    if (!list.length) return; // 保持 hidden——空殼不佔版面
+    host.innerHTML = openFixesInner(list.length);
+    host.hidden = false;
+  }
+
   async function loadGovernance(folderPath: string): Promise<void> {
     const r = await requestCoverage(folderPath);
     const host = document.getElementById(GOVERNANCE_CARD_ID);
@@ -514,7 +542,7 @@ if (!requireAuth()) {
   function renderStats(s: ProjectStats) {
     renderState(
       `<div class="d-top">${heroGit(s)}${cardTags(s)}</div>
-       <div class="d-grid">${cardCommits(s)}${cardGovernance(null)}${cardStack(s)}${cardSize(s)}${cardWorkspace(s)}</div>
+       <div class="d-grid">${cardCommits(s)}${cardGovernance(null)}${cardOpenFixes()}${cardStack(s)}${cardSize(s)}${cardWorkspace(s)}</div>
        <p class="d-measured">量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")}　<span class="mono">${escapeHtml(s.folderPath)}</span></p>`,
     );
     bindIdentEditing();
@@ -522,6 +550,7 @@ if (!requireAuth()) {
       openGitDoctor(s.git);
     });
     void loadGovernance(s.folderPath);
+    void loadOpenFixCount(s.folderPath);
   }
 
   async function load(force = false) {

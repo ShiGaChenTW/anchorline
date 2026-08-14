@@ -9,7 +9,7 @@
  * 放 tests/ 而非 src/ 的理由同 tracking-bridge.test.ts：tsconfig 的 include 是 `src/**`。
  */
 import { describe, expect, test } from "bun:test";
-import { attributePendingUats, pendingUatsFrom } from "../src/lib/uat-pending";
+import { attributePendingUats, openFixesFrom, pendingUatsFrom } from "../src/lib/uat-pending";
 import type { ScannedPlan } from "../src/lib/tracking-bridge";
 
 /** 一份最小的實測報告。verdicts 逐題給，長度就是題數。 */
@@ -294,5 +294,76 @@ describe("attributePendingUats（W2-1 跨專案歸屬）", () => {
     expect(got).toHaveLength(1);
     expect(got[0]!.title).toBe("新輪");
     expect(got[0]!.projectName).toBe("貝塔");
+  });
+});
+
+describe("待修視圖 openFixesFrom（W2-4）", () => {
+  function reportWithFail(title: string, opts: { failNote?: string; extra?: string[] } = {}): string {
+    return [
+      `# UAT: ${title}`,
+      "",
+      "**狀態：** 進行中",
+      "",
+      ...(opts.extra ?? []),
+      "## T1 失敗的題 <!-- anc:t=FAIL0001 -->",
+      "",
+      "**流程：**",
+      "1. 步",
+      "",
+      "**預期：**",
+      "果",
+      "",
+      "**結果：** 失敗",
+      "",
+      "**說明：**",
+      opts.failNote ?? "壞掉的原因",
+      "",
+      "## T2 通過的題 <!-- anc:t=PASS0001 -->",
+      "",
+      "**流程：**",
+      "1. 步",
+      "",
+      "**預期：**",
+      "果",
+      "",
+      "**結果：** 通過",
+      "",
+      "**說明：**",
+      "（無）",
+      "",
+    ].join("\n");
+  }
+
+  test("只收失敗題；通過／未測不列", () => {
+    const got = openFixesFrom([file("uat-a.md", reportWithFail("A"))]);
+    expect(got.length).toBe(1);
+    expect(got[0]!.itemTitle).toContain("失敗的題");
+    expect(got[0]!.note).toBe("壞掉的原因");
+  });
+
+  test("已收工（全題已結）的報告，失敗題仍算欠修——收工結束的是測試輪不是債", () => {
+    // 全題已結（失敗＋通過）→ 報告推導為已完成，但失敗題還在
+    const got = openFixesFrom([file("uat-b.md", reportWithFail("B"))]);
+    expect(got.length).toBe(1);
+  });
+
+  test("被 supersede 的報告整檔退場——以最新一輪為準", () => {
+    const oldFile = file("uat-old.md", reportWithFail("舊輪"));
+    const newFile = file(
+      "uat-new.md",
+      reportWithFail("新輪", { extra: ["> 重測自：/w/proj/plans/uat-old.md", ""] }),
+    );
+    const got = openFixesFrom([oldFile, newFile]);
+    expect(got.length).toBe(1);
+    expect(got[0]!.name).toBe("uat-new.md");
+  });
+
+  test("attributePendingUats 泛型化後也能歸屬待修列", () => {
+    const got = attributePendingUats(
+      openFixesFrom([file("uat-a.md", reportWithFail("A"))]),
+      [{ id: "p1", name: "專案一", rootPath: "/w/proj" }],
+    );
+    expect(got[0]!.projectId).toBe("p1");
+    expect(got[0]!.projectName).toBe("專案一");
   });
 });
