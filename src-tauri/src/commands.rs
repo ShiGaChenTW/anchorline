@@ -471,6 +471,66 @@ pub fn scan_plans(plans_dirs: &[String], openspec_roots: &[String]) -> TrackingS
     TrackingScan { files, signal }
 }
 
+// ── UAT 喚醒鏈 ───────────────────────────────────────────────────────
+
+/// UAT 出題 CLI 的交件位置。**路徑在這裡寫死。**
+///
+/// 前端只能問「有沒有待辦」，不能說「讀哪個檔」—— 讓它指定路徑等於在這個
+/// crate 的安全模型上開一個任意檔案讀取的洞（見 `paths.rs` 檔頭）。
+///
+/// 不跟 [`signal_path`] 共用 XDG 那套：交件檔是 CLI 與 App 之間的約定，
+/// 兩邊各自推導目錄規則會在某些機器上指到不同地方，而症狀是「App 跳出來
+/// 但什麼都沒發生」—— 那種靜默失效查起來很貴。位置固定成
+/// `~/.anchorline/uat-handoff.json`，兩邊照抄同一句。
+fn uat_handoff_base() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(|h| PathBuf::from(h).join(".anchorline"))
+}
+
+/// 取走一份 UAT 交件。**讀到就刪，內容原樣回傳**（JSON 判讀留在 TS，見檔頭約定 2）。
+///
+/// 沒有待辦回 `None`。這支在每次頁面載入與視窗聚焦時都會被呼叫 ——「沒東西」
+/// 是常態不是例外，回 Err 會讓使用者每切一次視窗就吃一次紅字。
+///
+/// **刪不掉就當作沒讀到。** 交出一份刪不掉的交件，會讓使用者每次聚焦視窗都被
+/// 彈回同一份報告，而且沒有辦法停下來。少跳一次，比跳不完好。
+#[tauri::command]
+pub async fn uat_handoff_take() -> R<Option<String>> {
+    let Some(base) = uat_handoff_base() else {
+        return Ok(None);
+    };
+    // 舊版單槽先吃 —— 換版期間 CLI 與 App 可能一新一舊，丟件比多跳一次糟。
+    let legacy = base.join("uat-handoff.json");
+    if let Ok(text) = fs::read_to_string(&legacy) {
+        if fs::remove_file(&legacy).is_ok() {
+            return Ok(Some(text));
+        }
+        return Ok(None);
+    }
+    // 佇列目錄：一件一檔，依檔名排序最舊先取，一次只取一件 ——
+    // 剩下的在下一次載入／聚焦時繼續排空，所以並發交件不會丟。
+    let dir = base.join("uat-handoff");
+    let Ok(rd) = fs::read_dir(&dir) else {
+        return Ok(None);
+    };
+    let mut files: Vec<PathBuf> = rd
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("json"))
+        .collect();
+    files.sort();
+    for p in files {
+        let Ok(text) = fs::read_to_string(&p) else { continue };
+        // 刪不掉就跳過這一件：交出刪不掉的交件會讓每次聚焦都被彈回同一份
+        if fs::remove_file(&p).is_err() {
+            continue;
+        }
+        return Ok(Some(text));
+    }
+    Ok(None)
+}
+
 // ── 檔案讀寫 ─────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -1222,6 +1282,7 @@ pub fn ping() -> R<Pong> {
             "fastfetch",
             "setCliPath",
             "probeClis",
+            "uatHandoffTake",
         ]
         .iter()
         .map(|s| s.to_string())

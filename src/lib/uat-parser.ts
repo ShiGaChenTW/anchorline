@@ -1,0 +1,405 @@
+/**
+ * UAT 實測報告方言 — 解析、寫回、序列化。
+ *
+ * ## 為什麼是第三種方言而不是塞進 plan
+ *
+ * plan 的 checkbox 只有兩態（勾／不勾），UAT 一題有五態（未測／通過／失敗／
+ * 不測／暫時跳過）外加一格說明。硬塞 checkbox 等於把四種結果都寫成「勾了」，
+ * 而「失敗」跟「通過」在治理鏈上是相反的事件。所以 UAT 用自己的區段結構：
+ * 一題一個 `## ` 區段，帶 `anc:t=` 錨點當身分，狀態寫在 `**結果：**` 行。
+ *
+ * ## 檔內寫中文詞，程式用 en token
+ *
+ * 檔案是使用者會用 git diff 讀的東西，`**結果：** 通過` 比 `pass` 誠實好讀。
+ * 解析時中文與 en token 都收（agent 手寫容易混用）；**未知詞一律退回「未測」**——
+ * 把看不懂的結果當成「還沒測」會讓題目重新出現，把它猜成任何已測狀態
+ * 則會讓一題安靜地消失。往安全的方向退。
+ *
+ * 寫回沿用 plan-writer 的哲學：只動目標題的 結果／說明 行，其餘一字不改，
+ * 併發守衛交給呼叫端的 guardOf + safeApply。
+ *
+ * 純函式、零 I/O。
+ */
+
+import { ANCHOR_PREFIX, anchorOf, mintId, stripAnchor } from "./plan-parser";
+
+export type UatVerdict = "pending" | "pass" | "fail" | "wont" | "later";
+
+export const UAT_VERDICTS: readonly UatVerdict[] = [
+  "pending",
+  "pass",
+  "fail",
+  "wont",
+  "later",
+];
+
+/** 檔內寫的詞。順序無意義，對照表才是真相。 */
+export const VERDICT_LABELS: Record<UatVerdict, string> = {
+  pending: "未測",
+  pass: "通過",
+  fail: "失敗",
+  wont: "不測",
+  later: "暫時跳過",
+};
+
+/**
+ * 這些結果**必須附說明**。規則來自需求原文：除了「通過」和「暫時跳過」，
+ * 其他選項都要寫原因 —— pending 是初始態不算選項，所以清單就是 fail、wont。
+ */
+export const VERDICT_NEEDS_NOTE: ReadonlySet<UatVerdict> = new Set([
+  "fail",
+  "wont",
+]);
+
+export type UatItem = {
+  /** `anc:t=` 錨點。沒有的題不能勾（UI 要標出來），跟 plan 步驟同一條規矩 */
+  id?: string;
+  /** 區段標題（含 T1 之類的編號前綴，去掉錨點註解） */
+  title: string;
+  /** 流程步驟，已去掉行首編號 */
+  steps: string[];
+  /** 預期效果，可多行 */
+  expected: string;
+  verdict: UatVerdict;
+  /** 說明。檔內的佔位「（無）」讀出來是空字串 */
+  note: string;
+};
+
+export type UatReport = {
+  title: string;
+  created: string;
+  updated: string;
+  /** 沿用 plan 的狀態詞彙子集：全題已測 = 已完成，否則進行中 */
+  status: "進行中" | "已完成";
+  items: UatItem[];
+  path?: string;
+  /** 沒錨點的題數。> 0 時 UI 要警告 —— 這些題勾不了 */
+  unanchored: number;
+};
+
+/** CLI／skill 端的出題規格。序列化前先過 validateUatSpec。 */
+export type UatSpecItem = { title: string; steps: string[]; expected: string };
+export type UatSpec = { title: string; items: UatSpecItem[] };
+
+const H1_RE = /^#\s+UAT[:：]\s*(.*)$/;
+const SECTION_RE = /^##\s+/;
+const LABEL_RE = /^\*\*(流程|預期|結果|說明)[：:]\*\*\s*(.*)$/;
+const EMPTY_NOTE = "（無）";
+
+/** 判斷一份 markdown 是不是 UAT 報告。tracking 頁靠它選 parser。 */
+export function isUatText(text: string): boolean {
+  for (const raw of text.split(/\r?\n/)) {
+    const s = raw.trim();
+    if (!s) continue;
+    return H1_RE.test(s);
+  }
+  return false;
+}
+
+function parseVerdict(raw: string): UatVerdict {
+  // 取第一個 token：容忍「通過（2026-08-14）」這類尾註
+  const head = raw.trim().split(/[\s（(]/)[0] ?? "";
+  for (const v of UAT_VERDICTS) {
+    if (head === v || head === VERDICT_LABELS[v]) return v;
+  }
+  return "pending";
+}
+
+export function parseUatReport(text: string, path?: string): UatReport {
+  const out: UatReport = {
+    title: "(無標題)",
+    created: "—",
+    updated: "—",
+    status: "進行中",
+    items: [],
+    path,
+    unanchored: 0,
+  };
+  if (!text) return out;
+
+  const lines = text.split(/\r?\n/);
+  let cur: UatItem | null = null;
+  /** 目前在哪個標籤區塊裡收內容 */
+  let field: "steps" | "expected" | "note" | null = null;
+  const noteBuf: string[] = [];
+  const expectedBuf: string[] = [];
+
+  const flushItem = () => {
+    if (!cur) return;
+    cur.expected = expectedBuf.join("\n").trim();
+    const note = noteBuf.join("\n").trim();
+    cur.note = note === EMPTY_NOTE ? "" : note;
+    out.items.push(cur);
+    cur = null;
+    noteBuf.length = 0;
+    expectedBuf.length = 0;
+  };
+
+  const pushStep = (raw: string) => {
+    const s = raw.trim();
+    if (!s) return;
+    cur?.steps.push(s.replace(/^\d+[.)]\s*/, "").replace(/^-\s+/, ""));
+  };
+
+  for (const raw of lines) {
+    const s = raw.trim();
+
+    const h1 = s.match(H1_RE);
+    if (h1 && out.title === "(無標題)") {
+      out.title = h1[1]!.trim() || out.title;
+      continue;
+    }
+    if (s.startsWith("**建立時間：**") || s.startsWith("**建立時間:**")) {
+      out.created = s.replace(/\*\*建立時間[：:]\*\*/, "").trim();
+      continue;
+    }
+    if (s.startsWith("**最後更新：**") || s.startsWith("**最後更新:**")) {
+      out.updated = s.replace(/\*\*最後更新[：:]\*\*/, "").trim();
+      continue;
+    }
+
+    if (SECTION_RE.test(s)) {
+      flushItem();
+      field = null;
+      const id = anchorOf(raw);
+      const title = stripAnchor(s.replace(SECTION_RE, "")).trim();
+      cur = { title, steps: [], expected: "", verdict: "pending", note: "" };
+      if (id) cur.id = id;
+      continue;
+    }
+    if (!cur) continue;
+
+    const label = s.match(LABEL_RE);
+    if (label) {
+      const kind = label[1]!;
+      const inline = label[2] ?? "";
+      if (kind === "結果") {
+        cur.verdict = parseVerdict(inline);
+        field = null;
+      } else if (kind === "流程") {
+        field = "steps";
+        pushStep(inline);
+      } else if (kind === "預期") {
+        field = "expected";
+        if (inline.trim()) expectedBuf.push(inline);
+      } else {
+        field = "note";
+        if (inline.trim()) noteBuf.push(inline);
+      }
+      continue;
+    }
+
+    if (field === "steps") {
+      pushStep(raw);
+    } else if (field === "expected") {
+      expectedBuf.push(raw);
+    } else if (field === "note") {
+      noteBuf.push(raw);
+    }
+  }
+  flushItem();
+
+  out.unanchored = out.items.filter((x) => !x.id).length;
+  const allTested =
+    out.items.length > 0 && out.items.every((x) => x.verdict !== "pending");
+  out.status = allTested ? "已完成" : "進行中";
+  return out;
+}
+
+/**
+ * 進度的單一真相，跟 planProgress 同一條規矩：分子與百分比出自同一個地方。
+ * 「已結」= 任何非未測的結果 —— 不測、暫時跳過都是「這一輪處理過了」。
+ */
+export function uatProgress(r: UatReport): {
+  closed: number;
+  total: number;
+  pct: number;
+} {
+  const total = r.items.length;
+  const closed = r.items.filter((x) => x.verdict !== "pending").length;
+  return { closed, total, pct: total ? Math.round((closed / total) * 100) : 0 };
+}
+
+/**
+ * 勾一題。**只動那一題的 結果／說明，其餘位元組不變**（狀態與最後更新兩行除外，
+ * 那兩行本來就是這次動作的一部分）。
+ *
+ * 必填規則在這裡執法而不是只在 UI：UI 可以先擋給出比較好的體驗，
+ * 但守門的是這個函式 —— 繞過 UI 的呼叫端（未來的 CLI 回填）也得遵守。
+ */
+export function setVerdict(
+  text: string,
+  id: string,
+  verdict: UatVerdict,
+  note: string,
+  opts: { now?: string } = {},
+): { ok: true; text: string } | { ok: false; reason: string } {
+  if (VERDICT_NEEDS_NOTE.has(verdict) && !note.trim()) {
+    return {
+      ok: false,
+      reason: `「${VERDICT_LABELS[verdict]}」必須在說明欄寫上原因`,
+    };
+  }
+
+  const hadTrailingNewline = text.endsWith("\n");
+  const lines = text.split("\n");
+  let si = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (SECTION_RE.test(lines[i]!.trim()) && anchorOf(lines[i]!) === id) {
+      si = i;
+      break;
+    }
+  }
+  if (si < 0) return { ok: false, reason: `找不到這一題（anc:t=${id}）` };
+
+  let ei = lines.length;
+  for (let i = si + 1; i < lines.length; i++) {
+    if (SECTION_RE.test(lines[i]!.trim())) {
+      ei = i;
+      break;
+    }
+  }
+
+  // 結果行：有就替換，沒有（手寫檔漏了）就插在區段尾
+  let resultAt = -1;
+  let noteLabelAt = -1;
+  for (let i = si + 1; i < ei; i++) {
+    const m = lines[i]!.trim().match(LABEL_RE);
+    if (!m) continue;
+    if (m[1] === "結果") resultAt = i;
+    if (m[1] === "說明") noteLabelAt = i;
+  }
+  const resultLine = `**結果：** ${VERDICT_LABELS[verdict]}`;
+  if (resultAt >= 0) {
+    lines[resultAt] = resultLine;
+  } else {
+    lines.splice(ei, 0, "", resultLine);
+    ei += 2;
+  }
+
+  // 說明區塊：從標籤行到下一個標籤／區段。整塊換掉，尾端補一個空行當區段分隔
+  const noteLines = note.trim() ? note.trim().split("\n") : [EMPTY_NOTE];
+  if (noteLabelAt >= 0) {
+    let blockEnd = ei;
+    for (let i = noteLabelAt + 1; i < ei; i++) {
+      if (LABEL_RE.test(lines[i]!.trim())) {
+        blockEnd = i;
+        break;
+      }
+    }
+    const tail = blockEnd < lines.length ? [""] : [];
+    lines.splice(noteLabelAt + 1, blockEnd - (noteLabelAt + 1), ...noteLines, ...tail);
+  } else {
+    lines.splice(ei, 0, "", "**說明：**", ...noteLines);
+  }
+
+  let next = lines.join("\n");
+
+  // 報告層級狀態：重讀一次算，不要在上面的迴圈裡邊改邊猜
+  const parsed = parseUatReport(next);
+  const statusWord = parsed.status;
+  next = next.replace(
+    /^\*\*狀態[：:]\*\*.*$/m,
+    `**狀態：** ${statusWord}`,
+  );
+  if (opts.now) {
+    next = next.replace(
+      /^\*\*最後更新[：:]\*\*.*$/m,
+      `**最後更新：** ${opts.now}`,
+    );
+  }
+  if (hadTrailingNewline && !next.endsWith("\n")) next += "\n";
+  return { ok: true, text: next };
+}
+
+/**
+ * 出題規格 → 檔案內容。錨點在這裡鑄，一題一個，鑄完就不再變。
+ * `mint` 可注入，測試才能給定值。
+ */
+export function serializeUatReport(
+  spec: UatSpec,
+  opts: { now?: string; mint?: () => string } = {},
+): string {
+  const now = opts.now ?? "";
+  const used = new Set<string>();
+  const nextId = () => {
+    let id = (opts.mint ?? mintId)();
+    while (used.has(id)) id = (opts.mint ?? mintId)();
+    used.add(id);
+    return id;
+  };
+
+  const out: string[] = [
+    `# UAT: ${spec.title.trim()}`,
+    "",
+    `**建立時間：** ${now}`,
+    `**最後更新：** ${now}`,
+    `**狀態：** 進行中`,
+    "",
+    `> 在 Anchorline 的 Task Tracking 開這一份逐題勾選。「失敗」與「不測」必須填說明。`,
+    "",
+  ];
+
+  spec.items.forEach((item, i) => {
+    out.push(
+      `## T${i + 1} ${item.title.trim()} <!-- ${ANCHOR_PREFIX}:t=${nextId()} -->`,
+      "",
+      "**流程：**",
+      ...item.steps.map((s, j) => `${j + 1}. ${s.replace(/\s*\n\s*/g, " ").trim()}`),
+      "",
+      "**預期：**",
+      item.expected.trim(),
+      "",
+      "**結果：** 未測",
+      "",
+      "**說明：**",
+      EMPTY_NOTE,
+      "",
+    );
+  });
+
+  return out.join("\n");
+}
+
+/**
+ * 出題規格驗證。**一次回報全部錯誤**，不是遇到第一個就停 ——
+ * agent 拿到完整清單一輪就能改完，擠牙膏式報錯要來回好幾輪。
+ */
+export function validateUatSpec(
+  v: unknown,
+): { ok: true; spec: UatSpec } | { ok: false; errors: string[] } {
+  const errors: string[] = [];
+  const o = v as Partial<UatSpec> | null;
+  if (!o || typeof o !== "object") {
+    return { ok: false, errors: ["spec 必須是 JSON 物件"] };
+  }
+  if (typeof o.title !== "string" || !o.title.trim()) {
+    errors.push("title：必填，一句話的報告標題");
+  }
+  if (!Array.isArray(o.items) || o.items.length === 0) {
+    errors.push("items：至少要有一題");
+  } else {
+    o.items.forEach((it, i) => {
+      const at = `items[${i}]`;
+      if (!it || typeof it !== "object") {
+        errors.push(`${at}：必須是物件`);
+        return;
+      }
+      if (typeof it.title !== "string" || !it.title.trim()) {
+        errors.push(`${at}.title：必填`);
+      }
+      if (
+        !Array.isArray(it.steps) ||
+        it.steps.length === 0 ||
+        it.steps.some((s) => typeof s !== "string" || !s.trim())
+      ) {
+        errors.push(`${at}.steps：至少一步，且每一步都要有內容 —— 流程要詳細到照著做就能重現`);
+      }
+      if (typeof it.expected !== "string" || !it.expected.trim()) {
+        errors.push(`${at}.expected：必填 —— 預期效果要具體到可以判定通過或失敗`);
+      }
+    });
+  }
+  if (errors.length) return { ok: false, errors };
+  return { ok: true, spec: o as UatSpec };
+}

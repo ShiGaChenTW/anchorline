@@ -152,6 +152,15 @@ export const native = {
   projectStats: (folderPath: string) => call<unknown>("project_stats", { folderPath }),
   trackingScan: (plansDirs: string[], openspecRoots: string[] = []) =>
     call<NativeTrackingScan>("tracking_scan", { plansDirs, openspecRoots }),
+  /**
+   * 取走一份 UAT 交件。**無參數** —— 交件檔的路徑在 Rust 端寫死，前端不能說
+   * 要讀哪個檔（見 `commands.rs` 的 `uat_handoff_take`）。回 `null` 代表沒有待辦。
+   *
+   * 走 `callMaybe` 而不是 `call`：這支每次視窗聚焦都會被呼叫，而「沒有待辦」
+   * 與「不在桌面版」都是狀態不是例外。用 throw 表達會讓一個背景輪詢在瀏覽器裡
+   * 每次聚焦都丟一個沒人接的 rejection。
+   */
+  uatHandoffTake: () => callMaybe<string | null>("uat_handoff_take"),
 
   readFile: (path: string) => call<{ path: string; text: string }>("read_file", { path }),
   writeFile: (path: string, text: string) => call<{ path: string }>("write_file", { path, text }),

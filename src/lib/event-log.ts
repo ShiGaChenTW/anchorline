@@ -52,7 +52,11 @@ export type EventKind =
   | "pr.merge"
   | "pr.checks.fail"
   | "decision.record"
-  | "file.edit";
+  | "file.edit"
+  // 實測結果不併進 `task.done`：一題判「失敗」在治理鏈上與「完成」是相反的
+  // 事件，共用同一個 kind 會讓任何依 kind 聚合的統計把兩者算成同一件事。
+  | "uat.verdict"
+  | "uat.report.done";
 
 export type LogEvent = {
   /** schema_version —— append-only 格式的唯一逃生口 */
@@ -103,6 +107,10 @@ export const PAYLOAD_ALLOW = new Set([
   "checks",
   "reviewDecision",
   "durationMs",
+  // 實測結果詞（通過／失敗／不測／暫時跳過／未測）。是五選一的固定字彙，
+  // 不是使用者輸入 —— **說明欄刻意不進 payload**，那是自由文字，
+  // 而稽核軌跡是 append-only：寫進去就刪不掉了。
+  "verdict",
 ]);
 
 /** 命令原文只留前 16 字元 —— 足以認出是哪一類指令，不足以外洩參數。 */

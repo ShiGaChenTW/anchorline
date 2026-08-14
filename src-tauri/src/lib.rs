@@ -43,6 +43,7 @@ pub fn run() {
             commands::pick_project_folder,
             commands::project_stats,
             commands::tracking_scan,
+            commands::uat_handoff_take,
             commands::read_file,
             commands::write_file,
             commands::write_domain_pack,
