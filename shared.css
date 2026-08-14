@@ -11048,6 +11048,18 @@ p.gd-warn {
 .rail-proj-action.on .ic {
   color: var(--accent);
 }
+/* 待實測 badge。外觀與「工作區」那一組的計數同一套（.rail-wsnav .count）——
+   側欄已經有一種計數藥丸了，這裡另做一種只會讓同一件事看起來像兩件事。
+   0 由 JS 直接藏起來，所以這裡不必寫 is-zero 的安靜態。 */
+.rail-proj-action .count {
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: color-mix(in oklab, var(--warn) 28%, transparent);
+  font-size: var(--fs-1);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-2);
+}
 
 /* 版本取號入口。跟版控健檢一樣貼在卡片標題列右邊。 */
 .d-take-btn {

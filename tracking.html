@@ -174,6 +174,35 @@
   .tk-prog-m { margin: 7px 0 0; font-size: var(--fs-2); color: var(--muted); }
   .tk-prog-m strong { color: var(--fg); font-variant-numeric: tabular-nums; }
 
+  /* ── 送出給 agent ──
+     位置在進度條下方：它是「測完之後要做的下一件事」，順序就是閱讀順序。
+     族系選單預設收著 —— 四顆按鈕常駐會跟結果鈕搶同一種視覺重量，
+     而這是一次性的動作，不是每一題都要看到的東西。 */
+  .tk-uat-send { margin: -10px 0 20px; }
+  .tk-uat-send-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--fg-2);
+    font: inherit;
+    font-size: var(--fs-2);
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .tk-uat-send-btn:hover:not([disabled]) { background: var(--inset); }
+  .tk-uat-send-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tk-uat-send-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+  .tk-uat-fams { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .tk-uat-fams[hidden] { display: none; }
+  .tk-uat-send-note {
+    margin: 8px 0 0;
+    font-size: var(--fs-2);
+    line-height: 1.6;
+    color: var(--meta);
+    max-width: 60ch;
+  }
+
   /* 步驟：未完成排前面，完成的降低對比但不刪除 */
   .tk-step {
     display: grid;

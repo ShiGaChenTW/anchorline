@@ -29,6 +29,9 @@ import { canQueryStatus, getGhStatusCached, requestOpenspecStatus } from "../lib
 import { openspecProgressPct } from "../lib/openspec-status";
 import { coverageLine, rollupCoverage } from "../lib/governance";
 import { canReadCoverage, requestCoverage, type CoverageResult } from "../lib/governance-bridge";
+import { loadPendingUats, type PendingUat } from "../lib/uat-pending";
+import { plansDirsOf } from "../lib/tracking-bridge";
+import { trackingUrlFor } from "../lib/uat-handoff";
 
 if (!requireAuth()) {
   /* redirected */
@@ -456,6 +459,44 @@ if (!requireAuth()) {
     </section>`;
   }
 
+  /**
+   * 待實測的報告。**等人動手的事，不是等 agent 的事** —— 這一頁其餘每一格
+   * 講的都是「專案怎麼樣」，只有這一區的下一步在使用者自己身上。
+   *
+   * 只掃當前選取專案（`plansDirsOf` 的規矩），而且**只在頁面載入時掃一次**：
+   * 這是磁碟 I/O，而它的值一分鐘內不會自己變。零份時整區不渲染 ——
+   * 一個永遠寫著「0 份」的空殼只是在首屏多佔一塊位置。
+   */
+  let pendingUats: PendingUat[] = [];
+
+  function cardPendingUat(): string {
+    if (!pendingUats.length) return "";
+    return `<section class="ov-others ov-uat">
+      <p class="ov-others-head">待實測 ${pendingUats.length} 份</p>
+      <ul class="ov-rows">${pendingUats
+        .map((u) => {
+          const pct = u.total ? Math.round((u.closed / u.total) * 100) : 0;
+          return `<li>
+            <button type="button" class="ov-row" data-uat="${escapeHtml(u.path)}" title="${escapeHtml(u.name)}">
+              <span class="ov-row-name">${escapeHtml(u.title)}</span>
+              <span class="ov-row-state tone-blocked">${u.closed}/${u.total} 已結</span>
+              <span class="ov-bar"><i style="width:${Math.max(2, pct)}%"></i></span>
+              <span class="ov-row-pct">${pct}%</span>
+              <span class="ov-row-flag">開報告</span>
+            </button>
+          </li>`;
+        })
+        .join("")}</ul>
+    </section>`;
+  }
+
+  /** 掃一次就好。掃完才重畫 —— 空的時候整區不存在，不需要先出一個骨架。 */
+  async function loadPendingUat(): Promise<void> {
+    const st = store.get();
+    pendingUats = await loadPendingUats(plansDirsOf(st.projects, st.activeProjectId));
+    if (pendingUats.length) render();
+  }
+
   // ── 版面 ────────────────────────────────────────────────────
 
   // ── 治理覆蓋率（跨專案）────────────────────────────────────
@@ -557,9 +598,12 @@ if (!requireAuth()) {
     // 清單改成常駐而不是收在 <details>：原本首屏下半是一大片空白，
     // 而空白對 ADHD 不是留白，是「還沒載完？我漏看什麼？」的不確定感。
     // 真正的次要資訊（狀態分佈／技術線／待補資料夾）才留在摺疊裡。
+    // 待實測排在焦點卡之後、其他統計之前：它是唯一「等你動手」的一區，
+    // 但仍然不該搶走「現在做這一個」那張卡的位置。
     root.innerHTML = `${warRoom(rows)}
       <div class="ov-focus">${hero(rows)}</div>
       ${prRadar()}
+      ${cardPendingUat()}
       <div class="ov-pair">
         <section class="d-card ov-gov" id="${GOVERNANCE_ID}">${governanceInner(rows)}</section>
         ${cardProjects(rows)}
@@ -577,6 +621,17 @@ if (!requireAuth()) {
       } catch {
         /* 隱私模式寫不了 —— 摺疊狀態不值得為它報錯 */
       }
+    });
+
+    // 待實測那一列直接落到報告本身（`tracking.html?uat=…`），不繞儀表板 ——
+    // 這一區的動作只有一個：把那份報告打開來勾。
+    root.querySelectorAll<HTMLElement>("[data-uat]").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        const path = el.dataset.uat;
+        if (!path) return;
+        e.preventDefault();
+        location.href = trackingUrlFor(path);
+      });
     });
 
     // 任何 data-go 都是「切到那個專案並打開它的儀表板」
@@ -680,6 +735,9 @@ if (!requireAuth()) {
   render();
   store.subscribe(render);
   store.subscribe(() => void refreshOpenspec());
+  // 載入時掃一次就好。不進 render()、不輪詢 —— 它是磁碟 I/O，而 render 會被
+  // store 訂閱觸發很多次（與 PR 雷達不進 render 是同一個理由）。
+  void loadPendingUat();
   void Promise.allSettled([refreshOpenspec(), refreshGh()]).then(() => hideLoading());
   window.setInterval(() => void refreshGh(), GH_REFRESH_MS);
 }
