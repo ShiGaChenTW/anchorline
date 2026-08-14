@@ -1,7 +1,7 @@
 # 下一版實作 — Wave 1（正確性止血）＋ Wave 2（UAT 迴圈補全）
 
 **建立時間：** 2026-08-15 01:11
-**最後更新：** 2026-08-15 03:20
+**最後更新：** 2026-08-15 04:45
 **狀態：** 進行中
 
 ## 目標
@@ -18,18 +18,42 @@ Cato（收尾審計）。完成後開 PR 回 main，並用 Uat skill 出實測�
 - [x] Step 2 — W1-2 mousedown guard（16e9790）：send/fam 實機驗證 prevented+零 blur、面板正常
 - [x] Step 3 — W1-6 中文檔名（85fe826，Forge）：CJK 放行＋NFC＋ENAMETOOLONG 截斷（Forge 自抓的新失效模式），突變測試驗證
 - [x] Step 4 — W2-3 supersede（d42304e）：parser/serializer/pending/CLI --supersedes，17 條新測試（NFC/NFD、/private 前綴收斂）
-- [ ] Step 5 — W2-2 本輪收工＋報告歸檔（P1/S）
-- [ ] Step 6 — W2-1 跨專案待實測收件匣（P0/M）
-- [ ] Step 7 — W1-3 治理計分認 openspec subject 第二形狀（P0/M，PM 親寫判準；畫面說明數字跳動）
-- [ ] Step 8 — W1-5 側欄 badge invalidateUatBadge（P1/S，排在分母修正後）
-- [ ] Step 9 — W2-5 待實測列 a11y/可測性（P2/S）：**先 Accessibility Inspector 定位**，驗收看 AX 樹
-- [ ] Step 10 — W1-4 js_dialogs completionHandler 硬化（P1/S，Rust，cargo test）
-- [ ] Step 11 — W1-7 CRLF eol 保留 ＋ round-trip 測試（P2/S）
+- [x] Step 5 — W2-2 本輪收工（47265f5）：剩餘題批次標暫時跳過＋兩段確認（臂態模組化——DOM 存臂態活不過重繪，實機踩到）；實機驗證含誠實文案
+- [x] Step 6 — W2-1 跨專案收件匣（e618449，Engineer 隔離 worktree 實作、PM 抽 patch 合入）：plansDirsOfAll＋歸屬 chip＋badge 全專案分母
+- [x] Step 7 — W1-3 治理計分（4780653）：openspec 第二形狀＋歸檔混合驗證規則（計劃未料到的坑：堅持存在驗證會讓歸檔倒扣覆蓋率）；join key 改目錄 id；dashboard 說明行
+- [x] Step 8 — W1-5 badge 即時失效（3f0b455）：onSetVerdict/收工成功路徑重掃；實機驗證收工後 badge 不導頁歸零
+- [x] Step 9 — W2-5（2280488）：AX 實機診斷——真 button＋完整名稱，計劃症狀不可重現，不修不存在的 bug；僅刪 .ov-uat 死 class。真痛點是 WKWebView AX 全樹遍歷逾時（工具側，另記）
+- [x] Step 10 — W1-4 js_dialogs 硬化（9691f18）：catch_unwind 三 handler、錯誤收斂取消語意、ping capabilities 報 jsDialogs
+- [x] Step 11 — W1-7 CRLF（794966e）：eolOf＋四 mutator；實測加碼發現 toggleStep 在 CRLF 上本來就是無聲 no-op（`.` 不吃 \r）
 - [x] Step 12 — W1-8 刪重複 stat（49608e2）：mtime_ms_of(&Metadata)，cargo 38 綠
 - [ ] Step 13 — W2-4 失敗題落地成工作項（P1/M）：**先寫設計段落給 main session 過目**
 - [ ] Step 14 — GrokResearcher 第二眼（每波完成後）＋ Cato 收尾審計
 - [ ] Step 15 — （餘裕）W3-1 updater
 - [ ] Step 16 — 開 PR 回 main、通知 main session（Miles）、Uat skill 出實測清單
+
+
+## W2-4 設計段落（待 main session 過目後動工）
+
+**核心判準：不建第二個工作項資料庫。** 失敗題的 single source of truth 是 UAT 報告檔
+（`**結果：** 失敗`＋說明）；「工作項」是**視圖**不是副本。一旦複製成獨立 todo，修完後
+兩邊狀態必然分岔——「報告說失敗、工作項說完成」是可預見的終局。
+
+1. 新純函式 `openFixesFrom(files)`（掛 uat-pending 旁）：掃全專案 UAT 報告，收集
+   verdict=fail 的題（報告路徑、題錨點、標題、說明、專案歸屬），**排除已被 supersede
+   的報告**——舊輪的失敗由新輪重驗，不重複列帳。
+2. Overview 收件匣下方加「待修 N 題」區塊：依專案分組，一列＝一個失敗題，
+   點擊 → `tracking.html?uat=<報告>`（沿用著陸鏈）。
+3. 「修完」的定義＝掃描結果自然出清：該題在原報告改判通過／不測，或整份報告被新
+   一輪 supersede。零狀態同步、零回寫協定。
+4. 每列「交辦」快捷重用 `uatFixTask`（uat-fix-handoff 既有打包）——加分項，第一版
+   可不做。
+5. 明確不做：獨立工作項 CRUD／指派／期限——單人系統，這些是儀式。
+
+**兩個開放問題（請 main session 裁決）：**
+- 位置：我傾向 overview（跨專案「還欠幾個修」正是 PM 視角），dashboard 專案卡只加
+  一個數字；另一案是整塊放 dashboard。
+- 報告已收工但含失敗題：我傾向**仍算欠修**——失敗不因收工而消失；反方論點是收工
+  語意應含「本輪帳結清」。
 
 ## 決策紀錄
 
@@ -51,6 +75,7 @@ Cato（收尾審計）。完成後開 PR 回 main，並用 Uat skill 出實測�
 - 03:20 — **教訓（付過學費）**：Forge 的 codex 越界重做了 W2-3/W1-8，Forge revert 越界部分時把 PM 未 commit 的並行變更一起清掉（已從 context 重放，無損失）。規則改為：**派 agent 進 worktree 前先 commit 乾淨；agent 在樹上時 PM 不動檔**。
 - 03:20 — 教訓：tsc incremental 可能在剛刪檔後假綠（W1-1 首次 commit 帶進壞 import，已 amend 為 3a55c98）。每次 commit 前 `git show --stat` ＋ grep TEMP 標記。
 - 03:20 — W2-2 設計判準：「本輪收工」＝把剩餘未測題批次標「暫時跳過」。狀態推導自然轉已完成（離開待辦），零方言變更、不破 Cato F3 完成判定守門，報告誠實記錄「這輪跳過了哪些」。批次用 setVerdict 組合、safeApply 一次寫入。
+- 04:45 — **Grok 第二眼：14 條挑戰、12 成立（高 3／中 5／低 4）**，全數判讀完畢。已修：C1（supersede 循環——升級為一般化環偵測，環內並存）、C2（--supersedes 對 root 解析＋存在驗證）、C3（收工按鈕/toast 對無錨點題誠實）、C4（supersede 標記圍欄意識，Cato F5 規矩）、C5（badge invalidate 加 dirty 旗標防吞）、C6（alignProjectForUat 套 canon 正規化）、C7（openspec 治理改純形狀認定——N.M 是位置編號，存在驗證會讓編輯 tasks.md 打回未治理）、C8（js_dialogs 加 objc2::exception::catch 攔 ObjC 例外）、C9（eolOf 改多數決）、C10（note split 剝 \r）、C11（strict 取號 window.prompt 改頁內三鈕——dogfood 摩擦①正解）。**緩辦（記帳）**：C12（草稿層蓋掉外部並發寫入——草稿模型內在代價，提示 UI 留下一版）、C13（送出給 agent 帶未存補充說明——必填原因已落地，損失限於補充文字）。C14/C15 不成立。
 
 ## 阻塞 / 待決議
 

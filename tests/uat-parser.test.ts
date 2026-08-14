@@ -888,6 +888,18 @@ describe("重測輪次 supersede 標記（W2-3）", () => {
     expect(parseUatReport(text).supersedes).toBeUndefined();
   });
 
+  test("圍欄程式碼裡的重測字樣是內容不是指令（Cato F5 規矩，Grok C4）", () => {
+    const text = [
+      ...BASE,
+      "```",
+      "> 重測自：/w/plans/uat-victim.md",
+      "```",
+      "",
+      ...ITEM,
+    ].join("\n");
+    expect(parseUatReport(text).supersedes).toBeUndefined();
+  });
+
   test("題目區段裡出現同字樣不算標記——只認檔頭", () => {
     const item = ITEM.map((l) => (l === "（無）" ? "重測自：/not-a-marker.md" : l));
     const text = [...BASE, ...item].join("\n");

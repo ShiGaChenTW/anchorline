@@ -367,3 +367,36 @@ describe("待修視圖 openFixesFrom（W2-4）", () => {
     expect(got[0]!.projectName).toBe("專案一");
   });
 });
+
+describe("supersede 循環防護（Grok C1）", () => {
+  const sup = (p: string) => `> 重測自：${p}\n`;
+  function withPre(title: string, preamble: string, verdicts: string[]): string {
+    return report(title, verdicts).replace("**狀態：** 進行中\n", `**狀態：** 進行中\n\n${preamble}`);
+  }
+
+  test("自指（複製檔忘了改標記）不會讓報告消失", () => {
+    const a = file("uat-a.md", withPre("A", sup("/w/proj/plans/uat-a.md"), ["未測"]));
+    expect(pendingUatsFrom([a]).map((x) => x.name)).toEqual(["uat-a.md"]);
+  });
+
+  test("互指（A 重測自 B、B 重測自 A）視為並存，兩份都留著", () => {
+    const a = file("uat-a.md", withPre("A", sup("/w/proj/plans/uat-b.md"), ["未測"]));
+    const b = file("uat-b.md", withPre("B", sup("/w/proj/plans/uat-a.md"), ["未測"]));
+    expect(pendingUatsFrom([a, b]).length).toBe(2);
+  });
+
+  test("正常單向鏈行為不變：舊的退場", () => {
+    const a = file("uat-a.md", report("A", ["未測"]));
+    const b = file("uat-b.md", withPre("B", sup("/w/proj/plans/uat-a.md"), ["未測"]));
+    expect(pendingUatsFrom([a, b]).map((x) => x.name)).toEqual(["uat-b.md"]);
+  });
+
+  test("三角循環不會全滅", () => {
+    const a = file("uat-a.md", withPre("A", sup("/w/proj/plans/uat-b.md"), ["未測"]));
+    const b = file("uat-b.md", withPre("B", sup("/w/proj/plans/uat-c.md"), ["未測"]));
+    const c = file("uat-c.md", withPre("C", sup("/w/proj/plans/uat-a.md"), ["未測"]));
+    // 三角互殺下每份都被「別人」指到且不構成互指——單向規則會全滅。
+    // 防護的最低要求：至少留一份，不能零。
+    expect(pendingUatsFrom([a, b, c]).length).toBeGreaterThan(0);
+  });
+});

@@ -116,9 +116,17 @@ function parseArgs(argv: string[]): CliOptions {
 
   if (specSource === null) fail(`${USAGE}\n缺少必填參數 --spec。`);
   if (root === null) fail(`${USAGE}\n缺少必填參數 --root（被測專案的根目錄，報告會寫進它的 plans/）。`);
-  // 解析成絕對路徑：檔頭標記是給另一台程式（App 的掃描）比對用的，
-  // 相對路徑會隨 cwd 漂移，對不上的症狀是「舊報告一直留在待辦」。
-  return { specSource, root: resolve(root), noOpen, supersedes: supersedes ? resolve(supersedes) : null };
+  // 相對路徑對 **--root** 解析，不是對 cwd（Grok C2）：這支 CLI 自己的註解
+  // 就警告過「agent 常常站在 Anchorline repo 卻要替別的專案出題」——cwd
+  // 解析會寫出一條指向錯 repo 的合理絕對路徑，舊報告永遠留在待辦且零報錯。
+  const rootAbs = resolve(root);
+  const supAbs =
+    supersedes === null
+      ? null
+      : isAbsolute(supersedes)
+        ? supersedes
+        : resolve(rootAbs, supersedes);
+  return { specSource, root: rootAbs, noOpen, supersedes: supAbs };
 }
 
 function readSpecText(specSource: string): string {
@@ -206,8 +214,15 @@ function main(): void {
   const now = new Date();
   const specText = readSpecText(opts.specSource);
   const spec = parseSpec(specText, opts.specSource === "-" ? "stdin" : resolve(opts.specSource));
-  // 旗標優先於 spec 內欄位：出題的是 skill，知道「這是重測」的是叫 CLI 的那一端
-  if (opts.supersedes) spec.supersedes = opts.supersedes;
+  // 旗標優先於 spec 內欄位：出題的是 skill，知道「這是重測」的是叫 CLI 的那一端。
+  // 存在驗證在這裡做：指向不存在的檔案代表叫錯路徑，寫進檔頭只會製造
+  // 「永遠比不中」的無聲失敗——寧可當場擋下。
+  if (opts.supersedes) {
+    if (!existsSync(opts.supersedes)) {
+      fail(`--supersedes 指向不存在的檔案：${opts.supersedes}`);
+    }
+    spec.supersedes = opts.supersedes;
+  }
   const reportPath = nextReportPath(opts.root, spec.title, now);
   const report = serializeUatReport(spec, { now: formatLocalMinute(now) });
   writeFileSync(reportPath, report);

@@ -13945,6 +13945,14 @@ p.gd-warn {
  * planned 要等 change 完成。所以未完成的 change 逐一列出來 ——
  * 「還不能 push」沒有下一步，「這三個還沒完成」才有。
  */
+/* 取號層級選擇（Grok C11：取代 window.prompt 的頁內三鈕） */
+.rl-level-pick {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
 .rl-push {
   margin: 18px 0 0;
   padding: 14px 16px;

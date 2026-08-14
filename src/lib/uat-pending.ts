@@ -48,7 +48,9 @@ export type PendingUat = {
  * 提到模組層是因為現在有兩個消費者：supersede 過濾（W2-3）與跨專案歸屬（W2-1）。
  * 兩邊各寫一次的話，症狀是「重測對得上、專案名卻空著」這種只錯一半的怪事。
  */
-const canon = (p: string) => p.normalize("NFC").replace(/^\/private(?=\/(?:tmp|var)\/)/, "");
+export const canonUatPath = (p: string) =>
+  p.normalize("NFC").replace(/^\/private(?=\/(?:tmp|var)\/)/, "");
+const canon = canonUatPath;
 
 /**
  * 歸屬比對需要的最小專案樣貌。
@@ -79,7 +81,7 @@ export type UatProjectRef = {
  */
 function uatReportsOf(files: ScannedPlan[]): {
   reports: { f: ScannedPlan; r: ReturnType<typeof parseUatReport> }[];
-  superseded: Set<string>;
+  isSuperseded: (f: ScannedPlan, sup: string | undefined) => boolean;
 } {
   const reports = files
     .filter((f) => f.kind !== "openspec")
@@ -87,22 +89,60 @@ function uatReportsOf(files: ScannedPlan[]): {
     .map((f) => ({ f, r: parseUatReport(f.text, f.path) }));
 
   // 取代者自己測完與否無關——新一輪存在的那一刻，舊報告就退場。
-  const superseded = new Set<string>();
-  for (const { r } of reports) {
-    if (r.supersedes) superseded.add(canon(r.supersedes));
+  //
+  // 但「退場」不能讓循環把報告集體蒸發（Grok C1）：自指（複製檔忘了改
+  // 標記）、互指、三角循環，單向 Set 都會把環裡每一份一起踢掉——收件匣
+  // 無聲清空、零錯誤訊息。規則升級成：**環內成員彼此不互踢**（人為錯誤
+  // 製造的環視為並存，留給人看見並修理），環外的正常單向鏈照舊退場。
+  const supersededBy = new Map<string, Set<string>>();
+  const byPath = new Map<string, string | undefined>();
+  for (const { f, r } of reports) {
+    byPath.set(canon(f.path), r.supersedes ? canon(r.supersedes) : undefined);
+    if (!r.supersedes) continue;
+    const target = canon(r.supersedes);
+    const source = canon(f.path);
+    if (target === source) continue; // 自指不算取代
+    (supersededBy.get(target) ?? supersededBy.set(target, new Set()).get(target)!).add(source);
   }
-  return { reports, superseded };
+  // 沿 supersedes 指標走出去，走回起點＝環。報告數量小，O(n²) 無所謂。
+  const cycleGroup = new Map<string, number>();
+  let nextGroup = 0;
+  for (const start of byPath.keys()) {
+    if (cycleGroup.has(start)) continue;
+    const walk: string[] = [];
+    let at: string | undefined = start;
+    const seen = new Set<string>();
+    while (at !== undefined && byPath.has(at) && !seen.has(at)) {
+      seen.add(at);
+      walk.push(at);
+      at = byPath.get(at);
+    }
+    if (at !== undefined && seen.has(at)) {
+      const g = nextGroup++;
+      for (const m of walk.slice(walk.indexOf(at))) cycleGroup.set(m, g);
+    }
+  }
+  const isSuperseded = (f: ScannedPlan, _sup: string | undefined): boolean => {
+    const me = canon(f.path);
+    const killers = supersededBy.get(me);
+    if (!killers) return false;
+    const myGroup = cycleGroup.get(me);
+    return [...killers].some(
+      (src) => myGroup === undefined || cycleGroup.get(src) !== myGroup,
+    );
+  };
+  return { reports, isSuperseded };
 }
 
 export function pendingUatsFrom(files: ScannedPlan[]): PendingUat[] {
-  const { reports, superseded } = uatReportsOf(files);
+  const { reports, isSuperseded } = uatReportsOf(files);
 
   const out: PendingUat[] = [];
   for (const { f, r } of reports) {
     if (r.status !== "進行中") continue;
     if (!r.items.some((x) => x.id)) continue;
     // 被新一輪取代的檔踢出待辦。兩輪並存都算待實測的話，badge 的分母只進不出。
-    if (superseded.has(canon(f.path))) continue;
+    if (isSuperseded(f, r.supersedes)) continue;
     const prog = uatProgress(r);
     out.push({
       path: f.path,
@@ -166,10 +206,10 @@ export type OpenFix = {
  * 以為債被吃掉了。
  */
 export function openFixesFrom(files: ScannedPlan[]): OpenFix[] {
-  const { reports, superseded } = uatReportsOf(files);
+  const { reports, isSuperseded } = uatReportsOf(files);
   const out: OpenFix[] = [];
   for (const { f, r } of reports) {
-    if (superseded.has(canon(f.path))) continue;
+    if (isSuperseded(f, r.supersedes)) continue;
     for (const it of r.items) {
       if (it.verdict !== "fail") continue;
       out.push({

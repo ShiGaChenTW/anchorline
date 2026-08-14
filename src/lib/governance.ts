@@ -36,11 +36,7 @@ const ANCHORED_SUBJECT_RE = /^(?:anc|sf):t=([0-9A-HJKMNP-TV-Z]{4,32})$/;
  */
 const OPENSPEC_SUBJECT_RE = /^openspec:(.+)\/(\d+(?:\.\d+)*)$/;
 
-/**
- * knownAnchors 集合裡，代表「這個 openspec change 目前活著（掃描得到）」的
- * sentinel 條目。見 `isGoverned` 的混合驗證規則。
- */
-export const OPENSPEC_LIVE_PREFIX = "openspec-change:";
+
 
 /**
  * 這筆事件串得回某個**真的存在**的 plan 步驟嗎。
@@ -70,21 +66,19 @@ export function isGoverned(
   const id = ANCHORED_SUBJECT_RE.exec(subject)?.[1];
   if (id !== undefined) return knownAnchors.has(id);
 
-  // openspec 形狀的存在驗證是**混合**規則：
+  // openspec 形狀只驗形狀，**不驗存在**——與錨點刻意不同。理由有兩層：
   //
-  // - change 還活著（掃描得到，集合裡有 sentinel）→ 步驟編號必須真的存在，
-  //   跟錨點同一條「去檔案裡確認」的規矩。
-  // - change 不在掃描裡（歸檔或已刪）→ 只驗形狀就放行。歸檔是 openspec
-  //   變更的**正常生命週期終點**——若堅持「必須活著」，每歸檔一個 change，
-  //   它整段歷史就從已治理翻回未治理，覆蓋率隨歸檔衰減，重蹈本項要修的
-  //   「對正確工作流反向計分」。代價是文件裡的佔位字串
-  //   （`openspec:XXXX/1.1`）會被放行——選系統性正確，不選軼事級純度。
-  const os = OPENSPEC_SUBJECT_RE.exec(subject);
-  if (os) {
-    const live = knownAnchors.has(`${OPENSPEC_LIVE_PREFIX}${os[1]}`);
-    return live ? knownAnchors.has(subject) : true;
-  }
-  return false;
+  // 1. 歸檔是 openspec 變更的正常生命週期終點。堅持「必須在掃描裡」，
+  //    每歸檔一個 change，它整段歷史就從已治理翻回未治理——覆蓋率隨
+  //    歸檔衰減，重蹈本項要修的「對正確工作流反向計分」。
+  // 2. `N.M` 是**位置編號**不是鑄造 id（Grok C7）：tasks.md 中間插一條
+  //    任務，底下全部重編，「去檔案裡確認」會讓活著的 change 每次編輯
+  //    都把歷史事件打回未治理。錨點驗存在成立的前提（id 鑄了不變）
+  //    在 openspec 不存在。
+  //
+  // 代價：文件裡的佔位字串（`openspec:XXXX/1.1`）會被放行。
+  // 選系統性正確，不選軼事級純度。
+  return OPENSPEC_SUBJECT_RE.test(subject);
 }
 
 export type GovernanceCoverage = {

@@ -5,9 +5,8 @@
  * 要不要顯示，一個 `requestX()` 真的去要。
  */
 import { dedupe, parseLog } from "./event-log";
-import { governanceCoverage, EMPTY_COVERAGE, OPENSPEC_LIVE_PREFIX, type GovernanceCoverage } from "./governance";
+import { governanceCoverage, EMPTY_COVERAGE, type GovernanceCoverage } from "./governance";
 import { isNative, native } from "./native";
-import { parsePlanMeta } from "./plan-parser";
 import { anchorsOf } from "./plan-writer";
 
 export type CoverageResult = {
@@ -69,22 +68,13 @@ export async function requestCoverage(projectRoot: string): Promise<CoverageResu
  */
 async function knownAnchorsOf(projectRoot: string): Promise<ReadonlySet<string>> {
   try {
-    const root = projectRoot.replace(/\/+$/, "");
-    // 第二個參數帶專案根：Rust 端會往 openspec/changes 下掃（跳過 archive）。
-    const scan = await native.trackingScan([`${root}/plans`], [root]);
+    const scan = await native.trackingScan([`${projectRoot.replace(/\/+$/, "")}/plans`]);
     const ids = new Set<string>();
+    // openspec 步驟不進這個集合：`N.M` 是位置編號不是鑄造 id，存在驗證
+    // 對它只會製造「編輯 tasks.md 就打回未治理」的新版反向計分——
+    // openspec subject 由 isGoverned 以形狀認定（Grok C7 裁決）。
     for (const f of scan.files ?? []) {
-      if (f.kind === "openspec") {
-        // openspec 步驟的 join key 是 `openspec:<changeId>/<編號>`（W1-3）。
-        // sentinel 標記「這個 change 活著」——isGoverned 靠它決定要嚴格驗
-        // 步驟存在，還是（歸檔後）只驗形狀。
-        const change = f.change ?? "";
-        if (!change) continue;
-        ids.add(`${OPENSPEC_LIVE_PREFIX}${change}`);
-        const meta = parsePlanMeta(f.text ?? "", f.path, { dialect: "openspec", change });
-        for (const step of meta.steps) if (step.id) ids.add(`openspec:${change}/${step.id}`);
-        continue;
-      }
+      if (f.kind === "openspec") continue;
       for (const id of anchorsOf(f.text ?? "")) ids.add(id);
     }
     return ids;
