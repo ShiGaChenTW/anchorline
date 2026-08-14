@@ -39,6 +39,19 @@ import {
   todaySummary,
 } from "../lib/log-views";
 import { buildReplay, replayMarkdown } from "../lib/replay";
+import {
+  isUatText,
+  parseUatReport,
+  setVerdict,
+  uatProgress,
+  UAT_VERDICTS,
+  VERDICT_LABELS,
+  VERDICT_NEEDS_NOTE,
+  type UatItem,
+  type UatReport,
+  type UatVerdict,
+} from "../lib/uat-parser";
+import { UAT_HANDOFF_EVENT, UAT_QUERY_KEY } from "../lib/uat-handoff";
 
 /** 壞行由 parseLog 跳過，不會毀掉整份。 */
 let auditEvents: LogEvent[] = [];
@@ -59,6 +72,12 @@ type PlanEntry = {
   mtimeMs: number;
   raw: string;
   meta: PlanMeta;
+  /**
+   * 實測報告方言才有。Rust 掃描一律把 `plans/*.md` 標成 `kind: "plan"`，
+   * 方言由前端的 `isUatText` 判 —— 掃描層不必知道有第三種方言，
+   * 而「這份是不是 UAT」只看得出來的地方就是內文的 H1。
+   */
+  uat?: UatReport;
 };
 
 const __authed = requireAuth();
@@ -92,6 +111,10 @@ if (__authed) {
     for (const p of plans) {
       const hit = p.meta.steps.find((st) => st.id === id);
       if (hit) return hit.text;
+      // 實測題也會被事件指到（`uat.verdict`）。少了這一段，時間軸上那些筆
+      // 只剩一串錨點，讀的人不知道當初問的是什麼題目。
+      const q = p.uat?.items.find((x) => x.id === id);
+      if (q) return q.title;
     }
     return "";
   }
@@ -143,15 +166,30 @@ if (__authed) {
     if (!scan.files.length) return false;
 
     plans = sortByRecency(
-      scan.files.map((f) => ({
-        id: f.path,
-        name: f.name,
-        path: f.path,
-        mtimeMs: f.mtimeMs,
-        raw: f.text,
-        // 方言由 Rust 端標好帶過來，前端不再用路徑猜一次
-        meta: parsePlanMeta(f.text, f.name, { dialect: f.kind ?? "plan", change: f.change }),
-      })),
+      scan.files.map((f) => {
+        // UAT 是唯一由前端判的方言：它跟 plan 住在同一個目錄、同一個副檔名，
+        // 分辨得出來的只有內文。openspec 的 tasks.md 不可能是 UAT，先排除，
+        // 省掉對每份 tasks.md 都跑一次判別。
+        //
+        // 檔名 `uat-` 開頭也算：實測發現手寫的實測檔常常只有檔名對、H1 沒有
+        // `# UAT:` 前綴（2026-08-14 Border Loom 那份表格版就是）。把它當普通
+        // plan 顯示會引導人去加 Plan Steps —— 錯的方向；歸進實測報告分組，
+        // 空狀態才有機會教正確的方言。
+        const uat =
+          f.kind !== "openspec" && (isUatText(f.text) || /^uat-/i.test(f.name))
+            ? parseUatReport(f.text, f.path)
+            : undefined;
+        return {
+          id: f.path,
+          name: f.name,
+          path: f.path,
+          mtimeMs: f.mtimeMs,
+          raw: f.text,
+          // 方言由 Rust 端標好帶過來，前端不再用路徑猜一次
+          meta: parsePlanMeta(f.text, f.name, { dialect: f.kind ?? "plan", change: f.change }),
+          ...(uat ? { uat } : {}),
+        };
+      }),
     );
     live = true;
     // 每次重繪重算，不快取 —— 快取只會製造「追蹤點卡住不動」這類 bug
@@ -205,13 +243,27 @@ if (__authed) {
   };
 
   function groupPlans(): Group[] {
+    const uat: Group["items"] = [];
     const tracked: Group["items"] = [];
     const active: Group["items"] = [];
     const done: Group["items"] = [];
     const noSteps: Group["items"] = [];
     plans.forEach((p, i) => {
       const entry = { p, i };
-      if (live && p.path === trackingPath) tracked.push(entry);
+      // 實測報告自成一組，而且排在最上面。它們是**等人動手**的東西，
+      // 混進「進行中」會跟一堆等 agent 動手的計劃長得一樣重要。
+      // 也不進「agent 正在寫」那一桶 —— 剛被寫出來的報告確實是最新的檔，
+      // 但那一桶的語意是「別碰，agent 在動」，對實測報告剛好是相反的指示。
+      if (p.uat) {
+        // 三種去向：可勾且沒測完 → 最上面等人動手；測完 → 已結束（做完的事
+        // 霸著最顯眼的位置，會把「等你動手」稀釋成「一疊做完的」）；
+        // 一題錨點都沒有（遺留表格版之類）→「沒有步驟的檔案」——它不可操作，
+        // 釘在最高優先組只是一份關不掉的幽靈報告。
+        const anchored = p.uat.items.some((x) => x.id);
+        if (!anchored) noSteps.push(entry);
+        else if (p.uat.status === "已完成") done.push(entry);
+        else uat.push(entry);
+      } else if (live && p.path === trackingPath) tracked.push(entry);
       else if (p.meta.total_steps === 0) noSteps.push(entry);
       // 分桶要跟進度條同源。用 done_steps 的話，有放棄步驟的 plan 進度條到 100%
       // 卻永遠留在「進行中」——同一張卡上兩個地方說反話。
@@ -220,6 +272,7 @@ if (__authed) {
       else active.push(entry);
     });
     return [
+      { key: "uat", label: "實測報告", items: uat, open: true },
       { key: "tracked", label: "agent 正在寫", items: tracked, open: true },
       { key: "active", label: "進行中", items: active, open: true },
       // 「已結束」而非「已完成」：這桶也收全部放棄的 plan，說完成就是在騙人
@@ -229,19 +282,27 @@ if (__authed) {
   }
 
   function planRow({ p, i }: { p: PlanEntry; i: number }): string {
-    const prog = planProgress(p.meta);
+    // 進度的分子分母跟中欄同源：UAT 走 uatProgress（已結 = 任何非未測的結果），
+    // plan 走 planProgress。在這裡自己數一次是進度條說反話的經典來源。
+    const prog = p.uat ? uatProgress(p.uat) : planProgress(p.meta);
+    const total = p.uat ? p.uat.items.length : p.meta.total_steps;
     const pct = prog.pct;
     const isTracked = live && p.path === trackingPath;
     // OpenSpec 的檔案全部叫 tasks.md，清單上靠標題（變更代號）區分還不夠 ——
     // 標一下來源，才知道勾選會寫回哪一個工具管的檔案
-    const src = p.meta.dialect === "openspec" ? `<span class="tk-row-src">OpenSpec</span>` : "";
+    const src = p.uat
+      ? `<span class="tk-row-src">實測</span>`
+      : p.meta.dialect === "openspec"
+        ? `<span class="tk-row-src">OpenSpec</span>`
+        : "";
+    const title = p.uat ? p.uat.title : p.meta.title;
     return `<button type="button" class="tk-row${i === idx ? " on" : ""}${isTracked ? " tracked" : ""}" data-i="${i}">
-      <span class="tk-row-t">${escapeHtml(p.meta.title)}${src}</span>
+      <span class="tk-row-t">${escapeHtml(title)}${src}</span>
       <span class="tk-row-m">
         ${
-          p.meta.total_steps
+          total
             ? `<span class="tk-mini"><i style="width:${pct}%"></i></span><span class="tk-num">${prog.closed}/${prog.total}</span>`
-            : `<span class="tk-num tk-num--none">沒有步驟</span>`
+            : `<span class="tk-num tk-num--none">${p.uat ? "沒有題目" : "沒有步驟"}</span>`
         }
       </span>
     </button>`;
@@ -301,6 +362,218 @@ if (__authed) {
       }</p>`;
   }
 
+  /**
+   * 四顆結果鈕。**從詞彙表減掉 `pending` 得來，不另外手寫一份** ——
+   * `pending`（未測）是初始態不是選項，而重抄一份清單的代價是詞彙表增修時
+   * 按鈕不會跟著長，UI 與檔案格式就開始各說各話。
+   */
+  const VERDICT_BUTTONS = UAT_VERDICTS.filter((v) => v !== "pending");
+
+  /** 「失敗、不測」這串字從規則本身長出來，不是文案裡寫死的。 */
+  const NEEDS_NOTE_HINT = [...VERDICT_NEEDS_NOTE]
+    .map((v) => VERDICT_LABELS[v])
+    .join("、");
+
+  /** `**最後更新：**` 用的時間戳。格式對齊 `plans/` 既有檔：本地時間、到分鐘。 */
+  function nowStamp(): string {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  /** 讀某一題說明欄當下的值（可能還沒存）。找不到那張卡就當空字串。 */
+  function noteValueOf(id: string): string {
+    return (
+      document.querySelector<HTMLTextAreaElement>(
+        `textarea[data-note="${CSS.escape(id)}"]`,
+      )?.value ?? ""
+    );
+  }
+
+  /**
+   * 把擋存的原因放在被擋的那一題旁邊。**不用 toast。**
+   *
+   * toast 會在幾秒後消失，而且不會說是哪一題 —— 一份 12 題的報告裡，
+   * 「必須寫原因」這句話沒有位置資訊等於沒說。
+   */
+  function showItemError(id: string, msg: string) {
+    const el = document.querySelector<HTMLElement>(
+      `[data-err="${CSS.escape(id)}"]`,
+    );
+    if (!el) {
+      // 卡片已經被重繪掉了。至少要說出來，不要靜靜地什麼都沒發生
+      toast(msg);
+      return;
+    }
+    el.textContent = msg;
+    el.classList.add("on");
+  }
+
+  /**
+   * 「現在該做什麼」的實測報告版。
+   *
+   * 全部測完不是終點：**失敗題才是這份報告真正的產出**，所以測完之後
+   * 這一格要指向那幾題，而不是恭喜一句就沒了。
+   */
+  function nextUatHtml(r: UatReport): string {
+    if (!r.items.length) {
+      return `<p class="tk-do-what">這份報告沒有題目</p>
+        <p class="tk-do-why">每一題是一個 <code>## </code> 區段，帶 <code>anc:t=</code> 錨點。用 Uat skill 重新出題會產生正確的格式。</p>`;
+    }
+    const pending = r.items.find((x) => x.verdict === "pending");
+    if (pending) {
+      return `<p class="tk-do-what">${escapeHtml(pending.title)}</p>
+        <p class="tk-do-why">這是第一題還沒測的。照著流程做一次，再回來選結果。</p>`;
+    }
+    const failed = r.items.filter((x) => x.verdict === "fail").length;
+    if (failed) {
+      return `<p class="tk-do-what">全部測完，其中 ${failed} 題失敗</p>
+        <p class="tk-do-why">失敗題的說明就是修復工單的起點 —— 交給 agent 時把那幾段一起帶上。</p>`;
+    }
+    return `<p class="tk-do-what tk-do-clear">全部測完，沒有失敗</p>
+      <p class="tk-do-why">結果已經寫回這份 markdown，agent 直接讀得到。</p>`;
+  }
+
+  /** 一題一張卡。沒有錨點的題勾不了 —— 跟 plan 步驟同一條規矩。 */
+  function uatCard(it: UatItem): string {
+    const editable = canEditFiles();
+    const body = [
+      it.steps.length
+        ? `<p class="tk-uat-k">流程</p>
+           <ol class="tk-uat-steps">${it.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>`
+        : "",
+      it.expected
+        ? `<p class="tk-uat-k">預期</p><p class="tk-uat-exp">${escapeHtml(it.expected)}</p>`
+        : "",
+    ].join("");
+
+    // 沒有錨點 = 寫回時定位不到那一行，也接不上事件流。UI 直接反映這個限制，
+    // 而不是給一顆按下去沒反應的鈕。
+    if (!it.id) {
+      return `<article class="tk-uat">
+        <header class="tk-uat-hd">
+          <h3 class="tk-uat-t">${escapeHtml(it.title)}</h3>
+          <span class="tk-uat-tag tk-v--${it.verdict}">${VERDICT_LABELS[it.verdict]}</span>
+        </header>
+        ${body}
+        <p class="tk-uat-warn">這一題沒有 <code>anc:t=</code> 錨點，勾了沒有地方可以寫回去。請讓出題的 agent 重出一份報告。</p>
+      </article>`;
+    }
+
+    const id = escapeHtml(it.id);
+    const acts = VERDICT_BUTTONS.map(
+      (v) =>
+        `<button type="button" class="tk-vb tk-vb--${v}${it.verdict === v ? " on" : ""}"
+           data-verdict="${v}" data-item="${id}" aria-pressed="${it.verdict === v}"${editable ? "" : " disabled"}
+         >${VERDICT_LABELS[v]}</button>`,
+    ).join("");
+
+    return `<article class="tk-uat${it.verdict === "pending" ? "" : " closed"}">
+      <header class="tk-uat-hd">
+        <h3 class="tk-uat-t">${escapeHtml(it.title)}</h3>
+        <span class="tk-uat-tag tk-v--${it.verdict}">${VERDICT_LABELS[it.verdict]}</span>
+      </header>
+      ${body}
+      <div class="tk-uat-acts" role="group" aria-label="結果">${acts}</div>
+      <label class="tk-uat-note">
+        <span class="tk-uat-k">說明<em>（${NEEDS_NOTE_HINT}必填）</em></span>
+        <textarea data-note="${id}" rows="2" placeholder="測不過的話，寫下看到什麼、跟預期差在哪"${editable ? "" : " disabled"}>${escapeHtml(it.note)}</textarea>
+      </label>
+      <p class="tk-uat-err" data-err="${id}" role="alert"></p>
+    </article>`;
+  }
+
+  /**
+   * 實測報告的中欄。**換一整套渲染器，不是在 plan 那套上加 if。**
+   *
+   * plan 的步驟是兩態 checkbox，UAT 一題是五態外加一格自由文字。把兩者塞進
+   * 同一個渲染器，結果會是兩邊都長出對方的分支，然後沒有人敢動它。
+   */
+  function renderUat(r: UatReport, sum: HTMLElement | null, steps: HTMLElement | null) {
+    const prog = uatProgress(r);
+    if (sum) {
+      sum.innerHTML = `
+        <h2 class="tk-title">${escapeHtml(r.title)}</h2>
+        <div class="tk-do">
+          <p class="tk-do-k">現在該做什麼</p>
+          ${nextUatHtml(r)}
+        </div>
+        <div class="tk-prog">
+          <div class="tk-bar"><i style="width:${prog.pct}%"></i></div>
+          <p class="tk-prog-m">
+            <strong>${prog.closed}/${prog.total}</strong> 已結
+            · 更新 ${escapeHtml(r.updated)}
+          </p>
+        </div>
+        ${
+          r.unanchored && r.items.some((x) => x.id)
+            ? `<p class="tk-uat-warn">有 ${r.unanchored} 題沒有錨點，那些題勾不了。</p>`
+            : ""
+        }
+        ${
+          canEditFiles()
+            ? ""
+            : `<p class="tk-uat-warn">瀏覽器只能看。勾選要寫回 <code>plans/</code> 底下的檔案，那需要桌面版。</p>`
+        }
+      `;
+    }
+    if (!steps) return;
+    // 「沒有題目」與「有題但全部沒錨點」走同一條路：後者一題都勾不了，
+    // 渲染九張不可操作的卡（附九個警告）不如直接教正確格式。
+    if (!r.items.some((x) => x.id)) {
+      steps.innerHTML = `<div class="tk-empty">
+        <p>${r.items.length ? "這份檔案不是實測方言，題目讀不出錨點，勾不了。" : "這份實測報告沒有題目。"}</p>
+        <p class="tk-empty-how">格式是這樣：</p>
+        <pre class="tk-code"><code>## T1 單頁結帳成功路徑 &lt;!-- anc:t=XXXX --&gt;
+
+**流程：**
+1. 開 app，加入任一商品
+
+**預期：**
+3 秒內顯示成功頁
+
+**結果：** 未測
+
+**說明：**
+（無）</code></pre>
+      </div>`;
+      return;
+    }
+
+    // 未測的排前面：要動手的事不該混在一堆已結的後面往下找。與 plan 步驟同一條規矩。
+    const sorted = r.items
+      .map((it, n) => ({ it, n }))
+      .sort(
+        (a, b) =>
+          Number(a.it.verdict !== "pending") - Number(b.it.verdict !== "pending") ||
+          a.n - b.n,
+      );
+    steps.innerHTML = sorted.map(({ it }) => uatCard(it)).join("");
+
+    steps.querySelectorAll<HTMLButtonElement>("[data-verdict]").forEach((btn) => {
+      btn.onclick = () => {
+        const id = btn.dataset.item!;
+        // 說明從畫面上讀，不是從 r 讀 —— 使用者很可能剛打完原因就直接按「失敗」，
+        // 那段字還沒經過 blur 存回去
+        void onSetVerdict(id, btn.dataset.verdict as UatVerdict, noteValueOf(id));
+      };
+    });
+
+    steps
+      .querySelectorAll<HTMLTextAreaElement>("textarea[data-note]")
+      .forEach((ta) => {
+        const original = ta.value;
+        ta.onblur = () => {
+          // 只在真的改過時寫回。每次失焦都寫一次的話，「點進去看一眼」也會動到
+          // mtime，把這份報告一路推上 live tracking 的追蹤位。
+          if (ta.value === original) return;
+          const it = r.items.find((x) => x.id === ta.dataset.note);
+          if (!it?.id) return;
+          void onSetVerdict(it.id, it.verdict, ta.value);
+        };
+      });
+  }
+
   function renderMain() {
     const p = plans[idx];
     const hd = document.getElementById("plan-hd");
@@ -313,9 +586,14 @@ if (__authed) {
         steps.innerHTML = `<div class="tk-empty"><p>從左邊挑一份計劃。</p></div>`;
       return;
     }
+    if (hd) hd.innerHTML = `<span class="mono">${escapeHtml(p.name)}</span>`;
+    if (p.uat) {
+      renderUat(p.uat, sum, steps);
+      return;
+    }
+
     const prog = planProgress(p.meta);
     const pct = prog.pct;
-    if (hd) hd.innerHTML = `<span class="mono">${escapeHtml(p.name)}</span>`;
 
     if (sum) {
       sum.innerHTML = `
@@ -701,9 +979,112 @@ if (__authed) {
     await refresh(true);
   }
 
+  /**
+   * 寫回一題的實測結果。
+   *
+   * 與 `onToggleStep` 同一條路徑（guardOf → safeApply → logEvent），三處不同：
+   *
+   * 1. mutate 換成 `setVerdict`（它自己執法「失敗／不測必填說明」）
+   * 2. 被必填規則擋下時**不重新整理** —— 重載會把使用者剛打到一半的說明沖掉，
+   *    而那正是他被要求補的東西
+   * 3. 訊息落在那一題旁邊，不是 toast。只有真的併發衝突才用 toast，
+   *    因為那是整份檔的事，不是某一題的事
+   */
+  async function onSetVerdict(id: string, verdict: UatVerdict, note: string) {
+    const p = plans[idx];
+    if (!p?.uat) return;
+    const before = p.uat.items.find((x) => x.id === id);
+
+    // UI 先擋一次，不用等一趟磁碟往返才知道說明沒填。**訊息跟判定都從 parser 拿**，
+    // 不在這裡再寫一份規則 —— 兩份會在規則改動時各自漂移，而漂移的那一份
+    // 通常是 UI，症狀是「按了說可以，存下去卻被拒絕」。
+    // setVerdict 是純函式，對一份幾 KB 的報告多跑一次的成本是零。
+    const dry = setVerdict(p.raw, id, verdict, note);
+    if (!dry.ok) {
+      showItemError(id, dry.reason);
+      return;
+    }
+
+    // safeApply 對 mutate 回 null 只有一句寫死的 plan 專用訊息（「找不到
+    // ## Plan Steps 區段」），那對實測報告是錯的。真正的原因用閉包帶出來。
+    let blocked = "";
+    const guard = guardOf(p.path, p.raw);
+    const r = await safeApply(
+      guard,
+      (text) => {
+        const res = setVerdict(text, id, verdict, note, { now: nowStamp() });
+        if (!res.ok) {
+          blocked = res.reason;
+          return null;
+        }
+        return res.text;
+      },
+      { read: readFile, write: writeFile },
+    );
+    if (!r.ok) {
+      if (blocked) {
+        showItemError(id, blocked);
+        return;
+      }
+      toast(r.reason);
+      await refresh(true); // 衝突時把畫面拉回磁碟現況，不要停在舊的
+      return;
+    }
+
+    // 寫成功才記事件。順序反過來的話，log 會有一筆沒發生的事
+    const st = store.get();
+    const proj = st.projects.find((x) => x.id === st.activeProjectId);
+    const root = proj?.importSummary?.rootPath;
+    if (root) {
+      const u = st.currentUser;
+      const actor = {
+        kind: u.kind === "agent" ? ("agent" as const) : ("human" as const),
+        family: u.agentFamily ?? null,
+        name: u.name,
+      };
+      logEvent(root, {
+        project: proj!.id,
+        actor,
+        kind: "uat.verdict",
+        subject: `${ANCHOR_PREFIX}:t=${id}`,
+        // **說明欄不進 payload。** 那是自由文字，而稽核軌跡是 append-only：
+        // 寫進去就刪不掉了。結果詞是五選一的固定字彙，那個可以記。
+        payload: { title: before?.title ?? "", verdict: VERDICT_LABELS[verdict] },
+      });
+      // 報告層級只在「這一次把它推成已完成」時記一筆。每次勾都判一次的話，
+      // 一份已經測完的報告，之後每改一題結果都會再記一筆「完成」。
+      const after = parseUatReport(r.text, p.path);
+      if (after.status === "已完成" && p.uat.status !== "已完成") {
+        const done = uatProgress(after);
+        logEvent(root, {
+          project: proj!.id,
+          actor,
+          kind: "uat.report.done",
+          // 報告不是一個錨點，它是一個檔。形狀對齊 openspec 那條
+          // （`openspec:<標題>/<編號>`）—— 前綴講清楚這個 join key 是哪一種。
+          subject: `uat:${p.name}`,
+          payload: { title: after.title, count: done.total, pct: done.pct },
+        });
+      }
+    }
+    await refresh(true);
+  }
+
+  /**
+   * 說明欄正在打字時不要重畫。
+   *
+   * 每秒輪詢一有變化就重建 DOM，而重建等於把還沒存的字吃掉 —— 使用者不會
+   * 知道發生了什麼，只會看到自己打的東西消失。只擋輪詢那一路（`force` 為假），
+   * 存檔後的強制重繪仍然要跑，否則結果不會更新。
+   */
+  function isEditingNote(): boolean {
+    const a = document.activeElement;
+    return a instanceof HTMLTextAreaElement && a.hasAttribute("data-note");
+  }
+
   function render(force = false) {
     const sig = signature();
-    if (!force && sig === lastSig) return;
+    if (!force && (sig === lastSig || isEditingNote())) return;
     lastSig = sig;
     syncUser();
     renderList();
@@ -719,8 +1100,59 @@ if (__authed) {
     render();
   }
 
+  /**
+   * 喚醒鏈的著陸點：`tracking.html?uat=<報告路徑>`。
+   *
+   * **不是「找不到就算了」。** CLI 剛寫好的檔不一定已經在掃描結果裡 —— 掃描
+   * 每秒一次，而 App 很可能是被 `open -a` 冷啟動的，第一輪掃描甚至還沒跑。
+   * 所以等它出現，等到就選中，有上限。
+   *
+   * 等不到一定要說出來。導了頁卻什麼都沒發生，使用者不會去想「大概不在這個
+   * 專案的 plans/ 裡」，他只會覺得這個功能壞了。
+   */
+  const UAT_LANDING_MS = 8000;
+  let pendingUat: { path: string; until: number } | null = null;
+
+  function clearUatQuery() {
+    const u = new URL(location.href);
+    if (!u.searchParams.has(UAT_QUERY_KEY)) return;
+    // 參數只用一次：留著的話，重新整理會再選中一次那份可能早就看完的報告
+    u.searchParams.delete(UAT_QUERY_KEY);
+    history.replaceState(null, "", `${u.pathname}${u.search}${u.hash}`);
+  }
+
+  function consumePendingUat() {
+    if (!pendingUat) return;
+    const want = pendingUat.path;
+    const base = want.split("/").pop() ?? want;
+    // 先比完整路徑，比不到再比檔名。CLI 給的路徑與 Rust 掃描回來的路徑可能
+    // 一個走了 symlink 一個沒走（`/tmp` 與 `/private/tmp` 是最常見的一對），
+    // 而嚴格比對的失敗模式是「靜靜地什麼都沒選中」—— 那是這裡最不能接受的結果。
+    let i = plans.findIndex((p) => p.path === want);
+    if (i < 0) i = plans.findIndex((p) => p.name === base);
+    if (i >= 0) {
+      pendingUat = null;
+      clearUatQuery();
+      select(i);
+      return;
+    }
+    if (!canScanPlans()) {
+      // 瀏覽器沒有資料通道，再等下去也不會有東西 —— 不要讓它空轉到逾時
+      pendingUat = null;
+      clearUatQuery();
+      toast("瀏覽器讀不到磁碟，實測報告要用桌面版才打得開");
+      return;
+    }
+    if (Date.now() > pendingUat.until) {
+      pendingUat = null;
+      clearUatQuery();
+      toast(`這份實測報告不在目前專案的 plans/ 裡：${base}`);
+    }
+  }
+
   async function refresh(force = false) {
     await loadPlans();
+    consumePendingUat();
     render(force);
   }
 
@@ -762,9 +1194,53 @@ if (__authed) {
     }
   });
 
+  /**
+   * 交件對齊專案。掃描只看「當前選取的專案」，報告卻可能屬於任何一個已匯入
+   * 專案 —— 多專案交替開發時這是常態不是例外。路徑前綴對得到就直接切過去；
+   * 對不到就立刻講清楚缺哪個資料夾，不要讓人白等 8 秒換一句沒出路的 toast。
+   */
+  function alignProjectForUat(path: string): boolean {
+    const st = store.get();
+    const hit = st.projects.find((p) => {
+      const root = (p.importSummary?.rootPath ?? "").replace(/\/+$/, "");
+      return root && path.startsWith(`${root}/`);
+    });
+    if (hit) {
+      if (hit.id !== st.activeProjectId) {
+        store.setActiveProject(hit.id);
+        toast(`已切換到專案「${hit.customName || hit.title || "未命名"}」`);
+      }
+      return true;
+    }
+    const dir = path.replace(/\/plans\/[^/]+$/, "");
+    toast(`這份報告的專案還沒匯入：${dir}。到「專案清單」匯入後再開一次。`);
+    return false;
+  }
+
+  // 已經停在這一頁時，喚醒鏈用事件交件而不是導頁 —— 導頁會整頁重載，把捲動
+  // 位置、展開狀態、還沒存的說明欄全部丟掉，而使用者正在做的事很可能就是
+  // 勾上一份報告。
+  window.addEventListener(UAT_HANDOFF_EVENT, (e) => {
+    const path = (e as CustomEvent<{ reportPath?: string }>).detail?.reportPath;
+    if (!path) return;
+    if (!alignProjectForUat(path)) return;
+    pendingUat = { path, until: Date.now() + UAT_LANDING_MS };
+    void refresh(true);
+  });
+
   // ponytail: 只做 1 秒輪詢，不掛 fs watcher。mtime 重比較本來就得每秒做一次，
   // 畫面去重讓沒變化的那幾百次輪詢不產生任何 DOM 動作。瀏覽器沒有資料通道，不輪詢。
   if (canScanPlans()) window.setInterval(() => void refresh(), 1000);
+
+  const uatParam = new URLSearchParams(location.search).get(UAT_QUERY_KEY);
+  if (uatParam) {
+    if (alignProjectForUat(uatParam)) {
+      pendingUat = { path: uatParam, until: Date.now() + UAT_LANDING_MS };
+    } else {
+      // 對不到專案就不要留著參數 —— 重新整理再吃一次同樣的死路
+      clearUatQuery();
+    }
+  }
 
   void refresh(true);
   store.subscribe(() => render(true));

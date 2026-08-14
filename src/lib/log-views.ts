@@ -36,6 +36,8 @@ const KIND_LABEL: Record<string, string> = {
   "pr.checks.fail": "CI 失敗",
   "decision.record": "記錄決策",
   "file.edit": "改檔案",
+  "uat.verdict": "實測判定",
+  "uat.report.done": "實測完成",
 };
 
 export function kindLabel(kind: string): string {

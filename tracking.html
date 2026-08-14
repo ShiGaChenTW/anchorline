@@ -199,6 +199,140 @@
   .tk-step.done .tk-step-t { color: var(--muted); }
   .tk-step.skipped .tk-step-t { color: var(--meta); text-decoration: line-through; }
 
+  /* ── 實測報告：一題一張卡 ──
+     為什麼不沿用 .tk-step：那一條是「一行一件事」的密集清單，適合掃過去。
+     實測要的是相反的東西 —— 使用者手上正在照著流程操作，眼睛會離開螢幕再回來，
+     所以一題要有邊界、找得回來。卡片是那個邊界。 */
+  .tk-uat {
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    margin-bottom: 10px;
+  }
+  /* 已結的題降低對比但不收合：使用者常常要回頭確認自己剛剛選了什麼 */
+  .tk-uat.closed { background: none; border-color: var(--border-muted); }
+  .tk-uat-hd { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .tk-uat-t {
+    margin: 0;
+    flex: 1 1 auto;
+    font-size: var(--fs-5);
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--fg);
+    max-width: 60ch;
+  }
+  .tk-uat.closed .tk-uat-t { color: var(--fg-2); }
+  .tk-uat-tag {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    border-radius: 99px;
+    border: 1px solid var(--border);
+    font-size: var(--fs-1);
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .tk-uat-k {
+    margin: 0 0 4px;
+    font-size: var(--fs-1);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  .tk-uat-k em { font-style: normal; font-weight: 400; color: var(--meta); }
+  .tk-uat-steps {
+    margin: 0 0 12px;
+    padding-left: 20px;
+    font-size: var(--fs-3);
+    line-height: 1.7;
+    color: var(--fg-2);
+    max-width: 70ch;
+  }
+  .tk-uat-steps li { margin: 0 0 2px; }
+  .tk-uat-exp {
+    /* 預期可能是多行，parser 原樣保留換行 —— 折成一段會把「三個條件」讀成一句話 */
+    white-space: pre-wrap;
+    margin: 0 0 12px;
+    font-size: var(--fs-3);
+    line-height: 1.7;
+    color: var(--fg-2);
+    max-width: 70ch;
+  }
+
+  /* 四顆結果鈕。色調只用既有 token —— 不新增主題層 */
+  .tk-uat-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .tk-vb {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--fg-2);
+    font: inherit;
+    font-size: var(--fs-2);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 140ms ease, border-color 140ms ease;
+  }
+  .tk-vb:hover:not([disabled]) { background: var(--inset); }
+  .tk-vb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tk-vb[disabled] { opacity: 0.45; cursor: not-allowed; }
+  /* 選中態靠「填色 + 粗體」表達，不是只換邊框顏色 ——
+     四顆並排時，只有邊框變色在小尺寸下看不出來哪一顆被選了 */
+  .tk-vb.on { font-weight: 650; }
+  .tk-vb--pass.on {
+    border-color: var(--success);
+    background: var(--success-bg);
+    color: var(--success);
+  }
+  .tk-vb--fail.on {
+    border-color: var(--danger);
+    background: var(--danger-bg);
+    color: var(--danger);
+  }
+  .tk-vb--wont.on { border-color: var(--meta); background: var(--inset); color: var(--muted); }
+  .tk-vb--later.on {
+    border-color: var(--warn);
+    background: var(--warn-bg);
+    color: var(--warn);
+  }
+  /* 標籤與按鈕同一套色，才看得出「上面那顆」跟「右上角那個字」是同一件事 */
+  .tk-uat-tag.tk-v--pass { border-color: var(--success); color: var(--success); }
+  .tk-uat-tag.tk-v--fail { border-color: var(--danger); color: var(--danger); }
+  .tk-uat-tag.tk-v--later { border-color: var(--warn); color: var(--warn); }
+  .tk-uat-tag.tk-v--wont { border-color: var(--meta); color: var(--meta); }
+
+  .tk-uat-note { display: block; }
+  .tk-uat-note textarea {
+    width: 100%;
+    min-height: 52px;
+    resize: vertical;
+    font-size: var(--fs-3);
+    line-height: 1.6;
+  }
+  /* 擋存原因：預設不佔位置，被擋時才出現在那一題底下 */
+  .tk-uat-err { display: none; margin: 8px 0 0; font-size: var(--fs-2); color: var(--danger); }
+  .tk-uat-err.on { display: block; }
+  .tk-uat-warn {
+    margin: 10px 0 0;
+    padding: 8px 11px;
+    border: 1px solid color-mix(in oklab, var(--warn) 40%, var(--border));
+    border-radius: 7px;
+    background: var(--warn-bg);
+    font-size: var(--fs-2);
+    line-height: 1.6;
+    color: var(--fg-2);
+  }
+  .tk-uat-warn code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--inset);
+    font-family: var(--mono);
+    font-size: var(--fs-1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tk-vb { transition: none; }
+  }
+
   /* 空狀態要教怎麼做，不是只說「沒有」 */
   .tk-empty { padding: 18px 4px; max-width: 56ch; }
   .tk-empty p { margin: 0 0 8px; font-size: var(--fs-3); line-height: 1.65; color: var(--fg-2); }
