@@ -29,6 +29,8 @@ export type AgentJob = {
    * 簽核頁會把結果貼在那一關上。沒有 stageId 的是一般進場（Agent 管理頁）。
    */
   stageId?: string;
+  /** 綁定的版號。送交執行的工作單帶這個，版本取號頁把進度貼回那一版 */
+  releaseId?: string;
   task: AgentTaskType;
   status: AgentJobStatus;
   note: string;

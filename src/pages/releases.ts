@@ -254,7 +254,9 @@ function pushGateHtml(r: Release): string {
     </div>`;
   }
 
-  // 閘門過了、只差放行 —— 這是預先作業的正常狀態，要給按鈕而不是只給理由
+  // 閘門過了、只差放行 —— 這是預先作業的正常狀態，要給按鈕而不是只給理由。
+  // 確認**做在卡片裡**（按第一下變成紅色的「確認放行」），不用 window.confirm ——
+  // 系統對話框在桌面殼壞過一次（2026-08-14），關鍵路徑不再壓在它身上
   const onlyNeedsRelease = !r.releasedAt && g.reason.includes("還沒放行");
   return `<div class="rl-push${onlyNeedsRelease ? " is-planned" : ""}">
     <div class="rl-push-head"><strong>${onlyNeedsRelease ? "已取號，尚未放行" : "還不能取這個號"}</strong>
@@ -263,9 +265,33 @@ function pushGateHtml(r: Release): string {
     <p class="rl-push-fix">${escapeHtml(g.fix)}</p>
     ${
       onlyNeedsRelease
-        ? `<button type="button" class="btn btn-sm btn-primary" id="rl-release">正式放行</button>`
+        ? `<span class="rl-arm">
+             <button type="button" class="btn btn-sm btn-primary" id="rl-release">正式放行</button>
+             <button type="button" class="btn btn-sm rl-arm-go" id="rl-release-go" hidden>確認放行 —— 之後內容不能再改</button>
+             <button type="button" class="btn btn-sm btn-ghost" id="rl-release-cancel" hidden>先不要</button>
+           </span>`
         : ""
     }
+  </div>`;
+}
+
+/**
+ * 交辦之後的去向。沒有這一段，「送交執行」按完畫面只多一行時間戳 ——
+ * Agent 到底跑了沒、跑完之後要幹嘛，全都要使用者自己猜（2026-08-14 回報）。
+ */
+function handoffStatusHtml(r: Release): string {
+  if (!r.handedAt) return "";
+  const job = store.get().agentJobs.find((j) => j.releaseId === r.id);
+  const jobLine = !job
+    ? `交辦單已產生（當時沒有可派工的 Agent，或由人工接手）。`
+    : job.status === "queued" || job.status === "running"
+      ? `⏳ ${escapeHtml(job.agentName)} 執行中 —— 結果會出現在 <a href="agents.html">Agent 管理</a> 的進場紀錄。`
+      : job.status === "failed"
+        ? `❌ ${escapeHtml(job.agentName)} 執行失敗：${escapeHtml(job.result.slice(0, 120) || "沒有留下原因")}　可再按一次「送交執行」重派。`
+        : `✅ ${escapeHtml(job.agentName)} 已完成 —— 全文在 <a href="agents.html">Agent 管理</a> 的進場紀錄。`;
+  return `<div class="rl-next">
+    <p class="rl-next-job">${jobLine}</p>
+    <p class="rl-next-steps">下一步：實作完成後回這裡把「待開發」項目勾成完成 → 按「正式放行」→ 複製 PUSH 指令到終端機執行。</p>
   </div>`;
 }
 
@@ -337,6 +363,7 @@ function renderDetail() {
       <button type="button" class="btn btn-sm btn-ghost" id="rl-del">刪除這一版</button>
       <button type="button" class="btn btn-primary" id="rl-hand">送交執行</button>
     </div>
+    ${handoffStatusHtml(r)}
   `;
 
   bindDetail(r);
@@ -448,8 +475,22 @@ function bindDetail(r: Release) {
     }
   });
 
-  document.getElementById("rl-release")?.addEventListener("click", () => {
-    if (!confirm("放行之後這一版的內容就不能再改。確定？")) return;
+  // 兩段式確認做在畫面裡，不用 window.confirm —— 桌面殼的系統對話框
+  // 壞過一次（回報「按了沒用」），不可逆操作的確認不再壓在它身上
+  const armBtn = document.getElementById("rl-release");
+  const goBtn = document.getElementById("rl-release-go");
+  const cancelBtn = document.getElementById("rl-release-cancel");
+  armBtn?.addEventListener("click", () => {
+    armBtn.hidden = true;
+    if (goBtn) goBtn.hidden = false;
+    if (cancelBtn) cancelBtn.hidden = false;
+  });
+  cancelBtn?.addEventListener("click", () => {
+    if (armBtn) armBtn.hidden = false;
+    if (goBtn) goBtn.hidden = true;
+    cancelBtn.hidden = true;
+  });
+  goBtn?.addEventListener("click", () => {
     const res = store.releaseNow(r.id);
     toast(res.ok ? "已放行，可以 PUSH 了" : (res.reason ?? "放行失敗"));
     render();
@@ -517,6 +558,8 @@ async function hand(r: Release) {
     projectId: r.projectId,
     task: "edit",
     note: md,
+    // 綁回這一版：詳情卡才能顯示「執行中／完成／失敗」與下一步
+    releaseId: r.id,
   });
   if (!res.ok) {
     toast(res.reason ?? "派工失敗（交辦單已複製）");
@@ -594,6 +637,21 @@ async function loadOpenspecChanges(): Promise<void> {
 }
 
 render();
+
+// 交辦的 Agent 跑完時狀態列要自己翻頁，不能等使用者重新整理。
+// **只在工作單狀態變了才重畫**：這一頁沒有全域 subscribe 是刻意的 ——
+// 每次 emit 都重畫會把使用者正在打的版號欄位洗掉。
+let lastJobKey = "";
+store.subscribe(() => {
+  const r = selected();
+  if (!r?.handedAt) return;
+  const j = store.get().agentJobs.find((x) => x.releaseId === r.id);
+  const key = j ? `${j.id}:${j.status}` : "";
+  if (key !== lastJobKey) {
+    lastJobKey = key;
+    render();
+  }
+});
 
 // 已經有 planned 版號就要把 change 狀態讀進來，否則 PUSH 閘門會全部說「沒完成」
 // change 候選與 YY 閘門都要 openspec 狀態，一進頁就讀
