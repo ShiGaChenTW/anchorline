@@ -1549,6 +1549,14 @@ pub struct Pong {
 /// **實際實作了哪些 action。** 前端靠它做功能偵測，而不是靠版本號猜。
 #[tauri::command]
 pub fn ping() -> R<Pong> {
+    #[allow(unused_mut)]
+    let mut extra: Vec<String> = Vec::new();
+    // js_dialogs 補丁裝上且自檢通過才報 jsDialogs——wry 升版改 delegate
+    // 結構時這裡會消失，前端能據此把 confirm/prompt 降級成頁內確認。
+    #[cfg(target_os = "macos")]
+    if crate::js_dialogs::ready() {
+        extra.push("jsDialogs".into());
+    }
     Ok(Pong {
         native: true,
         capabilities: [
@@ -1571,6 +1579,7 @@ pub fn ping() -> R<Pong> {
         ]
         .iter()
         .map(|s| s.to_string())
+        .chain(extra)
         .collect(),
     })
 }
