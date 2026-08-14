@@ -488,6 +488,15 @@ fn uat_handoff_base() -> Option<PathBuf> {
         .map(|h| PathBuf::from(h).join(".anchorline"))
 }
 
+/// 交件檔必須是普通檔案而且小。`read_to_string` 會跟著 symlink 走 ——
+/// 固定路徑擋掉的是「前端傳任意路徑」，擋不掉「路徑本身被換成連結」，
+/// 那會讓這支指令變成跨 WebView 邊界的任意檔案讀取（Cato F4）。
+fn uat_handoff_readable(p: &PathBuf) -> bool {
+    fs::symlink_metadata(p)
+        .map(|m| m.file_type().is_file() && m.len() <= 64 * 1024)
+        .unwrap_or(false)
+}
+
 /// 取走一份 UAT 交件。**讀到就刪，內容原樣回傳**（JSON 判讀留在 TS，見檔頭約定 2）。
 ///
 /// 沒有待辦回 `None`。這支在每次頁面載入與視窗聚焦時都會被呼叫 ——「沒東西」
@@ -502,11 +511,13 @@ pub async fn uat_handoff_take() -> R<Option<String>> {
     };
     // 舊版單槽先吃 —— 換版期間 CLI 與 App 可能一新一舊，丟件比多跳一次糟。
     let legacy = base.join("uat-handoff.json");
-    if let Ok(text) = fs::read_to_string(&legacy) {
-        if fs::remove_file(&legacy).is_ok() {
-            return Ok(Some(text));
+    if uat_handoff_readable(&legacy) {
+        if let Ok(text) = fs::read_to_string(&legacy) {
+            if fs::remove_file(&legacy).is_ok() {
+                return Ok(Some(text));
+            }
+            return Ok(None);
         }
-        return Ok(None);
     }
     // 佇列目錄：一件一檔，依檔名排序最舊先取，一次只取一件 ——
     // 剩下的在下一次載入／聚焦時繼續排空，所以並發交件不會丟。
@@ -521,6 +532,9 @@ pub async fn uat_handoff_take() -> R<Option<String>> {
         .collect();
     files.sort();
     for p in files {
+        if !uat_handoff_readable(&p) {
+            continue;
+        }
         let Ok(text) = fs::read_to_string(&p) else { continue };
         // 刪不掉就跳過這一件：交出刪不掉的交件會讓每次聚焦都被彈回同一份
         if fs::remove_file(&p).is_err() {

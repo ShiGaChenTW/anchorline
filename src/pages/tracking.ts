@@ -551,6 +551,11 @@ if (__authed) {
     steps.innerHTML = sorted.map(({ it }) => uatCard(it)).join("");
 
     steps.querySelectorAll<HTMLButtonElement>("[data-verdict]").forEach((btn) => {
+      // 按結果鈕不奪走 textarea 焦點。否則「打完原因直接按失敗」會先觸發
+      // blur 寫入、再觸發 click 寫入 —— 兩次寫共用同一份 guard 快照，
+      // 後到的那次（正是使用者要的結果）被當成陳舊寫入擋掉（Cato F1）。
+      // 擋掉 blur 之後，click 這一路就是唯一寫入者。
+      btn.onmousedown = (e) => e.preventDefault();
       btn.onclick = () => {
         const id = btn.dataset.item!;
         // 說明從畫面上讀，不是從 r 讀 —— 使用者很可能剛打完原因就直接按「失敗」，
