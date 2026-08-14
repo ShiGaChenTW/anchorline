@@ -23,10 +23,10 @@
 - [x] Grok now-fix 六項：UAT 著陸抑制歡迎 modal；handoff 單槽改佇列（CLI＋Rust＋測試）；著陸自動切換專案（比不到給匯入指引）；全無錨點檔改列「沒有步驟的檔案」＋教學態；已完成報告移出最高優先組；CLI --root 必填 <!-- anc:t=HRTD1X3Z -->
 - [x] Skill 修訂（principal 指示，子 agent 完成）：流程必須條列式（一步一原子動作、禁「→」串接）、以 mobile-final 檔為顆粒度標竿、報告頭脈絡誠實留白；評估結論 needs_code_change=no，選配 `context` 欄位列後續 <!-- anc:t=JSVE2Y4A -->
 - [x] 收尾：commit ×2（e829a2e 功能、4754574 審計修復）、安裝版更新至含全部修復的 build、結束摘要 <!-- anc:t=FPRB9V1X -->
-- [ ] 第二輪 Forge：`src/lib/uat-fix-handoff.ts`（uatProjectRoot／uatFixTask 純函式）＋測試 <!-- anc:t=KTWF3Z5B -->
-- [ ] 第二輪 Engineer：報告頁「送出給 agent」（族系選擇→產生指令→複製＋事件）；overview「待實測」區塊；側欄計劃追蹤 badge <!-- anc:t=MVXG4A6C -->
+- [x] 第二輪 Forge：`src/lib/uat-fix-handoff.ts`（uatProjectRoot／uatFixTask 純函式）＋13 測試（shellQuote 真 shell round-trip） <!-- anc:t=KTWF3Z5B -->
+- [x] 第二輪 Engineer：報告頁「送出給 agent」（族系選擇→產生指令→複製＋事件）；overview「待實測」區塊；側欄計劃追蹤 badge（合併時棄其 placeholder 與撞名測試檔，保 Forge 正版） <!-- anc:t=MVXG4A6C -->
 - [x] 第二輪 Skill：Uat 加「修復迴圈」合約（agent 端接收處理五步驟） <!-- anc:t=NWYH5B7D -->
-- [ ] 第二輪整合驗證＋重建安裝版 <!-- anc:t=PXZJ6C8E -->
+- [x] 第二輪整合驗證＋重建安裝版：tsc／1011 測試／vite build 全綠；安裝版 21:16 build 實機截圖驗證 tracking 送出鈕（0/8 正確 disabled＋原因文案）、overview「待實測 1 份」列、幽靈檔已降組。[DEFERRED-VERIFY] 送出 enabled 路徑（族系選擇→剪貼簿）與側欄 badge 併入 principal 首輪實測；AX 樹看不到待實測列（a11y 曝露）記後續 <!-- anc:t=PXZJ6C8E -->
 
 ## 決策紀錄
 
