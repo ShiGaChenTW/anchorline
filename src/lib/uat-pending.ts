@@ -71,18 +71,31 @@ export type UatProjectRef = {
  * 給使用者一個點進去也做不了事的項目 —— tracking 頁把那種檔歸進
  * 「沒有步驟的檔案」，這裡的判定要跟它一致。
  */
-export function pendingUatsFrom(files: ScannedPlan[]): PendingUat[] {
+/**
+ * 掃描結果 → 解析後的報告集＋「被重測取代」的舊報告路徑集。
+ *
+ * 待實測（W2-1/W2-3）與待修（W2-4）共用同一套：兩邊各算一次 supersede，
+ * 症狀會是「報告從待實測消失了、它的失敗題卻還掛在待修」這種半套出清。
+ */
+function uatReportsOf(files: ScannedPlan[]): {
+  reports: { f: ScannedPlan; r: ReturnType<typeof parseUatReport> }[];
+  superseded: Set<string>;
+} {
   const reports = files
     .filter((f) => f.kind !== "openspec")
     .filter((f) => isUatText(f.text) || /^uat-/i.test(f.name))
     .map((f) => ({ f, r: parseUatReport(f.text, f.path) }));
 
-  // 先收整份掃描裡所有「被重測取代」的舊報告路徑。取代者自己測完與否無關——
-  // 新一輪存在的那一刻，舊報告就不再是待辦。
+  // 取代者自己測完與否無關——新一輪存在的那一刻，舊報告就退場。
   const superseded = new Set<string>();
   for (const { r } of reports) {
     if (r.supersedes) superseded.add(canon(r.supersedes));
   }
+  return { reports, superseded };
+}
+
+export function pendingUatsFrom(files: ScannedPlan[]): PendingUat[] {
+  const { reports, superseded } = uatReportsOf(files);
 
   const out: PendingUat[] = [];
   for (const { f, r } of reports) {
@@ -123,10 +136,72 @@ export function pendingUatsFrom(files: ScannedPlan[]): PendingUat[] {
  * 兩者才會不同（那種情況下第一個相符取決於陣列順序，等於隨機）。修那一邊要動
  * tracking.ts，不在這次範圍內。
  */
-export function attributePendingUats(
-  list: PendingUat[],
+/**
+ * 一個還欠著的修（W2-4）：某份報告裡一題「失敗」。
+ *
+ * **不是第二個工作項資料庫**——single source of truth 永遠是報告檔的
+ * `**結果：** 失敗`。這裡是視圖：改判通過／不測、或整份被新一輪 supersede，
+ * 下一次掃描它就自然消失，零狀態同步、零回寫協定。
+ */
+export type OpenFix = {
+  /** 報告絕對路徑，deep-link 用 */
+  path: string;
+  name: string;
+  reportTitle: string;
+  itemId?: string;
+  itemTitle: string;
+  /** 失敗說明——必填規則保證它存在，但手寫檔可能繞過，空字串照收 */
+  note: string;
+  mtimeMs: number;
+  projectId?: string;
+  projectName?: string;
+};
+
+/**
+ * 掃描結果 → 待修清單：所有**未被 supersede** 報告裡的失敗題。
+ *
+ * 報告狀態不設限：**已收工的報告裡的失敗題仍算欠修**——收工結束的是
+ * 測試輪，不是債（main session 裁決 2026-08-15）。被 supersede 的整檔
+ * 退場、以新一輪為準——畫面要在空狀態／tooltip 講出這條，免得使用者
+ * 以為債被吃掉了。
+ */
+export function openFixesFrom(files: ScannedPlan[]): OpenFix[] {
+  const { reports, superseded } = uatReportsOf(files);
+  const out: OpenFix[] = [];
+  for (const { f, r } of reports) {
+    if (superseded.has(canon(f.path))) continue;
+    for (const it of r.items) {
+      if (it.verdict !== "fail") continue;
+      out.push({
+        path: f.path,
+        name: f.name,
+        reportTitle: r.title,
+        itemId: it.id,
+        itemTitle: it.title,
+        note: it.note,
+        mtimeMs: f.mtimeMs,
+      });
+    }
+  }
+  // 最近動過的報告排前面，同報告內維持題目原順序
+  return out.sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0));
+}
+
+/** 跟 loadPendingUats 同一條規矩：非桌面版／壞橋一律回空。 */
+export async function loadOpenFixes(plansDirs: string[]): Promise<OpenFix[]> {
+  if (!canScanPlans() || !plansDirs.length) return [];
+  try {
+    const scan = await requestTrackingScan(plansDirs, []);
+    return openFixesFrom(scan.files);
+  } catch {
+    return [];
+  }
+}
+
+export function attributePendingUats<T extends { path: string; projectId?: string; projectName?: string }>(
+  list: T[],
   projects: UatProjectRef[],
-): PendingUat[] {
+): T[] {
   const roots = projects
     .map((p) => ({ p, root: canon((p.rootPath ?? "").replace(/\/+$/, "")) }))
     // 沒綁資料夾的專案不參加比對：空字串會前綴到所有路徑，等於它吃下全部報告。
