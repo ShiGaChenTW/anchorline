@@ -36,6 +36,16 @@ const ANCHORED_SUBJECT_RE = /^(?:anc|sf):t=([0-9A-HJKMNP-TV-Z]{4,32})$/;
  */
 const OPENSPEC_SUBJECT_RE = /^openspec:(.+)\/(\d+(?:\.\d+)*)$/;
 
+/**
+ * 第三形狀（Cato-01）：報告／回合層級的 UAT 事件（`uat:<檔名>`）。
+ *
+ * 沒有這一條，「本輪收工」會把 N 筆已治理的逐題事件換成 1 筆未治理的
+ * 回合事件——使用者用了新做的、比較省事的按鈕，覆蓋率反而掉，
+ * 與 W1-3 要消滅的反向計分同一類。這些 subject 指向一個真實的報告檔，
+ * 是 App 自己寫的簿記，不是繞過治理的工作。
+ */
+const UAT_REPORT_SUBJECT_RE = /^uat:.+\.md$/;
+
 
 
 /**
@@ -78,7 +88,9 @@ export function isGoverned(
   //
   // 代價：文件裡的佔位字串（`openspec:XXXX/1.1`）會被放行。
   // 選系統性正確，不選軼事級純度。
-  return OPENSPEC_SUBJECT_RE.test(subject);
+  if (OPENSPEC_SUBJECT_RE.test(subject)) return true;
+  // 報告／回合層級的 uat 事件：形狀認定，理由同上
+  return UAT_REPORT_SUBJECT_RE.test(subject);
 }
 
 export type GovernanceCoverage = {

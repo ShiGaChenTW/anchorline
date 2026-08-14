@@ -263,7 +263,9 @@ function setNavCount(page: string, n: number, hideAtZero = false) {
  * 勾選成功後呼叫這一支，badge 跟著檔案一起動。
  */
 export function invalidateUatBadge() {
-  uatScanned = false;
+  // 失效的正確性靠 refreshUatBadge 裡的 uatDirty（掃描飛行中排補掃）；
+  // 這裡不動 uatScanned——那個旗標只管「首掃有沒有發生過」，掃描結束的
+  // finally 一律會把它設回 true，在這裡清它是沒有作用的誤導（Cato-07）。
   refreshUatBadge();
 }
 

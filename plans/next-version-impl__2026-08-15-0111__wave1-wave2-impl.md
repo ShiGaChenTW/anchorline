@@ -1,7 +1,7 @@
 # 下一版實作 — Wave 1（正確性止血）＋ Wave 2（UAT 迴圈補全）
 
 **建立時間：** 2026-08-15 01:11
-**最後更新：** 2026-08-15 04:55
+**最後更新：** 2026-08-15 05:15
 **狀態：** 進行中
 
 ## 目標
@@ -26,10 +26,10 @@ Cato（收尾審計）。完成後開 PR 回 main，並用 Uat skill 出實測�
 - [x] Step 10 — W1-4 js_dialogs 硬化（9691f18）：catch_unwind 三 handler、錯誤收斂取消語意、ping capabilities 報 jsDialogs
 - [x] Step 11 — W1-7 CRLF（794966e）：eolOf＋四 mutator；實測加碼發現 toggleStep 在 CRLF 上本來就是無聲 no-op（`.` 不吃 \r）
 - [x] Step 12 — W1-8 刪重複 stat（49608e2）：mtime_ms_of(&Metadata)，cargo 38 綠
-- [ ] Step 13 — W2-4 失敗題落地成工作項（P1/M）：**先寫設計段落給 main session 過目**
-- [ ] Step 14 — GrokResearcher 第二眼（每波完成後）＋ Cato 收尾審計
-- [ ] Step 15 — （餘裕）W3-1 updater
-- [ ] Step 16 — 開 PR 回 main、通知 main session（Miles）、Uat skill 出實測清單
+- [x] Step 13 — W2-4（3729371）：設計經 main session 核准後實作——純視圖不建資料庫，AX 實機驗證
+- [x] Step 14 — 雙審查閉環：Grok 12 成立修 10、Cato 10 findings 修 8
+- ~~Step 15 — W3-1 updater~~ （判定無餘裕：審查修正＋審計＋PR 優先；留下輪）
+- [x] Step 16 — PR #7 已開、實測清單已落地（uat-下一版實作驗收（wave1+2）.md，10 題）、Miles 通知中
 
 
 ## W2-4 設計段落（待 main session 過目後動工）
@@ -77,6 +77,8 @@ Cato（收尾審計）。完成後開 PR 回 main，並用 Uat skill 出實測�
 - 03:20 — W2-2 設計判準：「本輪收工」＝把剩餘未測題批次標「暫時跳過」。狀態推導自然轉已完成（離開待辦），零方言變更、不破 Cato F3 完成判定守門，報告誠實記錄「這輪跳過了哪些」。批次用 setVerdict 組合、safeApply 一次寫入。
 - 04:45 — **Grok 第二眼：14 條挑戰、12 成立（高 3／中 5／低 4）**，全數判讀完畢。已修：C1（supersede 循環——升級為一般化環偵測，環內並存）、C2（--supersedes 對 root 解析＋存在驗證）、C3（收工按鈕/toast 對無錨點題誠實）、C4（supersede 標記圍欄意識，Cato F5 規矩）、C5（badge invalidate 加 dirty 旗標防吞）、C6（alignProjectForUat 套 canon 正規化）、C7（openspec 治理改純形狀認定——N.M 是位置編號，存在驗證會讓編輯 tasks.md 打回未治理）、C8（js_dialogs 加 objc2::exception::catch 攔 ObjC 例外）、C9（eolOf 改多數決）、C10（note split 剝 \r）、C11（strict 取號 window.prompt 改頁內三鈕——dogfood 摩擦①正解）。**緩辦（記帳）**：C12（草稿層蓋掉外部並發寫入——草稿模型內在代價，提示 UI 留下一版）、C13（送出給 agent 帶未存補充說明——必填原因已落地，損失限於補充文字）。C14/C15 不成立。
 - 04:55 — C11（取號三鈕）與 C8（ObjC 例外攔截）標 **[DEFERRED-VERIFY]**：dev 環境驗證受阻——scratch 專案 dashboard 的「改採 vX.YY.ZZ」按鈕在「已綁資料夾＋非 git」渲染路徑下 click/AX press/鍵盤啟動皆無反應（confirm 從未被呼叫，js_dialogs 日誌零筆），疑似**既有 bug**，需在 main build 重現確認後開票。兩項已進 principal 實測清單（真安裝版驗證）。
+- 05:15 — **Cato 收尾審計：10 findings（高 2／中 4／低 4）**。已修 8：CATO-01（收工事件反向計分——治理認第三形狀 `uat:<檔>.md`）、02（無錨點失敗題不進待修，比照 pending 守門）、03（dashboard 待修數改全集解 supersede 再按專案過濾）、04（eolOf 改 lookbehind 精確計數——`[^\r]` 吃字元使空行密集的 LF 檔被誤判）、06（js_dialogs 巢狀對調：catch_unwind 內層，Rust panic 不過 ObjC @try 框）、07（invalidateUatBadge 死碼行清除）、08（isSuperseded 未用參數移除）、09（ASCII-only 小寫理由補註解）＋ CATO-10 三條釘子測試。**緩辦**：CATO-05（總覽三趟掃描——與計劃既有「掃描 mtime 快取」緩辦同族，一併排下輪）。
+- 05:15 — Step 14 完成：Grok（14 挑戰 12 成立，修 10 緩 2）＋ Cato（10 findings，修 8 緩 1 測試 1）雙審查閉環。
 
 ## 阻塞 / 待決議
 

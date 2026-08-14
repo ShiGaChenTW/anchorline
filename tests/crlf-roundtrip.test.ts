@@ -100,3 +100,14 @@ describe("CRLF round-trip：每個 mutator", () => {
     expect(v.ok && !v.text.includes("\r")).toBe(true);
   });
 });
+
+describe("eolOf 多數決精確計數（Cato-04）", () => {
+  test("LF 為主、空行密集、混少量 CRLF → 判 LF", () => {
+    const text = "a\n\nb\n\nc\n\nd\n\ne\n\nf\n\n" + "x\r\ny\r\nz\r\nw\r\nv\r\nu\r\nt\r\n";
+    expect(eolOf(text)).toBe("\n");
+  });
+  test("CRLF 為主混少量 LF → 判 CRLF", () => {
+    const text = "a\r\nb\r\nc\r\nd\r\ne\r\n" + "x\ny\n";
+    expect(eolOf(text)).toBe("\r\n");
+  });
+});

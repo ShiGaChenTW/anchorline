@@ -456,11 +456,23 @@ if (!requireAuth()) {
   }
 
   async function loadOpenFixCount(folderPath: string): Promise<void> {
-    const list = await loadOpenFixes([`${folderPath.replace(/\/+$/, "")}/plans`]);
+    // supersede 要在**全集**上解（Cato-03）：取代者可能在別的專案的 plans/，
+    // 只掃單一目錄的話，同一個「待修」數字會與總覽不一致——兩張卡都寫
+    // 「以最新一輪為準」，其中一張在說謊。掃全部、再按本專案過濾。
+    const st = store.get();
+    const { plansDirsOfAll } = await import("../lib/tracking-bridge");
+    const { attributePendingUats } = await import("../lib/uat-pending");
+    const all = await loadOpenFixes(plansDirsOfAll(st.projects));
+    const p = activeProject();
+    const mine = p
+      ? attributePendingUats(all, [
+          { id: p.id, name: projectDisplayName(p), rootPath: folderPath },
+        ]).filter((x) => x.projectId === p.id)
+      : [];
     const host = document.getElementById(FIXES_CARD_ID);
     if (!host) return;
-    if (!list.length) return; // 保持 hidden——空殼不佔版面
-    host.innerHTML = openFixesInner(list.length);
+    if (!mine.length) return; // 保持 hidden——空殼不佔版面
+    host.innerHTML = openFixesInner(mine.length);
     host.hidden = false;
   }
 

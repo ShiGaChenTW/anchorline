@@ -81,7 +81,7 @@ export type UatProjectRef = {
  */
 function uatReportsOf(files: ScannedPlan[]): {
   reports: { f: ScannedPlan; r: ReturnType<typeof parseUatReport> }[];
-  isSuperseded: (f: ScannedPlan, sup: string | undefined) => boolean;
+  isSuperseded: (f: ScannedPlan) => boolean;
 } {
   const reports = files
     .filter((f) => f.kind !== "openspec")
@@ -122,7 +122,7 @@ function uatReportsOf(files: ScannedPlan[]): {
       for (const m of walk.slice(walk.indexOf(at))) cycleGroup.set(m, g);
     }
   }
-  const isSuperseded = (f: ScannedPlan, _sup: string | undefined): boolean => {
+  const isSuperseded = (f: ScannedPlan): boolean => {
     const me = canon(f.path);
     const killers = supersededBy.get(me);
     if (!killers) return false;
@@ -142,7 +142,7 @@ export function pendingUatsFrom(files: ScannedPlan[]): PendingUat[] {
     if (r.status !== "進行中") continue;
     if (!r.items.some((x) => x.id)) continue;
     // 被新一輪取代的檔踢出待辦。兩輪並存都算待實測的話，badge 的分母只進不出。
-    if (isSuperseded(f, r.supersedes)) continue;
+    if (isSuperseded(f)) continue;
     const prog = uatProgress(r);
     out.push({
       path: f.path,
@@ -209,9 +209,13 @@ export function openFixesFrom(files: ScannedPlan[]): OpenFix[] {
   const { reports, isSuperseded } = uatReportsOf(files);
   const out: OpenFix[] = [];
   for (const { f, r } of reports) {
-    if (isSuperseded(f, r.supersedes)) continue;
+    if (isSuperseded(f)) continue;
     for (const it of r.items) {
       if (it.verdict !== "fail") continue;
+      // 錨點守門與 pendingUatsFrom 同一條規矩（Cato-02）：沒有錨點的題
+      // 改判不了（setVerdict 定位不到），出清條件只剩「整份被 supersede」
+      // ——列進待修等於一個只會漲不會退的數字。債仍誠實地留在報告檔裡。
+      if (!it.id) continue;
       out.push({
         path: f.path,
         name: f.name,
