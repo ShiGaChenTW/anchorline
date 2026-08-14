@@ -5,8 +5,9 @@
  * 要不要顯示，一個 `requestX()` 真的去要。
  */
 import { dedupe, parseLog } from "./event-log";
-import { governanceCoverage, EMPTY_COVERAGE, type GovernanceCoverage } from "./governance";
+import { governanceCoverage, EMPTY_COVERAGE, OPENSPEC_LIVE_PREFIX, type GovernanceCoverage } from "./governance";
 import { isNative, native } from "./native";
+import { parsePlanMeta } from "./plan-parser";
 import { anchorsOf } from "./plan-writer";
 
 export type CoverageResult = {
@@ -68,9 +69,24 @@ export async function requestCoverage(projectRoot: string): Promise<CoverageResu
  */
 async function knownAnchorsOf(projectRoot: string): Promise<ReadonlySet<string>> {
   try {
-    const scan = await native.trackingScan([`${projectRoot.replace(/\/+$/, "")}/plans`]);
+    const root = projectRoot.replace(/\/+$/, "");
+    // 第二個參數帶專案根：Rust 端會往 openspec/changes 下掃（跳過 archive）。
+    const scan = await native.trackingScan([`${root}/plans`], [root]);
     const ids = new Set<string>();
-    for (const f of scan.files ?? []) for (const id of anchorsOf(f.text ?? "")) ids.add(id);
+    for (const f of scan.files ?? []) {
+      if (f.kind === "openspec") {
+        // openspec 步驟的 join key 是 `openspec:<changeId>/<編號>`（W1-3）。
+        // sentinel 標記「這個 change 活著」——isGoverned 靠它決定要嚴格驗
+        // 步驟存在，還是（歸檔後）只驗形狀。
+        const change = f.change ?? "";
+        if (!change) continue;
+        ids.add(`${OPENSPEC_LIVE_PREFIX}${change}`);
+        const meta = parsePlanMeta(f.text ?? "", f.path, { dialect: "openspec", change });
+        for (const step of meta.steps) if (step.id) ids.add(`openspec:${change}/${step.id}`);
+        continue;
+      }
+      for (const id of anchorsOf(f.text ?? "")) ids.add(id);
+    }
     return ids;
   } catch {
     return new Set();

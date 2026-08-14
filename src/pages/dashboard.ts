@@ -420,6 +420,9 @@ if (!requireAuth()) {
           : "plans 裡還沒有任何錨點　勾選或編輯步驟時會自動鑄一個",
       r.truncated ? "只讀了最近的分片，實際數量可能更多" : "",
       r.skipped ? `跳過 ${r.skipped} 行讀不懂的資料` : "",
+      // W1-3 改了判準：openspec 步驟從此計入已治理。歷史數字因此往上跳
+      // 一次是預期行為——不講出來，使用者只會以為資料壞了。
+      c.startedIso !== null ? "計分規則 2026-08 起認 openspec 步驟，歷史數字曾因此上調一次" : "",
     ].filter(Boolean);
 
     return `<p class="d-eyebrow">治理覆蓋率</p>

@@ -25,6 +25,8 @@ export type PlanStep = {
 
 export type PlanMeta = {
   title: string;
+  /** openspec 專用：變更代號（目錄 id）。title 會被 H1 蓋掉，身分靠這個 */
+  change?: string;
   status: string;
   created: string;
   updated: string;
@@ -229,6 +231,9 @@ function parseOpenspecTasks(text: string, path: string | undefined, change: stri
     unanchored: 0,
     dialect: "openspec",
   };
+  // 目錄 id 要原樣留著：H1 會蓋掉 title，但治理 subject 的 join key 用的是
+  // 目錄 id（W1-3）——標題可以改，目錄 id 才是這個 change 的身分。
+  if (change) out.change = change;
   if (!text) return out;
 
   let group = "";

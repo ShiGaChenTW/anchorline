@@ -28,6 +28,21 @@ import type { LogEvent } from "./event-log";
 const ANCHORED_SUBJECT_RE = /^(?:anc|sf):t=([0-9A-HJKMNP-TV-Z]{4,32})$/;
 
 /**
+ * 第二種已治理形狀（W1-3）：`openspec:<changeId>/<N.M>`。
+ *
+ * 沒有這一條，每完成一個 openspec 步驟，覆蓋率就掉一格——核心指標對
+ * 自家最推薦的工作流**系統性反向計分**。不給 openspec 檔案塞 anchor
+ * （守 D10a）；openspec 的步驟身分就是變更代號＋編號，直接認它。
+ */
+const OPENSPEC_SUBJECT_RE = /^openspec:(.+)\/(\d+(?:\.\d+)*)$/;
+
+/**
+ * knownAnchors 集合裡，代表「這個 openspec change 目前活著（掃描得到）」的
+ * sentinel 條目。見 `isGoverned` 的混合驗證規則。
+ */
+export const OPENSPEC_LIVE_PREFIX = "openspec-change:";
+
+/**
  * 這筆事件串得回某個**真的存在**的 plan 步驟嗎。
  *
  * ## 為什麼光看形狀不夠
@@ -51,8 +66,25 @@ export function isGoverned(
   event: Pick<LogEvent, "subject">,
   knownAnchors: ReadonlySet<string>
 ): boolean {
-  const id = ANCHORED_SUBJECT_RE.exec(event.subject ?? "")?.[1];
-  return id !== undefined && knownAnchors.has(id);
+  const subject = event.subject ?? "";
+  const id = ANCHORED_SUBJECT_RE.exec(subject)?.[1];
+  if (id !== undefined) return knownAnchors.has(id);
+
+  // openspec 形狀的存在驗證是**混合**規則：
+  //
+  // - change 還活著（掃描得到，集合裡有 sentinel）→ 步驟編號必須真的存在，
+  //   跟錨點同一條「去檔案裡確認」的規矩。
+  // - change 不在掃描裡（歸檔或已刪）→ 只驗形狀就放行。歸檔是 openspec
+  //   變更的**正常生命週期終點**——若堅持「必須活著」，每歸檔一個 change，
+  //   它整段歷史就從已治理翻回未治理，覆蓋率隨歸檔衰減，重蹈本項要修的
+  //   「對正確工作流反向計分」。代價是文件裡的佔位字串
+  //   （`openspec:XXXX/1.1`）會被放行——選系統性正確，不選軼事級純度。
+  const os = OPENSPEC_SUBJECT_RE.exec(subject);
+  if (os) {
+    const live = knownAnchors.has(`${OPENSPEC_LIVE_PREFIX}${os[1]}`);
+    return live ? knownAnchors.has(subject) : true;
+  }
+  return false;
 }
 
 export type GovernanceCoverage = {
