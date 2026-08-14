@@ -7,7 +7,7 @@ import type { AISettings } from "../data/types";
 import { anthropicMessagesUrl, anthropicModelsUrl, geminiBase } from "./api-url";
 
 export type AiReady =
-  | { ok: true; provider: "gemini" | "openai" | "anthropic" | "custom" }
+  | { ok: true; provider: "gemini" | "openai" | "anthropic" | "openrouter" | "custom" }
   | { ok: false; reason: string };
 
 import { drainSseLines } from "./sse";
@@ -80,6 +80,10 @@ function detectProvider(s: AISettings): AiReady["ok"] extends true
   if (model.startsWith("gpt")) {
     return { ok: true, provider: "openai" };
   }
+  // `vendor/model` 格式（anthropic/claude-…、openai/gpt-…）只有 router 在用
+  if (model.includes("/")) {
+    return { ok: true, provider: "openrouter" };
+  }
   return { ok: true, provider: "custom" };
 }
 
@@ -100,10 +104,27 @@ export function isAiConfigured(): boolean {
   return getAiReadiness().ok;
 }
 
+/**
+ * 是不是走 OpenRouter。三個訊號任一成立就是：明選通路、端點指過去、
+ * 或模型是 `vendor/model` 格式 —— 這種 ID 只有 router 在用。
+ */
+function isOpenRouter(s: AISettings): boolean {
+  return (
+    s.provider === "openrouter" ||
+    /openrouter\.ai/i.test(s.endpoint || "") ||
+    (s.model !== "local-smart" && s.model.includes("/"))
+  );
+}
+
+const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
+
 function resolveOpenAiModel(s: AISettings): string {
   if (s.model === "local-smart") {
     return (s.localModelName || "llama3.2").trim() || "llama3.2";
   }
+  // OpenRouter 的 vendor/model ID 原樣送出。以前的「認不得就換 gpt-5.1」
+  // 保底對 router 是把使用者選的模型靜默換掉 —— 錯得無聲
+  if (isOpenRouter(s)) return s.model;
   if (s.model.startsWith("gpt")) return s.model;
   // 自訂端點卻選了其他 model 選項時，仍優先 localModelName（若有）
   const local = (s.localModelName || "").trim();
@@ -163,7 +184,7 @@ async function callGemini(system: string, user: string, s: AISettings, opts?: Ch
 async function callOpenAICompat(system: string, user: string, s: AISettings, opts?: ChatOpts): Promise<string> {
   const isLocal =
     s.model === "local-smart" || /localhost|127\.0\.0\.1|11434/i.test(s.endpoint || "");
-  const base = normalizeOpenAiBase(s.endpoint, isLocal);
+  const base = normalizeOpenAiBase(s.endpoint || (isOpenRouter(s) ? OPENROUTER_BASE : ""), isLocal);
   const url = base.includes("/chat/completions") ? base : `${base}/chat/completions`;
   const model = resolveOpenAiModel(s);
   // Ollama 可接受任意 Bearer；未填時用 ollama
@@ -350,7 +371,7 @@ export async function listModels(): Promise<string[]> {
     headers["anthropic-dangerous-direct-browser-access"] = "true";
   } else {
     const isLocal = s.model === "local-smart" || /localhost|127\.0\.0\.1|11434/i.test(s.endpoint || "");
-    url = `${normalizeOpenAiBase(s.endpoint, isLocal)}/models`;
+    url = `${normalizeOpenAiBase(s.endpoint || (isOpenRouter(s) ? OPENROUTER_BASE : ""), isLocal)}/models`;
     headers.Authorization = `Bearer ${key || (isLocal ? "ollama" : "")}`;
   }
 
@@ -550,7 +571,7 @@ async function streamOpenAICompat(
 ): Promise<string> {
   const isLocal =
     s.model === "local-smart" || /localhost|127\.0\.0\.1|11434/i.test(s.endpoint || "");
-  const base = normalizeOpenAiBase(s.endpoint, isLocal);
+  const base = normalizeOpenAiBase(s.endpoint || (isOpenRouter(s) ? OPENROUTER_BASE : ""), isLocal);
   const url = base.includes("/chat/completions") ? base : `${base}/chat/completions`;
   const model = resolveOpenAiModel(s);
   const key = (s.apiKey || "").trim() || (isLocal ? "ollama" : "");

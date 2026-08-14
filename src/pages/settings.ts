@@ -571,6 +571,7 @@ const PROVIDER_ENDPOINT: Record<string, string> = {
   gemini: "https://generativelanguage.googleapis.com/v1beta",
   openai: "https://api.openai.com/v1",
   anthropic: "https://api.anthropic.com",
+  openrouter: "https://openrouter.ai/api/v1",
   ollama: "http://localhost:11434/v1",
 };
 
@@ -608,6 +609,7 @@ document.getElementById("ai-model")?.addEventListener("input", () => {
   else if (model.startsWith("gemini")) applyProviderDefaults("gemini");
   else if (model.startsWith("gpt")) applyProviderDefaults("openai");
   else if (model.startsWith("claude")) applyProviderDefaults("anthropic");
+  else if (model.includes("/")) applyProviderDefaults("openrouter"); // vendor/model 格式只有 router 在用
   else syncLocalModelUi();
 });
 
