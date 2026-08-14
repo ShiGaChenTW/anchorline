@@ -497,16 +497,25 @@ if (__authed) {
     const btn = document.getElementById("uat-send") as HTMLButtonElement | null;
     const fams = document.getElementById("uat-fams");
     if (!btn || !fams) return;
+    // 與結果鈕同一條規矩（W1-2）：不奪走說明欄焦點。少了 guard，說明欄的
+    // blur 寫檔會觸發重繪，把剛按下去的按鈕連同展開狀態一起重建掉——
+    // 症狀是族系面板一閃就關、或 DIFF 開在舊資料上。
+    const keepFocus = (e: MouseEvent) => e.preventDefault();
+    btn.onmousedown = keepFocus;
     btn.onclick = () => {
       const open = !fams.hidden;
       fams.hidden = open;
       btn.setAttribute("aria-expanded", String(!open));
     };
     fams.querySelectorAll<HTMLButtonElement>("[data-fam]").forEach((b) => {
+      b.onmousedown = keepFocus;
       b.onclick = () => void onSubmitUat(r, b.dataset.fam as AgentFamilyId);
     });
     const diffBtn = document.getElementById("uat-diff") as HTMLButtonElement | null;
-    if (diffBtn) diffBtn.onclick = () => openUatDiff(r);
+    if (diffBtn) {
+      diffBtn.onmousedown = keepFocus;
+      diffBtn.onclick = () => openUatDiff(r);
+    }
   }
 
   /**
