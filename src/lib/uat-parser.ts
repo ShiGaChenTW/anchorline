@@ -121,6 +121,10 @@ export function parseUatReport(text: string, path?: string): UatReport {
   let cur: UatItem | null = null;
   /** 目前在哪個標籤區塊裡收內容 */
   let field: "steps" | "expected" | "note" | null = null;
+  /** 圍欄程式碼中：`##` 與 `**結果：**` 是內容不是結構（Cato F5） */
+  let inFence = false;
+  /** 同一題裡每種標籤只認第一次 —— 說明裡貼了長得像標籤的行是內容（Cato F2） */
+  let seenLabels = new Set<string>();
   const noteBuf: string[] = [];
   const expectedBuf: string[] = [];
 
@@ -141,8 +145,25 @@ export function parseUatReport(text: string, path?: string): UatReport {
     cur?.steps.push(s.replace(/^\d+[.)]\s*/, "").replace(/^-\s+/, ""));
   };
 
+  /** 把一行當「目前欄位的內容」收下。沒有開著的欄位就丟棄。 */
+  const routeContent = (raw: string) => {
+    if (field === "steps") pushStep(raw);
+    else if (field === "expected") expectedBuf.push(raw);
+    else if (field === "note") noteBuf.push(raw);
+  };
+
   for (const raw of lines) {
     const s = raw.trim();
+
+    if (/^(```|~~~)/.test(s)) {
+      inFence = !inFence;
+      routeContent(raw);
+      continue;
+    }
+    if (inFence) {
+      routeContent(raw);
+      continue;
+    }
 
     const h1 = s.match(H1_RE);
     if (h1 && out.title === "(無標題)") {
@@ -161,6 +182,7 @@ export function parseUatReport(text: string, path?: string): UatReport {
     if (SECTION_RE.test(s)) {
       flushItem();
       field = null;
+      seenLabels = new Set();
       const id = anchorOf(raw);
       const title = stripAnchor(s.replace(SECTION_RE, "")).trim();
       cur = { title, steps: [], expected: "", verdict: "pending", note: "" };
@@ -170,7 +192,8 @@ export function parseUatReport(text: string, path?: string): UatReport {
     if (!cur) continue;
 
     const label = s.match(LABEL_RE);
-    if (label) {
+    if (label && !seenLabels.has(label[1]!)) {
+      seenLabels.add(label[1]!);
       const kind = label[1]!;
       const inline = label[2] ?? "";
       if (kind === "結果") {
@@ -189,19 +212,20 @@ export function parseUatReport(text: string, path?: string): UatReport {
       continue;
     }
 
-    if (field === "steps") {
-      pushStep(raw);
-    } else if (field === "expected") {
-      expectedBuf.push(raw);
-    } else if (field === "note") {
-      noteBuf.push(raw);
-    }
+    routeContent(raw);
   }
   flushItem();
 
   out.unanchored = out.items.filter((x) => !x.id).length;
+  // 手改出來的「失敗／不測但沒說明」不算已測 —— 必填規則在寫入端執法，
+  // 但完成判定不能替繞過寫入端的檔案背書（Cato F3）
   const allTested =
-    out.items.length > 0 && out.items.every((x) => x.verdict !== "pending");
+    out.items.length > 0 &&
+    out.items.every(
+      (x) =>
+        x.verdict !== "pending" &&
+        !(VERDICT_NEEDS_NOTE.has(x.verdict) && !x.note),
+    );
   out.status = allTested ? "已完成" : "進行中";
   return out;
 }
@@ -243,32 +267,43 @@ export function setVerdict(
 
   const hadTrailingNewline = text.endsWith("\n");
   const lines = text.split("\n");
+  // 區段邊界要跟 parser 同一套視角：圍欄裡的 `##` 是內容不是新題（Cato F5）
+  let inFence = false;
   let si = -1;
+  let ei = lines.length;
   for (let i = 0; i < lines.length; i++) {
-    if (SECTION_RE.test(lines[i]!.trim()) && anchorOf(lines[i]!) === id) {
-      si = i;
+    const t = lines[i]!.trim();
+    if (/^(```|~~~)/.test(t)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence || !SECTION_RE.test(t)) continue;
+    if (si < 0) {
+      if (anchorOf(lines[i]!) === id) si = i;
+    } else {
+      ei = i;
       break;
     }
   }
   if (si < 0) return { ok: false, reason: `找不到這一題（anc:t=${id}）` };
 
-  let ei = lines.length;
-  for (let i = si + 1; i < lines.length; i++) {
-    if (SECTION_RE.test(lines[i]!.trim())) {
-      ei = i;
-      break;
-    }
-  }
-
-  // 結果行：有就替換，沒有（手寫檔漏了）就插在區段尾
-  let resultAt = -1;
-  let noteLabelAt = -1;
+  // 每種標籤只認第一次出現 —— 說明裡長得像 `**結果：**` 的行是內容，
+  // 認最後一次的話它會被當成結果行改寫掉（Cato F2）
+  const firstAt = new Map<string, number>();
+  inFence = false;
   for (let i = si + 1; i < ei; i++) {
-    const m = lines[i]!.trim().match(LABEL_RE);
-    if (!m) continue;
-    if (m[1] === "結果") resultAt = i;
-    if (m[1] === "說明") noteLabelAt = i;
+    const t = lines[i]!.trim();
+    if (/^(```|~~~)/.test(t)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const m = t.match(LABEL_RE);
+    if (m && !firstAt.has(m[1]!)) firstAt.set(m[1]!, i);
   }
+  // 結果行：有就替換，沒有（手寫檔漏了）就插在區段尾
+  let resultAt = firstAt.get("結果") ?? -1;
+  const noteLabelAt = firstAt.get("說明") ?? -1;
   const resultLine = `**結果：** ${VERDICT_LABELS[verdict]}`;
   if (resultAt >= 0) {
     lines[resultAt] = resultLine;
@@ -277,15 +312,14 @@ export function setVerdict(
     ei += 2;
   }
 
-  // 說明區塊：從標籤行到下一個標籤／區段。整塊換掉，尾端補一個空行當區段分隔
+  // 說明區塊：從標籤行到「下一個首次出現的標籤」或區段尾。整塊換掉 ——
+  // 舊說明裡的假標籤行不在 firstAt 裡，所以會連同舊說明一起被換掉，
+  // 不會殘留在新說明後面。尾端補一個空行當區段分隔。
   const noteLines = note.trim() ? note.trim().split("\n") : [EMPTY_NOTE];
   if (noteLabelAt >= 0) {
     let blockEnd = ei;
-    for (let i = noteLabelAt + 1; i < ei; i++) {
-      if (LABEL_RE.test(lines[i]!.trim())) {
-        blockEnd = i;
-        break;
-      }
+    for (const at of firstAt.values()) {
+      if (at > noteLabelAt && at < blockEnd) blockEnd = at;
     }
     const tail = blockEnd < lines.length ? [""] : [];
     lines.splice(noteLabelAt + 1, blockEnd - (noteLabelAt + 1), ...noteLines, ...tail);

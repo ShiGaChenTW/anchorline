@@ -495,3 +495,59 @@ describe("UAT parser：讀得回來，也守得住寫回邊界", () => {
     expect(isUatText(plan)).toBe(false);
   });
 });
+
+describe("Cato 審計回歸（F2/F3/F5）", () => {
+  const spec = {
+    title: "審計回歸",
+    items: [
+      { title: "唯一一題", steps: ["做一件事"], expected: "看到結果" },
+    ],
+  };
+
+  test("F2：說明裡長得像 **結果：** 的行是內容，寫回不會誤傷、重寫不留殘渣", () => {
+    const text = serializeUatReport(spec, { now: "2026-08-14 21:00", mint: mintFrom(["AAAA2222"]) });
+    const fakeNote = "第一行\n**結果：** API 回 500\n第二行";
+    const r1 = setVerdict(text, "AAAA2222", "fail", fakeNote);
+    if (!r1.ok) throw new Error(r1.reason);
+
+    const parsed = parseUatReport(r1.text);
+    expect(parsed.items).toHaveLength(1);
+    expect(parsed.items[0]!.verdict).toBe("fail");
+    expect(parsed.items[0]!.note).toBe(fakeNote);
+
+    // 再改一次：假標籤行要跟著舊說明整塊被換掉，不能殘留
+    const r2 = setVerdict(r1.text, "AAAA2222", "pass", "修好了");
+    if (!r2.ok) throw new Error(r2.reason);
+    expect(r2.text.includes("API 回 500")).toBe(false);
+    const reparsed = parseUatReport(r2.text);
+    expect(reparsed.items[0]!.verdict).toBe("pass");
+    expect(reparsed.items[0]!.note).toBe("修好了");
+  });
+
+  test("F3：手改出來的「失敗但沒說明」不算已完成", () => {
+    const text = serializeUatReport(spec, { now: "2026-08-14 21:00", mint: mintFrom(["BBBB3333"]) });
+    const handEdited = text.replace("**結果：** 未測", "**結果：** 失敗");
+    const parsed = parseUatReport(handEdited);
+    expect(parsed.items[0]!.verdict).toBe("fail");
+    expect(parsed.status).toBe("進行中");
+
+    const fixed = setVerdict(handEdited, "BBBB3333", "fail", "有寫原因");
+    if (!fixed.ok) throw new Error(fixed.reason);
+    expect(parseUatReport(fixed.text).status).toBe("已完成");
+  });
+
+  test("F5：圍欄程式碼裡的 ## 與標籤行不拆題，寫回照常命中", () => {
+    const text = serializeUatReport(spec, { now: "2026-08-14 21:00", mint: mintFrom(["CCCC4444"]) });
+    const fencedNote = "看 log：\n```\n## 這不是新題\n**結果：** 假的\n```\n完";
+    const r1 = setVerdict(text, "CCCC4444", "fail", fencedNote);
+    if (!r1.ok) throw new Error(r1.reason);
+
+    const parsed = parseUatReport(r1.text);
+    expect(parsed.items).toHaveLength(1);
+    expect(parsed.items[0]!.note).toBe(fencedNote);
+
+    const r2 = setVerdict(r1.text, "CCCC4444", "later", "");
+    if (!r2.ok) throw new Error(r2.reason);
+    expect(parseUatReport(r2.text).items[0]!.verdict).toBe("later");
+  });
+});
