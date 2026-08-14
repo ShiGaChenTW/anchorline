@@ -60,7 +60,10 @@ export type EventKind =
   // 「把這份報告的結果交給 agent 去修」。與 `uat.report.done`（測完了）分開：
   // 一份報告可以測完卻從來沒被送修，也可以測到一半就先送出前幾題的失敗 ——
   // 兩者共用同一個 kind 會讓「修復迴圈開過幾次」這個問題永遠答不出來。
-  | "uat.report.submitted";
+  | "uat.report.submitted"
+  // 「這一輪不測了」：剩餘題批次標暫時跳過。與逐題 `uat.verdict` 分開——
+  // 收工是回合層級的一個決定，灌 N 筆判定事件會把統計裡的「測了幾題」灌水。
+  | "uat.round.closeout";
 
 export type LogEvent = {
   /** schema_version —— append-only 格式的唯一逃生口 */

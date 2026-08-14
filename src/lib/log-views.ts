@@ -39,6 +39,7 @@ const KIND_LABEL: Record<string, string> = {
   "uat.verdict": "實測判定",
   "uat.report.done": "實測完成",
   "uat.report.submitted": "實測送出",
+  "uat.round.closeout": "實測收工",
 };
 
 export function kindLabel(kind: string): string {

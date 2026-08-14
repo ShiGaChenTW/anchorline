@@ -433,6 +433,12 @@ if (__authed) {
       return `<p class="tk-do-what">全部測完，其中 ${failed} 題失敗</p>
         <p class="tk-do-why">失敗題的說明就是修復工單的起點 —— 交給 agent 時把那幾段一起帶上。</p>`;
     }
+    // 收工收掉的報告不能說「全部測完」——那會把「這輪沒測的」偽裝成「測過沒問題」
+    const later = r.items.filter((x) => x.verdict === "later").length;
+    if (later) {
+      return `<p class="tk-do-what tk-do-clear">本輪已收工，沒有失敗</p>
+        <p class="tk-do-why">其中 ${later} 題標了「暫時跳過」——下一輪重測時它們還在檔案裡。</p>`;
+    }
     return `<p class="tk-do-what tk-do-clear">全部測完，沒有失敗</p>
       <p class="tk-do-why">結果已經寫回這份 markdown，agent 直接讀得到。</p>`;
   }
@@ -477,6 +483,23 @@ if (__authed) {
         <button type="button" class="tk-uat-send-btn" id="uat-diff"${
           closed ? "" : ` disabled title="還沒有任何一題有結果，沒有變更可看"`
         }>看 UAT DIFF</button>
+        ${
+          // 本輪收工（W2-2）：測 5/8 就走人的報告永遠「進行中」，待實測數字
+          // 只進不出。收工＝剩下的錨定題全標「暫時跳過」——狀態推導自然轉
+          // 已完成，報告誠實記下「這輪跳過了哪些」，完成判定守門（Cato F3）
+          // 原封不動。沒有錨點的題寫不回去，收不掉時報告會誠實留在進行中。
+          r.status === "進行中" && canEditFiles()
+            ? (() => {
+                const n = r.items.filter((x) => x.id && x.verdict === "pending").length;
+                if (!n) return "";
+                const armed = closeoutArmedFor === (r.path ?? "");
+                return `<button type="button" class="tk-uat-send-btn" id="uat-closeout" data-n="${n}"
+                     title="把剩下 ${n} 題標成「暫時跳過」，報告轉為已完成並離開待實測">${
+                       armed ? `確認收工：${n} 題標「暫時跳過」` : "本輪收工"
+                     }</button>`;
+              })()
+            : ""
+        }
       </div>
       <div class="tk-uat-fams" id="uat-fams" role="group" aria-label="交給哪一種 agent" hidden>
         ${HANDOFF_FAMILIES.map(
@@ -516,6 +539,99 @@ if (__authed) {
       diffBtn.onmousedown = keepFocus;
       diffBtn.onclick = () => openUatDiff(r);
     }
+    const closeBtn = document.getElementById("uat-closeout") as HTMLButtonElement | null;
+    if (closeBtn) {
+      closeBtn.onmousedown = keepFocus;
+      // 確認做在按鈕裡（按第一下變成確認態），不用 window.confirm——
+      // 與放行卡的既有原則一致。任何重繪都會重建按鈕、自動退回未確認態。
+      closeBtn.onclick = () => {
+        const key = r.path ?? "";
+        if (closeoutArmedFor !== key) {
+          closeoutArmedFor = key;
+          closeBtn.textContent = `確認收工：${closeBtn.dataset["n"]} 題標「暫時跳過」`;
+          return;
+        }
+        closeoutArmedFor = null;
+        void onCloseoutRound();
+      };
+    }
+  }
+
+  /**
+   * 收工確認臂態存模組變數而不是 DOM：輪詢重繪會重建按鈕，存 dataset 的話
+   * 臂態活不過一次重繪，使用者永遠按不到第二下。鍵是報告路徑——切報告自動解除。
+   */
+  let closeoutArmedFor: string | null = null;
+
+  /**
+   * 本輪收工：剩下的錨定未測題批次標「暫時跳過」，一次寫入。
+   *
+   * 逐題呼叫 onSetVerdict 會寫 N 次檔、重繪 N 次、灌 N 筆 uat.verdict 事件——
+   * 收工是回合層級的一個動作，事件也只記一筆。
+   */
+  async function onCloseoutRound() {
+    const p = plans[idx];
+    if (!p?.uat) return;
+    const pending = p.uat.items.filter((x) => x.id && x.verdict === "pending");
+    if (!pending.length) return;
+
+    let blocked = "";
+    const guard = guardOf(p.path, p.raw);
+    const r = await safeApply(
+      guard,
+      (text) => {
+        let acc = text;
+        for (const it of pending) {
+          const step = setVerdict(acc, it.id!, "later", it.note, { now: nowStamp() });
+          if (!step.ok) {
+            blocked = step.reason;
+            return null;
+          }
+          acc = step.text;
+        }
+        return acc;
+      },
+      { read: readFile, write: writeFile },
+    );
+    if (!r.ok) {
+      toast(blocked || r.reason);
+      await refresh(true);
+      return;
+    }
+
+    toast(`已收工：${pending.length} 題標為「暫時跳過」`);
+    const st = store.get();
+    const proj = st.projects.find((x) => x.id === st.activeProjectId);
+    const root = proj?.importSummary?.rootPath;
+    if (root) {
+      const u = st.currentUser;
+      const actor = {
+        kind: u.kind === "agent" ? ("agent" as const) : ("human" as const),
+        family: u.agentFamily ?? null,
+        name: u.name,
+      };
+      logEvent(root, {
+        project: proj!.id,
+        actor,
+        kind: "uat.round.closeout",
+        subject: `uat:${p.name}`,
+        payload: { title: p.uat.title, skipped: pending.length },
+      });
+      // 收工幾乎總是把報告推成已完成——報告層級的完成事件照 onSetVerdict
+      // 的同一條規矩補上（只在真的轉成已完成那一次記）。
+      const after = parseUatReport(r.text, p.path);
+      if (after.status === "已完成" && p.uat.status !== "已完成") {
+        const done = uatProgress(after);
+        logEvent(root, {
+          project: proj!.id,
+          actor,
+          kind: "uat.report.done",
+          subject: `uat:${p.name}`,
+          payload: { title: after.title, count: done.total, pct: done.pct },
+        });
+      }
+    }
+    await refresh(true);
   }
 
   /**
