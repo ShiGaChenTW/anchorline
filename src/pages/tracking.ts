@@ -1313,8 +1313,10 @@ if (__authed) {
         // openspec 的編號不是錨點，寫成 `anc:t=1.1` 會讓事件流以為那是 join key，
         // 之後任何依錨點聚合的查詢都會把它跟真正的步驟混在一起
         subject:
+          // join key 用目錄 id 不用 H1 標題（W1-3）：標題會被人改，目錄 id
+          // 才是 change 的身分——治理計分靠這個 key 對回 tasks.md。
           p.meta.dialect === "openspec"
-            ? `openspec:${p.meta.title}/${id}`
+            ? `openspec:${p.meta.change ?? p.meta.title}/${id}`
             : `${ANCHOR_PREFIX}:t=${id}`,
         payload: { title: p.meta.steps.find((s) => s.id === id)?.text ?? "" },
       });
