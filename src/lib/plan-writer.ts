@@ -25,6 +25,7 @@ import {
   OS_STEP_NO_RE,
   type PlanDialect,
   type PlanStep,
+  eolOf,
 } from "./plan-parser";
 
 /** 讀取當下的憑證。寫回去之前拿它跟磁碟上的現況比對。 */
@@ -96,7 +97,10 @@ export function toggleStep(
   done: boolean,
   dialect: PlanDialect = "plan",
 ): string {
-  const lines = text.split("\n");
+  // split 吃掉 \r 是必要的不是順手：`.` 不匹配 \r，CRLF 行尾會讓
+  // CHECKBOX_LINE 整行比不中——CRLF 檔上「勾了沒反應」而且零錯誤訊息（W1-7）。
+  const eol = eolOf(text);
+  const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     const m = line.match(CHECKBOX_LINE);
@@ -106,7 +110,7 @@ export function toggleStep(
     const hit = dialect === "openspec" ? osStepNoOf(m[4]!) === id : anchorOf(line) === id;
     if (!hit) continue;
     lines[i] = `${m[1]}${done ? "x" : " "}${m[3]}${m[4]}`;
-    return lines.join("\n");
+    return lines.join(eol);
   }
   return text;
 }
@@ -127,7 +131,8 @@ export function appendStep(
   label: string,
   rand?: () => number
 ): { text: string; id: string } | null {
-  const lines = text.split("\n");
+  const eol = eolOf(text);
+  const lines = text.split(/\r?\n/);
   let start = -1;
   for (let i = 0; i < lines.length; i++) {
     if (/^##\s+Plan Steps/i.test(lines[i]!.trim())) {
@@ -154,7 +159,7 @@ export function appendStep(
   while (used.has(id)) id = mintId(rand);
 
   lines.splice(at, 0, `- [ ] ${label.trim()} <!-- ${ANCHOR_PREFIX}:t=${id} -->`);
-  return { text: lines.join("\n"), id };
+  return { text: lines.join(eol), id };
 }
 
 /**
