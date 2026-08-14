@@ -30,6 +30,7 @@ let resizeBound = false;
 let adhdBound = false;
 let statusBarBound = false;
 let welcomeBound = false;
+let uatHandoffBound = false;
 
 const SESSION_KEY = "anchorline:session:v1";
 
@@ -102,10 +103,23 @@ export function requireAuth(): boolean {
             // 首次導覽優先；其餘由 welcome 自己判斷（今日靜音、是否桌面版）。
             window.setTimeout(() => {
               if (document.getElementById("tour-root")) return;
+              // UAT 著陸中不彈歡迎 modal。被 CLI 叫醒的那一刻，這個畫面唯一的
+              // 目的就是那份報告 —— 冷啟動的 sessionStorage 是新的，歡迎畫面
+              // 必彈，等於在最常見的喚醒路徑上多一道要先解除的門。
+              if (new URLSearchParams(location.search).has("uat")) return;
               import("./welcome")
                 .then((m) => m.initWelcome())
                 .catch(() => {});
             }, 700);
+          }
+          if (!uatHandoffBound) {
+            uatHandoffBound = true;
+            // UAT 喚醒鏈。接在共用 bootstrap 而不是 tracking 頁：被 `open -a`
+            // 叫起來的那一刻，使用者停在哪一頁是未知的 —— 只掛在 tracking
+            // 頁的話，App 停在編輯台時整條鏈不會發生，而且不會有任何錯誤。
+            import("./uat-handoff")
+              .then((m) => m.initUatHandoff())
+              .catch(() => {});
           }
           if (!statusBarBound) {
             statusBarBound = true;

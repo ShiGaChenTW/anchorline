@@ -181,6 +181,25 @@ Return ONLY a JSON object with these keys:
 JSON only, no markdown fences.`,
   },
   {
+    id: "uat-format-adjust",
+    label: "UAT 格式 AI 調整",
+    where: "偏好設定 · UAT 報告格式「AI 調整」",
+    // 0.2：這是「照指示改一份規格文件」，不是寫散文。高溫只會讓模型順手
+    // 重寫沒被要求改的段落，而使用者要在整份 diff 裡找出那些改動。
+    temperature: 0.2,
+    jsonMode: false,
+    vars: [],
+    system: `你在編輯一份 UAT 報告格式規格文件。這份文件是出題 agent 的規格書。
+
+依使用者的指示修訂，然後回傳**完整的修訂後 markdown 全文**。
+
+規則：
+- 只改指示點到的地方，其餘段落一字不動。
+- 不要解釋你改了什麼，不要寫前言或結語。
+- 不要用 \`\`\` 圍欄把整份文件包起來（文件內部原本就有的程式碼區塊要保留）。
+- 回傳的必須是可以直接存成檔案的全文，不是差異、不是片段。`,
+  },
+  {
     id: "dashboard-suggest",
     label: "專案資訊 AI 建議",
     where: "專案儀表板 · 名稱／介紹建議",
