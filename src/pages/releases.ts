@@ -12,6 +12,7 @@
  */
 import { store } from "../data/store";
 import { projectDisplayName } from "../data/types";
+import { askConfirm } from "../lib/ask";
 import {
   buildHandoff,
   lastVersionOf,
@@ -488,8 +489,8 @@ function bindDetail(r: Release) {
     }),
   );
 
-  document.getElementById("rl-del")?.addEventListener("click", () => {
-    if (!window.confirm(`要刪掉「${r.version || "這一版"}」嗎？`)) return;
+  document.getElementById("rl-del")?.addEventListener("click", async () => {
+    if (!(await askConfirm({ title: `要刪掉「${r.version || "這一版"}」嗎？`, danger: true }))) return;
     store.deleteRelease(r.id);
     selectedId = null;
     render();

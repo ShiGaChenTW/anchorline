@@ -1,6 +1,7 @@
 import { store } from "../data/store";
 import type { AccessRole, ActorKind, AgentFamily, AISettings, AppState, Employee } from "../data/types";
 import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL } from "../data/types";
+import { askConfirm } from "../lib/ask";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
 import { canManageUsers } from "../lib/permissions";
@@ -475,10 +476,10 @@ function renderEmployees() {
     });
 
     listEl.querySelectorAll(".btn-del-emp").forEach((btn) => {
-      (btn as HTMLButtonElement).onclick = () => {
+      (btn as HTMLButtonElement).onclick = async () => {
         const id = (btn as HTMLElement).dataset.id!;
         const target = employees.find((x) => x.id === id);
-        if (target && confirm(`確定刪除「${target.name}」？`)) {
+        if (target && (await askConfirm({ title: `確定刪除「${target.name}」？`, danger: true }))) {
           const r = store.deleteEmployee(id);
           if (!r.ok) toast(r.reason ?? "無法刪除");
           else toast(`已刪除「${target.name}」`);
@@ -859,8 +860,8 @@ function renderPromptRegistry(): void {
     };
   });
   host.querySelectorAll<HTMLButtonElement>("[data-pr-reset]").forEach((b) => {
-    b.onclick = () => {
-      if (!confirm(`把「${promptDef(b.dataset.prReset!).label}」還原成內建 prompt 與參數？`)) return;
+    b.onclick = async () => {
+      if (!(await askConfirm({ title: `把「${promptDef(b.dataset.prReset!).label}」還原成內建 prompt 與參數？`, danger: true }))) return;
       clearPromptOverride(b.dataset.prReset!);
       toast("已還原預設");
       renderPromptRegistry();
@@ -939,8 +940,8 @@ fileInput?.addEventListener("change", (e) => {
   reader.readAsText(file);
 });
 
-document.getElementById("btn-reset-data")?.addEventListener("click", () => {
-  if (confirm("確定要將所有專案與草稿重置為預設範例資料嗎？此操作無法復原。")) {
+document.getElementById("btn-reset-data")?.addEventListener("click", async () => {
+  if (await askConfirm({ title: "確定要將所有專案與草稿重置為預設範例資料嗎？此操作無法復原。", danger: true })) {
     store.reset();
     populateSettings();
     toast("已重置為預設範例資料");
@@ -1162,8 +1163,8 @@ document.getElementById("domain-auto-rescan")?.addEventListener("change", (e) =>
   toast(on ? "開 App 時會自動重掃領域包資料夾" : "已關閉自動重掃 — 按「重新讀取」才更新");
 });
 
-document.getElementById("btn-clear-domains")?.addEventListener("click", () => {
-  if (!confirm("清除自訂領域包？已經選了自訂領域的專案會退回通用，但內容不會被刪除。")) return;
+document.getElementById("btn-clear-domains")?.addEventListener("click", async () => {
+  if (!(await askConfirm({ title: "清除自訂領域包？已經選了自訂領域的專案會退回通用，但內容不會被刪除。", danger: true }))) return;
   clearUserDomains();
   store.refreshDomainPacks();
   renderDomainPacks();

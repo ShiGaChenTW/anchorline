@@ -15,6 +15,7 @@
  */
 import { store } from "../data/store";
 import { projectDisplayName, type Project } from "../data/types";
+import { askConfirm } from "../lib/ask";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { syncRailContext } from "../lib/rail-projects";
@@ -429,14 +430,14 @@ if (!requireAuth()) {
       toast(r.ok ? "已抽單" : (r.reason ?? "抽單失敗"));
       render();
     });
-    document.getElementById("btn-sg-reopen")?.addEventListener("click", () => {
-      if (!confirm("重開案件會清掉所有既有簽章，確定？")) return;
+    document.getElementById("btn-sg-reopen")?.addEventListener("click", async () => {
+      if (!(await askConfirm({ title: "重開案件會清掉所有既有簽章，確定？", danger: true }))) return;
       const r = store.reopenCase(p.id);
       toast(r.ok ? "已重開，所有關卡回到未簽" : (r.reason ?? "重開失敗"));
       render();
     });
-    document.getElementById("btn-sg-apply")?.addEventListener("click", () => {
-      if (!confirm("套用目前流程會依最新關卡設定重建案件，既有簽章會清掉，確定？")) return;
+    document.getElementById("btn-sg-apply")?.addEventListener("click", async () => {
+      if (!(await askConfirm({ title: "套用目前流程會依最新關卡設定重建案件，既有簽章會清掉，確定？", danger: true }))) return;
       const r = store.applyWorkflowToCase(p.id);
       toast(r.ok ? "已套用目前流程" : (r.reason ?? "套用失敗"));
       render();

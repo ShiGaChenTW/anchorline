@@ -6,6 +6,7 @@ import {
   isAiConfigured,
   polishTextWithAI,
 } from "../lib/ai-coach";
+import { askConfirm, askText } from "../lib/ask";
 import { evaluateChecks, liveScore, store } from "../data/store";
 import { CUSTOM_SECTION_ID } from "../data/seed";
 import type { Project, Section } from "../data/types";
@@ -350,11 +351,11 @@ function renderFileTree() {
   host.innerHTML = renderFileTreeHtml(tree, activeId);
 
   host.querySelectorAll<HTMLButtonElement>("[data-ft-section]").forEach((btn) => {
-    btn.onclick = () => {
+    btn.onclick = async () => {
       const sid = btn.dataset.ftSection!;
       const i = sections().findIndex((s) => s.id === sid);
       if (i < 0) return;
-      if (!goToSection(sid)) return;
+      if (!(await goToSection(sid))) return;
       idx = i;
       render();
     };
@@ -549,10 +550,10 @@ function renderOutline() {
     .join("");
 
   el.querySelectorAll(".sec").forEach((btn) => {
-    (btn as HTMLButtonElement).onclick = () => {
+    (btn as HTMLButtonElement).onclick = async () => {
       const i = Number((btn as HTMLElement).dataset.i);
       const s = sections()[i];
-      if (s && !goToSection(s.id)) return;
+      if (s && !(await goToSection(s.id))) return;
       idx = i;
       render();
     };
@@ -571,21 +572,21 @@ function renderOutline() {
   };
 
   el.querySelectorAll<HTMLButtonElement>("[data-sec-rename]").forEach((btn) => {
-    btn.onclick = (e) => {
+    btn.onclick = async (e) => {
       e.stopPropagation();
       const id = btn.dataset.secRename!;
       const cur = sections().find((x) => x.id === id);
       if (!cur) return;
-      const n = window.prompt(`章節編號（現在是 ${cur.n}）`, cur.n);
+      const n = await askText({ title: `章節編號（現在是 ${cur.n}）`, value: cur.n });
       if (n === null) return;
-      const title = window.prompt(`章節標題（現在是 ${cur.title}）`, cur.title);
+      const title = await askText({ title: `章節標題（現在是 ${cur.title}）`, value: cur.title });
       if (title === null) return;
       structOp(() => store.renameSection(id, { n, title }), "已改章節");
     };
   });
 
   el.querySelectorAll<HTMLButtonElement>("[data-sec-del]").forEach((btn) => {
-    btn.onclick = (e) => {
+    btn.onclick = async (e) => {
       e.stopPropagation();
       const id = btn.dataset.secDel!;
       const cur = sections().find((x) => x.id === id);
@@ -594,33 +595,33 @@ function renderOutline() {
         id === CUSTOM_SECTION_ID
           ? "\n\n之後插入章節範本時它會自動回來（範本段落沒有別的落點）。"
           : "";
-      if (!window.confirm(`刪掉「${cur.n} ${cur.title}」整節？這一節已經寫的內容會一起刪掉。${extra}`)) return;
+      if (!(await askConfirm({ title: `刪掉「${cur.n} ${cur.title}」整節？這一節已經寫的內容會一起刪掉。${extra}`, danger: true }))) return;
       structOp(() => store.removeSection(id), "已刪掉整節");
     };
   });
 
   el.querySelectorAll<HTMLButtonElement>("[data-fld-rename]").forEach((btn) => {
-    btn.onclick = (e) => {
+    btn.onclick = async (e) => {
       e.stopPropagation();
       const sid = btn.dataset.fldRename!;
       const key = btn.dataset.key!;
       const sec = sections().find((x) => x.id === sid);
       const f = sec?.fields.find((x) => x.key === key);
       if (!sec || !f) return;
-      const label = window.prompt(`子章節名稱（現在是 ${numberedFieldLabel(sec, key)}）`, f.label);
+      const label = await askText({ title: `子章節名稱（現在是 ${numberedFieldLabel(sec, key)}）`, value: f.label });
       if (label === null) return;
       structOp(() => store.renameField(sid, key, label), "已改子章節");
     };
   });
 
   el.querySelectorAll<HTMLButtonElement>("[data-fld-del]").forEach((btn) => {
-    btn.onclick = (e) => {
+    btn.onclick = async (e) => {
       e.stopPropagation();
       const sid = btn.dataset.fldDel!;
       const key = btn.dataset.key!;
       const sec = sections().find((x) => x.id === sid);
       if (!sec?.fields.find((x) => x.key === key)) return;
-      if (!window.confirm(`刪掉子章節「${numberedFieldLabel(sec, key)}」？裡面的內容會一起刪掉。`)) return;
+      if (!(await askConfirm({ title: `刪掉子章節「${numberedFieldLabel(sec, key)}」？裡面的內容會一起刪掉。`, danger: true }))) return;
       structOp(() => store.removeField(sid, key), "已刪掉子章節");
     };
   });
@@ -678,13 +679,16 @@ function fileIsDirty(): boolean {
 }
 
 /** 有未存變更時攔一次。回 true 代表可以繼續。 */
-function confirmLeaveFile(): boolean {
+async function confirmLeaveFile(): Promise<boolean> {
   if (!fileIsDirty()) return true;
-  return window.confirm(`「${shortPath(openFile!.path)}」有還沒存的變更，要放棄嗎？`);
+  return askConfirm({
+    title: `「${shortPath(openFile!.path)}」有還沒存的變更，要放棄嗎？`,
+    danger: true,
+  });
 }
 
-function closeFileView(force = false) {
-  if (!force && !confirmLeaveFile()) return false;
+async function closeFileView(force = false) {
+  if (!force && !(await confirmLeaveFile())) return false;
   openFile = null;
   render();
   return true;
@@ -700,15 +704,28 @@ function closeFileView(force = false) {
  *
  * 有未存變更時仍會攔一次 —— 換章節跟關檔一樣會讓編輯中的內容離開視野。
  */
-function goToSection(id: string): boolean {
+async function goToSection(id: string): Promise<boolean> {
   if (openFile) {
-    if (!confirmLeaveFile()) return false;
+    if (!(await confirmLeaveFile())) return false;
     // 直接清掉而不呼叫 closeFileView()：下面的 setActiveSection 會觸發 render，
     // 不需要為了同一次操作畫兩遍。
     openFile = null;
   }
   store.setActiveSection(id);
   return true;
+}
+
+/**
+ * 換章節但不攔截 —— 給「使用者剛剛主動要求、換章節只是其後果」的路徑用。
+ *
+ * 存在的理由是 render() 裡的插入範本那一段：在渲染過程中冒出「要放棄變更嗎？」
+ * 問的是使用者沒做過的決定，而且 goToSection() 的回傳值在那裡本來就被忽略——
+ * 按取消也照樣 toast「已插入」。與其讓對話框出現在 render 路徑上，不如承認
+ * 那條路徑本來就不該問。同步，沒有 async 傳染。
+ */
+function switchSectionForced(id: string) {
+  openFile = null;
+  store.setActiveSection(id);
 }
 
 async function openFileInEditor(path: string) {
@@ -1001,11 +1018,11 @@ function renderFileView(): boolean {
   const refreshHist = () => {
     histPanel.innerHTML = snapshotListHtml(openFile!.path);
     histPanel.querySelectorAll<HTMLButtonElement>("[data-fv-restore]").forEach((b) => {
-      b.addEventListener("click", () => {
+      b.addEventListener("click", async () => {
         const snaps = loadSnapshots(openFile!.path);
         const sn = snaps[Number(b.dataset.fvRestore)];
         if (!sn) return;
-        if (!window.confirm(`要把編輯區還原成 ${relativeTime(sn.at)} 的內容嗎？（還原後仍需按儲存才會寫回磁碟）`))
+        if (!(await askConfirm({ title: `要把編輯區還原成 ${relativeTime(sn.at)} 的內容嗎？（還原後仍需按儲存才會寫回磁碟）`, danger: true })))
           return;
         ta.value = sn.text;
         renderHighlightBackdrop();
@@ -1044,7 +1061,7 @@ function renderFileView(): boolean {
     ta.value = openFile!.original;
     renderHighlightBackdrop();
   });
-  document.getElementById("fv-close")?.addEventListener("click", () => closeFileView());
+  document.getElementById("fv-close")?.addEventListener("click", () => void closeFileView());
   const diffWrap = document.getElementById("fv-diff-wrap") as HTMLElement;
   const review = document.getElementById("fv-review") as HTMLElement;
   document.getElementById("fv-diff-hide")?.addEventListener("click", () => {
@@ -1208,8 +1225,8 @@ function renderSaveBar(s: Section): void {
 
   document.getElementById("btn-sec-save")?.addEventListener("click", () => saveCurrentSection());
   document.getElementById("btn-sec-save-all")?.addEventListener("click", () => saveAllSections());
-  document.getElementById("btn-sec-discard")?.addEventListener("click", () => {
-    if (!window.confirm(`捨棄「${s.title}」未儲存的變更？改回上次儲存的內容。`)) return;
+  document.getElementById("btn-sec-discard")?.addEventListener("click", async () => {
+    if (!(await askConfirm({ title: `捨棄「${s.title}」未儲存的變更？改回上次儲存的內容。`, danger: true }))) return;
     store.discardDrafts(s.id);
     toast("已捨棄未儲存的變更");
     render();
@@ -1763,11 +1780,11 @@ function renderBeginnerCoach() {
   `;
 
   bar.querySelectorAll("[data-sec]").forEach((btn) => {
-    (btn as HTMLButtonElement).onclick = () => {
+    (btn as HTMLButtonElement).onclick = async () => {
       const id = (btn as HTMLElement).dataset.sec!;
       const i = sections().findIndex((s) => s.id === id);
       if (i >= 0) {
-        if (!goToSection(id)) return;
+        if (!(await goToSection(id))) return;
         idx = i;
         render();
       }
@@ -1825,14 +1842,14 @@ if (pending && editable()) {
     const next = cur ? `${cur}\n\n${pending}` : pending;
     store.setSectionDraft(s.id, s.fields[0].key, next);
     if (s.status === "empty") store.updateSection(s.id, { status: "warn" });
-    goToSection(s.id);
+    switchSectionForced(s.id);
     toast(`已插入到「${s.n} ${s.title}」`);
   }
 } else if (pending && !editable()) {
   toast("目前身分無法插入範本到內文");
 }
 
-document.getElementById("domain-select")?.addEventListener("change", (e) => {
+document.getElementById("domain-select")?.addEventListener("change", async (e) => {
   const next = (e.target as HTMLSelectElement).value;
   const st = store.get();
   if (!editable() || !st.activeProjectId) return;
@@ -1845,24 +1862,24 @@ document.getElementById("domain-select")?.addEventListener("change", (e) => {
   idx = 0;
   const first = sections()[0];
   // 換領域等於整組章節換掉，開著的檔案檢視必須讓位
-  if (first) goToSection(first.id);
+  if (first) await goToSection(first.id);
   const orphans = store.orphanSectionIds().length;
   toast(orphans ? `已換領域 — ${orphans} 個章節的內容暫時收起，沒有刪除` : "已換領域");
   render();
 });
 
-document.getElementById("btn-prev")?.addEventListener("click", () => {
+document.getElementById("btn-prev")?.addEventListener("click", async () => {
   if (idx > 0) {
-    if (!goToSection(sections()[idx - 1]!.id)) return;
+    if (!(await goToSection(sections()[idx - 1]!.id))) return;
     idx--;
     render();
   }
 });
 
-document.getElementById("btn-next")?.addEventListener("click", () => {
+document.getElementById("btn-next")?.addEventListener("click", async () => {
   const list = sections();
   if (idx < list.length - 1) {
-    if (!goToSection(list[idx + 1]!.id)) return;
+    if (!(await goToSection(list[idx + 1]!.id))) return;
     idx++;
     render();
   } else {
@@ -1870,7 +1887,7 @@ document.getElementById("btn-next")?.addEventListener("click", () => {
   }
 });
 
-document.getElementById("btn-submit")?.addEventListener("click", () => {
+document.getElementById("btn-submit")?.addEventListener("click", async () => {
   if (!editable()) {
     toast("目前身分無法送出編輯成果");
     return;
@@ -1880,7 +1897,7 @@ document.getElementById("btn-submit")?.addEventListener("click", () => {
   // 審閱者核准的東西跟作者以為送出的東西不同，而兩邊都不會發現。
   const dirty = store.dirtySectionIds().length;
   if (dirty) {
-    if (!window.confirm(`還有 ${dirty} 個章節未儲存。要先全部儲存再送審嗎？`)) {
+    if (!(await askConfirm({ title: `還有 ${dirty} 個章節未儲存。要先全部儲存再送審嗎？` }))) {
       toast("已取消送審 —— 未儲存的內容不會被包含進去");
       return;
     }

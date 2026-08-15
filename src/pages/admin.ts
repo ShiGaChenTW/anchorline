@@ -7,6 +7,7 @@ import type {
   ProjectStatus,
 } from "../data/types";
 import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL } from "../data/types";
+import { askConfirm, askText } from "../lib/ask";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { canManageUsers } from "../lib/permissions";
@@ -120,10 +121,10 @@ if (__authed) {
       };
     });
     list.querySelectorAll(".btn-del").forEach((btn) => {
-      (btn as HTMLButtonElement).onclick = () => {
+      (btn as HTMLButtonElement).onclick = async () => {
         const id = (btn as HTMLElement).dataset.id!;
         const t = employees.find((x) => x.id === id);
-        if (!t || !confirm(`刪除「${t.name}」？`)) return;
+        if (!t || !(await askConfirm({ title: `刪除「${t.name}」？`, danger: true }))) return;
         const r = store.deleteEmployee(id);
         toast(r.ok ? "已刪除" : r.reason ?? "失敗");
         render();
@@ -267,8 +268,8 @@ if (__authed) {
         store.moveWorkflowStage(id, 1);
         renderWorkflow();
       });
-      el.querySelector(".st-del")?.addEventListener("click", () => {
-        if (!confirm("刪除此關卡？")) return;
+      el.querySelector(".st-del")?.addEventListener("click", async () => {
+        if (!(await askConfirm({ title: "刪除此關卡？", danger: true }))) return;
         store.removeWorkflowStage(id);
         toast("已刪除關卡");
         renderWorkflow();
@@ -375,21 +376,21 @@ if (__authed) {
       };
     });
     list.querySelectorAll(".btn-apply-flow").forEach((btn) => {
-      (btn as HTMLButtonElement).onclick = () => {
+      (btn as HTMLButtonElement).onclick = async () => {
         const id = (btn as HTMLElement).dataset.id!;
-        if (!confirm("以目前簽核流程覆寫此個案關卡？（會重置簽核狀態）")) return;
+        if (!(await askConfirm({ title: "以目前簽核流程覆寫此個案關卡？（會重置簽核狀態）", danger: true }))) return;
         const r = store.applyWorkflowToCase(id);
         toast(r.ok ? "已套用流程" : r.reason ?? "失敗");
         renderCases();
       };
     });
     list.querySelectorAll(".btn-withdraw").forEach((btn) => {
-      (btn as HTMLButtonElement).onclick = () => {
+      (btn as HTMLButtonElement).onclick = async () => {
         const id = (btn as HTMLElement).dataset.id!;
         // `?? ""` 會把 prompt 的 null 吃掉，讓下一行的守衛變成死分支——桌面殼裡
         // prompt() 恆回 null（wry 的 WKWebView delegate 缺口），於是「取消」與
         // 「對話框根本沒出現」都會直接抽單、理由被 store 補成預設值。留 null 給守衛擋。
-        const reason = prompt("抽單原因", "需求變更／管理者抽單");
+        const reason = await askText({ title: "抽單原因", value: "需求變更／管理者抽單" });
         if (reason === null) return;
         const r = store.withdrawCase(id, reason);
         toast(r.ok ? "已抽單" : r.reason ?? "失敗");
