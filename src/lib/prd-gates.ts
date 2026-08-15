@@ -18,6 +18,13 @@ const METRIC_RE = "\\d+\\s*%|\\d+\\s*ms|\\d+\\s*天|≥|<=|>=|p95|p99|Q[1-4]|覆
 /** 「刻意不選」的各種寫法 */
 const BOUNDARY_RE = "不選|不做|暫不|排除|不採用|out of scope|non-?goal";
 
+/**
+ * 「真的有條列」：行首的 - * • 或 1. / 1)。
+ * 刻意不用 `bullets` predicate —— 它在沒有列點符號時會退回用 `;；換行` 切，
+ * 多段落的純敘事會被算成好幾條而矇混過關，正好漏掉這條規則要抓的那一種。
+ */
+const LIST_ITEM_RE = "^\\s*(?:[-*•]|\\d+[.)])";
+
 /** 期限訊號：日期、季度、或明講的期限字眼 */
 const DEADLINE_RE = "\\d{1,2}\\/\\d{1,2}|Q\\d|週|前|deadline|期限";
 
@@ -40,6 +47,34 @@ export const BASE_GATE_SPEC: GateSpec = {
         },
       ],
       pass: { id: "summary-ok", label: "三行摘要完整", detail: "做什麼／給誰／為何現在皆有內容" },
+    },
+    {
+      // 願景一律 warn，不進 block。單人簽核下 gate 是自我約束，多一道會被習慣性
+      // 略過的門，代價是「所有 gate 都變成可以略過」——那比漏填願景貴得多
+      // （見 `docs/NEXT-VERSION-PLAN.md:44`）。刻意不發 pass：pass 會進 score 分母，
+      // 那是獨立決策（同 problem-thin 的處理）。
+      rules: [
+        {
+          id: "summary-vision-thin",
+          level: "warn",
+          label: "功能說明與願景單薄",
+          detail:
+            "建議在「01 三行摘要」的「專案功能說明與願景」先寫 2–3 句敘事，說明主要目的與實際要達成的事（不擋送審，但審閱者少了讀動機的入口）。",
+          section: "summary",
+          fields: ["vision"],
+          require: { kind: "minLength", n: 60 },
+        },
+        {
+          id: "summary-vision-outline",
+          level: "warn",
+          label: "功能說明與願景缺功能條列",
+          detail:
+            "已有敘事，但未見條列 — 建議在敘事之後以 -、• 或 1. 開頭逐條列出主要功能與目標，讓人與機器都能逐項核對。",
+          section: "summary",
+          fields: ["vision"],
+          require: { kind: "match", re: LIST_ITEM_RE, flags: "m" },
+        },
+      ],
     },
     {
       rules: [
