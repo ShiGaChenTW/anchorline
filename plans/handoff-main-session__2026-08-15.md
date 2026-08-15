@@ -1,26 +1,31 @@
 # Handoff — main session（Miles）交接
 
-**交棒人：** Miles（main session）· 2026-08-15，第二輪（09:21–11:45）
+**交棒人：** Miles（main session）· 2026-08-15，第二＋三輪（09:21–13:00）
 **接棒人：** 你 —— 接手 main session 的協調角色：對 principal（Scott）彙報、守關卡、
 派工給 worktree／agent、build＋安裝正式版。**你不是唯一寫手**，大量實作走 worktree PM 模式
 （範本：`plans/handoff-next-version-impl.md`）。
 
 ## 一句話現況
 
-W3 剩餘帳全數落地並推上 `origin/main`（`1ba052c`，0 unpushed，1191 測試全綠），
-正式版已用新做的 `bun run app:install` 重裝，**現在卡在等 Scott 勾兩份實測報告**——
-新的 11 題（本輪視覺驗收）＋ 原本的 10 題（wave1+2）。他勾完才有下一步。
+W3 剩餘帳＋跨專案 UAT 進度三個曝光面全數落地並推上 `origin/main`（`7f2d477`，
+0 unpushed，工作區乾淨，**1214 測試全綠**），正式版已用 `bun run app:install` 重裝且
+**識別碼與 HEAD 逐字相同**，**現在卡在等 Scott 勾三份實測報告共 30 題**。他勾完才有下一步。
 
 ## 等待中的線（依觸發順序）
 
-1. **Scott 的兩份 UAT**（App 會喚醒跳題，tracking 頁「實測報告」分組）：
+1. **Scott 的三份 UAT**（App 會喚醒跳題，tracking 頁「實測報告」分組）：
+   - `plans/uat-跨專案-uat-進度三個曝光面.md`（9 題，UAT-20260815-03）——
+     下午做的三個曝光面。**第 5 題是唯一能證明數字正確的**（人工把逐份列表每列
+     `total − closed` 加總跟合計比對），其餘只驗長相；第 8 題要切到**沒綁資料夾**的
+     專案確認那條列還在（那正是把它移出 `.d-grid` 的理由）；第 9 題放最後——
+     它會按「本輪收工」改動勾選狀態，驗被跳過的題不會憑空消失
    - `plans/uat-建置識別碼與願景-gate-視覺驗收.md`（11 題，UAT-20260815-02）——
      本輪三項變更的**畫面**驗收，全部是 Interceptor 擴充卡死時欠下的 `[DEFERRED-VERIFY]`。
      **第 2 題（比對狀態列雜湊與 `git log -1`）是重點**，其餘只驗長得對不對，那題驗它說的是不是真話
    - `plans/uat-下一版實作驗收（wave1+2）.md`（10 題）——仍全數未測。
      第 7、8 題是兩項 `[DEFERRED-VERIFY]`（C8 ObjC 例外路徑、C11 取號三鈕）；
      **第 9 題已被本輪改寫**，加了「再測一個 git 專案」的判別步驟（見下方 §根因）
-   - 兩份跑在同一個 build 上，不用裝兩次
+   - **三份跑在同一個 build 上，不用裝三次**
 2. **v0.01.01 dogfood 收官**：ZZ 草稿已在 App 取號。UAT 過 → 在版本取號頁編列
    本輪 commits → 正式放行（兩段式卡內確認）→ 複製 PUSH 指令到終端機執行。
    這是 W3-2 的交付；卡住的每一步都是 bug，記進票。
@@ -37,8 +42,34 @@ W3 剩餘帳全數落地並推上 `origin/main`（`1ba052c`，0 unpushed，1191 
 | `1947544` | W3-3 願景欄位進 gate（warn 級，兩條短路串接） |
 | `757422e` | W3-1b 狀態列建置識別碼 |
 | `1ba052c` | W3-1a `bun run app:install` 交易式一鍵換裝 |
+| `a3abfe8` | **跨專案 UAT 進度上三個曝光面**＋掃描三趟壓成一趟（CATO-05 還清）＋Rust `truncated` 旗標 |
 
-測試 1126 → **1191**（+5 W3-3、+14 W3-1b、+46 W3-1a），零迴歸。
+測試 1126 → **1214**（+5 W3-3、+14 W3-1b、+46 W3-1a、+23 三曝光面），零迴歸。
+
+### 下午那一輪的設計決策（別再重推一次）
+
+完整紀錄在 `plans/Anchorline__2026-08-15-1210__uat-progress-surfaces.md`。要點：
+
+- **逐份進度列本來就存在**（`overview.ts:481-514`，W2-1/W2-3 出貨）。這輪加的是**合計**，
+  不是逐份列表。動它之前先確認你要的不是已經在跑的東西
+- **三個詞綁死在 parser 的 verdict 上**：`沒勾`＝`pending`、`待修`＝`fail`、
+  `暫時跳過`＝`later`，三者互斥。口徑寫在 `UAT_SUM_TITLE` 常數，三個面共用
+- **用動詞區分而非量詞**：既有的「待修 N 題」已經佔走「題」這個量詞
+- **「暫時跳過」另列不併入**（Scott 裁決）。併進去等於讓「本輪收工」按鈕沒有作用；
+  不顯示則讓那批題在全 App 零追蹤——**按一顆按鈕合計歸零而沒有任何一題被測過**
+- **儀表板那一條刻意不在 `.d-grid` 裡、也不做成卡**。`.d-grid` 要過三道門才渲染
+  （有 activeProject／有 rootPath／isDesktop），而 `dashboard.ts:581` 註解自陳
+  「沒綁資料夾是這一頁最常見的狀態」——放進去會因為當前專案沒綁而整條消失
+- **「全部專案」四個字寫在可見文字裡，不是 tooltip**。決定性先例：側欄 badge 的值
+  也是全部專案（`rail-nav.ts:220,231`），卻掛在 `aria-label="這個專案可以做的事"`
+  群組裡（`rail-projects.ts:288`）、範圍只寫在 title——**從來沒人發現**
+- **掃描三趟壓成一趟**：`loadUatScan` 在 module 層快取 Promise，key = 排序後目錄字串；
+  五個消費者共吃。範圍算法統一到 `uatScanDirs`（同時是快取 key，分岔會讓快取靜默失效）
+
+### 記帳（本輪不做）
+
+側欄 badge 的三個缺陷：數「份」不數「題」、0 時隱藏（「沒事」與「掃不到」長得一樣）、
+範圍標示錯誤。Grok 主張「Scott 要的一半已經在顯示了，只是壞的」——修這三件比新增卡片便宜。
 
 ## 下一版帳本（做完 UAT 之後的工作來源）
 
@@ -104,14 +135,18 @@ WKWebView UI delegate 只實作檔案選擇面板，WebKit 對未實作的 deleg
 ⚠️ **「AX press 也沒反應」「鍵盤也沒反應」不構成獨立證據**——WKWebView 對
 AX value-set 與 postToPid 鍵擊多數不理，三路實際上只有滑鼠那路是有效訊號。
 
-### 兩個 tsc 盲點（今天各踩一次）
+### 三個閘門盲點（今天各踩一次）
 
 1. **`strict: true` 抓不到 `string === null` 這種死比較**——`admin.ts:389` 的
    fail-open bug 修之前 tsc 一樣是綠的
 2. **`tsconfig.json` 的 `include` 只有 `src/**/*.ts`，`vite.config.ts` 不在型別檢查範圍內**
    ——該檔的重複宣告 tsc 全綠，是 `bunx vite build` 才炸
+3. **`tsc` 與 `bun test` 完全看不到 `src-tauri/`**——下午那個 agent 改了 19 行 Rust
+   卻沒編譯過（worktree 連 `target/` 都沒有），是 PM 從外面查時間戳與程序才發現。
+   **動 Rust 就要 `cargo check`，而且丟背景跑**
 
-**推論：綠燈的涵蓋範圍比想像小。動 `vite.config.ts` 或寫守衛式比較時，tsc 不算證據。**
+**推論：綠燈的涵蓋範圍比想像小。四道閘門（tsc／bun test／cargo check／vite build）
+要按改動範圍挑齊，缺一道就是一整片沒有證據的區域。**
 
 ## 操作慣例（repo 文件沒寫全、用血換來的）
 
@@ -157,9 +192,10 @@ AX value-set 與 postToPid 鍵擊多數不理，三路實際上只有滑鼠那�
 |---|---|
 | 下一版規格（工程） | `docs/NEXT-VERSION-PLAN.md`（⚠️ updater 三處敘述待訂正） |
 | 下一版規劃書（Scott 版） | `docs/next-version-plan.html` |
-| **本輪追蹤與 34 處對話框清單** | `plans/Anchorline__2026-08-15-0921__w3-followup.md` |
+| **W3 收尾追蹤與 34 處對話框清單** | `plans/Anchorline__2026-08-15-0921__w3-followup.md` |
+| **跨專案 UAT 進度三曝光面追蹤** | `plans/Anchorline__2026-08-15-1210__uat-progress-surfaces.md` |
 | 上一輪追蹤與審計紀錄 | `plans/next-version-impl__2026-08-15-0111__wave1-wave2-impl.md` |
 | UAT 功能鏈全紀錄 | `plans/opaleye__2026-08-14-1949__uat-checklist.md` |
 | worktree PM handoff 範本 | `plans/handoff-next-version-impl.md` |
-| **Scott 的待勾考卷（兩份）** | `plans/uat-建置識別碼與願景-gate-視覺驗收.md`（11 題）<br>`plans/uat-下一版實作驗收（wave1+2）.md`（10 題） |
+| **Scott 的待勾考卷（三份，30 題）** | `plans/uat-跨專案-uat-進度三個曝光面.md`（9 題）<br>`plans/uat-建置識別碼與願景-gate-視覺驗收.md`（11 題）<br>`plans/uat-下一版實作驗收（wave1+2）.md`（10 題） |
 | 原生橋合約 | `docs/BRIDGE.md`（19+ actions，安全模型在 §3） |
