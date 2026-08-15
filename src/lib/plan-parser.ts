@@ -25,6 +25,8 @@ export type PlanStep = {
 
 export type PlanMeta = {
   title: string;
+  /** openspec 專用：變更代號（目錄 id）。title 會被 H1 蓋掉，身分靠這個 */
+  change?: string;
   status: string;
   created: string;
   updated: string;
@@ -144,6 +146,26 @@ function defaultRand(): number {
 }
 
 /**
+ * 檔案的換行慣例（W1-7）。
+ *
+ * mutator 一律 `split(/\r?\n/)` 再用這個值 join：CRLF 檔就地轉 LF 的話，
+ * 下一次 safeApply 的位元組級 hash 比對必失敗，回報「檔案被改過」拒寫——
+ * 症狀長得像併發衝突，其實是自己上一次寫入改了行尾。
+ *
+ * 混用行尾採**多數決**（Grok C9）：純 LF 檔沾到一行 CRLF 就整份翻成
+ * CRLF 的話，第一次寫入的 git diff 是全檔改動、併發持有 pre-image 的
+ * 寫入者必衝突。多數決讓收斂方向跟檔案的實際慣例一致；平手取 LF。
+ */
+export function eolOf(text: string): "\r\n" | "\n" {
+  const crlf = (text.match(/\r\n/g) ?? []).length;
+  // 零寬斷言精確計數（Cato-04）：`[^\r]\n` 會吃掉前一個字元，連續空行時
+  // 每兩個 LF 只數得到一個——markdown 全是空行分段，LF 為主的混用檔會被
+  // 系統性誤判成 CRLF。
+  const lf = (text.match(/(?<!\r)\n/g) ?? []).length;
+  return crlf > lf ? "\r\n" : "\n";
+}
+
+/**
  * Lazy 鑄造 —— 給 Plan Steps 區段裡還沒有錨點的 checkbox 補上 id。
  *
  * 刻意**不做**一次性回填腳本：「先跑一個會改 9 個檔的腳本才能開始」是最容易
@@ -181,7 +203,7 @@ export function mintMissingIds(
     return `${raw.replace(/\s+$/, "")} <!-- ${ANCHOR_PREFIX}:t=${id} -->`;
   });
 
-  return { text: out.join("\n"), minted };
+  return { text: out.join(eolOf(text)), minted };
 }
 
 /**
@@ -229,6 +251,9 @@ function parseOpenspecTasks(text: string, path: string | undefined, change: stri
     unanchored: 0,
     dialect: "openspec",
   };
+  // 目錄 id 要原樣留著：H1 會蓋掉 title，但治理 subject 的 join key 用的是
+  // 目錄 id（W1-3）——標題可以改，目錄 id 才是這個 change 的身分。
+  if (change) out.change = change;
   if (!text) return out;
 
   let group = "";

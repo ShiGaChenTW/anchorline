@@ -13,6 +13,7 @@ import {
 import { buildHandoff, HANDOFF_NOTE, type AgentFamilyId } from "../lib/agent-handoff";
 import { uatFixTask, uatProjectRoot } from "../lib/uat-fix-handoff";
 import { initTheme } from "../lib/theme";
+import { invalidateUatBadge } from "../lib/rail-nav";
 import { sortByRecency, trackingTarget } from "../lib/tracking";
 import {
   canScanPlans,
@@ -52,6 +53,8 @@ import {
   type UatReport,
   type UatVerdict,
 } from "../lib/uat-parser";
+import { canonUatPath } from "../lib/uat-pending";
+import { reconcileNoteDraft, setNoteDraft } from "../lib/uat-note-draft";
 import { UAT_HANDOFF_EVENT, UAT_QUERY_KEY } from "../lib/uat-handoff";
 import { renderMarkdown } from "../lib/markamd";
 
@@ -432,6 +435,12 @@ if (__authed) {
       return `<p class="tk-do-what">全部測完，其中 ${failed} 題失敗</p>
         <p class="tk-do-why">失敗題的說明就是修復工單的起點 —— 交給 agent 時把那幾段一起帶上。</p>`;
     }
+    // 收工收掉的報告不能說「全部測完」——那會把「這輪沒測的」偽裝成「測過沒問題」
+    const later = r.items.filter((x) => x.verdict === "later").length;
+    if (later) {
+      return `<p class="tk-do-what tk-do-clear">本輪已收工，沒有失敗</p>
+        <p class="tk-do-why">其中 ${later} 題標了「暫時跳過」——下一輪重測時它們還在檔案裡。</p>`;
+    }
     return `<p class="tk-do-what tk-do-clear">全部測完，沒有失敗</p>
       <p class="tk-do-why">結果已經寫回這份 markdown，agent 直接讀得到。</p>`;
   }
@@ -476,6 +485,29 @@ if (__authed) {
         <button type="button" class="tk-uat-send-btn" id="uat-diff"${
           closed ? "" : ` disabled title="還沒有任何一題有結果，沒有變更可看"`
         }>看 UAT DIFF</button>
+        ${
+          // 本輪收工（W2-2）：測 5/8 就走人的報告永遠「進行中」，待實測數字
+          // 只進不出。收工＝剩下的錨定題全標「暫時跳過」——狀態推導自然轉
+          // 已完成，報告誠實記下「這輪跳過了哪些」，完成判定守門（Cato F3）
+          // 原封不動。沒有錨點的題寫不回去，收不掉時報告會誠實留在進行中。
+          r.status === "進行中" && canEditFiles()
+            ? (() => {
+                const n = r.items.filter((x) => x.id && x.verdict === "pending").length;
+                if (!n) return "";
+                const armed = closeoutArmedFor === (r.path ?? "");
+                // 無錨點題寫不回去——按鈕不能承諾「離開待實測」卻做不到
+                // （Grok C3）：title 把限制講在按下去之前。
+                const tip =
+                  r.unanchored > 0
+                    ? `把 ${n} 題標成「暫時跳過」；另有 ${r.unanchored} 題無錨點寫不回去，報告仍會留在待實測`
+                    : `把剩下 ${n} 題標成「暫時跳過」，報告轉為已完成並離開待實測`;
+                return `<button type="button" class="tk-uat-send-btn" id="uat-closeout" data-n="${n}"
+                     title="${tip}">${
+                       armed ? `確認收工：${n} 題標「暫時跳過」` : "本輪收工"
+                     }</button>`;
+              })()
+            : ""
+        }
       </div>
       <div class="tk-uat-fams" id="uat-fams" role="group" aria-label="交給哪一種 agent" hidden>
         ${HANDOFF_FAMILIES.map(
@@ -496,16 +528,128 @@ if (__authed) {
     const btn = document.getElementById("uat-send") as HTMLButtonElement | null;
     const fams = document.getElementById("uat-fams");
     if (!btn || !fams) return;
+    // 與結果鈕同一條規矩（W1-2）：不奪走說明欄焦點。少了 guard，說明欄的
+    // blur 寫檔會觸發重繪，把剛按下去的按鈕連同展開狀態一起重建掉——
+    // 症狀是族系面板一閃就關、或 DIFF 開在舊資料上。
+    const keepFocus = (e: MouseEvent) => e.preventDefault();
+    btn.onmousedown = keepFocus;
     btn.onclick = () => {
       const open = !fams.hidden;
       fams.hidden = open;
       btn.setAttribute("aria-expanded", String(!open));
     };
     fams.querySelectorAll<HTMLButtonElement>("[data-fam]").forEach((b) => {
+      b.onmousedown = keepFocus;
       b.onclick = () => void onSubmitUat(r, b.dataset.fam as AgentFamilyId);
     });
     const diffBtn = document.getElementById("uat-diff") as HTMLButtonElement | null;
-    if (diffBtn) diffBtn.onclick = () => openUatDiff(r);
+    if (diffBtn) {
+      diffBtn.onmousedown = keepFocus;
+      diffBtn.onclick = () => openUatDiff(r);
+    }
+    const closeBtn = document.getElementById("uat-closeout") as HTMLButtonElement | null;
+    if (closeBtn) {
+      closeBtn.onmousedown = keepFocus;
+      // 確認做在按鈕裡（按第一下變成確認態），不用 window.confirm——
+      // 與放行卡的既有原則一致。任何重繪都會重建按鈕、自動退回未確認態。
+      closeBtn.onclick = () => {
+        const key = r.path ?? "";
+        if (closeoutArmedFor !== key) {
+          closeoutArmedFor = key;
+          closeBtn.textContent = `確認收工：${closeBtn.dataset["n"]} 題標「暫時跳過」`;
+          return;
+        }
+        closeoutArmedFor = null;
+        void onCloseoutRound();
+      };
+    }
+  }
+
+  /**
+   * 收工確認臂態存模組變數而不是 DOM：輪詢重繪會重建按鈕，存 dataset 的話
+   * 臂態活不過一次重繪，使用者永遠按不到第二下。鍵是報告路徑——切報告自動解除。
+   */
+  let closeoutArmedFor: string | null = null;
+
+  /**
+   * 本輪收工：剩下的錨定未測題批次標「暫時跳過」，一次寫入。
+   *
+   * 逐題呼叫 onSetVerdict 會寫 N 次檔、重繪 N 次、灌 N 筆 uat.verdict 事件——
+   * 收工是回合層級的一個動作，事件也只記一筆。
+   */
+  async function onCloseoutRound() {
+    const p = plans[idx];
+    if (!p?.uat) return;
+    const pending = p.uat.items.filter((x) => x.id && x.verdict === "pending");
+    if (!pending.length) return;
+
+    let blocked = "";
+    const guard = guardOf(p.path, p.raw);
+    const r = await safeApply(
+      guard,
+      (text) => {
+        let acc = text;
+        for (const it of pending) {
+          const step = setVerdict(acc, it.id!, "later", it.note, { now: nowStamp() });
+          if (!step.ok) {
+            blocked = step.reason;
+            return null;
+          }
+          acc = step.text;
+        }
+        return acc;
+      },
+      { read: readFile, write: writeFile },
+    );
+    if (!r.ok) {
+      toast(blocked || r.reason);
+      await refresh(true);
+      return;
+    }
+
+    // toast 跟著實際結果走，不跟著願望走（Grok C3）：混有無錨點題的報告
+    // 收不成「已完成」，說「已收工」會讓人以為它離開待實測了。
+    const afterAll = parseUatReport(r.text, p.path);
+    toast(
+      afterAll.status === "已完成"
+        ? `已收工：${pending.length} 題標為「暫時跳過」`
+        : `已標 ${pending.length} 題暫時跳過；另有 ${afterAll.unanchored} 題無錨點寫不回去，報告仍在進行中`,
+    );
+    const st = store.get();
+    const proj = st.projects.find((x) => x.id === st.activeProjectId);
+    const root = proj?.importSummary?.rootPath;
+    if (root) {
+      const u = st.currentUser;
+      const actor = {
+        kind: u.kind === "agent" ? ("agent" as const) : ("human" as const),
+        family: u.agentFamily ?? null,
+        name: u.name,
+      };
+      logEvent(root, {
+        project: proj!.id,
+        actor,
+        kind: "uat.round.closeout",
+        subject: `uat:${p.name}`,
+        payload: { title: p.uat.title, skipped: pending.length },
+      });
+      // 收工幾乎總是把報告推成已完成——報告層級的完成事件照 onSetVerdict
+      // 的同一條規矩補上（只在真的轉成已完成那一次記）。
+      const after = parseUatReport(r.text, p.path);
+      if (after.status === "已完成" && p.uat.status !== "已完成") {
+        const done = uatProgress(after);
+        logEvent(root, {
+          project: proj!.id,
+          actor,
+          kind: "uat.report.done",
+          subject: `uat:${p.name}`,
+          payload: { title: after.title, count: done.total, pct: done.pct },
+        });
+      }
+    }
+    // 這一下可能剛改變待辦分子（推成已完成／整份出清）——側欄 badge 立即
+    // 失效重掃，不然它停在舊數字直到下次導頁（W1-5）。
+    invalidateUatBadge();
+    await refresh(true);
   }
 
   /**
@@ -732,6 +876,13 @@ if (__authed) {
           Number(a.it.verdict !== "pending") - Number(b.it.verdict !== "pending") ||
           a.n - b.n,
       );
+    // 重繪會摧毀聚焦中的說明欄。草稿層（uat-note-draft）保住字，這裡保住焦點：
+    // 沒有這一步，勾完別題之後說明欄只剩畫面上的字，blur 永遠不會再發生，
+    // 草稿就永遠寫不回檔案。
+    const focusedNote =
+      document.activeElement instanceof HTMLTextAreaElement
+        ? document.activeElement.dataset["note"]
+        : undefined;
     steps.innerHTML = sorted.map(({ it }) => uatCard(it)).join("");
 
     steps.querySelectorAll<HTMLButtonElement>("[data-verdict]").forEach((btn) => {
@@ -751,16 +902,34 @@ if (__authed) {
     steps
       .querySelectorAll<HTMLTextAreaElement>("textarea[data-note]")
       .forEach((ta) => {
-        const original = ta.value;
+        const it = r.items.find((x) => x.id === ta.dataset.note);
+        if (!it?.id) return;
+        const id = it.id;
+        // 重繪之間的草稿層（W1-1）：結果鈕的 mousedown guard 擋掉 blur 之後，
+        // 任何 render(true)（別題寫檔成功、或衝突後拉回磁碟）都會重建 DOM——
+        // 沒有這一層，還沒存的說明就無聲消失。磁碟追上草稿時 reconcile 自清。
+        const draft = reconcileNoteDraft(r.path ?? "", id, it.note);
+        if (draft !== undefined) ta.value = draft;
+        ta.oninput = () => setNoteDraft(r.path ?? "", id, ta.value);
+        // 比對基準是磁碟值而不是 textarea 當下值：草稿被 seed 回來時，兩者不同
+        // 代表「有沒存的字」，blur 就該寫回。沒草稿時兩者相同——「點進去看一眼」
+        // 依然不會動到 mtime，不會把報告推上 live tracking 的追蹤位。
+        const original = it.note;
         ta.onblur = () => {
-          // 只在真的改過時寫回。每次失焦都寫一次的話，「點進去看一眼」也會動到
-          // mtime，把這份報告一路推上 live tracking 的追蹤位。
           if (ta.value === original) return;
-          const it = r.items.find((x) => x.id === ta.dataset.note);
-          if (!it?.id) return;
-          void onSetVerdict(it.id, it.verdict, ta.value);
+          void onSetVerdict(id, it.verdict, ta.value);
         };
       });
+
+    if (focusedNote) {
+      const ta = steps.querySelector<HTMLTextAreaElement>(
+        `textarea[data-note="${CSS.escape(focusedNote)}"]`,
+      );
+      if (ta) {
+        ta.focus({ preventScroll: true });
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+      }
+    }
   }
 
   function renderMain() {
@@ -1162,8 +1331,10 @@ if (__authed) {
         // openspec 的編號不是錨點，寫成 `anc:t=1.1` 會讓事件流以為那是 join key，
         // 之後任何依錨點聚合的查詢都會把它跟真正的步驟混在一起
         subject:
+          // join key 用目錄 id 不用 H1 標題（W1-3）：標題會被人改，目錄 id
+          // 才是 change 的身分——治理計分靠這個 key 對回 tasks.md。
           p.meta.dialect === "openspec"
-            ? `openspec:${p.meta.title}/${id}`
+            ? `openspec:${p.meta.change ?? p.meta.title}/${id}`
             : `${ANCHOR_PREFIX}:t=${id}`,
         payload: { title: p.meta.steps.find((s) => s.id === id)?.text ?? "" },
       });
@@ -1259,6 +1430,9 @@ if (__authed) {
         });
       }
     }
+    // 這一下可能剛改變待辦分子（推成已完成／整份出清）——側欄 badge 立即
+    // 失效重掃，不然它停在舊數字直到下次導頁（W1-5）。
+    invalidateUatBadge();
     await refresh(true);
   }
 
@@ -1393,9 +1567,13 @@ if (__authed) {
    */
   function alignProjectForUat(path: string): boolean {
     const st = store.get();
+    // 與收件匣歸屬（attributePendingUats）同一套路徑正規化（Grok C6）：
+    // 這邊裸比對的話，NFD 路徑的專案會出現「總覽掛得上專案名、點進去
+    // 卻說還沒匯入」的分裂。
+    const want = canonUatPath(path);
     const hit = st.projects.find((p) => {
-      const root = (p.importSummary?.rootPath ?? "").replace(/\/+$/, "");
-      return root && path.startsWith(`${root}/`);
+      const root = canonUatPath((p.importSummary?.rootPath ?? "").replace(/\/+$/, ""));
+      return root && want.startsWith(`${root}/`);
     });
     if (hit) {
       if (hit.id !== st.activeProjectId) {

@@ -28,6 +28,27 @@ import type { LogEvent } from "./event-log";
 const ANCHORED_SUBJECT_RE = /^(?:anc|sf):t=([0-9A-HJKMNP-TV-Z]{4,32})$/;
 
 /**
+ * 第二種已治理形狀（W1-3）：`openspec:<changeId>/<N.M>`。
+ *
+ * 沒有這一條，每完成一個 openspec 步驟，覆蓋率就掉一格——核心指標對
+ * 自家最推薦的工作流**系統性反向計分**。不給 openspec 檔案塞 anchor
+ * （守 D10a）；openspec 的步驟身分就是變更代號＋編號，直接認它。
+ */
+const OPENSPEC_SUBJECT_RE = /^openspec:(.+)\/(\d+(?:\.\d+)*)$/;
+
+/**
+ * 第三形狀（Cato-01）：報告／回合層級的 UAT 事件（`uat:<檔名>`）。
+ *
+ * 沒有這一條，「本輪收工」會把 N 筆已治理的逐題事件換成 1 筆未治理的
+ * 回合事件——使用者用了新做的、比較省事的按鈕，覆蓋率反而掉，
+ * 與 W1-3 要消滅的反向計分同一類。這些 subject 指向一個真實的報告檔，
+ * 是 App 自己寫的簿記，不是繞過治理的工作。
+ */
+const UAT_REPORT_SUBJECT_RE = /^uat:.+\.md$/;
+
+
+
+/**
  * 這筆事件串得回某個**真的存在**的 plan 步驟嗎。
  *
  * ## 為什麼光看形狀不夠
@@ -51,8 +72,25 @@ export function isGoverned(
   event: Pick<LogEvent, "subject">,
   knownAnchors: ReadonlySet<string>
 ): boolean {
-  const id = ANCHORED_SUBJECT_RE.exec(event.subject ?? "")?.[1];
-  return id !== undefined && knownAnchors.has(id);
+  const subject = event.subject ?? "";
+  const id = ANCHORED_SUBJECT_RE.exec(subject)?.[1];
+  if (id !== undefined) return knownAnchors.has(id);
+
+  // openspec 形狀只驗形狀，**不驗存在**——與錨點刻意不同。理由有兩層：
+  //
+  // 1. 歸檔是 openspec 變更的正常生命週期終點。堅持「必須在掃描裡」，
+  //    每歸檔一個 change，它整段歷史就從已治理翻回未治理——覆蓋率隨
+  //    歸檔衰減，重蹈本項要修的「對正確工作流反向計分」。
+  // 2. `N.M` 是**位置編號**不是鑄造 id（Grok C7）：tasks.md 中間插一條
+  //    任務，底下全部重編，「去檔案裡確認」會讓活著的 change 每次編輯
+  //    都把歷史事件打回未治理。錨點驗存在成立的前提（id 鑄了不變）
+  //    在 openspec 不存在。
+  //
+  // 代價：文件裡的佔位字串（`openspec:XXXX/1.1`）會被放行。
+  // 選系統性正確，不選軼事級純度。
+  if (OPENSPEC_SUBJECT_RE.test(subject)) return true;
+  // 報告／回合層級的 uat 事件：形狀認定，理由同上
+  return UAT_REPORT_SUBJECT_RE.test(subject);
 }
 
 export type GovernanceCoverage = {

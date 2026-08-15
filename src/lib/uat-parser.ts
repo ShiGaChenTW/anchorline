@@ -21,7 +21,7 @@
  * 純函式、零 I/O。
  */
 
-import { ANCHOR_PREFIX, anchorOf, mintId, stripAnchor } from "./plan-parser";
+import { ANCHOR_PREFIX, anchorOf, eolOf, mintId, stripAnchor } from "./plan-parser";
 
 export type UatVerdict = "pending" | "pass" | "fail" | "wont" | "later";
 
@@ -83,6 +83,12 @@ export type UatReport = {
    * setVerdict 只動題目區段與 狀態/最後更新 行，檔頭天然不會被寫回破壞。
    */
   preamble: string;
+  /**
+   * 重測輪次（W2-3 限縮版）：檔頭 `> 重測自：<路徑>` 指向被本輪取代的舊報告。
+   * 只有這一個欄位、不建 round 資料模型——anchor 每輪重鑄，題目層級對不起來
+   * 是已承認的上限。消費者只有 uat-pending：把被指到的檔踢出待實測清單。
+   */
+  supersedes?: string;
 };
 
 /** CLI／skill 端的出題規格。序列化前先過 validateUatSpec。 */
@@ -92,11 +98,15 @@ export type UatSpec = {
   items: UatSpecItem[];
   /** 檔頭脈絡自由文字（目的/環境/免測/編號…），序列化成 blockquote */
   context?: string;
+  /** 重測時填：被取代的舊報告絕對路徑，序列化成 `> 重測自：<路徑>` */
+  supersedes?: string;
 };
 
 const H1_RE = /^#\s+UAT[:：]\s*(.*)$/;
 const SECTION_RE = /^##\s+/;
 const LABEL_RE = /^\*\*(流程|預期|結果|說明)[：:]\*\*\s*(.*)$/;
+/** 檔頭的重測標記。blockquote 記號可有可無——人手剝掉 `>` 也不該讓標記失效 */
+const SUPERSEDES_RE = /^>?\s*重測自[：:]\s*(.+)$/;
 const EMPTY_NOTE = "（無）";
 
 /** 判斷一份 markdown 是不是 UAT 報告。tracking 頁靠它選 parser。 */
@@ -217,6 +227,14 @@ export function parseUatReport(text: string, path?: string): UatReport {
       continue;
     }
     if (!cur) {
+      // 重測標記只認**圍欄外**的檔頭行：這個分支到得了就代表不在 fence 裡
+      // （fence 行走的是上面 routeContent 那條路）。Cato F5 的規矩——圍欄裡
+      // 的東西是內容不是結構——supersede reader 也要遵守，不然 dogfood
+      // 寫 supersede 功能的 UAT 報告時，示範用的程式碼區塊會殺掉真報告。
+      if (out.supersedes === undefined) {
+        const sm = s.match(SUPERSEDES_RE);
+        if (sm) out.supersedes = sm[1]!.trim();
+      }
       preambleBuf.push(raw);
       continue;
     }
@@ -297,7 +315,10 @@ export function setVerdict(
   }
 
   const hadTrailingNewline = text.endsWith("\n");
-  const lines = text.split("\n");
+  // CRLF 檔行尾的 \r 會讓標籤行比不中、寫回時混用行尾（W1-7）：
+  // 統一剝掉、join 時還原檔案原本的換行慣例。
+  const eol = eolOf(text);
+  const lines = text.split(/\r?\n/);
   // 區段邊界要跟 parser 同一套視角：圍欄裡的 `##` 是內容不是新題（Cato F5）
   let inFence = false;
   let si = -1;
@@ -346,7 +367,9 @@ export function setVerdict(
   // 說明區塊：從標籤行到「下一個首次出現的標籤」或區段尾。整塊換掉 ——
   // 舊說明裡的假標籤行不在 firstAt 裡，所以會連同舊說明一起被換掉，
   // 不會殘留在新說明後面。尾端補一個空行當區段分隔。
-  const noteLines = note.trim() ? note.trim().split("\n") : [EMPTY_NOTE];
+  // split 吃 \r?\n：note 若來自未來的 CLI 回填可能帶 CRLF，裸 split("\n")
+  // 會把 \r 帶進 LF 檔、自己製造混用行尾（Grok C10）。
+  const noteLines = note.trim() ? note.trim().split(/\r?\n/) : [EMPTY_NOTE];
   if (noteLabelAt >= 0) {
     let blockEnd = ei;
     for (const at of firstAt.values()) {
@@ -358,7 +381,7 @@ export function setVerdict(
     lines.splice(ei, 0, "", "**說明：**", ...noteLines);
   }
 
-  let next = lines.join("\n");
+  let next = lines.join(eol);
 
   // 報告層級狀態：重讀一次算，不要在上面的迴圈裡邊改邊猜
   const parsed = parseUatReport(next);
@@ -373,7 +396,7 @@ export function setVerdict(
       `**最後更新：** ${opts.now}`,
     );
   }
-  if (hadTrailingNewline && !next.endsWith("\n")) next += "\n";
+  if (hadTrailingNewline && !next.endsWith("\n")) next += eol;
   return { ok: true, text: next };
 }
 
@@ -402,6 +425,11 @@ export function serializeUatReport(
     `**狀態：** 進行中`,
     "",
   ];
+  // 重測標記放在檔頭最前面：機器（uat-pending）與人都在第一眼找得到。
+  const sup = spec.supersedes?.trim();
+  if (sup) {
+    out.push(`> 重測自：${sup}`, "");
+  }
   // 檔頭脈絡（目的/環境/免測/編號…）序列化成 blockquote。空行也要帶 `>`，
   // 不然 markdown 會把一段 quote 切成兩段。
   const ctx = spec.context?.trim();
@@ -451,6 +479,12 @@ export function validateUatSpec(
   }
   if (o.context !== undefined && typeof o.context !== "string") {
     errors.push("context：選填，但給了就必須是字串（檔頭脈絡自由文字）");
+  }
+  if (
+    o.supersedes !== undefined &&
+    (typeof o.supersedes !== "string" || !o.supersedes.trim())
+  ) {
+    errors.push("supersedes：選填，但給了就必須是被取代舊報告的路徑字串");
   }
   if (!Array.isArray(o.items) || o.items.length === 0) {
     errors.push("items：至少要有一題");

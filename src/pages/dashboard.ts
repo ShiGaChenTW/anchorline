@@ -49,6 +49,7 @@ import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/u
 import { attachDiffSummary } from "../lib/diff-summary";
 import { coverageLine } from "../lib/governance";
 import { canReadCoverage, requestCoverage, type CoverageResult } from "../lib/governance-bridge";
+import { loadOpenFixes } from "../lib/uat-pending";
 
 if (!requireAuth()) {
   /* redirected */
@@ -420,6 +421,9 @@ if (!requireAuth()) {
           : "plans 裡還沒有任何錨點　勾選或編輯步驟時會自動鑄一個",
       r.truncated ? "只讀了最近的分片，實際數量可能更多" : "",
       r.skipped ? `跳過 ${r.skipped} 行讀不懂的資料` : "",
+      // W1-3 改了判準：openspec 步驟從此計入已治理。歷史數字因此往上跳
+      // 一次是預期行為——不講出來，使用者只會以為資料壞了。
+      c.startedIso !== null ? "計分規則 2026-08 起認 openspec 步驟，歷史數字曾因此上調一次" : "",
     ].filter(Boolean);
 
     return `<p class="d-eyebrow">治理覆蓋率</p>
@@ -433,6 +437,45 @@ if (!requireAuth()) {
   }
 
   /** 讀完就只換這張卡，不重畫整頁 —— 重畫會把使用者的捲動位置扔掉。 */
+  const FIXES_CARD_ID = "d-open-fixes";
+
+  /**
+   * 待修題數（W2-4）——只給一個數字，明細在總覽的「待修」收件匣。
+   * 這一頁講的是「這個專案怎麼樣」，所以只掃當前專案的 plans/。
+   * 零題整卡不渲染，跟總覽同一條「不留空殼」的規矩。
+   */
+  function openFixesInner(n: number): string {
+    if (!n) return "";
+    return `<p class="d-eyebrow">待修</p>
+      <p class="d-figure">${n} 題</p>
+      <p class="d-note" title="以最新一輪報告為準——被重測取代的舊報告不列入">失敗題明細與交辦在「專案總覽」的待修區塊</p>`;
+  }
+
+  function cardOpenFixes(): string {
+    return `<section class="d-card" id="${FIXES_CARD_ID}" hidden></section>`;
+  }
+
+  async function loadOpenFixCount(folderPath: string): Promise<void> {
+    // supersede 要在**全集**上解（Cato-03）：取代者可能在別的專案的 plans/，
+    // 只掃單一目錄的話，同一個「待修」數字會與總覽不一致——兩張卡都寫
+    // 「以最新一輪為準」，其中一張在說謊。掃全部、再按本專案過濾。
+    const st = store.get();
+    const { plansDirsOfAll } = await import("../lib/tracking-bridge");
+    const { attributePendingUats } = await import("../lib/uat-pending");
+    const all = await loadOpenFixes(plansDirsOfAll(st.projects));
+    const p = activeProject();
+    const mine = p
+      ? attributePendingUats(all, [
+          { id: p.id, name: projectDisplayName(p), rootPath: folderPath },
+        ]).filter((x) => x.projectId === p.id)
+      : [];
+    const host = document.getElementById(FIXES_CARD_ID);
+    if (!host) return;
+    if (!mine.length) return; // 保持 hidden——空殼不佔版面
+    host.innerHTML = openFixesInner(mine.length);
+    host.hidden = false;
+  }
+
   async function loadGovernance(folderPath: string): Promise<void> {
     const r = await requestCoverage(folderPath);
     const host = document.getElementById(GOVERNANCE_CARD_ID);
@@ -511,7 +554,7 @@ if (!requireAuth()) {
   function renderStats(s: ProjectStats) {
     renderState(
       `<div class="d-top">${heroGit(s)}${cardTags(s)}</div>
-       <div class="d-grid">${cardCommits(s)}${cardGovernance(null)}${cardStack(s)}${cardSize(s)}${cardWorkspace(s)}</div>
+       <div class="d-grid">${cardCommits(s)}${cardGovernance(null)}${cardOpenFixes()}${cardStack(s)}${cardSize(s)}${cardWorkspace(s)}</div>
        <p class="d-measured">量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")}　<span class="mono">${escapeHtml(s.folderPath)}</span></p>`,
     );
     bindIdentEditing();
@@ -519,6 +562,7 @@ if (!requireAuth()) {
       openGitDoctor(s.git);
     });
     void loadGovernance(s.folderPath);
+    void loadOpenFixCount(s.folderPath);
   }
 
   async function load(force = false) {

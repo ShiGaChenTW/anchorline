@@ -216,3 +216,45 @@ describe("佔位字串不是錨點", () => {
     expect(c.startedIso).toBeNull();
   });
 });
+
+describe("openspec 第二形狀（W1-3）", () => {
+  const LIVE = new Set<string>([]);
+
+  test("openspec 形狀合格 → 已治理（形狀認定，不驗存在）", () => {
+    expect(isGoverned(ev("openspec:add-login/1.1", "2026-08-15T00:00:00Z"), LIVE)).toBe(true);
+  });
+
+  test("步驟編號重編不影響歷史——任何數字編號都以形狀放行（Grok C7：N.M 是位置編號不是鑄造 id）", () => {
+    expect(isGoverned(ev("openspec:add-login/9.9", "2026-08-15T00:00:00Z"), LIVE)).toBe(true);
+  });
+
+  test("歸檔／已刪的 change → 照樣放行（歸檔是正常生命週期，不倒扣）", () => {
+    expect(isGoverned(ev("openspec:archived-change/3.2", "2026-08-15T00:00:00Z"), LIVE)).toBe(true);
+  });
+
+  test("形狀不合（編號不是數字）→ 未治理", () => {
+    expect(isGoverned(ev("openspec:add-login/abc", "2026-08-15T00:00:00Z"), LIVE)).toBe(false);
+  });
+
+  test("舊事件用 H1 標題當 changeId → 不在活集合，依形狀放行（向後相容）", () => {
+    expect(isGoverned(ev("openspec:某個中文標題/1.2", "2026-08-15T00:00:00Z"), LIVE)).toBe(true);
+  });
+
+  test("錨點形狀行為不變：佔位字串仍被第二層擋掉", () => {
+    expect(isGoverned(ev("anc:t=XXXXXXXX", "2026-08-15T00:00:00Z"), LIVE)).toBe(false);
+  });
+
+  test("uat 報告層級 subject（uat:檔名）依 Cato-01 裁決屬治理形狀", () => {
+    expect(isGoverned(ev("uat:uat-w1-1.md", "2026-08-15T00:00:00Z"), LIVE)).toBe(true);
+  });
+});
+
+describe("uat 報告層級事件（Cato-01）", () => {
+  const NONE = new Set<string>([]);
+  test("收工／完成／送出的 uat:<檔名> subject 算已治理——收工不能反向計分", () => {
+    expect(isGoverned(ev("uat:uat-結帳改版.md", "2026-08-15T00:00:00Z"), NONE)).toBe(true);
+  });
+  test("不是 .md 結尾的 uat: 字串不放行", () => {
+    expect(isGoverned(ev("uat:something-else", "2026-08-15T00:00:00Z"), NONE)).toBe(false);
+  });
+});

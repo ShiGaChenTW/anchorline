@@ -29,8 +29,14 @@ import { canQueryStatus, getGhStatusCached, requestOpenspecStatus } from "../lib
 import { openspecProgressPct } from "../lib/openspec-status";
 import { coverageLine, rollupCoverage } from "../lib/governance";
 import { canReadCoverage, requestCoverage, type CoverageResult } from "../lib/governance-bridge";
-import { loadPendingUats, type PendingUat } from "../lib/uat-pending";
-import { plansDirsOf } from "../lib/tracking-bridge";
+import {
+  attributePendingUats,
+  loadOpenFixes,
+  loadPendingUats,
+  type OpenFix,
+  type PendingUat,
+} from "../lib/uat-pending";
+import { plansDirsOfAll } from "../lib/tracking-bridge";
 import { trackingUrlFor } from "../lib/uat-handoff";
 
 if (!requireAuth()) {
@@ -460,25 +466,42 @@ if (!requireAuth()) {
   }
 
   /**
-   * 待實測的報告。**等人動手的事，不是等 agent 的事** —— 這一頁其餘每一格
-   * 講的都是「專案怎麼樣」，只有這一區的下一步在使用者自己身上。
+   * 待實測的報告 —— **跨專案的收件匣**。等人動手的事，不是等 agent 的事：
+   * 這一頁其餘每一格講的都是「專案怎麼樣」，只有這一區的下一步在使用者身上。
    *
-   * 只掃當前選取專案（`plansDirsOf` 的規矩），而且**只在頁面載入時掃一次**：
-   * 這是磁碟 I/O，而它的值一分鐘內不會自己變。零份時整區不渲染 ——
-   * 一個永遠寫著「0 份」的空殼只是在首屏多佔一塊位置。
+   * 掃**全部**專案（`plansDirsOfAll`），不是當前選取的那個。收件匣的意義正是
+   * 在人還沒切到那個專案時就告訴他有事 —— agent 幫 B 專案出的實測題，人正在
+   * A 專案工作時如果這裡看不到，那份報告就只剩喚醒導頁那一次曝光機會。
+   *
+   * 一樣**只在頁面載入時掃一次**：這是磁碟 I/O，而它的值一分鐘內不會自己變。
+   * 零份時整區不渲染 —— 一個永遠寫著「0 份」的空殼只是在首屏多佔一塊位置。
    */
   let pendingUats: PendingUat[] = [];
 
   function cardPendingUat(): string {
     if (!pendingUats.length) return "";
-    return `<section class="ov-others ov-uat">
+    const activeId = store.get().activeProjectId;
+    // W2-5 診斷（2026-08-15，AX 實機）：這一列在 AX 樹是真 button、名稱由內容
+    // 完整算出（「W1-1 … 0/2 已結 0% 開報告」），title 沒有蓋掉名稱——計劃裡
+    // 「AX 看不到」的症狀在現行 build 不可重現，不修不存在的 bug。原本掛著的
+    // .ov-uat 沒有任何 CSS 規則對應（死 class），移除。
+    return `<section class="ov-others">
       <p class="ov-others-head">待實測 ${pendingUats.length} 份</p>
       <ul class="ov-rows">${pendingUats
         .map((u) => {
           const pct = u.total ? Math.round((u.closed / u.total) * 100) : 0;
+          // 專案名 chip 只掛在**別的專案**的報告上：當前專案是預設脈絡，
+          // 每一列都標一次等於把唯一需要注意的那幾列淹掉。歸屬比不到（專案
+          // 還沒匯入）時也不標 —— 那種情況點進去會由 tracking 頁講清楚。
+          const foreign = u.projectName && u.projectId !== activeId;
+          // chip 放進 .ov-row-name 裡面而不是多開一個格子：.ov-row 是固定五欄的
+          // grid，多一個孩子會把進度條擠到別的欄位去。
+          const chip = foreign
+            ? `<span class="p-tag" style="margin-right:6px">${escapeHtml(u.projectName!)}</span>`
+            : "";
           return `<li>
-            <button type="button" class="ov-row" data-uat="${escapeHtml(u.path)}" title="${escapeHtml(u.name)}">
-              <span class="ov-row-name">${escapeHtml(u.title)}</span>
+            <button type="button" class="ov-row" data-uat="${escapeHtml(u.path)}" title="${escapeHtml(foreign ? `${u.projectName} · ${u.name}` : u.name)}">
+              <span class="ov-row-name">${chip}${escapeHtml(u.title)}</span>
               <span class="ov-row-state tone-blocked">${u.closed}/${u.total} 已結</span>
               <span class="ov-bar"><i style="width:${Math.max(2, pct)}%"></i></span>
               <span class="ov-row-pct">${pct}%</span>
@@ -490,10 +513,70 @@ if (!requireAuth()) {
     </section>`;
   }
 
+  /**
+   * 待修的失敗題 —— 跨專案（W2-4）。
+   *
+   * 與上方「待實測」可能同時指向同一份報告，**這不是重複計數**：待實測數的
+   * 是「份」（還有題沒測的報告），待修數的是「題」（已判失敗、還沒被修掉的
+   * 題）。量詞與樣式刻意錯開。修完＝改判或被新一輪 supersede，掃描自然出清。
+   */
+  let openFixes: OpenFix[] = [];
+
+  function cardOpenFixes(): string {
+    if (!openFixes.length) return "";
+    const activeId = store.get().activeProjectId;
+    return `<section class="ov-others">
+      <p class="ov-others-head" title="以最新一輪報告為準——被重測取代的舊報告不列入">待修 ${openFixes.length} 題</p>
+      <ul class="ov-rows">${openFixes
+        .map((x) => {
+          const foreign = x.projectName && x.projectId !== activeId;
+          const chip = foreign
+            ? `<span class="p-tag" style="margin-right:6px">${escapeHtml(x.projectName!)}</span>`
+            : "";
+          // .ov-row 是固定五欄 grid：bar 與 pct 這裡沒有意義，但要留空位
+          // 佔欄，不然「開報告」會滑進進度條的欄位。
+          return `<li>
+            <button type="button" class="ov-row" data-uat="${escapeHtml(x.path)}" title="${escapeHtml(`${x.reportTitle} · ${x.name}`)}">
+              <span class="ov-row-name">${chip}${escapeHtml(x.itemTitle)}</span>
+              <span class="ov-row-state tone-blocked">失敗</span>
+              <span class="ov-bar"></span>
+              <span class="ov-row-pct"></span>
+              <span class="ov-row-flag">開報告</span>
+            </button>
+          </li>`;
+        })
+        .join("")}</ul>
+    </section>`;
+  }
+
+  async function loadOpenFixList(): Promise<void> {
+    const st = store.get();
+    const list = await loadOpenFixes(plansDirsOfAll(st.projects));
+    openFixes = attributePendingUats(
+      list,
+      st.projects.map((p) => ({
+        id: p.id,
+        name: projectDisplayName(p),
+        rootPath: p.importSummary?.rootPath,
+      })),
+    );
+    if (openFixes.length) render();
+  }
+
   /** 掃一次就好。掃完才重畫 —— 空的時候整區不存在，不需要先出一個骨架。 */
   async function loadPendingUat(): Promise<void> {
     const st = store.get();
-    pendingUats = await loadPendingUats(plansDirsOf(st.projects, st.activeProjectId));
+    const list = await loadPendingUats(plansDirsOfAll(st.projects));
+    // 顯示名在這裡算好再傳進去：`projectDisplayName` 的 fallback 鏈屬於
+    // data/types，lib/uat-pending 不該再實作一份會分岔的版本。
+    pendingUats = attributePendingUats(
+      list,
+      st.projects.map((p) => ({
+        id: p.id,
+        name: projectDisplayName(p),
+        rootPath: p.importSummary?.rootPath,
+      })),
+    );
     if (pendingUats.length) render();
   }
 
@@ -604,6 +687,7 @@ if (!requireAuth()) {
       <div class="ov-focus">${hero(rows)}</div>
       ${prRadar()}
       ${cardPendingUat()}
+      ${cardOpenFixes()}
       <div class="ov-pair">
         <section class="d-card ov-gov" id="${GOVERNANCE_ID}">${governanceInner(rows)}</section>
         ${cardProjects(rows)}
@@ -738,6 +822,7 @@ if (!requireAuth()) {
   // 載入時掃一次就好。不進 render()、不輪詢 —— 它是磁碟 I/O，而 render 會被
   // store 訂閱觸發很多次（與 PR 雷達不進 render 是同一個理由）。
   void loadPendingUat();
+  void loadOpenFixList();
   void Promise.allSettled([refreshOpenspec(), refreshGh()]).then(() => hideLoading());
   window.setInterval(() => void refreshGh(), GH_REFRESH_MS);
 }

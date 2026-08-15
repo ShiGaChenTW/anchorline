@@ -25,7 +25,7 @@ serde_json = "1"
 # 我們在執行期把三個方法補到它的 delegate class 上（見 src/js_dialogs.rs）。
 # 版本跟著 wry 0.55 的 dep tree，避免兩套 objc2 runtime。
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.6"
+objc2 = { version = "0.6", features = ["exception"] }
 objc2-foundation = { version = "0.3", features = ["NSString", "NSGeometry"] }
 objc2-app-kit = { version = "0.3", features = ["NSAlert", "NSButton", "NSTextField", "NSControl", "NSView", "NSResponder", "NSWindow", "NSPanel", "NSApplication"] }
 block2 = "0.6"

@@ -139,7 +139,16 @@ export type FolderPick = {
   folderPath: string;
   files: ScannedFile[];
 };
-export type PlanStat = { path: string; name: string; mtimeMs: number; text: string };
+export type PlanStat = {
+  path: string;
+  name: string;
+  mtimeMs: number;
+  text: string;
+  /** `plan` | `openspec`——Rust 掃描一直有回，型別此前漏列 */
+  kind?: string;
+  /** openspec 專用：變更代號（目錄名） */
+  change?: string;
+};
 export type NativeTrackingScan = {
   files: PlanStat[];
   signal: { raw: string; mtimeMs: number } | null;

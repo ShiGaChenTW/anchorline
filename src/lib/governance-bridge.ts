@@ -70,7 +70,13 @@ async function knownAnchorsOf(projectRoot: string): Promise<ReadonlySet<string>>
   try {
     const scan = await native.trackingScan([`${projectRoot.replace(/\/+$/, "")}/plans`]);
     const ids = new Set<string>();
-    for (const f of scan.files ?? []) for (const id of anchorsOf(f.text ?? "")) ids.add(id);
+    // openspec 步驟不進這個集合：`N.M` 是位置編號不是鑄造 id，存在驗證
+    // 對它只會製造「編輯 tasks.md 就打回未治理」的新版反向計分——
+    // openspec subject 由 isGoverned 以形狀認定（Grok C7 裁決）。
+    for (const f of scan.files ?? []) {
+      if (f.kind === "openspec") continue;
+      for (const id of anchorsOf(f.text ?? "")) ids.add(id);
+    }
     return ids;
   } catch {
     return new Set();

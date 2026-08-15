@@ -9,7 +9,7 @@
  * 放 tests/ 而非 src/ 的理由同 tracking-bridge.test.ts：tsconfig 的 include 是 `src/**`。
  */
 import { describe, expect, test } from "bun:test";
-import { pendingUatsFrom } from "../src/lib/uat-pending";
+import { attributePendingUats, openFixesFrom, pendingUatsFrom } from "../src/lib/uat-pending";
 import type { ScannedPlan } from "../src/lib/tracking-bridge";
 
 /** 一份最小的實測報告。verdicts 逐題給，長度就是題數。 */
@@ -91,5 +91,370 @@ describe("pendingUatsFrom", () => {
 
   test("空清單不會爆", () => {
     expect(pendingUatsFrom([])).toEqual([]);
+  });
+});
+
+describe("重測輪次 supersede（W2-3）", () => {
+  const OLD = "uat-舊輪.md";
+  const NEW = "uat-新輪.md";
+  const supersedeLine = (p: string) => `> 重測自：${p}\n`;
+
+  function reportWithPreamble(title: string, preamble: string, verdicts: string[]): string {
+    const base = report(title, verdicts);
+    // preamble 插在狀態行之後、第一題之前
+    return base.replace("**狀態：** 進行中\n", `**狀態：** 進行中\n\n${preamble}`);
+  }
+
+  test("新一輪指到舊報告 → 舊報告踢出待辦，新報告留著", () => {
+    const oldFile = file(OLD, report("舊輪", ["未測", "未測"]));
+    const newFile = file(
+      NEW,
+      reportWithPreamble("新輪", supersedeLine(`/w/proj/plans/${OLD}`), ["未測"]),
+    );
+    const got = pendingUatsFrom([oldFile, newFile]);
+    expect(got.map((x) => x.name)).toEqual([NEW]);
+  });
+
+  test("取代者自己已測完，舊報告一樣被踢——新一輪存在即取代", () => {
+    const oldFile = file(OLD, report("舊輪", ["未測"]));
+    const newFile = file(
+      NEW,
+      reportWithPreamble("新輪", supersedeLine(`/w/proj/plans/${OLD}`), ["通過"]),
+    );
+    expect(pendingUatsFrom([oldFile, newFile]).map((x) => x.name)).toEqual([]);
+  });
+
+  test("/tmp 與 /private/tmp 指同一份檔 → 仍然對得上", () => {
+    const oldFile = file(OLD, report("舊輪", ["未測"]), {
+      path: `/private/tmp/proj/plans/${OLD}`,
+    });
+    const newFile = file(
+      NEW,
+      reportWithPreamble("新輪", supersedeLine(`/tmp/proj/plans/${OLD}`), ["未測"]),
+    );
+    expect(pendingUatsFrom([oldFile, newFile]).map((x) => x.name)).toEqual([NEW]);
+  });
+
+  test("NFD 路徑（macOS 檔案系統回報）對 NFC 標記 → 仍然對得上", () => {
+    const nfdName = "uat-é.md"; // e + 結合重音（NFD）
+    const nfcName = "uat-é.md"; // é 合成形（NFC）
+    const oldFile = file(nfdName, report("舊輪", ["未測"]), {
+      path: `/w/proj/plans/${nfdName}`,
+    });
+    const newFile = file(
+      NEW,
+      reportWithPreamble("新輪", supersedeLine(`/w/proj/plans/${nfcName}`), ["未測"]),
+    );
+    expect(pendingUatsFrom([oldFile, newFile]).map((x) => x.name)).toEqual([NEW]);
+  });
+
+  test("標記指到不存在的檔 → 不影響任何現存報告", () => {
+    const a = file("uat-a.md", report("A", ["未測"]));
+    const b = file(
+      NEW,
+      reportWithPreamble("新輪", supersedeLine("/w/proj/plans/uat-不存在.md"), ["未測"]),
+    );
+    expect(pendingUatsFrom([a, b]).map((x) => x.name).sort()).toEqual([NEW, "uat-a.md"].sort());
+  });
+
+  test("沒有標記 → 兩輪並存都算待辦（現狀行為，不誤殺）", () => {
+    const a = file("uat-a.md", report("A", ["未測"]));
+    const b = file("uat-b.md", report("B", ["未測"]));
+    expect(pendingUatsFrom([a, b]).length).toBe(2);
+  });
+});
+
+/**
+ * 跨專案歸屬（W2-1）。
+ *
+ * 收件匣現在掃全部專案，所以每一列都得回答「這是誰家的報告」——
+ * 答不出來的話，使用者看到的是一排來歷不明的標題。歸屬只靠 rootPath 前綴，
+ * 與 tracking 頁的 `alignProjectForUat` 同一條規則：兩邊分岔的症狀是
+ * 「總覽說這是 A 專案的，點進去卻切到 B」。
+ */
+describe("attributePendingUats（W2-1 跨專案歸屬）", () => {
+  const uat = (path: string): ReturnType<typeof pendingUatsFrom>[number] => ({
+    path,
+    name: path.split("/").pop()!,
+    title: "某份報告",
+    closed: 0,
+    total: 1,
+    mtimeMs: 1000,
+  });
+
+  const ref = (id: string, name: string, rootPath?: string) => ({ id, name, rootPath });
+
+  test("依 rootPath 前綴歸屬，其餘欄位原封不動", () => {
+    const list = [uat("/w/beta/plans/uat-b.md")];
+    const got = attributePendingUats(list, [
+      ref("a", "阿爾法", "/w/alpha"),
+      ref("b", "貝塔", "/w/beta"),
+    ]);
+    expect(got[0]!.projectId).toBe("b");
+    expect(got[0]!.projectName).toBe("貝塔");
+    // 歸屬只加欄位，不重算進度／標題 —— 那些是 pendingUatsFrom 的責任
+    expect(got[0]!.path).toBe("/w/beta/plans/uat-b.md");
+    expect(got[0]!.total).toBe(1);
+  });
+
+  test("前綴對不到任何專案 → 兩個欄位都留空", () => {
+    // 留空而不是猜一個：猜錯的專案名會讓人以為報告屬於別人，比沒有名字更糟。
+    const got = attributePendingUats(
+      [uat("/somewhere/else/plans/uat-x.md")],
+      [ref("a", "阿爾法", "/w/alpha")],
+    );
+    expect(got[0]!.projectId).toBeUndefined();
+    expect(got[0]!.projectName).toBeUndefined();
+  });
+
+  test("兄弟目錄不誤判：/w/alpha 吃不到 /w/alpha-2 的報告", () => {
+    // 純字串 startsWith(root) 會讓前綴相同的鄰居互相吃單，所以比的是 `root + "/"`。
+    const got = attributePendingUats(
+      [uat("/w/alpha-2/plans/uat-x.md")],
+      [ref("a", "阿爾法", "/w/alpha"), ref("a2", "阿爾法二號", "/w/alpha-2")],
+    );
+    expect(got[0]!.projectId).toBe("a2");
+  });
+
+  test("巢狀專案取最長的相符 root，不看陣列順序", () => {
+    // monorepo 底下再匯入子專案時會出現這種配置。取第一個相符的話，
+    // 歸屬會變成「看 store 裡誰先被匯入」—— 等於隨機。
+    const got = attributePendingUats(
+      [uat("/w/mono/sub/plans/uat-x.md")],
+      [ref("mono", "母專案", "/w/mono"), ref("sub", "子專案", "/w/mono/sub")],
+    );
+    expect(got[0]!.projectId).toBe("sub");
+  });
+
+  test("rootPath 尾端有斜線也對得上", () => {
+    const got = attributePendingUats(
+      [uat("/w/alpha/plans/uat-x.md")],
+      [ref("a", "阿爾法", "/w/alpha//")],
+    );
+    expect(got[0]!.projectId).toBe("a");
+  });
+
+  test("NFD 報告路徑對 NFC 專案根目錄 → 仍然對得上", () => {
+    // 掃描回來的路徑來自檔案系統（macOS 慣用 NFD），專案根目錄來自匯入時
+    // 存進 store 的字串。兩邊正規化形式不同時，症狀是「明明是這個專案的報告，
+    // 卻沒有專案名」—— 沒有錯誤訊息，只是欄位空著。
+    const nfd = "/w/資料é夾/plans/uat-x.md"; // e + 結合重音
+    const nfc = "/w/資料é夾"; // é 合成形
+    const got = attributePendingUats([uat(nfd)], [ref("a", "重音專案", nfc)]);
+    expect(got[0]!.projectId).toBe("a");
+  });
+
+  test("/private/tmp 報告對 /tmp 專案根目錄 → 仍然對得上", () => {
+    // 與 supersede 過濾用的是同一條正規化，理由也同一個：symlink 走不走
+    // 決定於誰產生那個字串，而使用者不該為此看到一份沒有歸屬的報告。
+    const got = attributePendingUats(
+      [uat("/private/tmp/proj/plans/uat-x.md")],
+      [ref("a", "臨時專案", "/tmp/proj")],
+    );
+    expect(got[0]!.projectId).toBe("a");
+  });
+
+  test("沒綁資料夾的專案不會吃掉任何報告", () => {
+    const got = attributePendingUats(
+      [uat("/w/alpha/plans/uat-x.md")],
+      [ref("noroot", "沒綁資料夾"), ref("a", "阿爾法", "/w/alpha")],
+    );
+    expect(got[0]!.projectId).toBe("a");
+  });
+
+  test("空專案清單 → 全部留空，不會爆", () => {
+    const got = attributePendingUats([uat("/w/alpha/plans/uat-x.md")], []);
+    expect(got).toHaveLength(1);
+    expect(got[0]!.projectName).toBeUndefined();
+  });
+
+  test("不改動傳進來的陣列與元素（純函式）", () => {
+    const list = [uat("/w/alpha/plans/uat-x.md")];
+    attributePendingUats(list, [ref("a", "阿爾法", "/w/alpha")]);
+    expect(list[0]!.projectId).toBeUndefined();
+  });
+
+  test("與 supersede 過濾串起來：活下來的那份帶著正確專案名", () => {
+    // 兩段各自對，串起來錯，是最難查的一種：badge 的數字對得上，
+    // 但列上的專案名是被取代那一輪的。
+    const OLD = "uat-舊輪.md";
+    const oldFile = file(OLD, report("舊輪", ["未測"]), {
+      path: `/w/beta/plans/${OLD}`,
+    });
+    const newText = report("新輪", ["未測"]).replace(
+      "**狀態：** 進行中\n",
+      `**狀態：** 進行中\n\n> 重測自：/w/beta/plans/${OLD}\n`,
+    );
+    const newFile = file("uat-新輪.md", newText, { path: "/w/beta/plans/uat-新輪.md" });
+
+    const got = attributePendingUats(pendingUatsFrom([oldFile, newFile]), [
+      ref("a", "阿爾法", "/w/alpha"),
+      ref("b", "貝塔", "/w/beta"),
+    ]);
+    expect(got).toHaveLength(1);
+    expect(got[0]!.title).toBe("新輪");
+    expect(got[0]!.projectName).toBe("貝塔");
+  });
+});
+
+describe("待修視圖 openFixesFrom（W2-4）", () => {
+  function reportWithFail(title: string, opts: { failNote?: string; extra?: string[] } = {}): string {
+    return [
+      `# UAT: ${title}`,
+      "",
+      "**狀態：** 進行中",
+      "",
+      ...(opts.extra ?? []),
+      "## T1 失敗的題 <!-- anc:t=FA240001 -->",
+      "",
+      "**流程：**",
+      "1. 步",
+      "",
+      "**預期：**",
+      "果",
+      "",
+      "**結果：** 失敗",
+      "",
+      "**說明：**",
+      opts.failNote ?? "壞掉的原因",
+      "",
+      "## T2 通過的題 <!-- anc:t=PA550001 -->",
+      "",
+      "**流程：**",
+      "1. 步",
+      "",
+      "**預期：**",
+      "果",
+      "",
+      "**結果：** 通過",
+      "",
+      "**說明：**",
+      "（無）",
+      "",
+    ].join("\n");
+  }
+
+  test("只收失敗題；通過／未測不列", () => {
+    const got = openFixesFrom([file("uat-a.md", reportWithFail("A"))]);
+    expect(got.length).toBe(1);
+    expect(got[0]!.itemTitle).toContain("失敗的題");
+    expect(got[0]!.note).toBe("壞掉的原因");
+  });
+
+  test("已收工（全題已結）的報告，失敗題仍算欠修——收工結束的是測試輪不是債", () => {
+    // 全題已結（失敗＋通過）→ 報告推導為已完成，但失敗題還在
+    const got = openFixesFrom([file("uat-b.md", reportWithFail("B"))]);
+    expect(got.length).toBe(1);
+  });
+
+  test("被 supersede 的報告整檔退場——以最新一輪為準", () => {
+    const oldFile = file("uat-old.md", reportWithFail("舊輪"));
+    const newFile = file(
+      "uat-new.md",
+      reportWithFail("新輪", { extra: ["> 重測自：/w/proj/plans/uat-old.md", ""] }),
+    );
+    const got = openFixesFrom([oldFile, newFile]);
+    expect(got.length).toBe(1);
+    expect(got[0]!.name).toBe("uat-new.md");
+  });
+
+  test("attributePendingUats 泛型化後也能歸屬待修列", () => {
+    const got = attributePendingUats(
+      openFixesFrom([file("uat-a.md", reportWithFail("A"))]),
+      [{ id: "p1", name: "專案一", rootPath: "/w/proj" }],
+    );
+    expect(got[0]!.projectId).toBe("p1");
+    expect(got[0]!.projectName).toBe("專案一");
+  });
+});
+
+describe("supersede 循環防護（Grok C1）", () => {
+  const sup = (p: string) => `> 重測自：${p}\n`;
+  function withPre(title: string, preamble: string, verdicts: string[]): string {
+    return report(title, verdicts).replace("**狀態：** 進行中\n", `**狀態：** 進行中\n\n${preamble}`);
+  }
+
+  test("自指（複製檔忘了改標記）不會讓報告消失", () => {
+    const a = file("uat-a.md", withPre("A", sup("/w/proj/plans/uat-a.md"), ["未測"]));
+    expect(pendingUatsFrom([a]).map((x) => x.name)).toEqual(["uat-a.md"]);
+  });
+
+  test("互指（A 重測自 B、B 重測自 A）視為並存，兩份都留著", () => {
+    const a = file("uat-a.md", withPre("A", sup("/w/proj/plans/uat-b.md"), ["未測"]));
+    const b = file("uat-b.md", withPre("B", sup("/w/proj/plans/uat-a.md"), ["未測"]));
+    expect(pendingUatsFrom([a, b]).length).toBe(2);
+  });
+
+  test("正常單向鏈行為不變：舊的退場", () => {
+    const a = file("uat-a.md", report("A", ["未測"]));
+    const b = file("uat-b.md", withPre("B", sup("/w/proj/plans/uat-a.md"), ["未測"]));
+    expect(pendingUatsFrom([a, b]).map((x) => x.name)).toEqual(["uat-b.md"]);
+  });
+
+  test("三角循環不會全滅", () => {
+    const a = file("uat-a.md", withPre("A", sup("/w/proj/plans/uat-b.md"), ["未測"]));
+    const b = file("uat-b.md", withPre("B", sup("/w/proj/plans/uat-c.md"), ["未測"]));
+    const c = file("uat-c.md", withPre("C", sup("/w/proj/plans/uat-a.md"), ["未測"]));
+    // 三角互殺下每份都被「別人」指到且不構成互指——單向規則會全滅。
+    // 防護的最低要求：至少留一份，不能零。
+    expect(pendingUatsFrom([a, b, c]).length).toBeGreaterThan(0);
+  });
+});
+
+describe("Cato 收尾釘子", () => {
+  test("Cato-02：無錨點的失敗題不進待修（改判不了、清不掉），債留在報告檔", () => {
+    const text = [
+      "# UAT: 混合",
+      "",
+      "**狀態：** 進行中",
+      "",
+      "## T1 無錨點的失敗題",
+      "",
+      "**流程：**",
+      "1. 步",
+      "",
+      "**預期：**",
+      "果",
+      "",
+      "**結果：** 失敗",
+      "",
+      "**說明：**",
+      "原因",
+      "",
+      "## T2 有錨點的失敗題 <!-- anc:t=CAT20002 -->",
+      "",
+      "**流程：**",
+      "1. 步",
+      "",
+      "**預期：**",
+      "果",
+      "",
+      "**結果：** 失敗",
+      "",
+      "**說明：**",
+      "原因",
+      "",
+    ].join("\n");
+    const got = openFixesFrom([file("uat-mixed.md", text)]);
+    expect(got.length).toBe(1);
+    expect(got[0]!.itemId).toBe("CAT20002");
+  });
+
+  test("Cato-10：兩個視圖對同一組 files 的 supersede 過濾一致（成員資格本就不同：待實測看未測、待修看失敗）", () => {
+    // 新報告一題失敗一題未測 → 同時具備進兩個視圖的資格；舊報告同樣資格
+    // 但被 supersede——兩個視圖都必須把它踢掉。
+    const both = (title: string, pre = "") =>
+      report(title, ["失敗", "未測"]).replace("**狀態：** 進行中\n", `**狀態：** 進行中\n\n${pre}`);
+    const oldF = file("uat-old.md", both("舊"));
+    const newF = file("uat-new.md", both("新", "> 重測自：/w/proj/plans/uat-old.md\n"));
+    const files = [oldF, newF];
+    expect(pendingUatsFrom(files).map((x) => x.name)).toEqual(["uat-new.md"]);
+    expect([...new Set(openFixesFrom(files).map((x) => x.name))]).toEqual(["uat-new.md"]);
+  });
+
+  test("Cato-03 前提：取代者不在掃描集裡 → 舊報告不被過濾（呼叫端必須餵全集）", () => {
+    const oldF = file("uat-old.md", report("舊", ["失敗"]));
+    // 取代者存在於世界上，但不在這次掃描的 files 裡
+    expect(openFixesFrom([oldF]).length).toBe(1);
   });
 });

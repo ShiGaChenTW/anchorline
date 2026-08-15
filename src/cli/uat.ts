@@ -11,10 +11,12 @@ type CliOptions = {
   specSource: string;
   root: string;
   noOpen: boolean;
+  /** 重測：被本輪取代的舊報告路徑，寫進檔頭 `> 重測自：` */
+  supersedes: string | null;
 };
 
 const USAGE =
-  "用法：bun src/cli/uat.ts --spec <file.json|-> --root <projectRoot> [--no-open]";
+  "用法：bun src/cli/uat.ts --spec <file.json|-> --root <projectRoot> [--supersedes <舊報告路徑>] [--no-open]";
 
 function fail(message: string): never {
   console.error(message);
@@ -38,13 +40,41 @@ function formatMinuteSlug(at: Date): string {
   return `${at.getFullYear()}${pad2(at.getMonth() + 1)}${pad2(at.getDate())}-${pad2(at.getHours())}${pad2(at.getMinutes())}`;
 }
 
+const FILE_NAME_DANGER_RE = /[\u0000-\u001F\u007F/\\:*?"<>|]+/g;
+// 只折 ASCII 大寫是刻意的：全 Unicode 的 .toLowerCase() 會把土耳其文 İ 拆出
+// 結合附加符號等驚喜；非 ASCII 大寫（É、Ω）原樣進檔名。代價（Cato-09）：
+// 只差大小寫的非 ASCII 標題在 APFS（大小寫不敏感）上依 existsSync 撞名邏輯
+// 處理，與 ASCII 標題的折疊行為不同源——接受，撞名後綴 -2 仍會兜住。
+const ASCII_UPPER_RE = /[A-Z]/g;
+const WHITESPACE_RE = /\s+/gu;
+const DUPLICATE_HYPHEN_RE = /-+/g;
+// 句點不在一般危險字元清單裡，但頭尾句點會把報告變成隱藏檔，`.` / `..` 甚至不是合法 stem。
+const EDGE_DOTS_AND_HYPHENS_RE = /^[.-]+|[.-]+$/g;
+// APFS 的單一路徑元件上限是 255 個字元（不是位元組——120 個中文字／360 bytes 實測會過）。
+// 扣掉 `uat-` 前綴與 `.md` 副檔名，再留一段給撞名時的 `-2`/`-3` 後綴。
+// 這條上限在中文放行之前碰不到：舊行為把 CJK 一律刷成時間戳，永遠是 13 個字元。
+// 不截斷的症狀是 writeFileSync 丟 ENAMETOOLONG、CLI 帶著原始 stack trace 中止——
+// 而這支 CLI 其他每一條錯誤路徑都是走 fail() 的可讀訊息。
+const MAX_SLUG_CHARS = 240;
+
 function slugOfTitle(title: string): string {
-  return title
-    .replace(/[^\x00-\x7F]+/g, " ")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-+/g, "-");
+  const cleaned = title
+    .replace(FILE_NAME_DANGER_RE, "")
+    .trim()
+    .replace(ASCII_UPPER_RE, (char) => char.toLowerCase())
+    .replace(WHITESPACE_RE, "-")
+    .replace(DUPLICATE_HYPHEN_RE, "-")
+    .replace(EDGE_DOTS_AND_HYPHENS_RE, "");
+
+  // 用碼位切而不是 .slice()：.slice() 數的是 UTF-16 單元，會把代理對（emoji、
+  // 罕用漢字）從中間劈開，留下半個字元的亂碼。
+  return Array.from(cleaned)
+    .slice(0, MAX_SLUG_CHARS)
+    .join("")
+    // 截斷可能剛好停在連字號或句點上，收尾要再修一次。
+    .replace(EDGE_DOTS_AND_HYPHENS_RE, "")
+    // NFC 必須放最後，才能讓 handoff 寫出的路徑與之後掃回來的路徑收斂成同一組位元組。
+    .normalize("NFC");
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -54,6 +84,7 @@ function parseArgs(argv: string[]): CliOptions {
   // 那句「App 會顯示這份報告」對一條永遠不會被掃到的路徑是假話。
   let root: string | null = null;
   let noOpen = false;
+  let supersedes: string | null = null;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -72,6 +103,14 @@ function parseArgs(argv: string[]): CliOptions {
       i++;
       continue;
     }
+    if (arg === "--supersedes") {
+      const value = argv[i + 1];
+      if (!value || value.startsWith("--"))
+        fail(`${USAGE}\n--supersedes 後面必須接被取代舊報告的路徑。`);
+      supersedes = value;
+      i++;
+      continue;
+    }
     if (arg === "--no-open") {
       noOpen = true;
       continue;
@@ -81,7 +120,17 @@ function parseArgs(argv: string[]): CliOptions {
 
   if (specSource === null) fail(`${USAGE}\n缺少必填參數 --spec。`);
   if (root === null) fail(`${USAGE}\n缺少必填參數 --root（被測專案的根目錄，報告會寫進它的 plans/）。`);
-  return { specSource, root: resolve(root), noOpen };
+  // 相對路徑對 **--root** 解析，不是對 cwd（Grok C2）：這支 CLI 自己的註解
+  // 就警告過「agent 常常站在 Anchorline repo 卻要替別的專案出題」——cwd
+  // 解析會寫出一條指向錯 repo 的合理絕對路徑，舊報告永遠留在待辦且零報錯。
+  const rootAbs = resolve(root);
+  const supAbs =
+    supersedes === null
+      ? null
+      : isAbsolute(supersedes)
+        ? supersedes
+        : resolve(rootAbs, supersedes);
+  return { specSource, root: rootAbs, noOpen, supersedes: supAbs };
 }
 
 function readSpecText(specSource: string): string {
@@ -169,6 +218,15 @@ function main(): void {
   const now = new Date();
   const specText = readSpecText(opts.specSource);
   const spec = parseSpec(specText, opts.specSource === "-" ? "stdin" : resolve(opts.specSource));
+  // 旗標優先於 spec 內欄位：出題的是 skill，知道「這是重測」的是叫 CLI 的那一端。
+  // 存在驗證在這裡做：指向不存在的檔案代表叫錯路徑，寫進檔頭只會製造
+  // 「永遠比不中」的無聲失敗——寧可當場擋下。
+  if (opts.supersedes) {
+    if (!existsSync(opts.supersedes)) {
+      fail(`--supersedes 指向不存在的檔案：${opts.supersedes}`);
+    }
+    spec.supersedes = opts.supersedes;
+  }
   const reportPath = nextReportPath(opts.root, spec.title, now);
   const report = serializeUatReport(spec, { now: formatLocalMinute(now) });
   writeFileSync(reportPath, report);

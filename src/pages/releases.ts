@@ -670,20 +670,44 @@ document.getElementById("rl-new")?.addEventListener("click", () => {
     return;
   }
 
-  // 層級決定取號要過哪一道閘門，所以建立時就要選
-  const pick = prompt(
-    [
-      "這一版動哪一段？（vX.YY.ZZ）",
-      "",
-      `1 = X  ${LEVEL_BLURB.major}`,
-      `2 = YY ${LEVEL_BLURB.minor}`,
-      `3 = ZZ ${LEVEL_BLURB.patch}`,
-    ].join("\n"),
-    "3",
-  );
-  if (pick === null) return;
-  const level: ReleaseLevel = pick.trim() === "1" ? "major" : pick.trim() === "2" ? "minor" : "patch";
+  // 層級決定取號要過哪一道閘門，所以建立時就要選。
+  // 選擇做在**頁面裡的三顆按鈕**，不用 window.prompt（Grok C11）：
+  // prompt 是系統面板——js_dialogs 補丁失效或舊 build 時 `pick===null`
+  // 直接 return，症狀是「按了零回饋」（2026-08-15 dogfood 實測踩到）；
+  // 對 agent 自動化也完全不可及。與「確認放行做在卡片裡」同一條原則。
+  toggleLevelPick();
+});
 
+function toggleLevelPick() {
+  const existing = document.getElementById("rl-level-pick");
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  const btn = document.getElementById("rl-new");
+  if (!btn) return;
+  const box = document.createElement("div");
+  box.id = "rl-level-pick";
+  box.className = "rl-level-pick";
+  box.setAttribute("role", "group");
+  box.setAttribute("aria-label", "這一版動哪一段");
+  const LEVELS: ReleaseLevel[] = ["patch", "minor", "major"];
+  box.innerHTML = LEVELS.map(
+    (lv) => `<button type="button" class="btn btn-sm" data-level="${lv}"
+       title="${LEVEL_BLURB[lv]}">${LEVEL_SEGMENT[lv]}｜${LEVEL_LABEL[lv]}</button>`,
+  ).join("");
+  box.querySelectorAll<HTMLButtonElement>("[data-level]").forEach((b) => {
+    b.onclick = () => {
+      box.remove();
+      mintAtLevel(b.dataset["level"] as ReleaseLevel);
+    };
+  });
+  btn.insertAdjacentElement("afterend", box);
+}
+
+function mintAtLevel(level: ReleaseLevel) {
+  const p = activeProject();
+  if (!p) return;
   const r = store.createRelease(p.id, level);
   // 建議版號放進欄位讓人改 —— 建議不是自動指定，最終決定仍然是使用者的
   const prev = lastVersionOf(p.id, store.releasesOf(p.id).filter((x) => x.id !== r.id));
@@ -692,7 +716,7 @@ document.getElementById("rl-new")?.addEventListener("click", () => {
   void loadOpenspecChanges();
   render();
   (document.getElementById("rl-version") as HTMLInputElement | null)?.focus();
-});
+}
 
 /**
  * 讀 openspec change 的名稱與完成度。
