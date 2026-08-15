@@ -386,7 +386,10 @@ if (__authed) {
     list.querySelectorAll(".btn-withdraw").forEach((btn) => {
       (btn as HTMLButtonElement).onclick = () => {
         const id = (btn as HTMLElement).dataset.id!;
-        const reason = prompt("抽單原因", "需求變更／管理者抽單") ?? "";
+        // `?? ""` 會把 prompt 的 null 吃掉，讓下一行的守衛變成死分支——桌面殼裡
+        // prompt() 恆回 null（wry 的 WKWebView delegate 缺口），於是「取消」與
+        // 「對話框根本沒出現」都會直接抽單、理由被 store 補成預設值。留 null 給守衛擋。
+        const reason = prompt("抽單原因", "需求變更／管理者抽單");
         if (reason === null) return;
         const r = store.withdrawCase(id, reason);
         toast(r.ok ? "已抽單" : r.reason ?? "失敗");
