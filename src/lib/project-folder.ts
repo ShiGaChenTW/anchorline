@@ -16,6 +16,7 @@ import { store } from "../data/store";
 import { isNative, native } from "./native";
 import { classifyPath } from "./folder-import";
 import { toast } from "./ui";
+import { escapeHtml } from "./ask";
 
 export function isDesktopApp(): boolean {
   return isNative();
@@ -126,14 +127,6 @@ export function askForProjectFolder(projectId: string, projectTitle: string) {
     back.remove();
     pickProjectFolder(projectId);
   });
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 // ponytail: 綁定只寫 sourceFolder + allPaths，不跑 folder-import 的評分流程。
