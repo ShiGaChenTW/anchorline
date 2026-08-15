@@ -716,12 +716,16 @@ async function goToSection(id: string): Promise<boolean> {
 }
 
 /**
- * 換章節但不攔截 —— 給「使用者剛剛主動要求、換章節只是其後果」的路徑用。
+ * 換章節但不攔截。⚠️ 無條件清掉 openFile，呼叫前要確定那是你要的。
  *
- * 存在的理由是 render() 裡的插入範本那一段：在渲染過程中冒出「要放棄變更嗎？」
- * 問的是使用者沒做過的決定，而且 goToSection() 的回傳值在那裡本來就被忽略——
- * 按取消也照樣 toast「已插入」。與其讓對話框出現在 render 路徑上，不如承認
- * 那條路徑本來就不該問。同步，沒有 async 傳染。
+ * 唯一的呼叫點是模組層級的「插入待處理範本」那一段（render() 之後）。那裡是
+ * 初始化時跑一次，`openFile` 必為 null（唯一的賦值點在 openFileInEditor，需要
+ * 使用者先開檔），所以實務上它跟 goToSection() 等價、不會少問任何一次。
+ *
+ * 之所以不直接用 goToSection()：那會讓 async 傳染到模組層級的初始化路徑，
+ * 為了一個永遠不會觸發的確認框付出全域代價。
+ *
+ * 但這個函式本身沒有守門 —— 對任何 openFile 可能非空的呼叫點，用 goToSection()。
  */
 function switchSectionForced(id: string) {
   openFile = null;
@@ -733,7 +737,7 @@ async function openFileInEditor(path: string) {
     toast("在編輯欄開檔需要桌面版 App");
     return;
   }
-  if (!confirmLeaveFile()) return;
+  if (!(await confirmLeaveFile())) return;
   const label = document.getElementById("sec-label");
   if (label) label.textContent = "讀取中…";
   try {
