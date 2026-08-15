@@ -16,6 +16,7 @@
  */
 import { store } from "../data/store";
 import type { Project } from "../data/types";
+import { askConfirm } from "../lib/ask";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import {
   buildChangeFiles,
@@ -446,8 +447,8 @@ if (requireAuth()) {
     const btn = el("os-init-run") as HTMLButtonElement;
     const warn = el("os-init-warn");
     if (
-      !confirm(
-        [
+      !(await askConfirm({
+        title: [
           `要在「${projectDisplayName(p!)}」執行 openspec init 嗎？`,
           "",
           `它會在 ${root} 底下建立 openspec/ 骨架。`,
@@ -455,10 +456,10 @@ if (requireAuth()) {
           "這是這個 App 唯一會寫進你專案資料夾的動作。",
           "不想要的話刪掉那個資料夾就還原了。",
         ].join("\n"),
-      )
-    ) {
+        danger: true,
+      }))
+    )
       return;
-    }
     btn.disabled = true;
     if (warn) warn.textContent = "執行中…";
     try {
@@ -574,7 +575,7 @@ if (requireAuth()) {
     const root = p?.importSummary?.rootPath;
     const line = el("os-ai-snap");
     if (!root) return;
-    if (snapState.at && !confirm("要重新讀一次整個專案資料夾，產出新的分析報告嗎？（舊的會留著）")) return;
+    if (snapState.at && !(await askConfirm({ title: "要重新讀一次整個專案資料夾，產出新的分析報告嗎？（舊的會留著）" }))) return;
     const btn = el("os-ai-scan") as HTMLButtonElement;
     btn.disabled = true;
     if (line) line.textContent = "讀取整個專案資料夾中…";

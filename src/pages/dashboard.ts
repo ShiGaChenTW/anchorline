@@ -11,6 +11,7 @@
  */
 import { store } from "../data/store";
 import { projectDisplayName, type Project } from "../data/types";
+import { askConfirm } from "../lib/ask";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import {
   aiSuggestions,
@@ -731,11 +732,11 @@ if (!requireAuth()) {
     const policyBtn = document.getElementById("d-policy-strict");
     if (policyBtn && policyBtn.dataset.bound !== "1") {
       policyBtn.dataset.bound = "1";
-      policyBtn.addEventListener("click", () => {
+      policyBtn.addEventListener("click", async () => {
         // 兩段確認：這個決定不可逆，而不可逆的動作值得一次刻意的停頓
         if (
-          !confirm(
-            [
+          !(await askConfirm({
+            title: [
               `「${projectDisplayName(p!)}」的版號要改採 vX.YY.ZZ。`,
               "",
               "之後取號會多三道閘門：",
@@ -746,10 +747,10 @@ if (!requireAuth()) {
               "這個選擇不能改回來。已經用這套發出去的版號帶著上面的保證，",
               "退回去之後那些保證沒有東西背書。",
             ].join("\n"),
-          )
-        ) {
+            danger: true,
+          }))
+        )
           return;
-        }
         const r = store.setVersionPolicy(p!.id, "strict");
         toast(r.ok ? "已改採 vX.YY.ZZ" : (r.reason ?? "切換失敗"));
         if (r.ok) void load(true);

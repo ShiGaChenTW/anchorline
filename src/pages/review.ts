@@ -1,6 +1,7 @@
 import { store } from "../data/store";
 import type { Comment, Section } from "../data/types";
 import { projectDisplayName } from "../data/types";
+import { askText } from "../lib/ask";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
 import { fieldNo } from "../lib/field-number";
@@ -786,7 +787,7 @@ document.getElementById("btn-post")?.addEventListener("click", () => {
   render();
 });
 
-document.getElementById("btn-approve")?.addEventListener("click", () => {
+document.getElementById("btn-approve")?.addEventListener("click", async () => {
   if (store.get().locked) return;
   const prdGate = evaluatePrdGates(store.get(), store.activeGateSpec());
   if (!prdGate.canApprove) {
@@ -799,10 +800,7 @@ document.getElementById("btn-approve")?.addEventListener("click", () => {
   // 逐關標成「以管理員身分代簽」。舊行為是 admin 按一次就靜默把所有未簽關卡
   // 吃掉，畫面看不出來、紀錄只有一筆。四眼原則要的是看得到，不是做不到。
   if (!r.ok && store.get().currentUser.accessRole === "admin") {
-    const reason = window.prompt(
-      "沒有你自己負責的關卡。要以管理員身分代簽其餘關卡嗎？\n請寫理由（會逐關留在簽核紀錄裡）：",
-      "",
-    );
+    const reason = await askText({ title: "沒有你自己負責的關卡。要以管理員身分代簽其餘關卡嗎？\n請寫理由（會逐關留在簽核紀錄裡）：", value: "" });
     if (reason === null) return;
     if (!reason.trim()) {
       toast("代簽一定要寫理由");

@@ -2,6 +2,7 @@ import { store } from "../data/store";
 import { planApply, seedValuesFromTemplate, sectionsFromTemplate, splitTemplate } from "../lib/prd-template";
 import { templateKind } from "../data/types";
 import type { Section, Template, TemplateCat, TemplateKind } from "../data/types";
+import { askConfirm, askText } from "../lib/ask";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { canEditContent } from "../lib/permissions";
 import { initTheme } from "../lib/theme";
@@ -316,11 +317,11 @@ function bindTemplateRowActions(host: Element) {
     };
   });
   host.querySelectorAll(".btn-del-tpl").forEach((btn) => {
-    (btn as HTMLButtonElement).onclick = (e) => {
+    (btn as HTMLButtonElement).onclick = async (e) => {
       e.stopPropagation();
       const id = (btn as HTMLElement).dataset.delId!;
       const tpl = getTemplates().find((t) => t.id === id);
-      if (tpl && confirm(`確定要移除範本「${tpl.title}」嗎？`)) {
+      if (tpl && (await askConfirm({ title: `確定要移除範本「${tpl.title}」嗎？`, danger: true }))) {
         store.deleteTemplate(id);
         toast(`已移除範本「${tpl.title}」`);
       }
@@ -588,8 +589,8 @@ function openPackEditor(name: string) {
   openModal("dp-modal");
 }
 
-function openPackCreator() {
-  const name = prompt("新領域包的識別碼（英數與底線，例：insurance）：", "my_domain");
+async function openPackCreator() {
+  const name = await askText({ title: "新領域包的識別碼（英數與底線，例：insurance）：", value: "my_domain" });
   if (!name) return;
   editingPack = null;
   const ta = dpEl<HTMLTextAreaElement>("dp-raw");
@@ -631,11 +632,11 @@ dpEl("dp-save")?.addEventListener("click", async () => {
   render();
 });
 
-dpEl("dp-delete")?.addEventListener("click", () => {
+dpEl("dp-delete")?.addEventListener("click", async () => {
   if (!editingPack) return;
   const used = projectsUsing(editingPack.name);
   const warn = used ? `\n\n目前有 ${used} 個專案在用這個領域，移除後會退回通用章節（內容不會消失）。` : "";
-  if (!confirm(`確定要移除領域包「${editingPack.name}」嗎？${warn}`)) return;
+  if (!(await askConfirm({ title: `確定要移除領域包「${editingPack.name}」嗎？${warn}`, danger: true }))) return;
   const r = removePack(editingPack.name);
   if (!r.ok) {
     dpStatus(r.reason, "err");
@@ -694,9 +695,9 @@ document.getElementById("q")?.addEventListener("input", (e) => {
 
 document.getElementById("m-close")?.addEventListener("click", () => closeModal("modal"));
 
-document.getElementById("m-delete")?.addEventListener("click", () => {
+document.getElementById("m-delete")?.addEventListener("click", async () => {
   if (!current) return;
-  if (confirm(`確定要移除範本「${current.title}」嗎？`)) {
+  if (await askConfirm({ title: `確定要移除範本「${current.title}」嗎？`, danger: true })) {
     store.deleteTemplate(current.id);
     closeModal("modal");
     toast(`已一鍵移除「${current.title}」`);
@@ -740,7 +741,7 @@ document.getElementById("m-insert")?.addEventListener("click", (e) => {
   location.href = "editor.html";
 });
 
-document.getElementById("btn-custom")?.addEventListener("click", () => {
+document.getElementById("btn-custom")?.addEventListener("click", async () => {
   if (kind === "domain") {
     openPackCreator();
     return;
@@ -748,13 +749,10 @@ document.getElementById("btn-custom")?.addEventListener("click", () => {
   // 建在哪一種、哪一類，跟著當下看的分頁走 —— 使用者在「整份」分頁按新增，
   // 結果東西掉進「章節」分頁看不見，是最容易發生的困惑
   const isFull = kind === "full";
-  const title = prompt("請輸入自訂範本標題：", isFull ? "新的整份 PRD 骨架" : "新自訂章節骨架");
+  const title = await askText({ title: "請輸入自訂範本標題：", value: isFull ? "新的整份 PRD 骨架" : "新自訂章節骨架" });
   if (!title) return;
-  const blurb = prompt("請輸入範本簡介：", isFull ? "自訂的整份 PRD 章節結構" : "用於加速撰寫自訂區塊內容");
-  const body = prompt(
-    "請輸入 Markdown 內容草稿：",
-    isFull ? "# [文件標題]\n\n## 1. 問題\n…\n\n## 2. 提案\n…\n\n## 3. 成功指標\n…" : "## 自訂段落\n- **項目 1：** ...\n- **項目 2：** ...",
-  );
+  const blurb = await askText({ title: "請輸入範本簡介：", value: isFull ? "自訂的整份 PRD 章節結構" : "用於加速撰寫自訂區塊內容" });
+  const body = await askText({ title: "請輸入 Markdown 內容草稿：", value: isFull ? "# [文件標題]\n\n## 1. 問題\n…\n\n## 2. 提案\n…\n\n## 3. 成功指標\n…" : "## 自訂段落\n- **項目 1：** ...\n- **項目 2：** ..." });
   if (title && body) {
     const fallbackCat = KIND_CATS[kind][0];
     const tpl: Template = {

@@ -16,6 +16,7 @@
 import { store, evaluateChecks } from "../data/store";
 import { projectDisplayName, type Project, type Section } from "../data/types";
 import { domainPacks } from "../data/domains";
+import { askConfirm } from "../lib/ask";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { getAiReadiness, writeFullPrd } from "../lib/ai-coach";
 import { openOptimizeWorkbench } from "../lib/ai-optimize";
@@ -268,11 +269,11 @@ if (!requireAuth()) {
         })
         .join("");
       listEl.querySelectorAll<HTMLInputElement>("[data-sec]").forEach((cb) => {
-        cb.onchange = () => {
+        cb.onchange = async () => {
           const sec = all.find((x) => x.id === cb.dataset.sec)!;
           if (cb.checked && sectionHasContent(sec)) {
             // 勾了已有內容的章節就問一次 —— 覆寫掉的是使用者自己寫的東西
-            if (!confirm(`「${sec.n} ${sec.title}」已經有內容。要讓 AI 覆寫嗎？`)) {
+            if (!(await askConfirm({ title: `「${sec.n} ${sec.title}」已經有內容。要讓 AI 覆寫嗎？`, danger: true }))) {
               cb.checked = false;
               return;
             }
@@ -297,10 +298,10 @@ if (!requireAuth()) {
       };
       document.getElementById("awp-close")!.onclick = () => done(null);
       document.getElementById("awp-cancel")!.onclick = () => done(null);
-      document.getElementById("awp-all")!.onclick = () => {
+      document.getElementById("awp-all")!.onclick = async () => {
         // 全選會包含已有內容的章節，所以整批問一次而不是逐節問
         const filled = all.filter(sectionHasContent);
-        if (filled.length && !confirm(`其中 ${filled.length} 節已經有內容，要一起覆寫嗎？`)) {
+        if (filled.length && !(await askConfirm({ title: `其中 ${filled.length} 節已經有內容，要一起覆寫嗎？`, danger: true }))) {
           all.filter((s) => !sectionHasContent(s)).forEach((s) => chosen.add(s.id));
         } else {
           all.forEach((s) => chosen.add(s.id));
@@ -315,7 +316,7 @@ if (!requireAuth()) {
       scanBtn.onclick = async () => {
         if (!root) return;
         // 已經有報告就問一次 —— 讀整個資料夾要花時間，而且會多一份檔案
-        if (snapState.at && !confirm("要重新讀一次整個專案資料夾，產出新的分析報告嗎？（舊的會留著）")) return;
+        if (snapState.at && !(await askConfirm({ title: "要重新讀一次整個專案資料夾，產出新的分析報告嗎？（舊的會留著）" }))) return;
         scanBtn.disabled = true;
         line.textContent = "讀取整個專案資料夾中…";
         const r = await makeSnapshot(root, projectDisplayName(p!));

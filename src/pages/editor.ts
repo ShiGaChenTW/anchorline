@@ -6,6 +6,7 @@ import {
   isAiConfigured,
   polishTextWithAI,
 } from "../lib/ai-coach";
+import { askConfirm, askText } from "../lib/ask";
 import { evaluateChecks, liveScore, store } from "../data/store";
 import { CUSTOM_SECTION_ID } from "../data/seed";
 import type { Project, Section } from "../data/types";
@@ -571,21 +572,21 @@ function renderOutline() {
   };
 
   el.querySelectorAll<HTMLButtonElement>("[data-sec-rename]").forEach((btn) => {
-    btn.onclick = (e) => {
+    btn.onclick = async (e) => {
       e.stopPropagation();
       const id = btn.dataset.secRename!;
       const cur = sections().find((x) => x.id === id);
       if (!cur) return;
-      const n = window.prompt(`章節編號（現在是 ${cur.n}）`, cur.n);
+      const n = await askText({ title: `章節編號（現在是 ${cur.n}）`, value: cur.n });
       if (n === null) return;
-      const title = window.prompt(`章節標題（現在是 ${cur.title}）`, cur.title);
+      const title = await askText({ title: `章節標題（現在是 ${cur.title}）`, value: cur.title });
       if (title === null) return;
       structOp(() => store.renameSection(id, { n, title }), "已改章節");
     };
   });
 
   el.querySelectorAll<HTMLButtonElement>("[data-sec-del]").forEach((btn) => {
-    btn.onclick = (e) => {
+    btn.onclick = async (e) => {
       e.stopPropagation();
       const id = btn.dataset.secDel!;
       const cur = sections().find((x) => x.id === id);
@@ -594,33 +595,33 @@ function renderOutline() {
         id === CUSTOM_SECTION_ID
           ? "\n\n之後插入章節範本時它會自動回來（範本段落沒有別的落點）。"
           : "";
-      if (!window.confirm(`刪掉「${cur.n} ${cur.title}」整節？這一節已經寫的內容會一起刪掉。${extra}`)) return;
+      if (!(await askConfirm({ title: `刪掉「${cur.n} ${cur.title}」整節？這一節已經寫的內容會一起刪掉。${extra}`, danger: true }))) return;
       structOp(() => store.removeSection(id), "已刪掉整節");
     };
   });
 
   el.querySelectorAll<HTMLButtonElement>("[data-fld-rename]").forEach((btn) => {
-    btn.onclick = (e) => {
+    btn.onclick = async (e) => {
       e.stopPropagation();
       const sid = btn.dataset.fldRename!;
       const key = btn.dataset.key!;
       const sec = sections().find((x) => x.id === sid);
       const f = sec?.fields.find((x) => x.key === key);
       if (!sec || !f) return;
-      const label = window.prompt(`子章節名稱（現在是 ${numberedFieldLabel(sec, key)}）`, f.label);
+      const label = await askText({ title: `子章節名稱（現在是 ${numberedFieldLabel(sec, key)}）`, value: f.label });
       if (label === null) return;
       structOp(() => store.renameField(sid, key, label), "已改子章節");
     };
   });
 
   el.querySelectorAll<HTMLButtonElement>("[data-fld-del]").forEach((btn) => {
-    btn.onclick = (e) => {
+    btn.onclick = async (e) => {
       e.stopPropagation();
       const sid = btn.dataset.fldDel!;
       const key = btn.dataset.key!;
       const sec = sections().find((x) => x.id === sid);
       if (!sec?.fields.find((x) => x.key === key)) return;
-      if (!window.confirm(`刪掉子章節「${numberedFieldLabel(sec, key)}」？裡面的內容會一起刪掉。`)) return;
+      if (!(await askConfirm({ title: `刪掉子章節「${numberedFieldLabel(sec, key)}」？裡面的內容會一起刪掉。`, danger: true }))) return;
       structOp(() => store.removeField(sid, key), "已刪掉子章節");
     };
   });
@@ -1001,11 +1002,11 @@ function renderFileView(): boolean {
   const refreshHist = () => {
     histPanel.innerHTML = snapshotListHtml(openFile!.path);
     histPanel.querySelectorAll<HTMLButtonElement>("[data-fv-restore]").forEach((b) => {
-      b.addEventListener("click", () => {
+      b.addEventListener("click", async () => {
         const snaps = loadSnapshots(openFile!.path);
         const sn = snaps[Number(b.dataset.fvRestore)];
         if (!sn) return;
-        if (!window.confirm(`要把編輯區還原成 ${relativeTime(sn.at)} 的內容嗎？（還原後仍需按儲存才會寫回磁碟）`))
+        if (!(await askConfirm({ title: `要把編輯區還原成 ${relativeTime(sn.at)} 的內容嗎？（還原後仍需按儲存才會寫回磁碟）`, danger: true })))
           return;
         ta.value = sn.text;
         renderHighlightBackdrop();
@@ -1208,8 +1209,8 @@ function renderSaveBar(s: Section): void {
 
   document.getElementById("btn-sec-save")?.addEventListener("click", () => saveCurrentSection());
   document.getElementById("btn-sec-save-all")?.addEventListener("click", () => saveAllSections());
-  document.getElementById("btn-sec-discard")?.addEventListener("click", () => {
-    if (!window.confirm(`捨棄「${s.title}」未儲存的變更？改回上次儲存的內容。`)) return;
+  document.getElementById("btn-sec-discard")?.addEventListener("click", async () => {
+    if (!(await askConfirm({ title: `捨棄「${s.title}」未儲存的變更？改回上次儲存的內容。`, danger: true }))) return;
     store.discardDrafts(s.id);
     toast("已捨棄未儲存的變更");
     render();
@@ -1870,7 +1871,7 @@ document.getElementById("btn-next")?.addEventListener("click", () => {
   }
 });
 
-document.getElementById("btn-submit")?.addEventListener("click", () => {
+document.getElementById("btn-submit")?.addEventListener("click", async () => {
   if (!editable()) {
     toast("目前身分無法送出編輯成果");
     return;
@@ -1880,7 +1881,7 @@ document.getElementById("btn-submit")?.addEventListener("click", () => {
   // 審閱者核准的東西跟作者以為送出的東西不同，而兩邊都不會發現。
   const dirty = store.dirtySectionIds().length;
   if (dirty) {
-    if (!window.confirm(`還有 ${dirty} 個章節未儲存。要先全部儲存再送審嗎？`)) {
+    if (!(await askConfirm({ title: `還有 ${dirty} 個章節未儲存。要先全部儲存再送審嗎？` }))) {
       toast("已取消送審 —— 未儲存的內容不會被包含進去");
       return;
     }
