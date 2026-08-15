@@ -169,29 +169,48 @@ function openDialog(
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
+        e.stopImmediatePropagation();
         finish("cancel");
         return;
       }
       // danger 時 Enter 不得觸發確認（預設焦點在取消，避免誤刪）。
       if (e.key === "Enter" && !danger) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         finish("confirm");
         return;
       }
-      if (e.key === "Tab") trapFocus(e, back);
+      if (e.key === "Tab") {
+        trapFocus(e, back);
+        return;
+      }
+      // 其餘按鍵一律不外流：對話框是 modal，頁面熱鍵不該在它開著時作用。
+      e.stopImmediatePropagation();
     };
 
-    document.addEventListener("keydown", onKeyDown);
+    // 捕獲階段 + stopImmediatePropagation：原生 confirm()/prompt() 會阻塞事件迴圈、
+    // 把鍵盤事件整個吞掉，頁面層級的監聽器根本收不到。頁內對話框沒有這個副作用，
+    // 所以不擋的話，開著對話框時 Escape 會同時被 bindModalDismiss（ui.ts:49 的
+    // document 層級監聽）收到而關掉背後的面板，頁面熱鍵（review.ts 的 r、
+    // templates.ts 的 /）也會把焦點搶到對話框後面去。preventDefault() 擋不住
+    // 同一個 target 上的兄弟監聽器，只有 stopImmediatePropagation 可以。
+    document.addEventListener("keydown", onKeyDown, true);
     back.querySelector('[data-dlg="ok"]')?.addEventListener("click", () => finish("confirm"));
     back.querySelectorAll('[data-dlg="cancel"]').forEach((el) => {
       el.addEventListener("click", () => finish("cancel"));
     });
 
-    const focusTarget = danger
-      ? back.querySelector<HTMLElement>('footer [data-dlg="cancel"]') ??
-        back.querySelector<HTMLElement>('[data-dlg="cancel"]')
-      : back.querySelector<HTMLElement>('[data-dlg="ok"]');
+    // 文字輸入一律把焦點放進輸入框並選取既有內容 —— 對齊原生 prompt() 的行為。
+    // 少了這一條，帶預設值的 askText 會把焦點停在「確認」上：使用者看不到游標，
+    // 一個 Enter 就把預設值送出去。抽單理由那種地方，那等於沒問就執行。
+    const focusTarget = input
+      ? input
+      : danger
+        ? back.querySelector<HTMLElement>('footer [data-dlg="cancel"]') ??
+          back.querySelector<HTMLElement>('[data-dlg="cancel"]')
+        : back.querySelector<HTMLElement>('[data-dlg="ok"]');
     focusTarget?.focus();
+    if (input) input.select();
   });
 }
 

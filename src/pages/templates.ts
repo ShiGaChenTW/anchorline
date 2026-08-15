@@ -743,7 +743,7 @@ document.getElementById("m-insert")?.addEventListener("click", (e) => {
 
 document.getElementById("btn-custom")?.addEventListener("click", async () => {
   if (kind === "domain") {
-    openPackCreator();
+    await openPackCreator();
     return;
   }
   // 建在哪一種、哪一類，跟著當下看的分頁走 —— 使用者在「整份」分頁按新增，
