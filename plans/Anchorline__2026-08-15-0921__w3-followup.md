@@ -126,4 +126,43 @@ Grok 的工作是挑這個判斷的毛病，不是背書。
 
 ## 結束摘要
 
-（未完成）
+**做了什麼**：W3 剩餘帳全數落地並推上 `origin/main`（`1ba052c`）。
+
+| commit | 內容 |
+|---|---|
+| `3ee1f6f` | **抽單 fail-open 修復（P0）**——`admin.ts:389` 的 `?? ""` 讓下一行的 null 守衛變死分支，桌面殼裡按抽單會零確認零輸入直接執行、理由被 store 補成預設值寫進簽核紀錄 |
+| `1947544` | W3-3 願景欄位進 gate（warn 級，兩條短路串接） |
+| `757422e` | W3-1b 狀態列建置識別碼 |
+| `1ba052c` | W3-1a `bun run app:install` 交易式一鍵換裝 |
+
+閘門：tsc 綠、`bun test` **1191**（基準 1126：+5 W3-3、+14 W3-1b、+46 W3-1a，加總逐項對得上）、
+`bunx vite build` 綠。合併後**重驗一次**（agent 各自驗的是自己的樹，合併才是可能互撞的地方）。
+建置識別碼的注入值從 `dist/assets/status-bar-*.js` 產物抓出來確認為 `757422e`——正好是當時的
+merge commit，證明它跟著 HEAD 走而非寫死。
+
+**四個 agent、四個 worktree、零衝突**。Grok 覆核打穿計劃書三處 updater 事實錯誤並攻下 PM 判斷的
+一半（新開 W3-1b）；唯讀盤點挖出 34 處對話框與其中唯一的 fail-open。
+
+**未完成／留下輪**：
+- **34 處原生對話框遷移**——四批計劃已排好，**批次 1 含 `dashboard.ts:670`（UAT 第 9 題受測物），
+  等 Scott 勾完才能動手**。四筆需個案設計的要他點頭
+- `docs/NEXT-VERSION-PLAN.md:42` 的 updater 三處事實錯誤**尚未回填**；
+  `vendor/markamd/AGENTS.md:19` 的誤導源**尚未加免責註記**
+- W3-1c updater＋Apple 簽章（降 P3，觸發條件寫死）
+- 緩辦帳：Grok C12/C13、CATO-05、mtime 快取、覆蓋率 N× 掃描
+- dogfood 摩擦②「worktree commit 不在候選」
+
+**欠的驗證（誠實列）**：
+- **本輪四筆視覺驗證一筆都沒做**——Interceptor 擴充資料面卡死（控制面正常、preflight 會過）。
+  已全數出成 11 題交 Scott 實測（`plans/uat-建置識別碼與願景-gate-視覺驗收.md`）
+- W3-1b **沒跑過完整 `tauri build`**，只跑前端半段；登入頁與 onboarding 頁沒有建置識別碼
+  （`requireAuth()` 對這兩頁提早 return）
+- W3-1a 的 build 失敗中止路徑、SIGTERM→SIGKILL 升級路徑**沒被真的觸發過**
+
+**兩個 tsc 盲點（今天各踩一次，值得進下一版檢查清單）**：`strict: true` 抓不到
+`string === null` 的死比較；`tsconfig.json` 的 `include` 只有 `src/**/*.ts`，
+`vite.config.ts` 不在型別檢查範圍內。**綠燈的涵蓋範圍比想像小。**
+
+**Agent 派工教訓**：Forge 的 codex 額度用盡到 2026-08-20，它沒有靜默降級而是明講改由
+Claude-family 自己寫——但「換認知血統降低共同盲點」的價值沒實現，8/20 前要跨廠商第二眼
+改派 Anvil（Kimi-family）。另：追加需求要趁早，本輪 7 條補充送達時 agent 已收工、得再打一輪。
