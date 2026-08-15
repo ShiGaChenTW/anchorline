@@ -27,19 +27,15 @@ export interface AskTextOptions extends AskOptions {
   placeholder?: string;
 }
 
+// escapeHtml 的單一擁有者是 ui.ts（早於本檔存在）。規格原本要求在這裡再寫一份，
+// 那會讓 repo 裡的複本從四份變五份 —— 已改為直接沿用。
+import { escapeHtml } from "./ui";
+
 type AskKind = "confirm" | "text" | "alert";
 type AskOutcome = "confirm" | "cancel";
 
 let dialogOpen = false;
 let dialogSeq = 0;
-
-export function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 export function resolveLabels(
   opts: AskOptions,

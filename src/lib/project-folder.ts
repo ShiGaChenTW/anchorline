@@ -15,8 +15,7 @@
 import { store } from "../data/store";
 import { isNative, native } from "./native";
 import { classifyPath } from "./folder-import";
-import { toast } from "./ui";
-import { escapeHtml } from "./ask";
+import { escapeHtml, toast } from "./ui";
 
 export function isDesktopApp(): boolean {
   return isNative();

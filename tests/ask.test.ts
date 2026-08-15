@@ -1,6 +1,6 @@
 import { test, expect, describe, afterEach } from "bun:test";
+import { escapeHtml } from "../src/lib/ui";
 import {
-  escapeHtml,
   acquireDialogLock,
   releaseDialogLock,
   isDialogOpen,
