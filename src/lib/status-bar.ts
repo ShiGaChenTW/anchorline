@@ -4,6 +4,7 @@
  */
 import { store } from "../data/store";
 import { projectDisplayName } from "../data/types";
+import { formatBuildStamp, resolveBuildInfo } from "./build-info";
 import { evaluatePrdGates, gateSummaryLine } from "./prd-gates";
 import { detectRailPage, type RailPage } from "./rail-nav";
 import { escapeHtml } from "./ui";
@@ -41,6 +42,58 @@ const STATUS_MAP: Record<string, { label: string; tone: string }> = {
 let ephemeral: { text: string; until: number } | null = null;
 let clockTimer: ReturnType<typeof setInterval> | null = null;
 let bound = false;
+
+/**
+ * 建置識別碼。整個 App 生命週期內是常數 —— 建置期就固定了，算一次即可。
+ */
+const BUILD = resolveBuildInfo();
+const BUILD_STAMP = formatBuildStamp(BUILD);
+
+/**
+ * 「我現在跑的是哪一份 build」。
+ *
+ * 放狀態列最右邊而不是設定頁：要在 3 秒內看到，而且不能為它多開一頁。狀態列是
+ * 唯一由 `requireAuth()` 注入、17 個 HTML 進入點共用的區塊，寫一次就全站都有。
+ *
+ * `#app-build-stamp` 與 `data-build-*` 是對外契約：Scott 用選取複製貼進 bug 報告，
+ * 自動化驗證則直接讀屬性，不必去 parse 顯示字串。
+ */
+function buildStampHtml(): string {
+  const title = `建置識別：${BUILD_STAMP}（點一下複製）`;
+  return `<span
+    class="app-status-build mono"
+    id="app-build-stamp"
+    title="${escapeHtml(title)}"
+    data-build-stamp="${escapeHtml(BUILD_STAMP)}"
+    data-build-version="${escapeHtml(BUILD.version)}"
+    data-build-commit="${escapeHtml(BUILD.commit)}"
+    data-build-dirty="${BUILD.dirty ? "true" : "false"}"
+    data-build-time="${escapeHtml(BUILD.builtAt)}"
+  >${escapeHtml(BUILD_STAMP)}</span>`;
+}
+
+/**
+ * 點一下複製建置識別碼。
+ *
+ * 用 document 事件委派：`renderStatusBar()` 每次 store 變動都重寫 `innerHTML`，
+ * 掛在節點上的 listener 下一次 render 就跟著節點一起消失了。
+ */
+function bindBuildStampCopy() {
+  document.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement | null;
+    if (!target?.closest("#app-build-stamp")) return;
+    // 沒有 clipboard API（非安全來源、舊 webview）就明講，不要假裝複製成功 ——
+    // 使用者會直接去貼上，貼到的是上一次剪貼簿的內容
+    if (!navigator.clipboard?.writeText) {
+      setStatusMessage("此環境無法存取剪貼簿，請手動選取複製");
+      return;
+    }
+    navigator.clipboard.writeText(BUILD_STAMP).then(
+      () => setStatusMessage(`已複製建置識別：${BUILD_STAMP}`),
+      () => setStatusMessage("複製失敗，請手動選取複製"),
+    );
+  });
+}
 
 function activeProject() {
   const st = store.get();
@@ -126,6 +179,7 @@ export function renderStatusBar(): void {
     <div class="app-status-right">
       <span class="app-status-user" title="${escapeHtml(user.title || "")}">${escapeHtml(user.name)} · ${escapeHtml(role)}</span>
       <span class="app-status-clock mono" id="app-status-clock">${clockText()}</span>
+      ${buildStampHtml()}
     </div>
   `;
 }
@@ -150,6 +204,7 @@ export function initStatusBar(): void {
 
   if (!bound) {
     bound = true;
+    bindBuildStampCopy();
     store.subscribe(() => renderStatusBar());
     if (clockTimer) clearInterval(clockTimer);
     clockTimer = setInterval(() => {
