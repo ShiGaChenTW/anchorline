@@ -722,6 +722,24 @@ html[data-theme="terminal"] body {
   color: var(--meta);
   font-variant-numeric: tabular-nums;
 }
+/*
+ * 建置識別碼（版號 · commit · build 時間）。沿用時鐘那一組字級與顏色 token，
+ * 不新增任何顏色／字級常數 —— 這一塊不碰主題系統的四層註冊。
+ *
+ * `user-select: text` 是必要的覆寫，不是裝飾：`.app-status-bar` 整條設了
+ * `user-select: none`，少了這一行就選不起來，而這串字存在的理由就是要被複製
+ * 貼進 bug 報告。少了它畫面看起來完全正常，只有實際去拖曳才會發現。
+ */
+.app-status-build {
+  flex-shrink: 0;
+  font-size: var(--fs-1);
+  color: var(--meta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-user-select: text;
+  user-select: text;
+}
 html.adhd-calm .app-status-bar {
   min-height: 30px;
   padding: 5px 14px;
