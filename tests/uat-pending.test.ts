@@ -9,7 +9,17 @@
  * 放 tests/ 而非 src/ 的理由同 tracking-bridge.test.ts：tsconfig 的 include 是 `src/**`。
  */
 import { describe, expect, test } from "bun:test";
-import { attributePendingUats, openFixesFrom, pendingUatsFrom } from "../src/lib/uat-pending";
+import {
+  attributePendingUats,
+  invalidateUatScan,
+  loadUatScan,
+  openFixesFrom,
+  pendingUatsFrom,
+  rollupPendingUats,
+  uatRollupText,
+  type PendingUat,
+} from "../src/lib/uat-pending";
+import type { UatVerdict } from "../src/lib/uat-parser";
 import type { ScannedPlan } from "../src/lib/tracking-bridge";
 
 /** 一份最小的實測報告。verdicts 逐題給，長度就是題數。 */
@@ -456,5 +466,184 @@ describe("Cato 收尾釘子", () => {
     const oldF = file("uat-old.md", report("舊", ["失敗"]));
     // 取代者存在於世界上，但不在這次掃描的 files 裡
     expect(openFixesFrom([oldF]).length).toBe(1);
+  });
+});
+
+/**
+ * 合計列的算術 —— **總覽彙總列與歡迎畫面共用的同一支**。它錯的話兩個曝光面
+ * 一起說謊，而且說的是同一個謊，看起來很像是對的。
+ *
+ * 只餵 `PendingUat[]`（不碰檔案、不碰橋）：合計的分母本來就只該從
+ * `pendingUatsFrom` 的輸出來，測試用同一條邊界。
+ */
+describe("rollupPendingUats", () => {
+  /** 一份報告的合計素材。`v` 是逐題結果，長度就是題數。 */
+  const u = (v: UatVerdict[], i = 0): PendingUat => {
+    const verdicts: Partial<Record<UatVerdict, number>> = {};
+    for (const x of v) verdicts[x] = (verdicts[x] ?? 0) + 1;
+    return {
+      path: `/w/proj/plans/uat-${i}.md`,
+      name: `uat-${i}.md`,
+      title: `報告 ${i}`,
+      closed: v.filter((x) => x !== "pending").length,
+      total: v.length,
+      verdicts,
+      mtimeMs: 1000,
+    };
+  };
+
+  test("空陣列 → 全 0，pct 是 0 而不是 NaN", () => {
+    expect(rollupPendingUats([])).toEqual({
+      reports: 0,
+      open: 0,
+      later: 0,
+      closed: 0,
+      total: 0,
+      pct: 0,
+      truncated: false,
+    });
+  });
+
+  test("單份：open 只數「未測」", () => {
+    expect(rollupPendingUats([u(["pass", "pending", "pending"])])).toMatchObject({
+      reports: 1,
+      open: 2,
+      closed: 1,
+      total: 3,
+      pct: 33,
+    });
+  });
+
+  test("多份：題數跨報告相加，pct 用總題數算而不是各份平均", () => {
+    // 各份 pct 是 100% 與 0%，取平均會得到 50%；正解是 1/11 ≈ 9%
+    const got = rollupPendingUats([
+      u(["pass"], 0),
+      u(["pending", "pending", "pending", "pending", "pending", "pending", "pending", "pending", "pending", "pending"], 1),
+    ]);
+    expect(got).toMatchObject({ reports: 2, open: 10, closed: 1, total: 11, pct: 9 });
+  });
+
+  test("一題都沒有的報告不會讓 pct 變成 NaN", () => {
+    expect(rollupPendingUats([u([])])).toMatchObject({
+      reports: 1,
+      open: 0,
+      closed: 0,
+      total: 0,
+      pct: 0,
+    });
+    // 混進正常報告時，它只貢獻份數
+    expect(rollupPendingUats([u([], 0), u(["pass", "fail", "pending", "pending"], 1)])).toMatchObject(
+      { reports: 2, open: 2, closed: 2, total: 4, pct: 50 },
+    );
+  });
+
+  test("待修（fail）不算進 open —— 已判失敗的題不是「還沒勾」", () => {
+    expect(rollupPendingUats([u(["fail", "fail", "pending"])]).open).toBe(1);
+  });
+
+  test("「暫時跳過」另列，不併進 open —— 收工不該讓合計歸零", () => {
+    // 一份報告按過「本輪收工」：剩餘未測題全被標成 later
+    const got = rollupPendingUats([u(["pass", "later", "later"])]);
+    expect(got.open).toBe(0);
+    expect(got.later).toBe(2);
+    const t = uatRollupText(got);
+    expect(t.lead).toBe("每題都勾完了");
+    expect(t.skipped).toBe("另有 2 題暫時跳過");
+  });
+
+  test("零題暫時跳過 → skipped 是空字串，呼叫端整段不渲染", () => {
+    expect(uatRollupText(rollupPendingUats([u(["pending"])])).skipped).toBe("");
+  });
+
+  test("分母可換：把 later 也算成未完成時，三個曝光面一起跟上", () => {
+    const list = [u(["pass", "later", "pending"])];
+    expect(rollupPendingUats(list).open).toBe(1);
+    expect(rollupPendingUats(list, { openVerdicts: ["pending", "later"] }).open).toBe(2);
+  });
+
+  test("truncated 由呼叫端傳入，預設 false —— 沒問到就不要無中生有一個警告", () => {
+    expect(rollupPendingUats([u(["pending"])]).truncated).toBe(false);
+    expect(rollupPendingUats([u(["pending"])], { truncated: true }).truncated).toBe(true);
+  });
+
+  test("量詞與動詞跟「待修 N 題」錯開：沒勾＝還沒判過", () => {
+    const t = uatRollupText(
+      rollupPendingUats([u(["pass", "pass", "pass", "pass", "pending", "pending", "pending", "pending", "pending", "pending"])]),
+    );
+    expect(t.lead).toBe("還有 6 題沒勾");
+    expect(t.detail).toBe("共 10 題 · 已勾 40%");
+  });
+
+  test("每題都判完但報告還沒收工 → 不說「還有 0 題沒勾」", () => {
+    const t = uatRollupText(rollupPendingUats([u(["pass", "fail", "wont"])]));
+    expect(t.lead).toBe("每題都勾完了");
+    expect(t.detail).toBe("共 3 題 · 已勾 100%");
+  });
+
+  test("同一份合計不會因為呼叫端不同而變 —— 三個曝光面吃同一支", () => {
+    const list = [u(["pass", "pending"], 0), u(["fail", "later"], 1)];
+    expect(rollupPendingUats(list)).toEqual(rollupPendingUats(list));
+  });
+
+  test("pendingUatsFrom 產出的 verdicts 能直接餵給合計（兩支不會分岔）", () => {
+    // 端到端：報告原文 → pendingUatsFrom → rollupPendingUats
+    const out = pendingUatsFrom([file("uat-e2e.md", report("端到端", ["通過", "未測", "失敗"]))]);
+    const got = rollupPendingUats(out);
+    expect(got).toMatchObject({ reports: 1, open: 1, later: 0, closed: 2, total: 3, pct: 67 });
+  });
+});
+
+/**
+ * 共用掃描快取。**沒有 mock 橋** —— 測試環境 `canScanPlans()` 為假（不是桌面版），
+ * 那條路徑本來就不碰橋，正好是可以誠實驗證的部分：
+ *
+ * - 非桌面版兩個視圖都回空（不是回 0 份的假資料）
+ * - 同一組目錄的重複呼叫拿到**同一個 Promise**（五個曝光面 = 一次請求）
+ * - 換目錄或失效之後不再共用
+ *
+ * ⚠️ 沒被這裡覆蓋的：真的過橋那條路徑（回傳合併、truncated 透傳、失敗不入快取）。
+ * 那需要桌面環境或 mock 整個橋，兩者都不在這次範圍。
+ */
+describe("loadUatScan（共用掃描快取）", () => {
+  test("非桌面版：兩個視圖都回空，truncated 是 false", async () => {
+    invalidateUatScan();
+    const scan = await loadUatScan(["/w/alpha/plans"]);
+    expect(scan).toEqual({ pending: [], fixes: [], truncated: false });
+  });
+
+  test("同一組目錄 → 同一個 Promise（並發的五個呼叫端只會有一次請求）", () => {
+    invalidateUatScan();
+    const a = loadUatScan(["/w/alpha/plans", "/w/beta/plans"]);
+    const b = loadUatScan(["/w/alpha/plans", "/w/beta/plans"]);
+    expect(a).toBe(b);
+  });
+
+  test("目錄順序不同但集合相同 → 仍然共用（key 前先排序）", () => {
+    invalidateUatScan();
+    const a = loadUatScan(["/w/alpha/plans", "/w/beta/plans"]);
+    const b = loadUatScan(["/w/beta/plans", "/w/alpha/plans"]);
+    expect(a).toBe(b);
+  });
+
+  test("換了目錄集合就重掃", () => {
+    invalidateUatScan();
+    const a = loadUatScan(["/w/alpha/plans"]);
+    const b = loadUatScan(["/w/gamma/plans"]);
+    expect(a).not.toBe(b);
+  });
+
+  test("失效之後不再共用 —— 勾完一題重掃拿到的不是勾之前那一份", () => {
+    invalidateUatScan();
+    const a = loadUatScan(["/w/alpha/plans"]);
+    invalidateUatScan();
+    const b = loadUatScan(["/w/alpha/plans"]);
+    expect(a).not.toBe(b);
+  });
+
+  test("空目錄清單回空，且不會與非空清單共用同一個結果", () => {
+    invalidateUatScan();
+    const a = loadUatScan([]);
+    const b = loadUatScan(["/w/alpha/plans"]);
+    expect(a).not.toBe(b);
   });
 });

@@ -31,12 +31,15 @@ import { coverageLine, rollupCoverage } from "../lib/governance";
 import { canReadCoverage, requestCoverage, type CoverageResult } from "../lib/governance-bridge";
 import {
   attributePendingUats,
-  loadOpenFixes,
-  loadPendingUats,
+  loadUatScan,
+  rollupPendingUats,
+  uatRollupText,
+  UAT_SUM_TITLE,
+  UAT_TRUNCATED_NOTE,
   type OpenFix,
   type PendingUat,
 } from "../lib/uat-pending";
-import { plansDirsOfAll } from "../lib/tracking-bridge";
+import { uatScanDirs } from "../lib/tracking-bridge";
 import { trackingUrlFor } from "../lib/uat-handoff";
 
 if (!requireAuth()) {
@@ -469,7 +472,7 @@ if (!requireAuth()) {
    * 待實測的報告 —— **跨專案的收件匣**。等人動手的事，不是等 agent 的事：
    * 這一頁其餘每一格講的都是「專案怎麼樣」，只有這一區的下一步在使用者身上。
    *
-   * 掃**全部**專案（`plansDirsOfAll`），不是當前選取的那個。收件匣的意義正是
+   * 掃**全部**專案（`uatScanDirs`），不是當前選取的那個。收件匣的意義正是
    * 在人還沒切到那個專案時就告訴他有事 —— agent 幫 B 專案出的實測題，人正在
    * A 專案工作時如果這裡看不到，那份報告就只剩喚醒導頁那一次曝光機會。
    *
@@ -477,16 +480,27 @@ if (!requireAuth()) {
    * 零份時整區不渲染 —— 一個永遠寫著「0 份」的空殼只是在首屏多佔一塊位置。
    */
   let pendingUats: PendingUat[] = [];
+  /** 掃描撞到 300 檔上限。合計被截斷就不是「全部」了，畫面要講出來 */
+  let uatTruncated = false;
 
   function cardPendingUat(): string {
     if (!pendingUats.length) return "";
     const activeId = store.get().activeProjectId;
+    // 逐份列表之上的一行合計：先回答「全部專案加起來還剩幾題」，再讓人決定
+    // 要不要逐列掃。分母沿用同一份 pendingUats，不重掃、不重算 supersede。
+    const roll = rollupPendingUats(pendingUats, { truncated: uatTruncated });
+    const sum = uatRollupText(roll);
     // W2-5 診斷（2026-08-15，AX 實機）：這一列在 AX 樹是真 button、名稱由內容
     // 完整算出（「W1-1 … 0/2 已結 0% 開報告」），title 沒有蓋掉名稱——計劃裡
     // 「AX 看不到」的症狀在現行 build 不可重現，不修不存在的 bug。原本掛著的
     // .ov-uat 沒有任何 CSS 規則對應（死 class），移除。
     return `<section class="ov-others">
       <p class="ov-others-head">待實測 ${pendingUats.length} 份</p>
+      <p class="ov-others-sum" title="${escapeHtml(UAT_SUM_TITLE)}">全部專案合計　<strong>${sum.lead}</strong>${sum.detail}${
+        // 「暫時跳過」另列：零題整段不渲染，有題就一定看得見 ——
+        // 收工按下去之後那批題只剩這裡看得到。
+        sum.skipped ? `　<span class="ov-sum-warn">${escapeHtml(sum.skipped)}</span>` : ""
+      }${roll.truncated ? `　<span class="ov-sum-warn">${escapeHtml(UAT_TRUNCATED_NOTE)}</span>` : ""}</p>
       <ul class="ov-rows">${pendingUats
         .map((u) => {
           const pct = u.total ? Math.round((u.closed / u.total) * 100) : 0;
@@ -549,35 +563,28 @@ if (!requireAuth()) {
     </section>`;
   }
 
-  async function loadOpenFixList(): Promise<void> {
+  /**
+   * 掃一次就好，**待實測與待修共用那一次**（`loadUatScan` 的快取讓側欄 badge
+   * 與歡迎畫面也吃同一份）。掃完才重畫 —— 空的時候整區不存在，不需要先出骨架。
+   *
+   * 專案清單用 `visibleProjects()` 而不是 `st.projects`：同頁其他區塊都濾掉
+   * 樣本專案，合計卻把它們算進去的話，那條不一致會直接被看到。掃描範圍那邊
+   * 由 `uatScanDirs` 用同一條規則濾。
+   */
+  async function loadUatLists(): Promise<void> {
     const st = store.get();
-    const list = await loadOpenFixes(plansDirsOfAll(st.projects));
-    openFixes = attributePendingUats(
-      list,
-      st.projects.map((p) => ({
-        id: p.id,
-        name: projectDisplayName(p),
-        rootPath: p.importSummary?.rootPath,
-      })),
-    );
-    if (openFixes.length) render();
-  }
-
-  /** 掃一次就好。掃完才重畫 —— 空的時候整區不存在，不需要先出一個骨架。 */
-  async function loadPendingUat(): Promise<void> {
-    const st = store.get();
-    const list = await loadPendingUats(plansDirsOfAll(st.projects));
+    const scan = await loadUatScan(uatScanDirs(st));
     // 顯示名在這裡算好再傳進去：`projectDisplayName` 的 fallback 鏈屬於
     // data/types，lib/uat-pending 不該再實作一份會分岔的版本。
-    pendingUats = attributePendingUats(
-      list,
-      st.projects.map((p) => ({
-        id: p.id,
-        name: projectDisplayName(p),
-        rootPath: p.importSummary?.rootPath,
-      })),
-    );
-    if (pendingUats.length) render();
+    const refs = visibleProjects().map((p) => ({
+      id: p.id,
+      name: projectDisplayName(p),
+      rootPath: p.importSummary?.rootPath,
+    }));
+    uatTruncated = scan.truncated;
+    pendingUats = attributePendingUats(scan.pending, refs);
+    openFixes = attributePendingUats(scan.fixes, refs);
+    if (pendingUats.length || openFixes.length) render();
   }
 
   // ── 版面 ────────────────────────────────────────────────────
@@ -821,8 +828,7 @@ if (!requireAuth()) {
   store.subscribe(() => void refreshOpenspec());
   // 載入時掃一次就好。不進 render()、不輪詢 —— 它是磁碟 I/O，而 render 會被
   // store 訂閱觸發很多次（與 PR 雷達不進 render 是同一個理由）。
-  void loadPendingUat();
-  void loadOpenFixList();
+  void loadUatLists();
   void Promise.allSettled([refreshOpenspec(), refreshGh()]).then(() => hideLoading());
   window.setInterval(() => void refreshGh(), GH_REFRESH_MS);
 }
