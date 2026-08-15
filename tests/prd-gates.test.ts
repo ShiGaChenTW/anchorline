@@ -34,6 +34,8 @@ function find(state: AppState, id: string) {
 /** 一份所有規則都通過的 baseline，供單一規則的變異測試使用 */
 const OK: Values = {
   summary: {
+    vision:
+      "登入只有密碼一道防線，企業客戶的資安審查一再卡在同一個地方。本專案在既有登入／SSO 流程上補齊第二因素，把安全性從銷售障礙變成賣點。\n\n主要功能：\n• TOTP 驗證（Authenticator App）\n• WebAuthn 安全金鑰\n• 工作區強制政策與一次性復原碼",
     what: "在登入流程加入 TOTP 與 WebAuthn 第二因素",
     who: "企業租戶管理員",
     why: "三筆待簽合約將 2FA 列為簽約前提，Q4 前必須關閉缺口",
@@ -119,6 +121,45 @@ describe("summary — 技術線選型", () => {
       const v = withSection(OK, "summary", { ...OK.summary, tech: `主路徑 TOTP + WebAuthn；${kw} 簡訊 OTP` });
       expect(find(st(v), "summary-tech-ok"), `關鍵詞「${kw}」應被接受`).toBeDefined();
     }
+  });
+});
+
+describe("summary — 功能說明與願景（W3-3：warn 級，不擋送審）", () => {
+  const vision = (v: string) => st(withSection(OK, "summary", { ...OK.summary, vision: v }));
+  const visionFindings = (v: string) =>
+    evaluatePrdGates(vision(v)).findings.filter((f) => f.id.startsWith("summary-vision"));
+
+  test("沒填 → warn（且不擋送審）", () => {
+    const fs = visionFindings("");
+    expect(fs.map((f) => f.id)).toEqual(["summary-vision-thin"]);
+    expect(fs[0].level).toBe("warn");
+    expect(evaluatePrdGates(vision("")).canSubmit).toBe(true);
+  });
+
+  test("只寫一行口號 → 仍 warn（判定不是只看有沒有字）", () => {
+    const fs = visionFindings("打造業界最好用、最值得信賴的登入體驗。");
+    expect(fs).toHaveLength(1);
+    expect(fs[0].level).toBe("warn");
+    expect(evaluatePrdGates(vision("打造業界最好用、最值得信賴的登入體驗。")).canSubmit).toBe(true);
+  });
+
+  test("敘事＋條列齊全 → 不出 warn", () => {
+    expect(visionFindings(OK.summary.vision)).toHaveLength(0);
+  });
+
+  test("敘事夠長但沒有條列 → summary-vision-outline（刻意如此：hint 要求兩者都有）", () => {
+    // 純敘事分段也算「沒有條列」——`bullets` predicate 的退回切分會放它過，
+    // 所以這條走行首符號的 match。這是有意識的取捨，不是漏判。
+    const prose =
+      "登入只有密碼一道防線，企業客戶的資安審查一再卡在同一個地方。\n\n本專案在既有登入流程上補齊第二因素，把安全性從銷售障礙變成賣點，讓合約不再卡在資安審查。";
+    expect(visionFindings(prose).map((f) => f.id)).toEqual(["summary-vision-outline"]);
+    expect(evaluatePrdGates(vision(prose)).canSubmit).toBe(true);
+  });
+
+  test("願景不影響 summary-incomplete（block 只看 what／who／why）", () => {
+    const r = evaluatePrdGates(vision(""));
+    expect(r.findings.some((f) => f.id === "summary-incomplete")).toBe(false);
+    expect(r.blocks).toBe(0);
   });
 });
 
