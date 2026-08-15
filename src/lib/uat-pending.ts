@@ -17,7 +17,7 @@
  * 只有 `loadPendingUats` 碰橋，判定本身是純函式。
  */
 import { canScanPlans, requestTrackingScan, type ScannedPlan } from "./tracking-bridge";
-import { isUatText, parseUatReport, uatProgress } from "./uat-parser";
+import { isUatText, parseUatReport, uatProgress, type UatVerdict } from "./uat-parser";
 
 export type PendingUat = {
   /** 絕對路徑。著陸網址與去重都用它 */
@@ -27,6 +27,16 @@ export type PendingUat = {
   title: string;
   closed: number;
   total: number;
+  /**
+   * 每種結果各幾題。**合計列的分母從這裡算**（見 `rollupPendingUats`）——
+   * `closed`／`total` 是給逐份進度條用的既有欄位，不動。
+   *
+   * 分開存是因為「哪些結果算未完成」是**還沒定案的政策**：`tracking.ts` 的
+   * 「本輪收工」會把剩下的未測題批次標成 `later`，那些題現在既不算未測、
+   * 又不是 `fail` 進不了待修 —— 整個 App 裡零追蹤。要把它們算回來時，改的是
+   * `rollupPendingUats` 的 `openVerdicts`，不是重新解析一次報告。
+   */
+  verdicts: Partial<Record<UatVerdict, number>>;
   mtimeMs: number;
   /**
    * 這份報告屬於哪個專案。**比不到就留空**，不猜 —— 收件匣現在掃全部專案，
@@ -144,17 +154,131 @@ export function pendingUatsFrom(files: ScannedPlan[]): PendingUat[] {
     // 被新一輪取代的檔踢出待辦。兩輪並存都算待實測的話，badge 的分母只進不出。
     if (isSuperseded(f)) continue;
     const prog = uatProgress(r);
+    const verdicts: Partial<Record<UatVerdict, number>> = {};
+    for (const it of r.items) verdicts[it.verdict] = (verdicts[it.verdict] ?? 0) + 1;
     out.push({
       path: f.path,
       name: f.name,
       title: r.title,
       closed: prog.closed,
       total: prog.total,
+      verdicts,
       mtimeMs: f.mtimeMs,
     });
   }
   // 最近動過的排前面。NaN（降級路徑沒有真實 mtime）沉底而不是把整個排序弄壞。
   return out.sort((a, b) => (b.mtimeMs || 0) - (a.mtimeMs || 0));
+}
+
+/**
+ * 全部待實測報告的合計 —— 「所有專案加起來，我還有幾題沒勾」。
+ *
+ * **分母只從 `pendingUatsFrom` 的輸出來**：不另外掃磁碟、不自己判 supersede。
+ * 理由同本檔 `uatReportsOf` 上的那條 —— 待實測與待修各算一次 supersede 曾造成
+ * 「報告從待實測消失、失敗題還掛在待修」的半套出清。第三個計數器自己算分母，
+ * 遲早跟前兩個分岔，而分岔的症狀是「上面說還有 12 題、下面逐列加起來只有 8 題」
+ * 這種沒有錯誤訊息、只會讓人不再相信那個數字的不一致。
+ *
+ * `open` 數的是 **verdict 還是 pending 的題**，與「待修」（已判失敗）互斥：
+ * 一題被判失敗的那一刻就離開 open、進入待修。兩個數字不會重複計算同一題。
+ */
+export type UatRollup = {
+  /** 幾份報告 */
+  reports: number;
+  /** 還沒勾的題數（結果落在 `openVerdicts` 裡的） */
+  open: number;
+  /**
+   * 被「本輪收工」批次標成「暫時跳過」的題數。
+   *
+   * **另列，不混進 `open`**：收工的語意是「這輪不做了」，不是「這些題不存在」。
+   * 混進去會讓收工按鈕失去意義；不顯示則會讓那批題在全 App 零追蹤 —— 一個按
+   * 一下就能清零的追蹤器比沒有追蹤器更糟，因為它會被信任。
+   */
+  later: number;
+  closed: number;
+  total: number;
+  /** 已勾百分比，0–100 整數。total 為 0 時是 0（不是 NaN，也不是 100） */
+  pct: number;
+  /** 這次掃描撞到 300 檔上限。合計被截斷時**必須講**，見 `UAT_TRUNCATED_NOTE` */
+  truncated: boolean;
+};
+
+/**
+ * 「還沒勾」＝結果仍是 `pending`（畫面上的「未測」）。**定案語意**（2026-08-15）。
+ *
+ * 「本輪收工」把剩餘未測題批次標成 `later`（「暫時跳過」）。那批題**不併進
+ * 這個分母** —— 收工的語意是「這輪不做了」，把它算成未測等於讓收工按鈕沒有
+ * 作用。它們改走 `UatRollup.later`，在合計旁另列一行。
+ *
+ * 形狀保留成可參數化的（`rollupPendingUats` 的 `openVerdicts`），但**預設值就是
+ * 這一份**：讓呼叫端各自傳參數的話，三個曝光面遲早分岔成三種分母。
+ */
+export const DEFAULT_OPEN_VERDICTS: readonly UatVerdict[] = ["pending"];
+
+/** 「暫時跳過」的結果值。另列計數用，不進 `open` */
+const LATER_VERDICT: UatVerdict = "later";
+
+/** 截斷警語。總覽與儀表板共用一句 —— 兩邊各寫一次，改的時候只會改到一邊。 */
+export const UAT_TRUNCATED_NOTE = "掃描達到 300 份上限，實際題數可能更多";
+
+/**
+ * 合計那一行的口徑說明。三個曝光面共用。
+ *
+ * ⚠️ 範圍（「全部專案」）**不能只寫在這裡** —— 側欄那個 badge 就是前車之鑑：
+ * 它的值是全部專案的份數，卻掛在「這個專案可以做的事」群組裡，範圍只寫在
+ * `title` 上，結果沒有人發現。範圍要在看得見的文字裡，title 只補充口徑。
+ */
+export const UAT_SUM_TITLE =
+  "「沒勾」＝結果還是「未測」的題；「待修」＝已判失敗、等著修的題；「暫時跳過」＝在 Task Tracking 按「本輪收工」時被批次標記的題。三者互斥，同一題只會算進一邊。跳過的題另列而不併進「沒勾」——收工的意思是這輪不做了，不是那些題不存在。";
+
+export function rollupPendingUats(
+  list: PendingUat[],
+  opts: { openVerdicts?: readonly UatVerdict[]; truncated?: boolean } = {},
+): UatRollup {
+  const openVerdicts = opts.openVerdicts ?? DEFAULT_OPEN_VERDICTS;
+  let closed = 0;
+  let total = 0;
+  let open = 0;
+  let later = 0;
+  for (const u of list) {
+    closed += u.closed;
+    total += u.total;
+    later += u.verdicts[LATER_VERDICT] ?? 0;
+    for (const v of openVerdicts) open += u.verdicts[v] ?? 0;
+  }
+  return {
+    reports: list.length,
+    open,
+    later,
+    closed,
+    total,
+    pct: total ? Math.round((closed / total) * 100) : 0,
+    truncated: opts.truncated === true,
+  };
+}
+
+/**
+ * 合計那一行的文案。**總覽與歡迎畫面共用同一支** —— 不是為了省行數，而是
+ * 兩邊各寫一次的話，改文案時只會改到看得見的那一邊（歡迎畫面可以被使用者
+ * 靜音一整天，改壞了不會有人發現）。
+ *
+ * 量詞與動詞刻意跟總覽既有的兩個計數器錯開：「待實測 N **份**」數的是報告，
+ * 「待修 N **題**」是已判失敗等著修的題，這裡的「還有 N 題**沒勾**」是還沒
+ * 判過的題。三個數字量的是三件事，同一題不會同時落在沒勾與待修。
+ */
+export function uatRollupText(t: UatRollup): {
+  lead: string;
+  detail: string;
+  /** 「暫時跳過」另列。**零題時是空字串**，呼叫端整段不渲染 */
+  skipped: string;
+} {
+  return {
+    // 每題都判完、報告卻還沒收工 —— 說「還有 0 題沒勾」是對的但沒用，
+    // 這時該講的下一步是去收工。
+    lead: t.open ? `還有 ${t.open} 題沒勾` : "每題都勾完了",
+    detail: `共 ${t.total} 題 · 已勾 ${t.pct}%`,
+    skipped: t.later ? `另有 ${t.later} 題暫時跳過` : "",
+  };
 }
 
 /**
@@ -233,13 +357,7 @@ export function openFixesFrom(files: ScannedPlan[]): OpenFix[] {
 
 /** 跟 loadPendingUats 同一條規矩：非桌面版／壞橋一律回空。 */
 export async function loadOpenFixes(plansDirs: string[]): Promise<OpenFix[]> {
-  if (!canScanPlans() || !plansDirs.length) return [];
-  try {
-    const scan = await requestTrackingScan(plansDirs, []);
-    return openFixesFrom(scan.files);
-  } catch {
-    return [];
-  }
+  return (await loadUatScan(plansDirs)).fixes;
 }
 
 export function attributePendingUats<T extends { path: string; projectId?: string; projectName?: string }>(
@@ -261,18 +379,75 @@ export function attributePendingUats<T extends { path: string; projectId?: strin
 }
 
 /**
+ * 一次掃描的兩個視圖 —— 待實測與待修**共用同一批檔案**。
+ *
+ * `uatReportsOf` 本來就是兩者共用的內部函式：同樣的目錄、同樣的檔案、同樣的
+ * supersede 解法，差別只在一個取 `pending` 一個取 `fail`。分兩趟過橋是純浪費。
+ */
+export type UatScan = {
+  pending: PendingUat[];
+  fixes: OpenFix[];
+  /** Rust 端撞到 300 檔上限。合計是「全部加起來」，被截斷卻不講就是安靜說謊 */
+  truncated: boolean;
+};
+
+const EMPTY_SCAN: UatScan = { pending: [], fixes: [], truncated: false };
+
+/**
+ * 共用掃描快取。**key 是排序後的目錄字串**，值是那一次掃描的 Promise。
+ *
+ * 存 Promise 而不是結果，是因為要治的正是**並發**：一次頁面載入裡，側欄 badge、
+ * 總覽待實測、總覽待修、儀表板那一列、歡迎畫面會在同一個 tick 前後各要一次，
+ * 五個呼叫端拿到的是同一個飛行中的請求，而不是五趟讀同一批最多 300 個檔的全文
+ * （CATO-05「總覽三趟掃描」那筆帳）。
+ *
+ * 生命週期只有一次 page load：這是多頁式 App，導頁 = 整個 module 重來，
+ * 所以不需要（也不該有）過期時間。頁內的失效走 `invalidateUatScan`，
+ * 由 `rail-nav.invalidateUatBadge` 在勾選／收工之後呼叫。
+ *
+ * **範圍算法要共用**（`tracking-bridge.uatScanDirs`）：兩個呼叫端各算一套目錄，
+ * key 就不一樣，快取等於沒有 —— 而且不會有任何症狀，只是又變回兩趟。
+ */
+let scanKey = "";
+let scanInFlight: Promise<UatScan> | null = null;
+
+export function invalidateUatScan(): void {
+  scanKey = "";
+  scanInFlight = null;
+}
+
+export function loadUatScan(plansDirs: string[]): Promise<UatScan> {
+  const key = [...plansDirs].sort().join("\n");
+  if (scanInFlight && scanKey === key) return scanInFlight;
+  scanKey = key;
+  // **非桌面版一律回空** —— 瀏覽器沒有資料通道，回空是誠實的「這裡看不到」，
+  // 不是「沒有待實測」。呼叫端要據此整區不渲染，不是顯示 0。
+  if (!canScanPlans() || !plansDirs.length) {
+    scanInFlight = Promise.resolve(EMPTY_SCAN);
+    return scanInFlight;
+  }
+  const p: Promise<UatScan> = requestTrackingScan(plansDirs, [])
+    .then((scan) => ({
+      pending: pendingUatsFrom(scan.files),
+      fixes: openFixesFrom(scan.files),
+      truncated: scan.truncated,
+    }))
+    .catch(() => {
+      // 失敗不留在快取裡：整個頁面生命週期都吃同一個空答案的話，失效重掃也救不回來。
+      if (scanInFlight === p) invalidateUatScan();
+      return EMPTY_SCAN;
+    });
+  scanInFlight = p;
+  return p;
+}
+
+/**
  * 掃一次磁碟。**非桌面版一律回空陣列** —— 瀏覽器沒有資料通道，
  * 回空是誠實的「這裡看不到」，不是「沒有待實測」。
  *
- * 呼叫端自己算 `plansDirsOf`：這一支刻意不碰 store，才能在測試裡直接餵資料。
+ * 呼叫端自己算目錄（`uatScanDirs`）：這一支刻意不碰 store，才能在測試裡直接餵資料。
  * 橋壞了／逾時也回空陣列 —— 一個 badge 不值得讓整頁噴錯。
  */
 export async function loadPendingUats(plansDirs: string[]): Promise<PendingUat[]> {
-  if (!canScanPlans() || !plansDirs.length) return [];
-  try {
-    const scan = await requestTrackingScan(plansDirs, []);
-    return pendingUatsFrom(scan.files);
-  } catch {
-    return [];
-  }
+  return (await loadUatScan(plansDirs)).pending;
 }

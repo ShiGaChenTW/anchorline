@@ -152,6 +152,8 @@ export type PlanStat = {
 export type NativeTrackingScan = {
   files: PlanStat[];
   signal: { raw: string; mtimeMs: number } | null;
+  /** 撞到 300 檔上限、提早收工。舊版橋沒有這個欄位，所以是選填 */
+  truncated?: boolean;
 };
 
 export const native = {

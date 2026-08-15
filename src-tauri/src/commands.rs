@@ -69,6 +69,11 @@ pub struct TrackingSignal {
 pub struct TrackingScan {
     pub files: Vec<PlanStat>,
     pub signal: Option<TrackingSignal>,
+    /// 撞到 `MAX_PLAN_FILES` 上限、提早收工。
+    ///
+    /// 前端的逐份列表被截斷還算誠實（看到的每一列都是真的），但「全部專案合計」
+    /// 被截斷卻不講，就是一個安靜偏低的數字 —— 沒有錯誤、沒有空白，只是錯。
+    pub truncated: bool,
 }
 
 /// CLI 不在／不是這種專案。**Ok 回傳，不是 Err。**
@@ -472,7 +477,19 @@ pub fn scan_plans(plans_dirs: &[String], openspec_roots: &[String]) -> TrackingS
         _ => None,
     };
 
-    TrackingScan { files, signal }
+    // 兩個迴圈（plans 的 `break 'outer`、openspec 的 `return`）都在撞到上限時
+    // 立刻收工，收工的當下 files 一定正好是 MAX_PLAN_FILES。所以不必在兩個地方
+    // 各插一個旗標，事後量長度就夠。
+    //
+    // 剛好 300 個檔、後面本來就沒有了 —— 這種邊界會誤報一次「可能更多」。
+    // 誤報的代價是一句多餘的警語；漏報的代價是一個安靜說謊的合計數字。
+    let truncated = files.len() >= MAX_PLAN_FILES;
+
+    TrackingScan {
+        files,
+        signal,
+        truncated,
+    }
 }
 
 // ── UAT 喚醒鏈 ───────────────────────────────────────────────────────

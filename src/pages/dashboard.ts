@@ -49,7 +49,17 @@ import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/u
 import { attachDiffSummary } from "../lib/diff-summary";
 import { coverageLine } from "../lib/governance";
 import { canReadCoverage, requestCoverage, type CoverageResult } from "../lib/governance-bridge";
-import { loadOpenFixes } from "../lib/uat-pending";
+// 靜態 import：這個 module 本來就已經被靜態拉進來（原本的 loadOpenFixes），
+// 再對同一個 module 用動態 import 只是多一段 await，省不到任何東西。
+import {
+  attributePendingUats,
+  loadUatScan,
+  rollupPendingUats,
+  uatRollupText,
+  UAT_SUM_TITLE,
+  UAT_TRUNCATED_NOTE,
+  type UatRollup,
+} from "../lib/uat-pending";
 
 if (!requireAuth()) {
   /* redirected */
@@ -455,25 +465,71 @@ if (!requireAuth()) {
     return `<section class="d-card" id="${FIXES_CARD_ID}" hidden></section>`;
   }
 
-  async function loadOpenFixCount(folderPath: string): Promise<void> {
-    // supersede 要在**全集**上解（Cato-03）：取代者可能在別的專案的 plans/，
-    // 只掃單一目錄的話，同一個「待修」數字會與總覽不一致——兩張卡都寫
-    // 「以最新一輪為準」，其中一張在說謊。掃全部、再按本專案過濾。
+  /**
+   * 跨專案實測進度 —— **一列，不是一張卡**。
+   *
+   * 三重錯位是這裡唯一要處理的問題：這個數字是**全部專案**、`.d-grid` 裡的
+   * 「待修」卡是**本專案**；兩者同單位（題）、集合互斥（未測 vs 已判失敗）、
+   * 範圍還是子集關係。三個錯位疊在兩張同款並排的卡上，版面會主動教人讀成
+   * 「7 裡面有 2」。所以視覺重量刻意跟卡片拉開（一條細列、虛線框、無底色），
+   * 而且**「全部專案」四個字寫在看得見的文字裡**。
+   *
+   * 範圍寫進 title 是不夠的：側欄那個 badge 的值也是全部專案，卻掛在
+   * 「這個專案可以做的事」群組裡、範圍只寫在 title —— 從來沒有人發現。
+   */
+  const UAT_ROW_ID = "d-uat-row";
+
+  /** 三個分支共用的空殼。掃完才填，零份就一直 hidden —— 不留空殼佔版面。 */
+  function uatRow(): string {
+    return `<a class="d-uat-row" id="${UAT_ROW_ID}" href="overview.html" hidden title="${escapeHtml(UAT_SUM_TITLE)}"></a>`;
+  }
+
+  function uatRowInner(t: UatRollup): string {
+    const s = uatRollupText(t);
+    return `<span class="d-uat-scope">全部專案實測</span>
+      <strong>${escapeHtml(s.lead)}</strong>
+      <span class="d-uat-detail">${escapeHtml(s.detail)}　${t.reports} 份報告</span>
+      ${s.skipped ? `<span class="d-uat-detail">${escapeHtml(s.skipped)}</span>` : ""}
+      ${t.truncated ? `<span class="d-uat-detail">${escapeHtml(UAT_TRUNCATED_NOTE)}</span>` : ""}
+      <span class="d-uat-go">看逐份 ›</span>`;
+  }
+
+  /**
+   * 待修數字卡與實測進度列**共用同一次掃描**。
+   *
+   * supersede 要在**全集**上解（Cato-03）：取代者可能在別的專案的 plans/，
+   * 只掃單一目錄的話，同一個「待修」數字會與總覽不一致——兩張卡都寫
+   * 「以最新一輪為準」，其中一張在說謊。掃全部、再按本專案過濾。
+   *
+   * 兩者掃的是完全相同的目錄與檔案，差別只在一個取 `fail` 一個取 `pending`，
+   * 所以走 `loadUatScan` 一次拿兩個視圖（側欄 badge 也吃同一份快取）。
+   */
+  async function loadUatCards(folderPath?: string): Promise<void> {
     const st = store.get();
-    const { plansDirsOfAll } = await import("../lib/tracking-bridge");
-    const { attributePendingUats } = await import("../lib/uat-pending");
-    const all = await loadOpenFixes(plansDirsOfAll(st.projects));
-    const p = activeProject();
+    const { uatScanDirs } = await import("../lib/tracking-bridge");
+    const scan = await loadUatScan(uatScanDirs(st));
+
+    // 待修卡只在「有選專案且綁了資料夾」時才有意義；沒綁資料夾就沒有本專案
+    // 的歸屬可比。實測進度那一列不受影響 —— 它問的是全部專案。
+    const p = folderPath ? activeProject() : null;
     const mine = p
-      ? attributePendingUats(all, [
+      ? attributePendingUats(scan.fixes, [
           { id: p.id, name: projectDisplayName(p), rootPath: folderPath },
         ]).filter((x) => x.projectId === p.id)
       : [];
     const host = document.getElementById(FIXES_CARD_ID);
-    if (!host) return;
-    if (!mine.length) return; // 保持 hidden——空殼不佔版面
-    host.innerHTML = openFixesInner(mine.length);
-    host.hidden = false;
+    if (host && mine.length) {
+      host.innerHTML = openFixesInner(mine.length);
+      host.hidden = false;
+    }
+
+    // 這一列不過濾專案：它回答的就是「所有專案加起來」。
+    const rowHost = document.getElementById(UAT_ROW_ID);
+    const roll = rollupPendingUats(scan.pending, { truncated: scan.truncated });
+    if (rowHost && roll.reports) {
+      rowHost.innerHTML = uatRowInner(roll);
+      rowHost.hidden = false;
+    }
   }
 
   async function loadGovernance(folderPath: string): Promise<void> {
@@ -554,6 +610,7 @@ if (!requireAuth()) {
   function renderStats(s: ProjectStats) {
     renderState(
       `<div class="d-top">${heroGit(s)}${cardTags(s)}</div>
+       ${uatRow()}
        <div class="d-grid">${cardCommits(s)}${cardGovernance(null)}${cardOpenFixes()}${cardStack(s)}${cardSize(s)}${cardWorkspace(s)}</div>
        <p class="d-measured">量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")}　<span class="mono">${escapeHtml(s.folderPath)}</span></p>`,
     );
@@ -562,7 +619,7 @@ if (!requireAuth()) {
       openGitDoctor(s.git);
     });
     void loadGovernance(s.folderPath);
-    void loadOpenFixCount(s.folderPath);
+    void loadUatCards(s.folderPath);
   }
 
   async function load(force = false) {
@@ -571,8 +628,11 @@ if (!requireAuth()) {
 
     if (!p) {
       renderState(
-        `<div class="dash-empty"><p>還沒有選擇專案。</p><a class="btn btn-primary" href="overview.html">回總覽</a></div>`,
+        `${uatRow()}
+         <div class="dash-empty"><p>還沒有選擇專案。</p><a class="btn btn-primary" href="overview.html">回總覽</a></div>`,
       );
+      // 沒選專案時這一列**最有用**：它是唯一不需要選專案就能回答的問題。
+      void loadUatCards();
       return;
     }
     const path = p.importSummary?.rootPath;
@@ -581,6 +641,7 @@ if (!requireAuth()) {
       // 「沒綁資料夾」是這一頁最常見的狀態（多數專案都沒綁）
       renderState(
         `${identHtml(p)}
+         ${uatRow()}
          <div class="dash-empty">
           <p>「${escapeHtml(projectDisplayName(p))}」還沒有對應磁碟上的資料夾，所以量不到 git、技術線與容量。</p>
           <button type="button" class="btn btn-primary" id="dash-bind">指定專案資料夾</button>
@@ -589,12 +650,18 @@ if (!requireAuth()) {
         ${policyCard(p)}`,
       );
       bindIdentEditing();
+      // 本專案沒綁資料夾，但**別的**專案可能有實測在等 —— 這一列問的是全部專案，
+      // 沒有理由跟著這一頁的空狀態一起消失。
+      void loadUatCards();
       document.getElementById("dash-bind")?.addEventListener("click", () => {
         askForProjectFolder(p.id, projectDisplayName(p));
       });
       return;
     }
     if (!isDesktop()) {
+      // 這一支分支**刻意不放實測列**：瀏覽器沒有資料通道，掃描一律回空，
+      // 而空經過 rollup 會變成「每題都勾完了」—— 一句假的全清。
+      // 同一條規矩寫在 welcome.ts 的 canScanPlans 守門上。
       renderState(
         `${identHtml(p)}
          <div class="dash-empty">

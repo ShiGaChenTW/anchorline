@@ -13,7 +13,7 @@
  * 放 tests/ 而非 src/ 的理由同 tracking.test.ts：tsconfig 的 include 是 `src/**`。
  */
 import { describe, expect, test } from "bun:test";
-import { plansDirsOf, plansDirsOfAll } from "../src/lib/tracking-bridge";
+import { plansDirsOf, plansDirsOfAll, uatScanDirs } from "../src/lib/tracking-bridge";
 
 const proj = (id: string, rootPath?: string) => ({
   id,
@@ -97,5 +97,40 @@ describe("plansDirsOfAll（收件匣／badge 的分母）", () => {
     for (const dir of plansDirsOf(projects, "b")) {
       expect(plansDirsOfAll(projects)).toContain(dir);
     }
+  });
+});
+
+/**
+ * `uatScanDirs` —— 五個 UAT 曝光面共用的範圍算法。
+ *
+ * 它同時是共用掃描快取的 key（`uat-pending.loadUatScan`）。分岔的症狀不是錯誤
+ * 訊息，是**又變回一頁掃很多趟**：兩個呼叫端各算一串目錄，key 不同，快取全部
+ * 落空。所以這裡釘的是「同一個 state 一定得到同一串目錄」。
+ */
+describe("uatScanDirs（跨專案 UAT 的範圍）", () => {
+  const sample = (id: string, rootPath: string) => ({
+    id,
+    isSample: true,
+    importSummary: { rootPath },
+  });
+
+  test("樣本專案不算 —— 畫面上看不到它們，合計把它們算進去就是看得見的不一致", () => {
+    const st = { projects: [proj("a", "/w/alpha"), sample("s", "/w/sample")] };
+    expect(uatScanDirs(st)).toEqual(["/w/alpha/plans"]);
+  });
+
+  test("showSamples 打開時樣本專案算進來 —— 跟其他區塊同一條規則", () => {
+    const st = { projects: [proj("a", "/w/alpha"), sample("s", "/w/sample")], showSamples: true };
+    expect(uatScanDirs(st)).toEqual(["/w/alpha/plans", "/w/sample/plans"]);
+  });
+
+  test("同一份 state 兩次呼叫得到同一串目錄（快取 key 才穩定）", () => {
+    const st = { projects: [proj("b", "/w/beta"), proj("a", "/w/alpha")] };
+    expect(uatScanDirs(st)).toEqual(uatScanDirs(st));
+  });
+
+  test("沒綁資料夾與重複目錄的處理沿用 plansDirsOfAll，不另寫一套", () => {
+    const st = { projects: [proj("a"), proj("b", "/w/same"), proj("c", "/w/same/")] };
+    expect(uatScanDirs(st)).toEqual(["/w/same/plans"]);
   });
 });

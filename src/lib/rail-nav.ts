@@ -215,9 +215,10 @@ function refreshUatBadge() {
   void Promise.all([import("./uat-pending"), import("./tracking-bridge")])
     .then(([uat, bridge]) => {
       const st = store.get();
-      // plansDirsOfAll 而不是 plansDirsOf：收件匣與 badge 的範圍是全部專案，
-      // tracking 頁的「只看當前專案」限定不適用於這裡。
-      return uat.loadPendingUats(bridge.plansDirsOfAll(st.projects));
+      // uatScanDirs 而不是 plansDirsOf：收件匣與 badge 的範圍是全部專案（樣本
+      // 專案除外），tracking 頁的「只看當前專案」限定不適用於這裡。**範圍算法
+      // 五個曝光面共用同一支**，那串目錄同時是共用掃描快取的 key。
+      return uat.loadPendingUats(bridge.uatScanDirs(st));
     })
     .then((list) => {
       uatPending = list.length;
@@ -263,10 +264,17 @@ function setNavCount(page: string, n: number, hideAtZero = false) {
  * 勾選成功後呼叫這一支，badge 跟著檔案一起動。
  */
 export function invalidateUatBadge() {
-  // 失效的正確性靠 refreshUatBadge 裡的 uatDirty（掃描飛行中排補掃）；
-  // 這裡不動 uatScanned——那個旗標只管「首掃有沒有發生過」，掃描結束的
-  // finally 一律會把它設回 true，在這裡清它是沒有作用的誤導（Cato-07）。
-  refreshUatBadge();
+  // 共用掃描快取也要作廢，否則重掃會拿到勾選前的那一份（快取的生命週期是一次
+  // page load，正好蓋過「同一頁上勾完一題」這條路徑）。**對外語意不變**：
+  // 失效仍然等於「立刻重掃並更新 badge」，只是重掃前先把快取清掉；正確性照舊
+  // 靠下面 refreshUatBadge 裡的 uatDirty，那段一個字沒動。
+  void import("./uat-pending")
+    .then((m) => m.invalidateUatScan())
+    .catch(() => {})
+    // 失效的正確性靠 refreshUatBadge 裡的 uatDirty（掃描飛行中排補掃）；
+    // 這裡不動 uatScanned——那個旗標只管「首掃有沒有發生過」，掃描結束的
+    // finally 一律會把它設回 true，在這裡清它是沒有作用的誤導（Cato-07）。
+    .finally(() => refreshUatBadge());
 }
 
 /** 更新側欄 count（專案數／範本數／待審／待實測） */

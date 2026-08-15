@@ -26,6 +26,15 @@ export type ScannedPlan = {
 export type TrackingScan = {
   files: ScannedPlan[];
   signal: TrackingSignal | null;
+  /**
+   * Rust 端撞到 `MAX_PLAN_FILES`（300）上限、提早收工。
+   *
+   * 逐份列表被截斷還算誠實 —— 看到的每一列都是真的。但「全部專案合計」被截斷
+   * 就是一個**安靜說謊的數字**，而且零症狀：沒有錯誤、沒有空白，只是偏低。
+   * 舊版沒有這個旗標，所以 `?? false`：橋回不出這個欄位時當作沒截斷，
+   * 寧可不警告也不要無中生有一個警告。
+   */
+  truncated: boolean;
 };
 
 export function canScanPlans(): boolean {
@@ -38,7 +47,11 @@ export async function requestTrackingScan(
   openspecRoots: string[] = [],
 ): Promise<TrackingScan> {
   const r = await native.trackingScan(plansDirs, openspecRoots);
-  return { files: r.files as ScannedPlan[], signal: r.signal ?? null };
+  return {
+    files: r.files as ScannedPlan[],
+    signal: r.signal ?? null,
+    truncated: r.truncated === true,
+  };
 }
 
 type ProjectLike = { id?: string; importSummary?: { rootPath: string } };
@@ -93,6 +106,23 @@ export function plansDirsOfAll(projects: ProjectLike[]): string[] {
   // 去重：同一個資料夾綁在兩個專案上時，重複目錄會讓同一份報告被掃回兩次，
   // badge 的數字直接翻倍。
   return [...new Set(dirs)];
+}
+
+/**
+ * 跨專案 UAT 的掃描範圍 —— **五個曝光面必須共用這一支**。
+ *
+ * 共用掃描快取的 key 就是這串目錄（`uat-pending.loadUatScan`）：範圍算法在
+ * 某個呼叫端分岔的那一刻，key 跟著不一樣，快取等於沒有 —— 而且不會有任何
+ * 症狀，只是又變回一頁多趟掃描。
+ *
+ * 樣本專案不算：總覽其他區塊用 `visibleProjects()` 濾掉 `isSample`，合計卻把
+ * 它們算進去的話，那條不一致會直接被看到（畫面上五個專案、合計說七個）。
+ */
+export function uatScanDirs(st: {
+  projects: (ProjectLike & { isSample?: boolean })[];
+  showSamples?: boolean;
+}): string[] {
+  return plansDirsOfAll(st.projects.filter((p) => (st.showSamples ? true : !p.isSample)));
 }
 
 /**

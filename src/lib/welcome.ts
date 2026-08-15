@@ -17,6 +17,14 @@
  */
 import { isUnavailable, native } from "./native";
 import { store } from "../data/store";
+import { canScanPlans, uatScanDirs } from "./tracking-bridge";
+import {
+  loadUatScan,
+  rollupPendingUats,
+  uatRollupText,
+  UAT_SUM_TITLE,
+  type UatRollup,
+} from "./uat-pending";
 
 const SHOWN_KEY = "anchorline:welcome-shown-date";
 /**
@@ -155,6 +163,48 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * 跨專案實測進度那一行的 HTML。`null` = 還沒掃到／不該顯示。
+ *
+ * 放在 module 層而不是參數，是因為**這一行與 fastfetch 誰先到是不確定的**：
+ * 掃描先到就先存起來，等 renderWelcome 自己帶上；renderWelcome 先到就由
+ * `patchWelcomeUat` 事後補。兩種順序都不會掉行。
+ *
+ * ⚠️ 這一行天生是「可能看不到」的：歡迎畫面可以被「今天不再顯示」靜音一整天，
+ * 而且帶 `?uat=` 參數叫醒時（agent 剛寫完報告的那條路徑）一律不彈。兜底在總覽
+ * 頁的合計列 —— 不為了曝光一個數字去繞過使用者的靜音決定。所以這一行是**入口**
+ * （可點、導到總覽），不是資料來源。
+ */
+let uatLineHtml: string | null = null;
+
+/**
+ * 掃完之後補上那一行。**不重畫整個歡迎畫面** —— 使用者可能已經勾了靜音、
+ * 或正在按關閉，重畫會把他的動作洗掉。
+ *
+ * 補之前檢查節點還在：`renderWelcome` 開頭會 `remove()` 舊的，總覽頁開
+ * 「軟體說明」時也會主動移除它（`overview.ts` 的 btn-about）—— 掃描回來時
+ * 歡迎畫面早就不在畫面上是**正常情況**，不是錯誤。
+ */
+export function patchWelcomeUat(uat: UatRollup | null) {
+  uatLineHtml = uat && uat.reports ? uatLine(uat) : null;
+  if (!uatLineHtml) return;
+  const counts = document.querySelector("#welcome-root .welcome-counts");
+  if (!counts || counts.parentElement?.querySelector(".welcome-uat")) return;
+  counts.insertAdjacentHTML("afterend", uatLineHtml);
+}
+
+/**
+ * 一行、可點、**不放列表也不放進度條或百分比**。
+ * 啟動閃屏要回答的是「有沒有事等我」，不是「進度到哪」——後者在總覽頁。
+ */
+function uatLine(uat: UatRollup): string {
+  const t = uatRollupText(uat);
+  // 「暫時跳過」也要帶：收工按下去之後那批題只剩合計看得到，三個曝光面
+  // 少一個都會讓「按一下就歸零」的問題只解一半。零題整段不渲染。
+  const skipped = t.skipped ? `<span class="welcome-uat-more">${escapeHtml(t.skipped)}</span>` : "";
+  return `<a class="welcome-uat" href="overview.html" title="${escapeHtml(UAT_SUM_TITLE)}">全部專案實測　<strong>${escapeHtml(t.lead)}</strong>${skipped}<span class="welcome-uat-go">看逐份 ›</span></a>`;
+}
+
 export function renderWelcome(list: FastfetchEntry[] | null) {
   document.getElementById("welcome-root")?.remove();
 
@@ -191,6 +241,7 @@ export function renderWelcome(list: FastfetchEntry[] | null) {
             <span>草稿／審閱中</span>
           </div>
         </div>
+        ${uatLineHtml ?? ""}
         ${
           rows.length
             ? `<dl class="dash-dl welcome-dl">${rows
@@ -241,15 +292,40 @@ export function renderWelcome(list: FastfetchEntry[] | null) {
 
 /**
  * 啟動時嘗試顯示。
- * 三個前提會擋下來：這次啟動已經跳過、今天勾過靜音、不是桌面版。
- * fastfetch 抓不到不算前提 —— 問候與專案數本來就不需要它。
+ *
+ * **兩個前提會擋下來**：這次啟動已經跳過、今天勾過靜音。（原本這裡寫「三個
+ * 前提，含不是桌面版」—— 桌面版的判斷根本不在這一支，那句註解漂了。歡迎畫面
+ * 在瀏覽器裡照跳，只是下半的系統資訊與實測那一行會缺席。）
+ *
+ * fastfetch 抓不到也不算前提 —— 問候與專案數本來就不需要它。
  */
 export function initWelcome() {
   if (seenThisLaunch() || mutedToday()) return;
 
   void (async () => {
     const r = await native.fastfetch();
-    renderWelcome(isUnavailable(r) ? null : (JSON.parse(r.raw) as FastfetchEntry[]));
+    // fastfetch 吐出不是 JSON 的東西時，垮掉的只該是下半的系統資訊。
+    let sys: FastfetchEntry[] | null = null;
+    try {
+      sys = isUnavailable(r) ? null : (JSON.parse(r.raw) as FastfetchEntry[]);
+    } catch {
+      sys = null;
+    }
+    renderWelcome(sys);
   })().catch(() => renderWelcome(null));
+
+  // 實測進度**不擋畫面**：跟 fastfetch 各走各的，誰先到誰先畫，晚到的那個補。
+  //
+  // `canScanPlans()` 守門是必要的，不是保險：瀏覽器端掃描回空，而空經過
+  // rollup 會變成一句「每題都勾完了」—— 那是**假的全清**，比不顯示糟得多。
+  // 掃不到與零份一律整行不渲染。
+  //
+  // 掃描本身吃 `loadUatScan` 的共用快取：同一次頁面載入裡，側欄 badge 與（在
+  // 總覽時）合計列要的是同一份，這裡不會多過一次橋。
+  void (async () => {
+    if (!canScanPlans()) return;
+    const scan = await loadUatScan(uatScanDirs(store.get()));
+    patchWelcomeUat(rollupPendingUats(scan.pending, { truncated: scan.truncated }));
+  })().catch(() => {});
 
 }

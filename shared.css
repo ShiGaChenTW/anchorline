@@ -8371,6 +8371,36 @@ button.ft-row:focus-visible {
   font-size: var(--fs-2);
   color: var(--muted);
 }
+/* 跨專案實測進度，一行、可點。負的 margin-top 抵銷 .welcome-counts 自己的
+   16px 下緣 —— 這一行要貼著上面兩個數字，屬於同一句話的下半。
+   不放進度條也不放百分比：啟動閃屏回答的是「有沒有事等我」，不是「進度到哪」。 */
+.welcome-uat {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: -8px 0 16px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: var(--fs-2);
+  color: var(--muted);
+  text-decoration: none;
+}
+.welcome-uat:hover {
+  background: var(--inset);
+  color: var(--fg-2);
+}
+.welcome-uat strong {
+  font-weight: 650;
+  color: var(--fg);
+}
+.welcome-uat-more {
+  color: var(--meta);
+}
+.welcome-uat-go {
+  margin-left: auto;
+  color: var(--accent);
+}
 /* 靜音勾選放 footer 左邊，跟兩顆行動鈕拉開 ——
    它是「以後別再問我」，不是這次要做的動作。 */
 .welcome-foot {
@@ -8700,6 +8730,46 @@ button.ft-row:focus-visible {
   font-size: var(--fs-4);
   color: var(--fg);
   font-variant-numeric: tabular-nums;
+}
+
+/* 跨專案實測進度 —— 一條列，**刻意不是一張 .d-card**。
+   旁邊網格裡的「待修」卡數的是本專案、這一列數的是全部專案；同單位、互斥集合、
+   子集範圍，三重錯位疊在兩張同款卡上，版面會主動教人讀成「7 裡面有 2」。
+   所以：無底色、虛線框、單行高度 —— 一眼就知道它不屬於那組統計卡。
+   範圍還寫在看得見的文字裡（.d-uat-scope），不是只寫在 title。 */
+.d-uat-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 9px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  font-size: var(--fs-2);
+  color: var(--muted);
+  text-decoration: none;
+}
+.d-uat-row[hidden] {
+  display: none;
+}
+.d-uat-row:hover {
+  background: var(--inset);
+}
+.d-uat-row strong {
+  font-size: var(--fs-3);
+  font-weight: 650;
+  color: var(--fg);
+}
+.d-uat-scope {
+  color: var(--fg-2);
+}
+.d-uat-detail {
+  color: var(--meta);
+}
+.d-uat-go {
+  margin-left: auto;
+  color: var(--accent);
 }
 
 /* ── 支撐網格 ── */
@@ -9752,6 +9822,25 @@ button.ft-row:focus-visible {
 .ov-others-head {
   margin: 0 0 10px;
   font-size: var(--fs-2);
+  color: var(--meta);
+}
+/* 逐份列表之上的一行合計：「全部專案加起來還剩幾題」。
+   比標題重、比逐列輕 —— 它是要被一眼掃到的那一行，但不該蓋過清單本身。 */
+.ov-others-sum {
+  margin: -4px 0 10px;
+  font-size: var(--fs-3);
+  color: var(--meta);
+}
+.ov-others-sum strong {
+  margin-right: 8px;
+  font-size: var(--fs-5);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+/* 「暫時跳過」與截斷警語：比合計輕、比正文重 —— 它們是**限定條件**，
+   不講會讓合計看起來比實際乾淨。 */
+.ov-sum-warn {
   color: var(--meta);
 }
 /* 卡片自帶內距，列就不必再縮排一層 */
