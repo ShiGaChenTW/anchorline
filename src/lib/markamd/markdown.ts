@@ -3,6 +3,12 @@
  * MIT © mattenarle10/markamd — 精簡版：markdown-it + task lists + mark，無 Tauri/Shiki。
  */
 import MarkdownIt from "markdown-it";
+// CommonMark 的 flanking 規則會讓 `**專案：**內容` 這種中文寫法整段變成字面上的
+// 星號——收尾 `**` 前面是全形標點、後面是文字時不算 right-flanking，粗體開不了。
+// 我們的 UAT／PRD 檔頭幾乎全長這樣，所以閱讀模式看到的是一堆 `**`。
+// 這支外掛就是 CommonMark 的 CJK emphasis 擴充，不要用 regex 前處理取代它：
+// 前處理分不出程式碼區塊裡的星號。
+import cjkFriendly from "markdown-it-cjk-friendly";
 // @ts-expect-error no types for mark plugin in some installs
 import mark from "markdown-it-mark";
 // @ts-expect-error task-lists types optional
@@ -26,6 +32,7 @@ const md = new MarkdownIt({
   },
 });
 
+md.use(cjkFriendly);
 md.use(taskLists, { enabled: false, label: true });
 md.use(mark);
 
