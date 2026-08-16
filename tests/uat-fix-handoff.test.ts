@@ -11,6 +11,7 @@ function report(overrides: Partial<UatReport> = {}): UatReport {
     status: "進行中",
     path: "/repo/plans/uat-checkout.md",
     unanchored: 0,
+    extras: [],
     items: [],
     ...overrides,
   };
@@ -236,5 +237,48 @@ describe("uatFixTask", () => {
     expect(printed.exitCode).toBe(0);
     expect(Buffer.from(printed.stderr).toString("utf8")).toBe("");
     expect(Buffer.from(printed.stdout)).toEqual(Buffer.from(task, "utf8"));
+  });
+
+  test("失敗題附件與報告末補充都進交接，並帶絕對路徑", () => {
+    const r = report({
+      path: "/repo/plans/uat-checkout.md",
+      items: [
+        {
+          id: "A1B2C3D4",
+          title: "T1 過濾列",
+          steps: ["看上方"],
+          expected: "在紀錄上方",
+          verdict: "fail",
+          note: "跑到下方",
+          evidence: [
+            {
+              name: "T1-01.png",
+              rel: "uat-assets/uat-checkout/T1-01.png",
+              caption: "紅框是實際位置",
+            },
+          ],
+        },
+      ],
+      extras: [
+        {
+          n: 1,
+          text: "側欄太窄",
+          evidence: [
+            {
+              name: "S1-01.png",
+              rel: "uat-assets/uat-checkout/S1-01.png",
+              caption: "iPhone SE",
+            },
+          ],
+        },
+      ],
+    });
+    const out = uatFixTask(r);
+    expect(out).toContain("/repo/plans/uat-assets/uat-checkout/T1-01.png（紅框是實際位置）");
+    expect(out).toContain("## 補充說明（題目以外）");
+    expect(out).toContain("### 補充 1");
+    expect(out).toContain("側欄太窄");
+    expect(out).toContain("/repo/plans/uat-assets/uat-checkout/S1-01.png（iPhone SE）");
+    expect(out).toContain("不要當成帶錨點的失敗題");
   });
 });

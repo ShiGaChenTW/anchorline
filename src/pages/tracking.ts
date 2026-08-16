@@ -30,6 +30,7 @@ import {
 import { byNewest, dedupe, parseLog, type LogEvent } from "../lib/event-log";
 import { hookInstallSnippet, logEvent } from "../lib/event-writer";
 import { canEditFiles, readFile, writeFile } from "../lib/file-editor";
+import { isNative, native } from "../lib/native";
 import { guardOf, safeApply, toggleStep } from "../lib/plan-writer";
 import {
   buildResumeCard,
@@ -42,8 +43,20 @@ import {
 } from "../lib/log-views";
 import { buildReplay, replayMarkdown } from "../lib/replay";
 import {
+  blobToBase64,
+  extraPrefix,
+  extOfMime,
+  itemPrefix,
+  nextEvidenceName,
+  nextExtraNumber,
+  type UatEvidence,
+  type UatExtra,
+} from "../lib/uat-evidence";
+import {
   isUatText,
   parseUatReport,
+  setEvidence,
+  setExtras,
   setVerdict,
   uatProgress,
   UAT_VERDICTS,
@@ -55,7 +68,7 @@ import {
 } from "../lib/uat-parser";
 import { canonUatPath } from "../lib/uat-pending";
 import { reconcileNoteDraft, setNoteDraft } from "../lib/uat-note-draft";
-import { UAT_HANDOFF_EVENT, UAT_QUERY_KEY } from "../lib/uat-handoff";
+import { isUatPage, UAT_HANDOFF_EVENT, UAT_QUERY_KEY } from "../lib/uat-handoff";
 import { renderMarkdown } from "../lib/markamd";
 
 /** 壞行由 parseLog 跳過，不會毀掉整份。 */
@@ -85,10 +98,19 @@ type PlanEntry = {
   uat?: UatReport;
 };
 
+const IS_UAT_PAGE = isUatPage();
+
+if (!IS_UAT_PAGE) {
+  const pending = new URL(location.href).searchParams.get(UAT_QUERY_KEY);
+  if (pending) {
+    location.replace(`uat.html?${UAT_QUERY_KEY}=${encodeURIComponent(pending)}`);
+  }
+}
+
 const __authed = requireAuth();
 if (__authed) {
   initTheme();
-  initMobileNav("tracking");
+  initMobileNav(IS_UAT_PAGE ? "uat" : "tracking");
   bindLogout();
   initHelpOverlay();
 
@@ -170,7 +192,7 @@ if (__authed) {
     }
     if (!scan.files.length) return false;
 
-    plans = sortByRecency(
+    const loaded = sortByRecency(
       scan.files.map((f) => {
         // UAT 是唯一由前端判的方言：它跟 plan 住在同一個目錄、同一個副檔名，
         // 分辨得出來的只有內文。openspec 的 tasks.md 不可能是 UAT，先排除，
@@ -196,6 +218,8 @@ if (__authed) {
         };
       }),
     );
+    // 兩頁共用掃描，畫面分開：UAT 頁只看實測報告，Task Tracking 不再混進來。
+    plans = IS_UAT_PAGE ? loaded.filter((p) => p.uat) : loaded.filter((p) => !p.uat);
     live = true;
     // 每次重繪重算，不快取 —— 快取只會製造「追蹤點卡住不動」這類 bug
     trackingPath = trackingTarget(
@@ -319,7 +343,12 @@ if (__authed) {
     if (!plans.length) {
       const name = activeProjectName();
       const scope = name ? `「${name}」` : "當前專案";
-      el.innerHTML = `<div class="tk-empty">
+      el.innerHTML = IS_UAT_PAGE
+        ? `<div class="tk-empty">
+        <p>${escapeHtml(scope)} 的 <code>plans/</code> 還沒有實測報告。</p>
+        <p class="tk-empty-how">用 Uat skill 出題後，報告會出現在這裡。</p>
+      </div>`
+        : `<div class="tk-empty">
         <p>${escapeHtml(scope)} 的 <code>plans/</code> 還沒有計劃檔。</p>
         <p class="tk-empty-how">在專案資料夾建一個 <code>plans/</code>，放入含 <code>## Plan Steps</code> 的 markdown，這裡就會列出進度。</p>
       </div>`;
@@ -386,6 +415,19 @@ if (__authed) {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
+  function extrasFor(r: UatReport): UatExtra[] {
+    const pending = unsavedExtras.get(r.path ?? "") ?? [];
+    const disk = r.extras ?? [];
+    const seen = new Set(disk.map((e) => e.n));
+    return [...disk, ...pending.filter((e) => !seen.has(e.n))];
+  }
+
+  function dropUnsaved(path: string, extras: UatExtra[]) {
+    const leftover = extras.filter((e) => !e.text.trim() && !e.evidence.length);
+    if (leftover.length) unsavedExtras.set(path, leftover);
+    else unsavedExtras.delete(path);
+  }
+
   /** 讀某一題說明欄當下的值（可能還沒存）。找不到那張卡就當空字串。 */
   function noteValueOf(id: string): string {
     return (
@@ -431,9 +473,10 @@ if (__authed) {
         <p class="tk-do-why">這是第一題還沒測的。照著流程做一次，再回來選結果。</p>`;
     }
     const failed = r.items.filter((x) => x.verdict === "fail").length;
+    const extraN = (r.extras ?? []).length;
     if (failed) {
       return `<p class="tk-do-what">全部測完，其中 ${failed} 題失敗</p>
-        <p class="tk-do-why">失敗題的說明就是修復工單的起點 —— 交給 agent 時把那幾段一起帶上。</p>`;
+        <p class="tk-do-why">失敗題的說明就是修復工單的起點${extraN ? `；另外有 ${extraN} 則補充說明` : ""} —— 交給 agent 時一起帶上。</p>`;
     }
     // 收工收掉的報告不能說「全部測完」——那會把「這輪沒測的」偽裝成「測過沒問題」
     const later = r.items.filter((x) => x.verdict === "later").length;
@@ -441,8 +484,11 @@ if (__authed) {
       return `<p class="tk-do-what tk-do-clear">本輪已收工，沒有失敗</p>
         <p class="tk-do-why">其中 ${later} 題標了「暫時跳過」——下一輪重測時它們還在檔案裡。</p>`;
     }
+    const extraHint = extraN
+      ? `報告末還有 ${extraN} 則補充說明，送出時會一起帶上。`
+      : "結果已經寫回這份 markdown，agent 直接讀得到。";
     return `<p class="tk-do-what tk-do-clear">全部測完，沒有失敗</p>
-      <p class="tk-do-why">結果已經寫回這份 markdown，agent 直接讀得到。</p>`;
+      <p class="tk-do-why">${extraHint}</p>`;
   }
 
   /**
@@ -471,8 +517,8 @@ if (__authed) {
   function uatSubmitHtml(r: UatReport): string {
     const closed = uatProgress(r).closed;
     const root = uatProjectRoot(r.path ?? "");
-    const why = !closed
-      ? "還沒有任何一題有結果 —— 先測幾題，失敗題的說明就是工單內容。"
+    const why = !closed && !(r.extras ?? []).length
+      ? "還沒有任何一題有結果，也還沒寫補充說明。"
       : !root
         ? "這份報告不在專案的 plans/ 底下，推不出專案根目錄，組不出指令。"
         : "";
@@ -570,6 +616,9 @@ if (__authed) {
    * 臂態活不過一次重繪，使用者永遠按不到第二下。鍵是報告路徑——切報告自動解除。
    */
   let closeoutArmedFor: string | null = null;
+  /** 還沒寫進檔的空白補充列。有內容之後就進 markdown，這裡只留空殼。 */
+  const unsavedExtras = new Map<string, UatExtra[]>();
+  const evPreview = new Map<string, string>();
 
   /**
    * 本輪收工：剩下的錨定未測題批次標「暫時跳過」，一次寫入。
@@ -752,8 +801,78 @@ if (__authed) {
     });
   }
 
+  function evidenceStripHtml(
+    evidence: readonly UatEvidence[],
+    scope: string,
+    prefix: string,
+    editable: boolean,
+  ): string {
+    const cards = evidence
+      .map((ev) => {
+        const name = escapeHtml(ev.name);
+        const cap = escapeHtml(ev.caption);
+        return `<figure class="tk-uat-ev-card">
+          <button type="button" class="tk-uat-ev-thumb" data-ev-open="${name}" title="用系統預覽開啟">
+            <img alt="${name}" data-ev-img="${name}" />
+          </button>
+          <figcaption>
+            <span class="tk-uat-ev-name">${name}</span>
+            <input data-cap="${name}" value="${cap}" placeholder="這張圖要說明什麼"${editable ? "" : " disabled"} />
+          </figcaption>
+          ${
+            editable
+              ? `<button type="button" class="tk-uat-ev-del" data-ev-del="${name}" aria-label="移除 ${name}">×</button>`
+              : ""
+          }
+        </figure>`;
+      })
+      .join("");
+    return `<div class="tk-uat-ev" data-ev-scope="${escapeHtml(scope)}" data-ev-prefix="${escapeHtml(prefix)}">
+      <p class="tk-uat-k">截圖<em>（可貼上或選檔，可多張）</em></p>
+      <div class="tk-uat-ev-row">
+        ${cards}
+        <div class="tk-uat-ev-add">
+          <button type="button" data-ev-paste="${escapeHtml(scope)}"${editable ? "" : " disabled"}>貼上截圖</button>
+          <button type="button" data-ev-pick="${escapeHtml(scope)}"${editable ? "" : " disabled"}>選檔</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function extrasHtml(r: UatReport): string {
+    const editable = canEditFiles();
+    const extras = extrasFor(r);
+    const rows = extras
+      .map((ex) => {
+        const n = String(ex.n);
+        return `<article class="tk-uat-extra" data-extra="${n}">
+          <header class="tk-uat-extra-hd">
+            <span class="tk-uat-extra-n">${n}.</span>
+            ${
+              editable
+                ? `<button type="button" class="tk-uat-extra-del" data-extra-del="${n}">刪除</button>`
+                : ""
+            }
+          </header>
+          <textarea data-extra-text="${n}" rows="2" placeholder="題目沒問到、但這輪測到的問題或建議"${editable ? "" : " disabled"}>${escapeHtml(ex.text)}</textarea>
+          ${evidenceStripHtml(ex.evidence, `extra:${n}`, extraPrefix(ex.n), editable)}
+        </article>`;
+      })
+      .join("");
+    return `<section class="tk-uat-extras" aria-label="補充說明">
+      <h3>補充說明</h3>
+      <p class="tk-uat-extras-lead">題目以外碰到的問題，或想請 agent 一併看的優化建議。編號列表，每則都可以帶圖。送出報告時會一起帶上。</p>
+      ${rows || `<p class="tk-uat-extras-lead">還沒有補充。測到題目沒覆蓋的事，就加一則。</p>`}
+      ${
+        editable
+          ? `<button type="button" class="tk-uat-send-btn tk-uat-extra-add" id="uat-extra-add">新增一則</button>`
+          : ""
+      }
+    </section>`;
+  }
+
   /** 一題一張卡。沒有錨點的題勾不了 —— 跟 plan 步驟同一條規矩。 */
-  function uatCard(it: UatItem): string {
+  function uatCard(it: UatItem, index: number): string {
     const editable = canEditFiles();
     const body = [
       it.steps.length
@@ -797,6 +916,7 @@ if (__authed) {
         <span class="tk-uat-k">說明<em>（${NEEDS_NOTE_HINT}必填）</em></span>
         <textarea data-note="${id}" rows="2" placeholder="測不過的話，寫下看到什麼、跟預期差在哪"${editable ? "" : " disabled"}>${escapeHtml(it.note)}</textarea>
       </label>
+      ${evidenceStripHtml(it.evidence ?? [], `item:${id}`, itemPrefix(it.title, index + 1), editable)}
       <p class="tk-uat-err" data-err="${id}" role="alert"></p>
     </article>`;
   }
@@ -883,7 +1003,8 @@ if (__authed) {
       document.activeElement instanceof HTMLTextAreaElement
         ? document.activeElement.dataset["note"]
         : undefined;
-    steps.innerHTML = sorted.map(({ it }) => uatCard(it)).join("");
+    steps.innerHTML =
+      sorted.map(({ it, n }) => uatCard(it, n)).join("") + extrasHtml(r);
 
     steps.querySelectorAll<HTMLButtonElement>("[data-verdict]").forEach((btn) => {
       // 按結果鈕不奪走 textarea 焦點。否則「打完原因直接按失敗」會先觸發
@@ -921,6 +1042,8 @@ if (__authed) {
         };
       });
 
+    bindUatMedia(r, steps);
+
     if (focusedNote) {
       const ta = steps.querySelector<HTMLTextAreaElement>(
         `textarea[data-note="${CSS.escape(focusedNote)}"]`,
@@ -938,10 +1061,10 @@ if (__authed) {
     const sum = document.getElementById("plan-summary");
     const steps = document.getElementById("step-list");
     if (!p) {
-      if (hd) hd.textContent = "還沒選計劃";
+      if (hd) hd.textContent = IS_UAT_PAGE ? "還沒選報告" : "還沒選計劃";
       if (sum) sum.innerHTML = "";
       if (steps)
-        steps.innerHTML = `<div class="tk-empty"><p>從左邊挑一份計劃。</p></div>`;
+        steps.innerHTML = `<div class="tk-empty"><p>${IS_UAT_PAGE ? "從左邊挑一份實測報告。" : "從左邊挑一份計劃。"}</p></div>`;
       return;
     }
     if (hd) hd.innerHTML = `<span class="mono">${escapeHtml(p.name)}</span>`;
@@ -1436,6 +1559,330 @@ if (__authed) {
     await refresh(true);
   }
 
+  async function applyUatText(
+    mutate: (text: string) => { ok: true; text: string } | { ok: false; reason: string },
+  ): Promise<boolean> {
+    const p = plans[idx];
+    if (!p?.uat) return false;
+    let blocked = "";
+    const guard = guardOf(p.path, p.raw);
+    const r = await safeApply(
+      guard,
+      (text) => {
+        const res = mutate(text);
+        if (!res.ok) {
+          blocked = res.reason;
+          return null;
+        }
+        return res.text;
+      },
+      { read: readFile, write: writeFile },
+    );
+    if (!r.ok) {
+      toast(blocked || r.reason);
+      await refresh(true);
+      return false;
+    }
+    await refresh(true);
+    return true;
+  }
+
+  function extrasFromDom(r: UatReport): UatExtra[] {
+    const out: UatExtra[] = [];
+    document.querySelectorAll<HTMLElement>("[data-extra]").forEach((el) => {
+      const n = Number(el.dataset.extra);
+      if (!Number.isFinite(n) || n < 1) return;
+      const text =
+        el.querySelector<HTMLTextAreaElement>("textarea[data-extra-text]")?.value ?? "";
+      const disk = extrasFor(r).find((e) => e.n === n);
+      const evidence = (disk?.evidence ?? []).map((ev) => {
+        const cap =
+          el.querySelector<HTMLInputElement>(`input[data-cap="${CSS.escape(ev.name)}"]`)
+            ?.value ?? ev.caption;
+        return { ...ev, caption: cap };
+      });
+      out.push({ n, text, evidence });
+    });
+    return out;
+  }
+
+  async function persistExtras(r: UatReport, extras: UatExtra[]) {
+    const path = r.path ?? "";
+    dropUnsaved(path, extras);
+    const kept = extras.filter((e) => e.text.trim() || e.evidence.length);
+    await applyUatText((text) => setExtras(text, kept, { now: nowStamp() }));
+  }
+
+  async function persistItemEvidence(id: string, evidence: UatEvidence[]) {
+    await applyUatText((text) => setEvidence(text, id, evidence, { now: nowStamp() }));
+  }
+
+  async function blobsFromClipboard(e?: ClipboardEvent): Promise<Blob[]> {
+    const out: Blob[] = [];
+    const fromEvent = e?.clipboardData;
+    if (fromEvent) {
+      for (const item of Array.from(fromEvent.items)) {
+        if (!item.type.startsWith("image/")) continue;
+        const f = item.getAsFile();
+        if (f) out.push(f);
+      }
+      if (fromEvent.files?.length) {
+        for (const f of Array.from(fromEvent.files)) {
+          if (f.type.startsWith("image/")) out.push(f);
+        }
+      }
+    }
+    if (out.length) return out;
+    if (!navigator.clipboard?.read) return [];
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith("image/"));
+        if (!type) continue;
+        out.push(await item.getType(type));
+      }
+    } catch {
+      /* 權限被拒就當沒圖 */
+    }
+    return out;
+  }
+
+  async function saveBlobs(
+    reportPath: string,
+    prefix: string,
+    existing: readonly UatEvidence[],
+    blobs: Blob[],
+  ): Promise<UatEvidence[]> {
+    const added: UatEvidence[] = [];
+    let acc = [...existing];
+    for (const blob of blobs) {
+      const ext = extOfMime(blob.type) ?? "png";
+      const name = nextEvidenceName(prefix, acc, ext);
+      const base64 = await blobToBase64(blob);
+      const saved = await native.saveUatEvidence(reportPath, name, base64);
+      evPreview.set(saved.name, `data:${blob.type || "image/png"};base64,${base64}`);
+      const ev = { name: saved.name, rel: saved.rel, caption: "" };
+      acc.push(ev);
+      added.push(ev);
+    }
+    return added;
+  }
+
+  async function onPasteImages(r: UatReport, scope: string, e?: ClipboardEvent) {
+    if (!isNative() || !r.path) {
+      toast("貼圖要在桌面版，瀏覽器寫不進專案資料夾");
+      return;
+    }
+    const blobs = await blobsFromClipboard(e);
+    if (!blobs.length) {
+      toast("剪貼簿裡沒有圖片。先截圖，再貼上。");
+      return;
+    }
+    const wrap = document.querySelector<HTMLElement>(`[data-ev-scope="${CSS.escape(scope)}"]`);
+    const prefix = wrap?.dataset.evPrefix ?? "T1";
+    try {
+      if (scope.startsWith("item:")) {
+        const id = scope.slice(5);
+        const it = r.items.find((x) => x.id === id);
+        if (!it) return;
+        const added = await saveBlobs(r.path, prefix, it.evidence ?? [], blobs);
+        await persistItemEvidence(id, [...(it.evidence ?? []), ...added]);
+        return;
+      }
+      if (scope.startsWith("extra:")) {
+        const n = Number(scope.slice(6));
+        const extras = extrasFromDom(r);
+        const extra = extras.find((x) => x.n === n);
+        if (!extra) return;
+        const added = await saveBlobs(r.path, prefix, extra.evidence, blobs);
+        extra.evidence = [...extra.evidence, ...added];
+        await persistExtras(r, extras);
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "存圖失敗");
+    }
+  }
+
+  async function onPickImages(r: UatReport, scope: string) {
+    if (!isNative() || !r.path) {
+      toast("選檔要在桌面版");
+      return;
+    }
+    const wrap = document.querySelector<HTMLElement>(`[data-ev-scope="${CSS.escape(scope)}"]`);
+    const prefix = wrap?.dataset.evPrefix ?? "T1";
+    try {
+      const picked = await native.pickUatImages(r.path, prefix);
+      if (picked.cancelled || !picked.saved.length) return;
+      const added: UatEvidence[] = picked.saved.map((s) => ({
+        name: s.name,
+        rel: s.rel,
+        caption: "",
+      }));
+      if (scope.startsWith("item:")) {
+        const id = scope.slice(5);
+        const it = r.items.find((x) => x.id === id);
+        if (!it) return;
+        await persistItemEvidence(id, [...(it.evidence ?? []), ...added]);
+        return;
+      }
+      if (scope.startsWith("extra:")) {
+        const n = Number(scope.slice(6));
+        const extras = extrasFromDom(r);
+        const extra = extras.find((x) => x.n === n);
+        if (!extra) return;
+        extra.evidence = [...extra.evidence, ...added];
+        await persistExtras(r, extras);
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "選檔失敗");
+    }
+  }
+
+  async function onDeleteImage(r: UatReport, scope: string, name: string) {
+    if (r.path) {
+      try {
+        await native.deleteUatEvidence(r.path, name);
+      } catch {
+        /* 檔不在了也要把 markdown 清掉 */
+      }
+    }
+    evPreview.delete(name);
+    if (scope.startsWith("item:")) {
+      const id = scope.slice(5);
+      const it = r.items.find((x) => x.id === id);
+      if (!it) return;
+      await persistItemEvidence(
+        id,
+        (it.evidence ?? []).filter((e) => e.name !== name),
+      );
+      return;
+    }
+    if (scope.startsWith("extra:")) {
+      const n = Number(scope.slice(6));
+      const extras = extrasFromDom(r);
+      const extra = extras.find((x) => x.n === n);
+      if (extra) extra.evidence = extra.evidence.filter((e) => e.name !== name);
+      await persistExtras(r, extras);
+    }
+  }
+
+  function fillEvidencePreviews(r: UatReport, root: HTMLElement) {
+    root.querySelectorAll<HTMLImageElement>("img[data-ev-img]").forEach((img) => {
+      const name = img.dataset.evImg;
+      if (!name) return;
+      const cached = evPreview.get(name);
+      if (cached) {
+        img.src = cached;
+        return;
+      }
+      if (!r.path || !isNative()) return;
+      void native
+        .readUatEvidence(r.path, name)
+        .then((got) => {
+          const url = `data:${got.mime};base64,${got.base64}`;
+          evPreview.set(name, url);
+          img.src = url;
+        })
+        .catch(() => {
+          img.alt = `${name}（讀不到）`;
+        });
+    });
+  }
+
+  function bindUatMedia(r: UatReport, steps: HTMLElement) {
+    const path = r.path ?? "";
+    steps.querySelectorAll<HTMLButtonElement>("[data-ev-paste]").forEach((btn) => {
+      btn.onclick = () => void onPasteImages(r, btn.dataset.evPaste ?? "");
+    });
+    steps.querySelectorAll<HTMLButtonElement>("[data-ev-pick]").forEach((btn) => {
+      btn.onclick = () => void onPickImages(r, btn.dataset.evPick ?? "");
+    });
+    steps.querySelectorAll<HTMLButtonElement>("[data-ev-del]").forEach((btn) => {
+      btn.onclick = () => {
+        const scope = btn.closest<HTMLElement>("[data-ev-scope]")?.dataset.evScope ?? "";
+        void onDeleteImage(r, scope, btn.dataset.evDel ?? "");
+      };
+    });
+    steps.querySelectorAll<HTMLButtonElement>("[data-ev-open]").forEach((btn) => {
+      btn.onclick = () => {
+        if (!r.path || !isNative()) return;
+        void native.openUatEvidence(r.path, btn.dataset.evOpen ?? "").catch((e) => {
+          toast(e instanceof Error ? e.message : "打不開這張圖");
+        });
+      };
+    });
+    steps.querySelectorAll<HTMLInputElement>("input[data-cap]").forEach((inp) => {
+      const original = inp.value;
+      inp.onblur = () => {
+        if (inp.value === original) return;
+        const scope = inp.closest<HTMLElement>("[data-ev-scope]")?.dataset.evScope ?? "";
+        if (scope.startsWith("item:")) {
+          const id = scope.slice(5);
+          const it = r.items.find((x) => x.id === id);
+          if (!it) return;
+          const next = (it.evidence ?? []).map((ev) =>
+            ev.name === inp.dataset.cap ? { ...ev, caption: inp.value } : ev,
+          );
+          void persistItemEvidence(id, next);
+          return;
+        }
+        void persistExtras(r, extrasFromDom(r));
+      };
+    });
+    steps.querySelectorAll<HTMLTextAreaElement>("textarea[data-extra-text]").forEach((ta) => {
+      const n = Number(ta.dataset.extraText);
+      const original = extrasFor(r).find((e) => e.n === n)?.text ?? "";
+      ta.onblur = () => {
+        if (ta.value === original) return;
+        void persistExtras(r, extrasFromDom(r));
+      };
+    });
+    steps.querySelectorAll<HTMLButtonElement>("[data-extra-del]").forEach((btn) => {
+      btn.onclick = () => {
+        const n = Number(btn.dataset.extraDel);
+        const extras = extrasFromDom(r).filter((e) => e.n !== n);
+        const pending = (unsavedExtras.get(path) ?? []).filter((e) => e.n !== n);
+        if (pending.length) unsavedExtras.set(path, pending);
+        else unsavedExtras.delete(path);
+        const gone = extrasFor(r).find((e) => e.n === n);
+        if (r.path && gone) {
+          for (const ev of gone.evidence) {
+            void native.deleteUatEvidence(r.path, ev.name).catch(() => undefined);
+            evPreview.delete(ev.name);
+          }
+        }
+        void persistExtras(r, extras);
+      };
+    });
+    const addBtn = document.getElementById("uat-extra-add");
+    if (addBtn) {
+      addBtn.onclick = () => {
+        const current = extrasFor(r);
+        const next = { n: nextExtraNumber(current), text: "", evidence: [] };
+        const pending = unsavedExtras.get(path) ?? [];
+        unsavedExtras.set(path, [...pending, next]);
+        render(true);
+      };
+    }
+    steps.onpaste = (e) => {
+      const hasImage = Array.from(e.clipboardData?.items ?? []).some((it) =>
+        it.type.startsWith("image/"),
+      );
+      if (!hasImage) return;
+      const host =
+        e.target instanceof Element
+          ? e.target.closest<HTMLElement>("[data-ev-scope], [data-extra], article.tk-uat")
+          : null;
+      const scope =
+        host?.dataset.evScope ??
+        host?.querySelector<HTMLElement>("[data-ev-scope]")?.dataset.evScope;
+      if (!scope) return;
+      e.preventDefault();
+      void onPasteImages(r, scope, e);
+    };
+    fillEvidencePreviews(r, steps);
+  }
+
   /**
    * 說明欄正在打字時不要重畫。
    *
@@ -1445,7 +1892,14 @@ if (__authed) {
    */
   function isEditingNote(): boolean {
     const a = document.activeElement;
-    return a instanceof HTMLTextAreaElement && a.hasAttribute("data-note");
+    if (!(a instanceof HTMLTextAreaElement || a instanceof HTMLInputElement)) {
+      return false;
+    }
+    return (
+      a.hasAttribute("data-note") ||
+      a.hasAttribute("data-extra-text") ||
+      a.hasAttribute("data-cap")
+    );
   }
 
   function render(force = false) {
@@ -1467,7 +1921,8 @@ if (__authed) {
   }
 
   /**
-   * 喚醒鏈的著陸點：`tracking.html?uat=<報告路徑>`。
+   * 喚醒鏈的著陸點：`uat.html?uat=<報告路徑>`。
+   * 舊書籤 `tracking.html?uat=` 會被導到同一份報告。
    *
    * **不是「找不到就算了」。** CLI 剛寫好的檔不一定已經在掃描結果裡 —— 掃描
    * 每秒一次，而 App 很可能是被 `open -a` 冷啟動的，第一輪掃描甚至還沒跑。

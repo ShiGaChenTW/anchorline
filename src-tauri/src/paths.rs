@@ -124,6 +124,96 @@ pub fn domain_pack_writable(dir: &Path, name: &str, roots: &RegisteredRoots) -> 
     !stem.is_empty() && stem.chars().any(|c| c != '.')
 }
 
+/// UAT 證物檔名：`T1-01.png` / `S12-03.jpg`。前端只能說這個形狀，不能帶路徑。
+pub fn uat_evidence_name_ok(name: &str) -> bool {
+    let Some((stem, ext)) = name.rsplit_once('.') else {
+        return false;
+    };
+    if !matches!(
+        ext.to_ascii_lowercase().as_str(),
+        "png" | "jpg" | "jpeg" | "webp"
+    ) {
+        return false;
+    }
+    let Some((kind, seq)) = stem.split_once('-') else {
+        return false;
+    };
+    let mut chars = kind.chars();
+    let Some(prefix) = chars.next() else {
+        return false;
+    };
+    if prefix != 'T' && prefix != 'S' {
+        return false;
+    }
+    let digits: String = chars.collect();
+    !digits.is_empty()
+        && digits.len() <= 3
+        && digits.chars().all(|c| c.is_ascii_digit())
+        && seq.len() == 2
+        && seq.chars().all(|c| c.is_ascii_digit())
+}
+
+pub fn uat_evidence_prefix_ok(prefix: &str) -> bool {
+    let mut chars = prefix.chars();
+    let Some(head) = chars.next() else {
+        return false;
+    };
+    if head != 'T' && head != 'S' {
+        return false;
+    }
+    let digits: String = chars.collect();
+    !digits.is_empty() && digits.len() <= 3 && digits.chars().all(|c| c.is_ascii_digit())
+}
+
+pub const MAX_UAT_EVIDENCE_BYTES: usize = 8 * 1024 * 1024;
+
+/// 報告檔 → 證物落地路徑。
+///
+/// 已註冊專案根 ∧ 報告在 `plans/*.md` ∧ 檔名通過 [`uat_evidence_name_ok`]。
+/// 目錄可以還不存在（這條路允許建檔）。
+pub fn uat_evidence_dest(
+    report: &Path,
+    name: &str,
+    roots: &RegisteredRoots,
+) -> Result<PathBuf, String> {
+    if !uat_evidence_name_ok(name) {
+        return Err("檔名只能是 T1-01.png 或 S1-01.jpg 這種形狀".into());
+    }
+    if !roots.contains_ancestor_of(report) {
+        return Err("這份報告不在你選過的專案裡，不能寫附件".into());
+    }
+    let ext = report
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase());
+    if !matches!(ext.as_deref(), Some("md") | Some("markdown")) {
+        return Err("附件只能掛在 markdown 報告下面".into());
+    }
+    if !report.is_file() {
+        return Err("找不到這份報告，無法寫附件".into());
+    }
+    let parent = report.parent().ok_or("報告路徑不完整")?;
+    if parent.file_name().and_then(|s| s.to_str()) != Some("plans") {
+        return Err("附件只准寫在 plans/uat-assets/ 底下".into());
+    }
+    let stem = report
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or("報告檔名無法當成目錄名")?;
+    if stem.is_empty() || stem.contains("..") || stem.contains('/') || stem.contains('\\') {
+        return Err("報告檔名不適合作為附件目錄".into());
+    }
+    Ok(parent.join("uat-assets").join(stem).join(name))
+}
+
+pub fn uat_evidence_rel(report: &Path, name: &str) -> String {
+    let stem = report
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("uat");
+    format!("uat-assets/{stem}/{name}")
+}
+
 /// `canonicalize` 解得開就用解開的，解不開（檔案還不存在）就退回逐段正規化。
 ///
 /// append 的目標檔第一次寫入時**還不存在**，所以不能無條件依賴 canonicalize。
@@ -380,6 +470,34 @@ mod tests {
             &tmp.join("../escape/.anchorline/a.jsonl"),
             &roots
         ));
+    }
+
+    #[test]
+    fn uat_evidence_name_is_closed() {
+        assert!(uat_evidence_name_ok("T1-01.png"));
+        assert!(uat_evidence_name_ok("S12-03.JPG"));
+        assert!(uat_evidence_prefix_ok("T1"));
+        assert!(uat_evidence_prefix_ok("S12"));
+        assert!(!uat_evidence_name_ok("../T1-01.png"));
+        assert!(!uat_evidence_name_ok("T1-1.png"));
+        assert!(!uat_evidence_name_ok("X1-01.png"));
+        assert!(!uat_evidence_prefix_ok("T"));
+        assert!(!uat_evidence_prefix_ok("TT1"));
+    }
+
+    #[test]
+    fn uat_evidence_dest_stays_under_plans_assets() {
+        let tmp = std::env::temp_dir().join("sf-uat-ev-test");
+        let plans = tmp.join("plans");
+        let _ = std::fs::create_dir_all(&plans);
+        let report = plans.join("uat-demo.md");
+        let _ = std::fs::write(&report, "# UAT: x\n");
+        let roots = RegisteredRoots::default();
+        roots.register(&tmp);
+        let dest = uat_evidence_dest(&report, "T1-01.png", &roots).unwrap();
+        assert!(dest.ends_with("plans/uat-assets/uat-demo/T1-01.png"));
+        assert!(uat_evidence_dest(&report, "../T1-01.png", &roots).is_err());
+        assert!(uat_evidence_dest(&tmp.join("other.md"), "T1-01.png", &roots).is_err());
     }
 
     #[test]

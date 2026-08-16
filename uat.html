@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Task Tracking · Anchorline</title>
+<title>UAT使用者測試 · Anchorline</title>
 <link rel="stylesheet" href="shared.css" />
 <style>
   /* 三欄：計劃清單｜這一份的內容｜結構檢查。
@@ -698,7 +698,7 @@
         <a class="nav-item" href="editor.html">編輯工作台</a>
         <a class="nav-item" href="templates.html">PRD 範本</a>
         <a class="nav-item" href="review.html">審閱佇列</a>
-        <a class="nav-item active" href="tracking.html">計劃追蹤</a>
+        <a class="nav-item active" href="uat.html">UAT使用者測試</a>
         <a class="nav-item" href="settings.html">偏好設定</a>
       </nav>
       <div class="rail-foot rail-foot--user" aria-label="目前使用者">
@@ -724,17 +724,17 @@
       </div>
     </aside>
     <main class="main" style="overflow:hidden;display:flex;flex-direction:column">
-      <div class="toolbar context-toolbar context-surface-toolbar" data-context="tracking" data-od-id="toolbar">
+      <div class="toolbar context-toolbar context-surface-toolbar" data-context="uat" data-od-id="toolbar">
         <div class="context-frame-top">
-          <span class="context-kicker">09 / TASK TRACKING</span>
+          <span class="context-kicker">10 / UAT 使用者測試</span>
           <span class="context-state">EXECUTION</span>
         </div>
         <div class="context-title-block">
-          <h1>Task Tracking</h1>
-          <div class="sub">這個專案 <code>plans/</code> 底下每份計劃的進度。左緣有線的那一份是 agent 此刻正在寫的。</div>
+          <h1>UAT使用者測試</h1>
+          <div class="sub">這個專案 <code>plans/</code> 底下每份實測報告。逐題勾選、貼截圖、寫補充說明，再送出給 agent。</div>
         </div>
         <div class="context-frame-bottom">
-          <span class="context-path">project / task-tracking</span>
+          <span class="context-path">project / uat</span>
           <div class="context-actions">
             <button type="button" class="btn" id="btn-refresh">重新整理</button>
             <a class="btn btn-ghost" href="editor.html">回編輯器</a>
@@ -744,11 +744,11 @@
       <div class="content" style="padding:0;overflow:hidden;flex:1;min-height:0;display:flex;flex-direction:column">
         <div class="tk-shell" style="flex:1">
           <div class="tk-rail">
-            <div class="tk-hd">計劃</div>
+            <div class="tk-hd">實測報告</div>
             <div id="plan-list"></div>
           </div>
           <div class="tk-main">
-            <div class="tk-hd" id="plan-hd">還沒選計劃</div>
+            <div class="tk-hd" id="plan-hd">還沒選報告</div>
             <div class="tk-body">
               <div id="plan-summary"></div>
               <div id="step-list"></div>
@@ -769,6 +769,6 @@
   </div>
 </div>
 <div class="toast" id="toast" role="status"></div>
-<script type="module" src="/src/pages/tracking.ts"></script>
+<script type="module" src="/src/pages/uat.ts"></script>
 </body>
 </html>

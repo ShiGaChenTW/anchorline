@@ -21,11 +21,11 @@
  */
 import { isNative, isUnavailable, native } from "./native";
 
-/** 導頁時報告路徑掛在哪個 query 參數上。tracking 頁靠它著陸。 */
+/** 導頁時報告路徑掛在哪個 query 參數上。UAT 頁靠它著陸。 */
 export const UAT_QUERY_KEY = "uat";
 
 /**
- * 已經在 tracking 頁時改用事件交件，不重新導頁。
+ * 已經在 UAT 頁時改用事件交件，不重新導頁。
  *
  * 導頁會整頁重載，把捲動位置、展開狀態、還沒存的說明欄全部丟掉 —— 而使用者
  * 正在做的事很可能就是勾上一份報告。
@@ -54,15 +54,20 @@ export function parseHandoff(text: string): string | null {
   return typeof p === "string" && p.trim() ? p.trim() : null;
 }
 
-/** 現在人在 tracking 頁嗎。判斷方式與 `auth.ts` 的 `isLoginPage` 一致。 */
-export function isTrackingPage(): boolean {
+/** 現在人在 UAT 使用者測試頁嗎。判斷方式與 `auth.ts` 的 `isLoginPage` 一致。 */
+export function isUatPage(): boolean {
   const path = location.pathname.replace(/\\/g, "/");
-  return path.endsWith("tracking.html") || path.endsWith("/tracking");
+  return path.endsWith("uat.html") || path.endsWith("/uat");
+}
+
+/** @deprecated 舊名，等於 {@link isUatPage}。喚醒鏈改停在 uat.html。 */
+export function isTrackingPage(): boolean {
+  return isUatPage();
 }
 
 /** 報告路徑 → 著陸網址。導頁與測試共用同一段拼接，不要在呼叫端各拼一次。 */
 export function trackingUrlFor(reportPath: string): string {
-  return `tracking.html?${UAT_QUERY_KEY}=${encodeURIComponent(reportPath)}`;
+  return `uat.html?${UAT_QUERY_KEY}=${encodeURIComponent(reportPath)}`;
 }
 
 async function takeOnce(): Promise<void> {
@@ -74,7 +79,7 @@ async function takeOnce(): Promise<void> {
   const reportPath = parseHandoff(raw);
   if (!reportPath) return;
 
-  if (isTrackingPage()) {
+  if (isUatPage()) {
     window.dispatchEvent(
       new CustomEvent(UAT_HANDOFF_EVENT, { detail: { reportPath } }),
     );

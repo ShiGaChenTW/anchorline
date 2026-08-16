@@ -554,7 +554,7 @@ describe("Cato 審計回歸（F2/F3/F5）", () => {
 
 describe("UAT 檔頭脈絡／context 契約", () => {
   const instructionLine =
-    "> 在 Anchorline 的 Task Tracking 開這一份逐題勾選。「失敗」與「不測」必須填說明。";
+    "> 在 Anchorline 的 UAT使用者測試 開這一份逐題勾選。「失敗」與「不測」必須填說明。";
 
   test("serialize 再 parse 時，context 的空白行與 inline markdown 都要原樣留在 preamble", () => {
     const text = serializeUatReport(

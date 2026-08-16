@@ -21,6 +21,7 @@ const PAGE_LABEL: Record<RailPage, string> = {
   openspec: "OpenSpec 入口",
   review: "審閱佇列",
   tracking: "Task Tracking",
+  uat: "UAT使用者測試",
   admin: "管理中心",
   agents: "Agent 管理",
   settings: "偏好設定",

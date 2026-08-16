@@ -19,7 +19,8 @@ pub mod testing {
     pub use crate::commands::{append_line, scan_plans, valid_history_name};
     pub use crate::exec::strip_ansi;
     pub use crate::paths::{
-        append_allowed, domain_pack_writable, editable, normalize_line, RegisteredRoots,
+        append_allowed, domain_pack_writable, editable, normalize_line,
+        uat_evidence_dest, uat_evidence_name_ok, RegisteredRoots,
     };
 }
 
@@ -62,6 +63,11 @@ pub fn run() {
             commands::read_file,
             commands::write_file,
             commands::write_domain_pack,
+            commands::save_uat_evidence,
+            commands::pick_uat_images,
+            commands::read_uat_evidence,
+            commands::delete_uat_evidence,
+            commands::open_uat_evidence,
             commands::is_root_registered,
             commands::append_file,
             commands::read_log,

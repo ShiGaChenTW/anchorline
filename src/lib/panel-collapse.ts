@@ -9,6 +9,8 @@ const KEYS = {
   rail: "anchorline:collapse:rail",
   outline: "anchorline:collapse:outline",
   coach: "anchorline:collapse:coach",
+  tkRail: "anchorline:collapse:tk-rail",
+  tkSide: "anchorline:collapse:tk-side",
 } as const;
 
 function readCollapsed(key: string): boolean {
@@ -180,6 +182,63 @@ function initWbColCollapse(
   apply(readCollapsed(KEYS[key]));
 }
 
+/**
+ * Task Tracking 的左右兩欄（計劃／結構檢查）。
+ *
+ * 刻意不跟 initWbColCollapse 併成一支：那支綁著 .wb 的 resize handle 與
+ * grid 重算事件，tracking 這邊兩者都沒有。硬要共用就得加一堆 if，
+ * 而編輯台那條路現在是好的 —— 不值得為了少 30 行去動它。
+ *
+ * 收起來靠 CSS class 換 grid-template-columns（見 tracking.html）；
+ * 這裡不算 grid 寬度，因為 .tk-shell 的三欄是固定值，算了也只是重寫一次。
+ */
+function initTkColCollapse(
+  colSel: string,
+  key: "tkRail" | "tkSide",
+  expandId: string,
+  label: string,
+  side: "left" | "right",
+  collapseClass: string,
+) {
+  const shell = document.querySelector(".tk-shell") as HTMLElement | null;
+  const col = document.querySelector(colSel) as HTMLElement | null;
+  if (!shell || !col || col.dataset.collapseReady === "1") return;
+
+  const head = col.querySelector(".tk-hd");
+  if (!head) return;
+  col.dataset.collapseReady = "1";
+
+  head.classList.add("panel-head-with-toggle");
+  const toggle = makeToggle({
+    id: `btn-collapse-${expandId}`,
+    labelCollapse: `收縮${label}`,
+    labelExpand: `展開${label}`,
+    side,
+  });
+  head.appendChild(toggle);
+
+  // 窄條要落在原本那一欄的格線位置上，不能多出第四個 grid item——
+  // 所以收起時那一欄是 display:none，不是被搬走。
+  let strip = document.getElementById(expandId) as HTMLButtonElement | null;
+  if (!strip) {
+    strip = makeExpandRail(side, label, expandId);
+    if (side === "left") shell.insertBefore(strip, col);
+    else col.insertAdjacentElement("afterend", strip);
+  }
+
+  const apply = (collapsed: boolean) => {
+    shell.classList.toggle(collapseClass, collapsed);
+    col.setAttribute("aria-hidden", collapsed ? "true" : "false");
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    strip!.hidden = !collapsed;
+    writeCollapsed(KEYS[key], collapsed);
+  };
+
+  toggle.addEventListener("click", () => apply(true));
+  strip.addEventListener("click", () => apply(false));
+  apply(readCollapsed(KEYS[key]));
+}
+
 function reflowWorkbench() {
   const wb = document.querySelector(".wb") as HTMLElement | null;
   if (!wb) return;
@@ -228,6 +287,16 @@ export function initPanelCollapse() {
     "教練",
     "right",
     "coach-collapsed",
+  );
+
+  initTkColCollapse(".tk-rail", "tkRail", "btn-expand-tk-rail", "計劃", "left", "tk-rail-collapsed");
+  initTkColCollapse(
+    ".tk-side",
+    "tkSide",
+    "btn-expand-tk-side",
+    "結構檢查",
+    "right",
+    "tk-side-collapsed",
   );
 
   window.addEventListener("anchorline:panel-collapse", () => reflowWorkbench());

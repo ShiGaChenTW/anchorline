@@ -69,6 +69,13 @@ function nextStepForPage(page: RailPage | null): NextStep {
         cta: "回編輯",
         href: "editor.html",
       };
+    case "uat":
+      return {
+        label: "下一步",
+        detail: "逐題勾選實測報告；失敗與補充會一起交給 agent。",
+        cta: "回編輯",
+        href: "editor.html",
+      };
     case "admin":
       return {
         label: "下一步",

@@ -407,7 +407,7 @@ describe("UAT CLI：真的走 subprocess 時也要守住輸出契約", () => {
         "> **環境：** sandbox",
         "> 保留 `code`",
         "",
-        "> 在 Anchorline 的 Task Tracking 開這一份逐題勾選。「失敗」與「不測」必須填說明。",
+        "> 在 Anchorline 的 UAT使用者測試 開這一份逐題勾選。「失敗」與「不測」必須填說明。",
         "",
       ]);
 
@@ -419,7 +419,7 @@ describe("UAT CLI：真的走 subprocess 時也要守住輸出契約", () => {
           "> **環境：** sandbox",
           "> 保留 `code`",
           "",
-          "> 在 Anchorline 的 Task Tracking 開這一份逐題勾選。「失敗」與「不測」必須填說明。",
+          "> 在 Anchorline 的 UAT使用者測試 開這一份逐題勾選。「失敗」與「不測」必須填說明。",
         ].join("\n"),
       );
     });

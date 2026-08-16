@@ -103,6 +103,7 @@ export default defineConfig(({ command }) => ({
         admin: resolve(root, "admin.html"),
         agents: resolve(root, "agents.html"),
         tracking: resolve(root, "tracking.html"),
+        uat: resolve(root, "uat.html"),
         releases: resolve(root, "releases.html"),
       },
     },

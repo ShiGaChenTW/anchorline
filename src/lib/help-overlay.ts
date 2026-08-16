@@ -16,6 +16,7 @@ const DEFAULT_SECTIONS: HelpSection[] = [
       { keys: "3", desc: "範本庫" },
       { keys: "4", desc: "審閱佇列" },
       { keys: "5", desc: "計劃追蹤" },
+      { keys: "8", desc: "UAT使用者測試" },
       { keys: "6", desc: "PRD 審閱監控" },
       { keys: "7", desc: "簽核管理" },
       { keys: "?", desc: "顯示／關閉本說明" },
@@ -36,10 +37,10 @@ const DEFAULT_SECTIONS: HelpSection[] = [
     ],
   },
   {
-    title: "計劃追蹤",
+    title: "計劃追蹤／UAT",
     items: [
-      { keys: "j / ↓", desc: "下一個 plan" },
-      { keys: "k / ↑", desc: "上一個 plan" },
+      { keys: "j / ↓", desc: "下一份" },
+      { keys: "k / ↑", desc: "上一份" },
       { keys: "r", desc: "重新整理" },
     ],
   },

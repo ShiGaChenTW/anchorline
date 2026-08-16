@@ -282,7 +282,8 @@ function projActionsHtml(): string {
     { href: "editor.html", label: "編輯工作台", icon: IC.editor },
     // 計數 = 未測完的實測報告。由 rail-nav 的 refreshNavCounts 填值（0 不顯示），
     // 走的是「審閱佇列／範本」早就在用的 data-nav-count 機制，不另做一套。
-    { href: "tracking.html", label: "Task Tracking", icon: IC.tracking, count: "tracking" },
+    { href: "tracking.html", label: "Task Tracking", icon: IC.tracking },
+    { href: "uat.html", label: "UAT使用者測試", icon: IC.uat, count: "uat" },
   ];
   // 現在站在哪一頁要標出來。上面的「工作區」那一組早就這麼做了，這三個沒有 ——
   // 結果是在編輯台跟在 PRD 審閱監控看到的側欄長得一模一樣，位置感全靠記憶。

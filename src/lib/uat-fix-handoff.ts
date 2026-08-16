@@ -10,6 +10,7 @@
 
 import { validAnchor } from "./agent-handoff";
 import { ANCHOR_PREFIX } from "./plan-parser";
+import type { UatEvidence } from "./uat-evidence";
 import { uatProgress, type UatItem, type UatReport } from "./uat-parser";
 
 type AnchoredItem = { item: UatItem; anchor: string | null };
@@ -67,6 +68,26 @@ function pushTitle(lines: string[], title: string): void {
 function pushNote(lines: string[], label: "說明原文" | "原因原文", note: string): void {
   lines.push(`- ${label}：`);
   lines.push(noteBlock(note));
+}
+
+function evidenceAbs(reportPath: string | undefined, rel: string): string {
+  const root = reportPath ? uatProjectRoot(reportPath) : null;
+  if (!root) return rel;
+  return `${root}/plans/${rel.replace(/^\/+/, "")}`;
+}
+
+function pushEvidence(
+  lines: string[],
+  reportPath: string | undefined,
+  evidence: readonly UatEvidence[] | undefined,
+): void {
+  if (!evidence?.length) return;
+  lines.push("- 證物：先 Read 下列檔案再重現");
+  for (const ev of evidence) {
+    const loc = evidenceAbs(reportPath, ev.rel);
+    const cap = ev.caption.trim();
+    lines.push(cap ? `  - ${loc}（${cap}）` : `  - ${loc}`);
+  }
 }
 
 function pushPendingLine(lines: string[], pending: number): void {
@@ -148,12 +169,18 @@ export function uatFixTask(r: UatReport): string {
   pushPendingLine(lines, pending);
 
   if (failed.length === 0) {
-    lines.push("- 結論：全數通過/跳過，無需修復。");
-    lines.push(
-      `- 建議收尾：回覆使用者這份 UAT 目前沒有 fix 工單；若之後要再開一輪，請以 ${reportLabel(r)} 為基準重出新報告。`,
-    );
+    const extras = r.extras ?? [];
+    if (extras.length) {
+      lines.push("- 結論：沒有失敗題。報告末有補充說明，先讀再判斷要不要另開工作。");
+    } else {
+      lines.push("- 結論：全數通過/跳過，無需修復。");
+      lines.push(
+        `- 建議收尾：回覆使用者這份 UAT 目前沒有 fix 工單；若之後要再開一輪，請以 ${reportLabel(r)} 為基準重出新報告。`,
+      );
+    }
     if (wont.length > 0) pushWontItems(lines, wont);
     if (later.length > 0) pushLaterItems(lines, later);
+    pushExtras(lines, r);
     return lines.join("\n");
   }
 
@@ -179,6 +206,7 @@ export function uatFixTask(r: UatReport): string {
     pushAnchor(lines, entry.anchor);
     pushTitle(lines, entry.item.title);
     pushNote(lines, "說明原文", entry.item.note);
+    pushEvidence(lines, r.path, entry.item.evidence);
     if (entry.anchor) {
       lines.push(`- 這題修好後，commit 訊息內文獨立一行寫：${ANCHOR_PREFIX}:t=${entry.anchor}`);
     } else {
@@ -203,5 +231,22 @@ export function uatFixTask(r: UatReport): string {
     pushLaterItems(lines, later);
   }
 
+  pushExtras(lines, r);
   return lines.join("\n");
+}
+
+function pushExtras(lines: string[], r: UatReport): void {
+  const extras = r.extras ?? [];
+  if (!extras.length) return;
+  if (lines[lines.length - 1] !== "") lines.push("");
+  lines.push("## 補充說明（題目以外）");
+  lines.push(
+    "- 定位：使用者在本輪實測另外記下的問題或建議，不是某一題的失敗。先讀、再判斷要不要進修復範圍。不要當成帶錨點的失敗題去 commit。",
+  );
+  for (const extra of extras) {
+    lines.push("");
+    lines.push(`### 補充 ${extra.n}`);
+    pushNote(lines, "說明原文", extra.text || "（見附件）");
+    pushEvidence(lines, r.path, extra.evidence);
+  }
 }

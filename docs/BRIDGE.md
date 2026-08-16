@@ -80,6 +80,16 @@ canonicalize(path) 仍位於某個「已註冊專案根目錄」之內   ← 擋
 ∧ 單行 < 4KB（保住 append 的原子性）
 ```
 
+**`uatEvidenceDest(report, name)`** — 給 UAT 證物的建檔／讀／刪／開：
+
+```
+報告是已註冊專案根底下的 plans/*.md
+∧ 檔名 ∈ T|S + 1–3 位數字 + - + 兩位流水 + .(png|jpg|jpeg|webp)
+∧ 落地路徑 = <plans>/uat-assets/<報告 stem>/<檔名>
+```
+
+前端不能指定目的地。選檔對話框**不**把來源資料夾登記成專案根。
+
 **「已註冊專案根目錄」的唯一來源是使用者透過系統資料夾選擇器親手選過的路徑。** 前端傳來的路徑只能被檢查，不能被信任成根目錄。
 
 ### 3.3 永不執行的動作
@@ -338,6 +348,20 @@ gh search prs --author=@me --state=open --limit 30 --json repository,number,titl
 歡迎畫面的裝飾。`{ folderPath }` / 無輸入 → `{ raw }` 或 unavailable。
 
 `fastfetch` 的輸出前後夾 ANSI 跳脫序列，而序列本身含 `[`——**要先整段剝掉 ANSI 再找 JSON 開頭**，直接 parse 會炸在第一個字元。
+
+### 4.7e `saveUatEvidence` / `pickUatImages` / `readUatEvidence` / `deleteUatEvidence` / `openUatEvidence`
+
+UAT 截圖的窄通道。圖只准進 `plans/uat-assets/<報告 stem>/`。
+
+| | |
+|---|---|
+| `saveUatEvidence` | `{ reportPath, name, base64 }` → `{ name, rel, path }` |
+| `pickUatImages` | `{ reportPath, prefix }` → `{ cancelled, saved[] }`。系統開檔框，可多選。取消不是錯誤 |
+| `readUatEvidence` | `{ reportPath, name }` → `{ name, mime, base64 }` |
+| `deleteUatEvidence` | `{ reportPath, name }` → `{ path }`。檔不在也算成功 |
+| `openUatEvidence` | `{ reportPath, name }` → 用系統預覽開該檔 |
+
+`name` / `prefix` 在 Rust 驗證。單檔上限 8MB。
 
 ### 4.10 `ping`
 

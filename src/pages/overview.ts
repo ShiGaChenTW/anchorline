@@ -714,7 +714,7 @@ if (!requireAuth()) {
       }
     });
 
-    // 待實測那一列直接落到報告本身（`tracking.html?uat=…`），不繞儀表板 ——
+    // 待實測那一列直接落到報告本身（`uat.html?uat=…`），不繞儀表板 ——
     // 這一區的動作只有一個：把那份報告打開來勾。
     root.querySelectorAll<HTMLElement>("[data-uat]").forEach((el) => {
       el.addEventListener("click", (e) => {

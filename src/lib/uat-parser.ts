@@ -21,7 +21,18 @@
  * 純函式、零 I/O。
  */
 
+import {
+  formatEvidenceLine,
+  formatExtrasSection,
+  isExtraSectionTitle,
+  parseEvidenceLine,
+  parseExtraBody,
+  type UatEvidence,
+  type UatExtra,
+} from "./uat-evidence";
 import { ANCHOR_PREFIX, anchorOf, eolOf, mintId, stripAnchor } from "./plan-parser";
+
+export type { UatEvidence, UatExtra };
 
 export type UatVerdict = "pending" | "pass" | "fail" | "wont" | "later";
 
@@ -63,6 +74,8 @@ export type UatItem = {
   verdict: UatVerdict;
   /** 說明。檔內的佔位「（無）」讀出來是空字串 */
   note: string;
+  /** 題目附件。沒有這塊標籤時是空陣列 */
+  evidence?: UatEvidence[];
 };
 
 export type UatReport = {
@@ -89,6 +102,11 @@ export type UatReport = {
    * 是已承認的上限。消費者只有 uat-pending：把被指到的檔踢出待實測清單。
    */
   supersedes?: string;
+  /**
+   * 報告末「補充說明」：題目沒問到、實測時另外記下的問題或建議。
+   * 不是一題，沒有錨點，不計入進度／待實測。
+   */
+  extras?: UatExtra[];
 };
 
 /** CLI／skill 端的出題規格。序列化前先過 validateUatSpec。 */
@@ -104,7 +122,7 @@ export type UatSpec = {
 
 const H1_RE = /^#\s+UAT[:：]\s*(.*)$/;
 const SECTION_RE = /^##\s+/;
-const LABEL_RE = /^\*\*(流程|預期|結果|說明)[：:]\*\*\s*(.*)$/;
+const LABEL_RE = /^\*\*(流程|預期|結果|說明|附件)[：:]\*\*\s*(.*)$/;
 /** 檔頭的重測標記。blockquote 記號可有可無——人手剝掉 `>` 也不該讓標記失效 */
 const SUPERSEDES_RE = /^>?\s*重測自[：:]\s*(.+)$/;
 const EMPTY_NOTE = "（無）";
@@ -138,29 +156,35 @@ export function parseUatReport(text: string, path?: string): UatReport {
     path,
     unanchored: 0,
     preamble: "",
+    extras: [],
   };
   if (!text) return out;
 
   const lines = text.split(/\r?\n/);
   let cur: UatItem | null = null;
   /** 目前在哪個標籤區塊裡收內容 */
-  let field: "steps" | "expected" | "note" | null = null;
+  let field: "steps" | "expected" | "note" | "evidence" | null = null;
   /** 圍欄程式碼中：`##` 與 `**結果：**` 是內容不是結構（Cato F5） */
   let inFence = false;
   /** 同一題裡每種標籤只認第一次 —— 說明裡貼了長得像標籤的行是內容（Cato F2） */
   let seenLabels = new Set<string>();
   const noteBuf: string[] = [];
   const expectedBuf: string[] = [];
+  const evidenceBuf: UatEvidence[] = [];
+  const extraBuf: string[] = [];
+  let inExtras = false;
 
   const flushItem = () => {
     if (!cur) return;
     cur.expected = expectedBuf.join("\n").trim();
     const note = noteBuf.join("\n").trim();
     cur.note = note === EMPTY_NOTE ? "" : note;
+    cur.evidence = evidenceBuf.slice();
     out.items.push(cur);
     cur = null;
     noteBuf.length = 0;
     expectedBuf.length = 0;
+    evidenceBuf.length = 0;
   };
 
   const pushStep = (raw: string) => {
@@ -177,6 +201,10 @@ export function parseUatReport(text: string, path?: string): UatReport {
     else if (field === "steps") pushStep(raw);
     else if (field === "expected") expectedBuf.push(raw);
     else if (field === "note") noteBuf.push(raw);
+    else if (field === "evidence") {
+      const ev = parseEvidenceLine(raw);
+      if (ev) evidenceBuf.push(ev);
+    }
   };
 
   for (const raw of lines) {
@@ -217,13 +245,35 @@ export function parseUatReport(text: string, path?: string): UatReport {
     }
 
     if (SECTION_RE.test(s)) {
+      const title = stripAnchor(s.replace(SECTION_RE, "")).trim();
+      if (isExtraSectionTitle(title)) {
+        flushItem();
+        field = null;
+        inExtras = true;
+        extraBuf.length = 0;
+        continue;
+      }
+      if (inExtras) {
+        extraBuf.push(raw);
+        continue;
+      }
       flushItem();
       field = null;
       seenLabels = new Set();
       const id = anchorOf(raw);
-      const title = stripAnchor(s.replace(SECTION_RE, "")).trim();
-      cur = { title, steps: [], expected: "", verdict: "pending", note: "" };
+      cur = {
+        title,
+        steps: [],
+        expected: "",
+        verdict: "pending",
+        note: "",
+        evidence: [],
+      };
       if (id) cur.id = id;
+      continue;
+    }
+    if (inExtras) {
+      extraBuf.push(raw);
       continue;
     }
     if (!cur) {
@@ -253,6 +303,10 @@ export function parseUatReport(text: string, path?: string): UatReport {
       } else if (kind === "預期") {
         field = "expected";
         if (inline.trim()) expectedBuf.push(inline);
+      } else if (kind === "附件") {
+        field = "evidence";
+        const ev = parseEvidenceLine(inline);
+        if (ev) evidenceBuf.push(ev);
       } else {
         field = "note";
         if (inline.trim()) noteBuf.push(inline);
@@ -264,6 +318,7 @@ export function parseUatReport(text: string, path?: string): UatReport {
   }
   flushItem();
   out.preamble = preambleBuf.join("\n").trim();
+  if (inExtras) out.extras = parseExtraBody(extraBuf);
 
   out.unanchored = out.items.filter((x) => !x.id).length;
   // 手改出來的「失敗／不測但沒說明」不算已測 —— 必填規則在寫入端執法，
@@ -400,6 +455,134 @@ export function setVerdict(
   return { ok: true, text: next };
 }
 
+function locateItemSection(
+  lines: string[],
+  id: string,
+): { si: number; ei: number } | { reason: string } {
+  let inFence = false;
+  let si = -1;
+  let ei = lines.length;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i]!.trim();
+    if (/^(```|~~~)/.test(t)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence || !SECTION_RE.test(t)) continue;
+    if (si < 0) {
+      if (anchorOf(lines[i]!) === id) si = i;
+    } else {
+      ei = i;
+      break;
+    }
+  }
+  if (si < 0) return { reason: `找不到這一題（anc:t=${id}）` };
+  return { si, ei };
+}
+
+function firstLabels(
+  lines: string[],
+  si: number,
+  ei: number,
+): Map<string, number> {
+  const firstAt = new Map<string, number>();
+  let inFence = false;
+  for (let i = si + 1; i < ei; i++) {
+    const t = lines[i]!.trim();
+    if (/^(```|~~~)/.test(t)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const m = t.match(LABEL_RE);
+    if (m && !firstAt.has(m[1]!)) firstAt.set(m[1]!, i);
+  }
+  return firstAt;
+}
+
+function stampUpdated(text: string, now?: string): string {
+  if (!now) return text;
+  return text.replace(/^\*\*最後更新[：:]\*\*.*$/m, `**最後更新：** ${now}`);
+}
+
+/**
+ * 只改一題的附件列。說明／結果不動。
+ */
+export function setEvidence(
+  text: string,
+  id: string,
+  evidence: readonly UatEvidence[],
+  opts: { now?: string } = {},
+): { ok: true; text: string } | { ok: false; reason: string } {
+  const hadTrailingNewline = text.endsWith("\n");
+  const eol = eolOf(text);
+  const lines = text.split(/\r?\n/);
+  const loc = locateItemSection(lines, id);
+  if ("reason" in loc) return { ok: false, reason: loc.reason };
+  const { si, ei } = loc;
+  const firstAt = firstLabels(lines, si, ei);
+  const evLines = evidence.map(formatEvidenceLine);
+  const block = evLines.length ? evLines : ["（無）"];
+  const evAt = firstAt.get("附件") ?? -1;
+  if (evAt >= 0) {
+    let blockEnd = ei;
+    for (const at of firstAt.values()) {
+      if (at > evAt && at < blockEnd) blockEnd = at;
+    }
+    const tail = blockEnd < lines.length ? [""] : [];
+    lines.splice(evAt + 1, blockEnd - (evAt + 1), ...block, ...tail);
+  } else {
+    lines.splice(ei, 0, "", "**附件：**", ...block, "");
+  }
+  let next = lines.join(eol);
+  next = stampUpdated(next, opts.now);
+  if (hadTrailingNewline && !next.endsWith("\n")) next += eol;
+  return { ok: true, text: next };
+}
+
+/**
+ * 整段換掉報告末的補充說明。空陣列＝刪掉該區段。其餘位元組不變。
+ */
+export function setExtras(
+  text: string,
+  extras: readonly UatExtra[],
+  opts: { now?: string } = {},
+): { ok: true; text: string } | { ok: false; reason: string } {
+  const hadTrailingNewline = text.endsWith("\n");
+  const eol = eolOf(text);
+  const lines = text.split(/\r?\n/);
+  let inFence = false;
+  let si = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i]!.trim();
+    if (/^(```|~~~)/.test(t)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence || !SECTION_RE.test(t)) continue;
+    const title = stripAnchor(t.replace(SECTION_RE, "")).trim();
+    if (isExtraSectionTitle(title)) {
+      si = i;
+      break;
+    }
+  }
+  const body = formatExtrasSection(extras);
+  if (si >= 0) {
+    lines.splice(si, lines.length - si, ...body);
+    if (body.length === 0) {
+      while (lines.length && lines[lines.length - 1] === "") lines.pop();
+      lines.push("");
+    }
+  } else if (body.length) {
+    while (lines.length && lines[lines.length - 1] === "") lines.pop();
+    lines.push("", ...body);
+  }
+  let next = lines.join(eol);
+  next = stampUpdated(next, opts.now);
+  if (hadTrailingNewline && !next.endsWith("\n")) next += eol;
+  return { ok: true, text: next };
+}
+
 /**
  * 出題規格 → 檔案內容。錨點在這裡鑄，一題一個，鑄完就不再變。
  * `mint` 可注入，測試才能給定值。
@@ -437,7 +620,7 @@ export function serializeUatReport(
     out.push(...ctx.split("\n").map((l) => (l.trim() ? `> ${l}` : ">")), "");
   }
   out.push(
-    `> 在 Anchorline 的 Task Tracking 開這一份逐題勾選。「失敗」與「不測」必須填說明。`,
+    `> 在 Anchorline 的 UAT使用者測試 開這一份逐題勾選。「失敗」與「不測」必須填說明。`,
     "",
   );
 

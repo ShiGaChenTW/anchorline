@@ -207,6 +207,27 @@ export const native = {
   /** 領域包專用：唯一能建新檔的寫入路徑，檔名在 Rust 端驗證 */
   writeDomainPack: (dir: string, name: string, text: string) =>
     call<{ path: string }>("write_domain_pack", { dir, name, text }),
+
+  saveUatEvidence: (reportPath: string, name: string, base64: string) =>
+    call<{ name: string; rel: string; path: string }>("save_uat_evidence", {
+      reportPath,
+      name,
+      base64,
+    }),
+  pickUatImages: (reportPath: string, prefix: string) =>
+    call<{ cancelled: boolean; saved: { name: string; rel: string; path: string }[] }>(
+      "pick_uat_images",
+      { reportPath, prefix },
+    ),
+  readUatEvidence: (reportPath: string, name: string) =>
+    call<{ name: string; mime: string; base64: string }>("read_uat_evidence", {
+      reportPath,
+      name,
+    }),
+  deleteUatEvidence: (reportPath: string, name: string) =>
+    call<{ path: string }>("delete_uat_evidence", { reportPath, name }),
+  openUatEvidence: (reportPath: string, name: string) =>
+    call<{ path: string }>("open_uat_evidence", { reportPath, name }),
   appendFile: (path: string, line: string) => call<{ path: string }>("append_file", { path, line }),
   /**
    * 稽核軌跡的讀取端。傳的是**專案根目錄**，不是檔案路徑 —— 前端不能指定

@@ -923,6 +923,231 @@ pub fn write_domain_pack(
     })
 }
 
+// ── UAT 證物（剪貼簿貼上／選檔）─────────────────────────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UatEvidenceSaved {
+    name: String,
+    rel: String,
+    path: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UatEvidencePick {
+    cancelled: bool,
+    saved: Vec<UatEvidenceSaved>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UatEvidenceRead {
+    name: String,
+    mime: String,
+    base64: String,
+}
+
+fn evidence_ext_of(path: &Path) -> Option<&'static str> {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("png") => Some("png"),
+        Some("jpg") | Some("jpeg") => Some("jpg"),
+        Some("webp") => Some("webp"),
+        _ => None,
+    }
+}
+
+fn mime_of_ext(ext: &str) -> &'static str {
+    match ext {
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        _ => "image/png",
+    }
+}
+
+fn next_evidence_seq(dir: &Path, prefix: &str) -> u32 {
+    let mut max = 0u32;
+    let Ok(rd) = fs::read_dir(dir) else {
+        return 1;
+    };
+    let head = format!("{prefix}-");
+    for entry in rd.flatten() {
+        let name = entry.file_name();
+        let s = name.to_string_lossy();
+        let Some(rest) = s.strip_prefix(&head) else {
+            continue;
+        };
+        let num = rest.split('.').next().unwrap_or("");
+        if let Ok(v) = num.parse::<u32>() {
+            if v > max {
+                max = v;
+            }
+        }
+    }
+    max + 1
+}
+
+fn write_evidence_bytes(
+    dest: &Path,
+    bytes: &[u8],
+) -> Result<(), String> {
+    if bytes.is_empty() {
+        return Err("圖是空的".into());
+    }
+    if bytes.len() > paths::MAX_UAT_EVIDENCE_BYTES {
+        return Err("單張圖不能超過 8MB".into());
+    }
+    if let Some(dir) = dest.parent() {
+        fs::create_dir_all(dir).map_err(|e| format!("建不出附件目錄：{e}"))?;
+    }
+    fs::write(dest, bytes).map_err(|e| format!("寫不進附件：{e}"))
+}
+
+/// 把一張圖寫進這份報告的 `plans/uat-assets/<stem>/`。
+/// 檔名由前端給、Rust 驗證形狀；目的地不接受任意路徑。
+#[tauri::command]
+pub fn save_uat_evidence(
+    report_path: String,
+    name: String,
+    base64: String,
+    roots: State<'_, RegisteredRoots>,
+) -> R<UatEvidenceSaved> {
+    use base64::Engine;
+    let report = PathBuf::from(&report_path);
+    let dest = paths::uat_evidence_dest(&report, &name, &roots)?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64.trim())
+        .map_err(|_| "圖的內容讀不回來（不是合法的圖片資料）".to_string())?;
+    write_evidence_bytes(&dest, &bytes)?;
+    Ok(UatEvidenceSaved {
+        rel: paths::uat_evidence_rel(&report, &name),
+        path: dest.to_string_lossy().to_string(),
+        name,
+    })
+}
+
+/// 系統開檔框選圖，複製進同一棵 `uat-assets` 樹。
+/// **不**把選到的來源資料夾登記成專案根。
+#[tauri::command]
+pub async fn pick_uat_images(
+    app: tauri::AppHandle,
+    report_path: String,
+    prefix: String,
+    roots: State<'_, RegisteredRoots>,
+) -> R<UatEvidencePick> {
+    if !paths::uat_evidence_prefix_ok(&prefix) {
+        return Err("前綴只能是 T1 或 S1 這種形狀".into());
+    }
+    let report = PathBuf::from(&report_path);
+    // 先確認報告本身過關，對話框取消時也不該先寫檔。
+    let probe = format!("{prefix}-01.png");
+    let dest_probe = paths::uat_evidence_dest(&report, &probe, &roots)?;
+    let dir = dest_probe.parent().map(|p| p.to_path_buf()).ok_or("附件目錄算不出來")?;
+
+    let picked = app
+        .dialog()
+        .file()
+        .add_filter("圖片", &["png", "jpg", "jpeg", "webp"])
+        .blocking_pick_files();
+    let Some(files) = picked else {
+        return Ok(UatEvidencePick {
+            cancelled: true,
+            saved: vec![],
+        });
+    };
+
+    let mut saved = Vec::new();
+    for file in files {
+        let src = match file.into_path() {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        let Some(ext) = evidence_ext_of(&src) else {
+            continue;
+        };
+        let bytes = fs::read(&src).map_err(|e| format!("讀不到選中的圖：{e}"))?;
+        let seq = next_evidence_seq(&dir, &prefix);
+        let name = format!("{prefix}-{seq:02}.{ext}");
+        let dest = paths::uat_evidence_dest(&report, &name, &roots)?;
+        write_evidence_bytes(&dest, &bytes)?;
+        saved.push(UatEvidenceSaved {
+            rel: paths::uat_evidence_rel(&report, &name),
+            path: dest.to_string_lossy().to_string(),
+            name,
+        });
+    }
+    Ok(UatEvidencePick {
+        cancelled: false,
+        saved,
+    })
+}
+
+#[tauri::command]
+pub fn read_uat_evidence(
+    report_path: String,
+    name: String,
+    roots: State<'_, RegisteredRoots>,
+) -> R<UatEvidenceRead> {
+    use base64::Engine;
+    let report = PathBuf::from(&report_path);
+    let dest = paths::uat_evidence_dest(&report, &name, &roots)?;
+    let bytes = fs::read(&dest).map_err(|e| format!("讀不到附件：{e}"))?;
+    if bytes.len() > paths::MAX_UAT_EVIDENCE_BYTES {
+        return Err("附件太大，讀不回來".into());
+    }
+    let ext = dest
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("png");
+    Ok(UatEvidenceRead {
+        mime: mime_of_ext(ext).into(),
+        base64: base64::engine::general_purpose::STANDARD.encode(bytes),
+        name,
+    })
+}
+
+#[tauri::command]
+pub fn delete_uat_evidence(
+    report_path: String,
+    name: String,
+    roots: State<'_, RegisteredRoots>,
+) -> R<FilePath> {
+    let report = PathBuf::from(&report_path);
+    let dest = paths::uat_evidence_dest(&report, &name, &roots)?;
+    if dest.exists() {
+        fs::remove_file(&dest).map_err(|e| format!("刪不掉附件：{e}"))?;
+    }
+    Ok(FilePath {
+        path: dest.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+pub fn open_uat_evidence(
+    app: tauri::AppHandle,
+    report_path: String,
+    name: String,
+    roots: State<'_, RegisteredRoots>,
+) -> R<FilePath> {
+    use tauri_plugin_opener::OpenerExt;
+    let report = PathBuf::from(&report_path);
+    let dest = paths::uat_evidence_dest(&report, &name, &roots)?;
+    if !dest.is_file() {
+        return Err("找不到這張附件".into());
+    }
+    app.opener()
+        .open_path(dest.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| format!("開不起來：{e}"))?;
+    Ok(FilePath {
+        path: dest.to_string_lossy().to_string(),
+    })
+}
+
 /// 稽核軌跡的讀取端回傳值。
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1593,6 +1818,11 @@ pub fn ping() -> R<Pong> {
             "setCliPath",
             "probeClis",
             "uatHandoffTake",
+            "saveUatEvidence",
+            "pickUatImages",
+            "readUatEvidence",
+            "deleteUatEvidence",
+            "openUatEvidence",
         ]
         .iter()
         .map(|s| s.to_string())

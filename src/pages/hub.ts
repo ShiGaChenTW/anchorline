@@ -25,6 +25,7 @@ const routes: Record<string, string> = {
   "5": "tracking.html",
   "6": "write.html",
   "7": "signoff.html",
+  "8": "uat.html",
 };
 
 const toastEl = document.getElementById("kbd-toast");

@@ -189,12 +189,13 @@ describe("aiAdjustUser", () => {
 
 describe("UAT_FORMAT_DEFAULT", () => {
   test("描述的檔案結構與 uat-parser 的方言一致", () => {
-    // 這四個標籤是 uat-parser 的 LABEL_RE 認得的全部。預設規格若描述了
+    // 這五個標籤是 uat-parser 的 LABEL_RE 認得的全部。預設規格若描述了
     // 別的標籤名，agent 會照著寫出解析不出題目的報告 —— 而症狀是題目
     // 全部消失，不是錯誤訊息。
-    for (const label of ["**流程：**", "**預期：**", "**結果：**", "**說明：**"]) {
+    for (const label of ["**流程：**", "**預期：**", "**結果：**", "**說明：**", "**附件：**"]) {
       expect(UAT_FORMAT_DEFAULT).toContain(label);
     }
+    expect(UAT_FORMAT_DEFAULT).toContain("## 補充說明");
     expect(UAT_FORMAT_DEFAULT).toContain("# UAT:");
     expect(UAT_FORMAT_DEFAULT).toContain("anc:t=");
   });
