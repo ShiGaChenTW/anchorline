@@ -26,7 +26,7 @@ import {
 } from "../lib/beginner-flow";
 import { exportMarkdownFile } from "../lib/export";
 import { fieldNo, numberedFieldLabel } from "../lib/field-number";
-import { bindMdField, mdFieldHtml } from "../lib/markamd";
+import { bindMdField, mdFieldHtml, setAllMdModes, type MdPaneMode } from "../lib/markamd";
 import { renderMarkdown } from "../lib/markamd/markdown";
 import { canEditContent } from "../lib/permissions";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
@@ -1237,6 +1237,28 @@ function renderSaveBar(s: Section): void {
   });
 }
 
+function currentEditorMode(): MdPaneMode {
+  const mode = store.get().settings.editor?.defaultMode;
+  return mode === "write" || mode === "preview" || mode === "split" ? mode : "split";
+}
+
+function applyEditorMode(mode: MdPaneMode, persist: boolean): void {
+  const body = document.getElementById("editor-body");
+  if (body) setAllMdModes(body, mode);
+  document.querySelectorAll<HTMLButtonElement>("[data-ed-mode]").forEach((btn) => {
+    btn.classList.toggle("on", btn.dataset.edMode === mode);
+    btn.setAttribute("aria-pressed", btn.dataset.edMode === mode ? "true" : "false");
+  });
+  if (persist) {
+    const cur = store.get().settings.editor;
+    store.updateSettings({ editor: { ...cur, defaultMode: mode } });
+  }
+}
+
+function syncEditorModeTabs(): void {
+  applyEditorMode(currentEditorMode(), false);
+}
+
 function renderEditor() {
   if (renderFileView()) return;
   const list = sections();
@@ -1278,6 +1300,10 @@ function renderEditor() {
 
   // 這一節從哪個檔案來、匯出後會落在 OpenSpec 的哪裡
   const srcFile = sourceFileForSection(activeProject(), s.id);
+  const exportAt = SECTION_TO_OPENSPEC[s.id] ?? "PRD.md › ## Technical Specifications";
+  const originLine = srcFile
+    ? `${srcFile} → ${exportAt}`
+    : `只存在 Anchorline 內 → ${exportAt}`;
 
   // 章節導引可摺。空章節「不」展開：那時起手骨架按鈕會出現，
   // 它本身就是「怎麼開始」的答案，再攤開 4 條提示只是要人先讀 6 行才知道按哪個。
@@ -1289,20 +1315,7 @@ function renderEditor() {
     <header class="adhd-sec-header">
       <h3 data-od-id="section-title">${escapeHtml(s.title)}</h3>
       <p class="lead adhd-sec-lead">${escapeHtml(s.desc)}</p>
-      <dl class="sec-origin" aria-label="這一節的檔案位置">
-        <div class="sec-origin-row">
-          <dt>來源檔</dt>
-          <dd class="mono">${
-            srcFile
-              ? escapeHtml(srcFile)
-              : `<span class="sec-origin-none">無（本節只存在 Anchorline 內）</span>`
-          }</dd>
-        </div>
-        <div class="sec-origin-row">
-          <dt>匯出後</dt>
-          <dd class="mono">${escapeHtml(SECTION_TO_OPENSPEC[s.id] ?? "PRD.md › ## Technical Specifications")}</dd>
-        </div>
-      </dl>
+      <p class="sec-origin-line mono" title="${escapeHtml(originLine)}">${escapeHtml(originLine)}</p>
     </header>
     <details class="adhd-guide" data-od-id="guide" ${guideOpen ? "open" : ""}>
       <summary>本章怎麼寫 <span class="adhd-guide-meta">${s.tips.length} 提示</span></summary>
@@ -1356,6 +1369,7 @@ function renderEditor() {
     renderSaveBar(s);
     renderFieldDiffs(s);
   });
+  syncEditorModeTabs();
 
   renderSaveBar(s);
   renderFieldDiffs(s);
@@ -1936,6 +1950,15 @@ document.getElementById("btn-submit")?.addEventListener("click", async () => {
   window.setTimeout(() => {
     location.href = "review.html";
   }, 800);
+});
+
+document.querySelectorAll<HTMLButtonElement>("[data-ed-mode]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const mode = btn.dataset.edMode;
+    if (mode === "write" || mode === "preview" || mode === "split") {
+      applyEditorMode(mode, true);
+    }
+  });
 });
 
 document.getElementById("btn-outline")?.addEventListener("click", () => {

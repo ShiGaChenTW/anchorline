@@ -24,6 +24,23 @@ export type MdFieldOptions = {
   readOnly?: boolean;
 };
 
+export type MdPaneMode = "split" | "write" | "preview";
+
+export function applyMdPaneMode(field: HTMLElement, mode: MdPaneMode): void {
+  const pane = field.querySelector<HTMLElement>("[data-mdv-pane]");
+  if (!pane) return;
+  field.querySelectorAll(".mdv-mode-btn").forEach((b) => {
+    b.classList.toggle("on", (b as HTMLElement).dataset.mdvMode === mode);
+  });
+  pane.classList.remove("mdv-pane--split", "mdv-pane--write", "mdv-pane--preview");
+  pane.classList.add(`mdv-pane--${mode}`);
+}
+
+/** 這一節所有 Markdown 欄位一起切。章節列的 Write/Preview/Split 走這裡。 */
+export function setAllMdModes(root: HTMLElement, mode: MdPaneMode): void {
+  root.querySelectorAll<HTMLElement>(".mdv-field").forEach((field) => applyMdPaneMode(field, mode));
+}
+
 function escapeAttr(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -96,9 +113,9 @@ export function mdFieldHtml(opts: MdFieldOptions): string {
     <div class="mdv-field-head">
       <label>${escapeAttr(opts.label)}${opts.hint ? `<span>${escapeAttr(opts.hint)}</span>` : ""}</label>
       <div class="mdv-mode" role="group" aria-label="編輯模式">
-        <button type="button" class="mdv-mode-btn${mode === "split" ? " on" : ""}" data-mdv-mode="split" title="寫作 + 預覽">雙欄</button>
-        <button type="button" class="mdv-mode-btn${mode === "write" ? " on" : ""}" data-mdv-mode="write" title="只寫作">寫作</button>
-        <button type="button" class="mdv-mode-btn${mode === "preview" ? " on" : ""}" data-mdv-mode="preview" title="只預覽">預覽</button>
+        <button type="button" class="mdv-mode-btn${mode === "write" ? " on" : ""}" data-mdv-mode="write" title="只寫作">Write</button>
+        <button type="button" class="mdv-mode-btn${mode === "preview" ? " on" : ""}" data-mdv-mode="preview" title="只預覽">Preview</button>
+        <button type="button" class="mdv-mode-btn${mode === "split" ? " on" : ""}" data-mdv-mode="split" title="寫作 + 預覽">Split</button>
       </div>
     </div>
     ${showTb ? toolbarHtml(!!opts.readOnly) : ""}
@@ -419,13 +436,7 @@ export function bindMdField(
     cleanups.push(() => ta.removeEventListener("keydown", onKeyDown));
 
     field.querySelectorAll<HTMLButtonElement>("[data-mdv-mode]").forEach((btn) => {
-      const handler = () => {
-        const mode = btn.dataset.mdvMode || "split";
-        field.querySelectorAll(".mdv-mode-btn").forEach((b) => b.classList.remove("on"));
-        btn.classList.add("on");
-        pane.classList.remove("mdv-pane--split", "mdv-pane--write", "mdv-pane--preview");
-        pane.classList.add(`mdv-pane--${mode}`);
-      };
+      const handler = () => applyMdPaneMode(field, (btn.dataset.mdvMode || "split") as MdPaneMode);
       btn.addEventListener("click", handler);
       cleanups.push(() => btn.removeEventListener("click", handler));
     });

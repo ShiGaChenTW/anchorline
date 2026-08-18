@@ -1765,6 +1765,11 @@ table.data tbody tr.selected td.col-actions {
 .section-list > * {
   flex: 0 0 auto;
 }
+.sec[aria-selected="true"],
+.sec.on,
+.sec.active {
+  background: color-mix(in oklab, var(--accent) 16%, var(--surface));
+}
 .sec {
   display: grid;
   /* 多一欄放展開箭頭。章節底下掛欄位樹之後，沒有箭頭就看不出「這一列還有下一層」 */
@@ -1786,7 +1791,7 @@ table.data tbody tr.selected td.col-actions {
   background: var(--inset);
 }
 .sec.active {
-  background: var(--inset);
+  background: color-mix(in oklab, var(--accent) 16%, var(--surface));
   border-color: var(--border);
 }
 .sec .n {
@@ -1831,6 +1836,42 @@ table.data tbody tr.selected td.col-actions {
 }
 .sec .st.empty {
   opacity: 0.7;
+}
+
+.ed-head-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.ed-mode {
+  display: inline-flex;
+  gap: 2px;
+}
+.ed-mode-btn {
+  font: inherit;
+  font-size: var(--fs-1);
+  font-weight: 600;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+}
+.ed-mode-btn.on,
+.ed-mode-btn[aria-pressed="true"] {
+  color: var(--fg);
+  background: var(--inset);
+}
+.sec-origin-line {
+  margin: 6px 0 0;
+  font-size: var(--fs-1);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .editor-pane {
@@ -2896,7 +2937,7 @@ body {
   html .toolbar.context-toolbar,
   html .toolbar.context-toolbar.context-surface-toolbar {
     min-height: 0;
-    padding: 20px 16px 18px;
+    padding: 10px 16px 10px;
   }
   .search {
     min-width: 0;
@@ -3129,7 +3170,12 @@ html.reduce-motion .attn-expand-enter {
 /* Approved context-surface treatment: same structure as docs/design/green-context-frame.html. */
 .toolbar.context-toolbar.context-surface-toolbar {
   position: relative;
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 2px;
   min-height: 0;
   /*
    * **不可以是 `overflow: hidden`。** 動作區的「更多」下拉是這個容器的
@@ -3144,7 +3190,7 @@ html.reduce-motion .attn-expand-enter {
   /* tracking.html 的 <main> 是 overflow:hidden 的 flex column —— 沒有這行，
      標題列會被下方三欄擠扁，內容互相疊上去。 */
   flex-shrink: 0;
-  padding: 52px clamp(24px, 5vw, 72px) 38px;
+  padding: 22px clamp(24px, 5vw, 72px) 16px;
   border-bottom: 1px solid var(--border);
   background:
     radial-gradient(circle at 88% 0%, color-mix(in oklab, var(--accent) 10%, transparent), transparent 34%),
@@ -3153,12 +3199,12 @@ html.reduce-motion .attn-expand-enter {
 .toolbar.context-toolbar.context-surface-toolbar::before {
   content: "";
   position: absolute;
-  left: clamp(24px, 5vw, 72px);
-  right: clamp(24px, 5vw, 72px);
+  left: 0;
+  right: 0;
   bottom: -1px;
   height: 2px;
   background: var(--accent);
-  opacity: .72;
+  opacity: 1;
 }
 .context-frame-top,
 .context-frame-bottom {
@@ -3166,6 +3212,12 @@ html.reduce-motion .attn-expand-enter {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
+}
+.context-frame-top {
+  grid-column: 1;
+  grid-row: 1;
+  justify-content: flex-start;
+  gap: 12px;
 }
 .context-frame-top .context-kicker {
   margin-bottom: 0;
@@ -3178,42 +3230,37 @@ html.reduce-motion .attn-expand-enter {
   letter-spacing: .08em;
 }
 .context-title-block {
+  grid-column: 1;
+  grid-row: 2;
   min-width: 0;
-  margin-top: 15px;
+  margin-top: 0;
+  align-self: center;
 }
 .context-title-block h1 {
-  /* 字級放大之後 780px 會讓兩字標題也吃滿一行，跟著同比例放寬 */
   max-width: 1090px;
   margin: 0;
   color: var(--fg);
-  /* 34/5vw/58 各 ×1.4（Scott 2026-08-12）。三個值一起放大，
-     不然窄螢幕會停在舊的下限，只有寬螢幕變大。 */
-  font-size: clamp(48px, 7vw, 81px);
+  font-size: clamp(24px, 3.5vw, 40px);
   font-weight: 700;
   letter-spacing: -.045em;
-  line-height: .98;
+  line-height: 1.05;
 }
 .context-title-block .sub {
-  max-width: 640px;
-  margin-top: 16px;
-  color: var(--muted);
-  font-size: 15px;
-  line-height: 1.7;
+  display: none;
 }
 .context-frame-bottom {
+  grid-column: 2;
+  grid-row: 1 / span 2;
   align-items: center;
-  margin-top: 28px;
-}
-.context-path {
-  min-width: 0;
-  overflow: hidden;
+  justify-content: flex-end;
+  align-self: center;
   margin-top: 0;
-  color: var(--meta);
-  font-family: var(--mono);
-  font-size: var(--fs-2);
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.context-path,
+.adhd-toolbar-focus,
+#adhd-toolbar-focus,
+#adhd-focus-strip {
+  display: none !important;
 }
 .context-actions {
   display: flex;
@@ -3341,15 +3388,24 @@ html.reduce-motion .attn-expand-enter {
 }
 @media (max-width: 860px) {
   .toolbar.context-toolbar.context-surface-toolbar {
-    padding: 36px 20px 28px;
+    padding: 16px 20px 12px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
   }
   .toolbar.context-toolbar.context-surface-toolbar::before {
-    left: 20px;
-    right: 20px;
+    left: 0;
+    right: 0;
+  }
+  .context-frame-top,
+  .context-title-block,
+  .context-frame-bottom {
+    grid-column: 1;
+    grid-row: auto;
   }
   .context-frame-bottom {
     align-items: flex-start;
     flex-direction: column;
+    justify-content: flex-start;
   }
   .context-actions {
     width: 100%;
@@ -5450,6 +5506,46 @@ html.adhd-calm .adhd-editor-chrome-actions .search {
   align-items: stretch;
 }
 
+/* 全站右鍵選單。掛在 body，z-index 要壓過 toolbar / rail。 */
+.al-ctx {
+  position: fixed;
+  z-index: 80;
+  min-width: 188px;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--elev-raised, 0 12px 32px color-mix(in oklab, #000 28%, transparent));
+}
+.al-ctx-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--fs-2);
+  padding: 7px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.al-ctx-item:hover:not(:disabled),
+.al-ctx-item:focus-visible:not(:disabled) {
+  background: var(--inset);
+  outline: none;
+}
+.al-ctx-item:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.al-ctx-sep {
+  height: 1px;
+  margin: 5px 6px;
+  background: var(--border);
+}
+
 /* 摺疊統計／計劃 */
 .adhd-details {
   margin: 0;
@@ -5772,11 +5868,15 @@ html.adhd-calm .beginner-cta {
   background: var(--bg);
   min-width: 0;
   width: 100%;
-  /* 關鍵：高度綁視窗，而非固定 px */
-  height: clamp(220px, calc(100vh - 280px), 900px);
-  min-height: clamp(200px, 36vh, 480px);
-  max-height: calc(100vh - 200px);
+  /* 多欄位時不能每人一屏。單欄位才准長一點。 */
+  height: auto;
+  min-height: 200px;
+  max-height: min(42vh, 420px);
   box-sizing: border-box;
+}
+.editor-body:not(:has(.mdv-field ~ .mdv-field)) .mdv-pane {
+  min-height: 280px;
+  max-height: min(58vh, 640px);
 }
 .mdv-pane--split {
   grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
@@ -9849,6 +9949,102 @@ button.ft-row:focus-visible {
   padding-right: 6px;
 }
 
+/* ── 總覽「UAT測試」左右欄 ──────────────────────────────────
+   兩張卡合成一張：標題一次、左右掃同一眼。清單高度鎖 5 列，
+   「顯示更多」只開 overflow，不讓卡片被第 6 筆往下撐。 */
+.ov-uat-board-title {
+  margin: 0 0 6px;
+  font-size: var(--fs-5);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.ov-uat-board .ov-others-sum {
+  margin-bottom: 12px;
+}
+.ov-uat-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 20px;
+  align-items: stretch;
+}
+.ov-uat-col {
+  --ov-uat-row-h: 32px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ov-uat-col + .ov-uat-col {
+  border-left: 1px solid var(--border);
+  padding-left: 20px;
+}
+.ov-uat-col-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: var(--fs-2);
+  color: var(--meta);
+}
+.ov-uat-col-count {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ov-uat-col .ov-uat-list {
+  flex: 0 0 auto;
+  /* 5 = UAT_BOARD_PREVIEW；markup 也會寫 --ov-uat-preview 以免兩邊分岔 */
+  max-height: calc(var(--ov-uat-preview, 5) * var(--ov-uat-row-h));
+  overflow: hidden;
+}
+.ov-uat-col.is-open .ov-uat-list {
+  overflow: auto;
+}
+.ov-uat-col .ov-row {
+  box-sizing: border-box;
+  height: var(--ov-uat-row-h);
+  min-height: var(--ov-uat-row-h);
+  padding-top: 0;
+  padding-bottom: 0;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+.ov-uat-empty {
+  padding: 8px 6px;
+  font-size: var(--fs-3);
+  color: var(--meta);
+}
+.ov-uat-more {
+  margin-top: 8px;
+  width: 100%;
+  height: var(--ctl-h-sm);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--meta);
+  font-size: var(--fs-2);
+  cursor: pointer;
+}
+.ov-uat-more:hover {
+  background: var(--inset);
+  color: var(--fg);
+}
+.ov-uat-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (max-width: 900px) {
+  .ov-uat-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px 0;
+  }
+  .ov-uat-col + .ov-uat-col {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+}
+
 .ov-rows {
   list-style: none;
   margin: 0;
@@ -13530,13 +13726,7 @@ p.gd-warn {
  * 靠 kicker 的 accent 色定位 —— 掃視時找得到，但不跟標題競爭。
  */
 .context-title-block .adhd-toolbar-focus {
-  margin-top: 14px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  max-width: 62ch;
-  gap: 4px 8px;
+  display: none !important;
 }
 .context-title-block .adhd-toolbar-focus-kicker {
   font-size: var(--fs-2);

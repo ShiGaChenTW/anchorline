@@ -69,6 +69,13 @@ function nextStepForPage(page: RailPage | null): NextStep {
         cta: "回編輯",
         href: "editor.html",
       };
+    case "history":
+      return {
+        label: "下一步",
+        detail: "這頁只讀 git 歷史。要改檔回編輯台，要提交去終端機。",
+        cta: "回編輯",
+        href: "editor.html",
+      };
     case "uat":
       return {
         label: "下一步",
@@ -149,39 +156,10 @@ export function setFocusStripHidden(hidden: boolean) {
   if (btn) btn.textContent = hidden ? "顯示引導列" : "隱藏引導列";
 }
 
-/**
- * context header 版的「下一步」——落在 `.context-title-block` 裡，
- * 大標題與副標之下。
- *
- * `step.label` 是空字串代表這一頁刻意不給下一步（例如頁面本身就是入口面板），
- * 那就把節點移掉而不是留一個空框 —— 一個空的提示框比沒有提示更吵。
- */
-function renderContextFocus(toolbar: HTMLElement, step: NextStep) {
-  const host = toolbar.querySelector(".context-title-block");
-  const existing = document.getElementById("adhd-toolbar-focus");
-  if (!host || !step.label) {
-    existing?.remove();
-    return;
-  }
-
-  let line = existing;
-  if (!line) {
-    line = document.createElement("div");
-    line.id = "adhd-toolbar-focus";
-    line.className = "adhd-toolbar-focus";
-    line.setAttribute("role", "status");
-    line.setAttribute("aria-label", "目前建議的下一步");
-    host.appendChild(line);
-  } else if (line.parentElement !== host) {
-    // 頁內導覽重跑時節點可能還掛在舊位置，搬過來而不是再生一個
-    host.appendChild(line);
-  }
-
-  line.dataset.detail = step.detail;
-  line.innerHTML = `
-    <span class="adhd-toolbar-focus-kicker">${escape(step.label)}</span>
-    <span class="adhd-toolbar-focus-detail">${escape(step.detail)}</span>
-  `;
+/** 標題列不再插入「下一步」。舊節點若還在就拆掉。 */
+function renderContextFocus(toolbar: HTMLElement, _step: NextStep) {
+  document.getElementById("adhd-toolbar-focus")?.remove();
+  toolbar.querySelector("#adhd-toolbar-focus")?.remove();
 }
 
 function integratePageChrome(step: NextStep) {
@@ -193,12 +171,8 @@ function integratePageChrome(step: NextStep) {
     return;
   }
 
-  // context-frame 結構的頁面：不套 `.adhd-page-chrome` 那一整組改寫
-  // （那會拆掉設計稿的上下層次），但「下一步」那一行要留下來。
-  //
-  // 它是全站唯一一句「你現在該做什麼」，而 ADHD 的任務啟動缺損正是靠它補的
-  // （見 `focus-mode.ts` 檔頭）。第一版轉 context header 時連這行一起拿掉，
-  // 結果是九頁裡最需要它的編輯台反而沒有 —— 版面對了，機制掉了。
+  // context-frame 結構的頁面：不套 `.adhd-page-chrome` 那一整組改寫。
+  // 「下一步」與路徑已從標題列拿掉（2026-08-18）。
   if (toolbar.classList.contains("context-toolbar")) {
     document.getElementById("adhd-focus-strip")?.remove();
     toolbar.classList.add("context-surface-toolbar");
@@ -225,23 +199,7 @@ function integratePageChrome(step: NextStep) {
     chromeMain.appendChild(titleBlock);
   }
 
-  let focusLine = document.getElementById("adhd-toolbar-focus");
-  const isNew = !focusLine;
-  if (!focusLine) {
-    focusLine = document.createElement("div");
-    focusLine.id = "adhd-toolbar-focus";
-    focusLine.className = "adhd-toolbar-focus";
-    focusLine.setAttribute("role", "status");
-    focusLine.setAttribute("aria-label", "目前建議的下一步");
-    chromeMain.appendChild(focusLine);
-  }
-
-  const prev = focusLine.dataset.detail ?? "";
-  focusLine.dataset.detail = step.detail;
-  focusLine.innerHTML = `
-    <span class="adhd-toolbar-focus-kicker">${escape(step.label)}</span>
-    <span class="adhd-toolbar-focus-detail">${escape(step.detail)}</span>
-  `;
+  document.getElementById("adhd-toolbar-focus")?.remove();
 
   let actions = toolbar.querySelector(
     ".adhd-page-chrome-actions, .adhd-editor-chrome-actions",
@@ -308,75 +266,17 @@ function integratePageChrome(step: NextStep) {
   import("./attention-motion")
     .then((m) => {
       m.syncMotionPreferenceClass();
-      if (isNew) m.enter(focusLine);
-      else if (prev && prev !== step.detail) m.flashFocus(focusLine);
     })
     .catch(() => {});
 }
 
-/** 無標準 toolbar 時的後備焦點條 */
-function ensureStandaloneFocusStrip(step: NextStep) {
-  const main = document.querySelector(".main");
-  if (!main) return;
-
-  if (!step.label) {
-    document.getElementById("adhd-focus-strip")?.remove();
-    return;
-  }
-
-  let strip = document.getElementById("adhd-focus-strip");
-  const isNew = !strip;
-  if (!strip) {
-    strip = document.createElement("div");
-    strip.id = "adhd-focus-strip";
-    strip.className = "adhd-focus-strip";
-    strip.setAttribute("role", "region");
-    strip.setAttribute("aria-label", "目前建議的下一步");
-    const toolbar = main.querySelector(".toolbar");
-    if (toolbar) toolbar.insertAdjacentElement("afterend", strip);
-    else main.prepend(strip);
-  }
-
-  const prevLabel = strip.querySelector(".adhd-focus-label")?.textContent ?? "";
-  const labelChanged = prevLabel !== step.label;
-
-  strip.innerHTML = `
-    <div class="adhd-focus-text">
-      <strong class="adhd-focus-label">${escape(step.label)}</strong>
-      <span class="adhd-focus-detail">${escape(step.detail)}</span>
-    </div>
-    ${
-      step.cta
-        ? step.href
-          ? `<a class="btn btn-primary adhd-focus-cta" href="${step.href}">${escape(step.cta)}</a>`
-          : `<button type="button" class="btn btn-primary adhd-focus-cta" id="adhd-focus-action">${escape(step.cta)}</button>`
-        : ""
-    }
-  `;
-
-  if (step.action) {
-    document.getElementById("adhd-focus-action")?.addEventListener("click", () => step.action?.());
-  }
-
-  import("./attention-motion")
-    .then((m) => {
-      m.syncMotionPreferenceClass();
-      if (isNew) m.enter(strip);
-      else if (labelChanged) m.flashFocus(strip);
-    })
-    .catch(() => {});
+/** 標題列不再放引導條。舊節點清掉。 */
+function ensureStandaloneFocusStrip(_step: NextStep) {
+  document.getElementById("adhd-focus-strip")?.remove();
 }
 
 function ensureFocusStrip(step: NextStep) {
   integratePageChrome(step);
-}
-
-function escape(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 /** 工具列：只留主要 CTA，其餘收進「更多」 */

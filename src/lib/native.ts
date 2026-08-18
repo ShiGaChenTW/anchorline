@@ -255,6 +255,22 @@ export const native = {
       "git_changeset",
       { folderPath },
     ),
+  /**
+   * 某個 commit 的說明／檔案／patch。**唯讀**（BRIDGE.md §4.7d）。
+   * `hash` 只能是 hex；`path` 省略就拿整份 commit。
+   */
+  gitCommitDiff: (folderPath: string, hash: string, path?: string) =>
+    callMaybe<{
+      hash: string;
+      subject: string;
+      body: string;
+      author: string;
+      email: string;
+      at: string;
+      files: { path: string; added: number | null; deleted: number | null }[];
+      patch: string;
+      truncated: boolean;
+    }>("git_commit_diff", path ? { folderPath, hash, path } : { folderPath, hash }),
   /** 這個資料夾有沒有 openspec 骨架。純檔案系統檢查，不呼叫 CLI —— 
       「CLI 不在」與「沒 init 過」是兩件事。 */
   openspecProbe: (folderPath: string) =>

@@ -16,6 +16,7 @@ export type RailPage =
   | "openspec"
   | "review"
   | "tracking"
+  | "history"
   | "uat"
   | "admin"
   | "agents"
@@ -51,6 +52,8 @@ export const IC = {
     '<path d="M1.5 8a6.5 6.5 0 1 1 13 0 6.5 6.5 0 0 1-13 0zM8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm.75 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .471.696l2.5 1a.75.75 0 0 0 .557-1.392l-2.028-.811V4.75z"/>',
   tracking:
     '<path d="M1.5 1.75a.75.75 0 0 0 0 1.5h13a.75.75 0 0 0 0-1.5h-13zM1.5 5.75a.75.75 0 0 0 0 1.5h8a.75.75 0 0 0 0-1.5h-8zM1.5 9.75a.75.75 0 0 0 0 1.5h13a.75.75 0 0 0 0-1.5h-13zM1.5 13.75a.75.75 0 0 0 0 1.5h8a.75.75 0 0 0 0-1.5h-8z"/>',
+  history:
+    '<path d="M1.5 2.75A.75.75 0 0 1 2.25 2h11.5a.75.75 0 0 1 0 1.5H2.25A.75.75 0 0 1 1.5 2.75zm0 5A.75.75 0 0 1 2.25 7h11.5a.75.75 0 0 1 0 1.5H2.25A.75.75 0 0 1 1.5 7.75zM2.25 12a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5z"/>',
   uat: '<path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 8.28a.75.75 0 0 1 1.06-1.06L6 9.94l6.72-6.72a.75.75 0 0 1 1.06 0z"/>',
   admin:
     '<path d="M2 2.75A.75.75 0 0 1 2.75 2h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 2.75zm0 5A.75.75 0 0 1 2.75 7h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.75zm0 5a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75z"/>',
@@ -74,6 +77,7 @@ export const RAIL_ITEMS: RailItem[] = [
   { page: "write", href: "write.html", label: "PRD 審閱監控", odId: "nav-write", icon: IC.write, hidden: true },
   { page: "signoff", href: "signoff.html", label: "簽核管理", odId: "nav-signoff", icon: IC.signoff, hidden: true },
   { page: "tracking", href: "tracking.html", label: "Task Tracking", odId: "nav-tracking", icon: IC.tracking, hidden: true },
+  { page: "history", href: "history.html", label: "提交與 Diff", odId: "nav-history", icon: IC.history, hidden: true },
   { page: "uat", href: "uat.html", label: "UAT使用者測試", odId: "nav-uat", icon: IC.uat, hidden: true },
   { page: "dashboard", href: "dashboard.html", label: "專案儀表板", odId: "nav-dashboard", icon: IC.dashboard, hidden: true },
   // 漏了這一筆的症狀完全符合 config.yaml 那句警告：`detectRailPage()` 回 null，

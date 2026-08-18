@@ -426,7 +426,7 @@ export type AISettings = {
     showLineNumbers: boolean;
     /** 顯示 Markdown 工具列 */
     showToolbar: boolean;
-    /** 預設雙欄 / 寫作 / 預覽 */
+    /** 預設 Split / Write / Preview */
     defaultMode: "split" | "write" | "preview";
     /** 預覽欄語意高亮（待決／風險等） */
     semanticHighlight: boolean;

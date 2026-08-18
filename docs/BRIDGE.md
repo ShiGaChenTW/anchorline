@@ -53,7 +53,7 @@ const res = await invoke<TrackingScan>("tracking_scan", { plansDirs });
 
 | 程式 | 允許的呼叫 |
 |---|---|
-| `git` | `-C <dir>` + 寫死的唯讀子指令（`rev-parse` `log` `status` `remote` `rev-list` `describe` `worktree` `for-each-ref`） |
+| `git` | `-C <dir>` + 寫死的唯讀子指令（`rev-parse` `log` `status` `remote` `rev-list` `describe` `worktree` `for-each-ref` `diff` `show`） |
 | `openspec` | `list --json` · `status --change <name> --json`。**`<name>` 只能來自 `list --json` 自己的輸出**，不經過前端 |
 | `gh` | `search prs --author=@me --state=open --limit 30 --json …`。**永遠不包含** `pr review` / `pr merge` / `pr comment` / 任何寫入 |
 | `onefetch` `fastfetch` | 固定旗標，唯讀 |
@@ -247,6 +247,34 @@ commit 本身仍由使用者在終端機執行 —— 那是 `git-doctor.ts` 立
   與 `appendFile` 共用同一道守衛。
 
 非 git 專案或找不到 `git` 一律回 `Missing`，不是錯誤。
+
+### 4.7d `gitCommitDiff`
+
+```ts
+gitCommitDiff(folderPath: string, hash: string, path?: string)
+  -> Maybe<{
+       hash, subject, body, author, email, at,
+       files: { path, added, deleted }[],
+       patch: string, truncated: boolean
+     }>
+```
+
+某個 commit 的說明、檔案清單（`numstat`）、與 unified patch。給 History 頁人眼閱讀。
+
+**全部唯讀。** Rust 端跑的是寫死的 `git show`：
+
+| | |
+|---|---|
+| 說明 | `git show -s --format=… HASH` |
+| 檔案清單 | `git show --format= --numstat HASH` |
+| 全文 patch | `git show --format= --unified=3 HASH` |
+| 單檔 | `git show --format= --unified=3 HASH -- PATH` |
+
+`HASH` 必須是 4–40 位十六進位，否則 **Err**（不是 Missing）——那是輸入錯誤，不是「git 不在」。
+`PATH` 若有值必須是相對路徑、不得含 `..` 或空段，否則 Err。
+`folderPath` 必須是已註冊專案根，否則 Missing。找不到該 commit 或不是 git 專案 → Missing。
+
+`patch` 上限 400,000 bytes，超過就截斷並把 `truncated` 設為 true。這條比 §4.7b 的 24KB 寬，因為這份**不外送 AI**，只跨 IPC。截斷點仍落在 UTF-8 字元邊界。
 
 ### 4.7c `openspecProbe` / `openspecInit`
 

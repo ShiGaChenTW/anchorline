@@ -16,7 +16,9 @@ mod paths;
 /// 所以把可測的核心抽出來從這裡露出去。**只給測試用**——正式流程一律走
 /// command，那裡才有守門。
 pub mod testing {
-    pub use crate::commands::{append_line, scan_plans, valid_history_name};
+    pub use crate::commands::{
+        append_line, scan_plans, valid_commit_hash, valid_history_name, valid_repo_rel_path,
+    };
     pub use crate::exec::strip_ansi;
     pub use crate::paths::{
         append_allowed, domain_pack_writable, editable, normalize_line,
@@ -74,6 +76,7 @@ pub fn run() {
             commands::open_path,
             commands::openspec_status,
             commands::git_changeset,
+            commands::git_commit_diff,
             commands::openspec_probe,
             commands::openspec_init,
             commands::scan_project,

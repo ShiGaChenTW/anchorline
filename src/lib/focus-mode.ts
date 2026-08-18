@@ -35,13 +35,16 @@ export function setFocusMode(on: boolean) {
     btn.textContent = on ? "專注中 ●" : "專注模式";
   }
 
-  // 專注模式下 markdown 欄位切「寫作」單欄：直接點既有按鈕，重用既有切換邏輯
+  // 專注模式下 markdown 欄位切 Write 單欄
   if (on) {
-    document
-      .querySelectorAll<HTMLButtonElement>('[data-mdv-mode="write"]')
-      .forEach((b) => {
-        if (!b.classList.contains("on")) b.click();
-      });
+    document.querySelector<HTMLButtonElement>('[data-ed-mode="write"]')?.click();
+    if (!document.querySelector('[data-ed-mode="write"]')) {
+      document
+        .querySelectorAll<HTMLButtonElement>('[data-mdv-mode="write"]')
+        .forEach((b) => {
+          if (!b.classList.contains("on")) b.click();
+        });
+    }
   }
 }
 

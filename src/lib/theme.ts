@@ -96,6 +96,7 @@ export function applyFontScale(id: string | null | undefined) {
 export function initTheme() {
   applyTheme(currentTheme());
   applyFontScale(currentFontScale());
+  void import("./context-menu").then((m) => m.installContextMenu());
   document.addEventListener("click", (e) => {
     const t = e.target as HTMLElement | null;
     const btn = t?.closest?.("[data-theme-value]") as HTMLElement | null;

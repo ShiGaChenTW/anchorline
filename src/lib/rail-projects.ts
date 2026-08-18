@@ -283,6 +283,7 @@ function projActionsHtml(): string {
     // 計數 = 未測完的實測報告。由 rail-nav 的 refreshNavCounts 填值（0 不顯示），
     // 走的是「審閱佇列／範本」早就在用的 data-nav-count 機制，不另做一套。
     { href: "tracking.html", label: "Task Tracking", icon: IC.tracking },
+    { href: "history.html", label: "提交與 Diff", icon: IC.history },
     { href: "uat.html", label: "UAT使用者測試", icon: IC.uat, count: "uat" },
   ];
   // 現在站在哪一頁要標出來。上面的「工作區」那一組早就這麼做了，這三個沒有 ——

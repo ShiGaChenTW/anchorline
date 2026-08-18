@@ -7,7 +7,10 @@
 //! - `ahead = -1` 的語意有沒有被正規化掉
 //! - 掃描的上限與去重
 
-use anchorline_lib::testing::{append_line, domain_pack_writable, scan_plans, RegisteredRoots};
+use anchorline_lib::testing::{
+    append_line, domain_pack_writable, scan_plans, valid_commit_hash, valid_repo_rel_path,
+    RegisteredRoots,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -77,6 +80,32 @@ fn append_flattens_newlines_so_one_event_is_one_line() {
     let log = dir.join(".anchorline/log/x.jsonl");
     append_line(&log, "{\"a\":\"line1\nline2\"}").unwrap();
     assert_eq!(fs::read_to_string(&log).unwrap().lines().count(), 1);
+}
+
+#[test]
+fn commit_hash_only_accepts_hex() {
+    assert!(valid_commit_hash("ed1cbf1"));
+    assert!(valid_commit_hash("deadbeef"));
+    assert!(valid_commit_hash(&"a".repeat(40)));
+    assert!(!valid_commit_hash("HEAD"));
+    assert!(!valid_commit_hash("main"));
+    assert!(!valid_commit_hash("abc..def"));
+    assert!(!valid_commit_hash("-n"));
+    assert!(!valid_commit_hash(""));
+    assert!(!valid_commit_hash("abc"));
+    assert!(!valid_commit_hash(&"a".repeat(41)));
+}
+
+#[test]
+fn repo_rel_path_rejects_traversal() {
+    assert!(valid_repo_rel_path("src/lib/foo.ts"));
+    assert!(valid_repo_rel_path(".gitignore"));
+    assert!(!valid_repo_rel_path("../etc/passwd"));
+    assert!(!valid_repo_rel_path("/etc/passwd"));
+    assert!(!valid_repo_rel_path("foo/../bar"));
+    assert!(!valid_repo_rel_path("foo//bar"));
+    assert!(!valid_repo_rel_path(""));
+    assert!(!valid_repo_rel_path("foo/./bar"));
 }
 
 #[test]

@@ -41,6 +41,15 @@ import {
 } from "../lib/uat-pending";
 import { uatScanDirs } from "../lib/tracking-bridge";
 import { trackingUrlFor } from "../lib/uat-handoff";
+import {
+  UAT_BOARD_LEFT,
+  UAT_BOARD_LESS,
+  UAT_BOARD_MORE,
+  UAT_BOARD_PREVIEW,
+  UAT_BOARD_RIGHT,
+  UAT_BOARD_TITLE,
+  uatBoardNeedsMore,
+} from "../lib/uat-board";
 
 if (!requireAuth()) {
   /* redirected */
@@ -477,89 +486,116 @@ if (!requireAuth()) {
    * A 專案工作時如果這裡看不到，那份報告就只剩喚醒導頁那一次曝光機會。
    *
    * 一樣**只在頁面載入時掃一次**：這是磁碟 I/O，而它的值一分鐘內不會自己變。
-   * 零份時整區不渲染 —— 一個永遠寫著「0 份」的空殼只是在首屏多佔一塊位置。
+   * 零份且零待修時整區不渲染 —— 一個永遠寫著「0 份」的空殼只是在首屏多佔一塊位置。
    */
   let pendingUats: PendingUat[] = [];
   /** 掃描撞到 300 檔上限。合計被截斷就不是「全部」了，畫面要講出來 */
   let uatTruncated = false;
 
-  function cardPendingUat(): string {
-    if (!pendingUats.length) return "";
-    const activeId = store.get().activeProjectId;
-    // 逐份列表之上的一行合計：先回答「全部專案加起來還剩幾題」，再讓人決定
-    // 要不要逐列掃。分母沿用同一份 pendingUats，不重掃、不重算 supersede。
-    const roll = rollupPendingUats(pendingUats, { truncated: uatTruncated });
-    const sum = uatRollupText(roll);
-    // W2-5 診斷（2026-08-15，AX 實機）：這一列在 AX 樹是真 button、名稱由內容
-    // 完整算出（「W1-1 … 0/2 已結 0% 開報告」），title 沒有蓋掉名稱——計劃裡
-    // 「AX 看不到」的症狀在現行 build 不可重現，不修不存在的 bug。原本掛著的
-    // .ov-uat 沒有任何 CSS 規則對應（死 class），移除。
-    return `<section class="ov-others">
-      <p class="ov-others-head">待實測 ${pendingUats.length} 份</p>
-      <p class="ov-others-sum" title="${escapeHtml(UAT_SUM_TITLE)}">全部專案合計　<strong>${sum.lead}</strong>${sum.detail}${
-        // 「暫時跳過」另列：零題整段不渲染，有題就一定看得見 ——
-        // 收工按下去之後那批題只剩這裡看得到。
-        sum.skipped ? `　<span class="ov-sum-warn">${escapeHtml(sum.skipped)}</span>` : ""
-      }${roll.truncated ? `　<span class="ov-sum-warn">${escapeHtml(UAT_TRUNCATED_NOTE)}</span>` : ""}</p>
-      <ul class="ov-rows">${pendingUats
-        .map((u) => {
-          const pct = u.total ? Math.round((u.closed / u.total) * 100) : 0;
-          // 專案名 chip 只掛在**別的專案**的報告上：當前專案是預設脈絡，
-          // 每一列都標一次等於把唯一需要注意的那幾列淹掉。歸屬比不到（專案
-          // 還沒匯入）時也不標 —— 那種情況點進去會由 tracking 頁講清楚。
-          const foreign = u.projectName && u.projectId !== activeId;
-          // chip 放進 .ov-row-name 裡面而不是多開一個格子：.ov-row 是固定五欄的
-          // grid，多一個孩子會把進度條擠到別的欄位去。
-          const chip = foreign
-            ? `<span class="p-tag" style="margin-right:6px">${escapeHtml(u.projectName!)}</span>`
-            : "";
-          return `<li>
-            <button type="button" class="ov-row" data-uat="${escapeHtml(u.path)}" title="${escapeHtml(foreign ? `${u.projectName} · ${u.name}` : u.name)}">
-              <span class="ov-row-name">${chip}${escapeHtml(u.title)}</span>
-              <span class="ov-row-state tone-blocked">${u.closed}/${u.total} 已結</span>
-              <span class="ov-bar"><i style="width:${Math.max(2, pct)}%"></i></span>
-              <span class="ov-row-pct">${pct}%</span>
-              <span class="ov-row-flag">開報告</span>
-            </button>
-          </li>`;
-        })
-        .join("")}</ul>
-    </section>`;
-  }
-
   /**
    * 待修的失敗題 —— 跨專案（W2-4）。
    *
-   * 與上方「待實測」可能同時指向同一份報告，**這不是重複計數**：待實測數的
-   * 是「份」（還有題沒測的報告），待修數的是「題」（已判失敗、還沒被修掉的
+   * 與左欄「待測試報告」可能同時指向同一份報告，**這不是重複計數**：左欄數的
+   * 是「份」（還有題沒測的報告），右欄數的是「題」（已判失敗、還沒被修掉的
    * 題）。量詞與樣式刻意錯開。修完＝改判或被新一輪 supersede，掃描自然出清。
    */
   let openFixes: OpenFix[] = [];
 
-  function cardOpenFixes(): string {
-    if (!openFixes.length) return "";
+  /**
+   * 「顯示更多」狀態放模組層，不放 DOM。`render()` 會整區重畫
+   *（量測、掃描回來），class 會丟；這個物件撐過那一次重畫。
+   */
+  const uatBoardOpen: Record<"pending" | "fixes", boolean> = { pending: false, fixes: false };
+
+  function uatChip(projectName: string | undefined, projectId: string | undefined, activeId: string | null): string {
+    const foreign = projectName && projectId !== activeId;
+    return foreign ? `<span class="p-tag" style="margin-right:6px">${escapeHtml(projectName)}</span>` : "";
+  }
+
+  function uatBoardCol(
+    key: "pending" | "fixes",
+    subtitle: string,
+    countLabel: string,
+    rows: string,
+    count: number,
+    empty: string,
+    headTitle?: string,
+  ): string {
+    const open = uatBoardOpen[key];
+    const more = uatBoardNeedsMore(count);
+    const titleAttr = headTitle ? ` title="${escapeHtml(headTitle)}"` : "";
+    return `<div class="ov-uat-col${open ? " is-open" : ""}" data-uat-col="${key}">
+      <p class="ov-uat-col-head"${titleAttr}>
+        <span>${escapeHtml(subtitle)}</span>
+        <span class="ov-uat-col-count">${escapeHtml(countLabel)}</span>
+      </p>
+      <ul class="ov-rows ov-uat-list" id="ov-uat-${key}" style="--ov-uat-preview:${UAT_BOARD_PREVIEW}">${
+        rows || `<li class="ov-uat-empty">${escapeHtml(empty)}</li>`
+      }</ul>
+      ${
+        more
+          ? `<button type="button" class="ov-uat-more" data-uat-more="${key}" aria-expanded="${open ? "true" : "false"}" aria-controls="ov-uat-${key}">${open ? UAT_BOARD_LESS : UAT_BOARD_MORE}</button>`
+          : ""
+      }
+    </div>`;
+  }
+
+  /**
+   * 待實測與待修合成一張「UAT測試」卡。左右分欄是掃視契約：同一眼看到
+   * 「還沒勾的報告」和「已經失敗等修的題」，不必上下滾兩張卡對帳。
+   * 每欄預設 5 列；超過才出「顯示更多」，展開只開 overflow，卡高鎖死。
+   */
+  function cardUatBoard(): string {
+    if (!pendingUats.length && !openFixes.length) return "";
     const activeId = store.get().activeProjectId;
-    return `<section class="ov-others">
-      <p class="ov-others-head" title="以最新一輪報告為準——被重測取代的舊報告不列入">待修 ${openFixes.length} 題</p>
-      <ul class="ov-rows">${openFixes
-        .map((x) => {
-          const foreign = x.projectName && x.projectId !== activeId;
-          const chip = foreign
-            ? `<span class="p-tag" style="margin-right:6px">${escapeHtml(x.projectName!)}</span>`
-            : "";
-          // .ov-row 是固定五欄 grid：bar 與 pct 這裡沒有意義，但要留空位
-          // 佔欄，不然「開報告」會滑進進度條的欄位。
-          return `<li>
-            <button type="button" class="ov-row" data-uat="${escapeHtml(x.path)}" title="${escapeHtml(`${x.reportTitle} · ${x.name}`)}">
-              <span class="ov-row-name">${chip}${escapeHtml(x.itemTitle)}</span>
-              <span class="ov-row-state tone-blocked">失敗</span>
-              <span class="ov-bar"></span>
-              <span class="ov-row-pct"></span>
-              <span class="ov-row-flag">開報告</span>
-            </button>
-          </li>`;
-        })
-        .join("")}</ul>
+    // 逐份列表之上的一行合計：先回答「全部專案加起來還剩幾題」，再讓人決定
+    // 要不要逐列掃。分母沿用同一份 pendingUats，不重掃、不重算 supersede。
+    const roll = pendingUats.length
+      ? rollupPendingUats(pendingUats, { truncated: uatTruncated })
+      : null;
+    const sum = roll ? uatRollupText(roll) : null;
+
+    const pendingRows = pendingUats
+      .map((u) => {
+        const pct = u.total ? Math.round((u.closed / u.total) * 100) : 0;
+        const chip = uatChip(u.projectName, u.projectId, activeId);
+        const foreign = u.projectName && u.projectId !== activeId;
+        return `<li>
+          <button type="button" class="ov-row" data-uat="${escapeHtml(u.path)}" title="${escapeHtml(foreign ? `${u.projectName} · ${u.name}` : u.name)}">
+            <span class="ov-row-name">${chip}${escapeHtml(u.title)}</span>
+            <span class="ov-row-state tone-blocked">${u.closed}/${u.total} · ${pct}%</span>
+            <span class="ov-row-flag">開報告</span>
+          </button>
+        </li>`;
+      })
+      .join("");
+
+    const fixRows = openFixes
+      .map((x) => {
+        const chip = uatChip(x.projectName, x.projectId, activeId);
+        return `<li>
+          <button type="button" class="ov-row" data-uat="${escapeHtml(x.path)}" title="${escapeHtml(`${x.reportTitle} · ${x.name}`)}">
+            <span class="ov-row-name">${chip}${escapeHtml(x.itemTitle)}</span>
+            <span class="ov-row-state tone-blocked">失敗</span>
+            <span class="ov-row-flag">開報告</span>
+          </button>
+        </li>`;
+      })
+      .join("");
+
+    return `<section class="ov-others ov-uat-board">
+      <p class="ov-uat-board-title">${UAT_BOARD_TITLE}</p>
+      ${
+        sum
+          ? `<p class="ov-others-sum" title="${escapeHtml(UAT_SUM_TITLE)}">全部專案合計　<strong>${sum.lead}</strong>${sum.detail}${
+              sum.skipped ? `　<span class="ov-sum-warn">${escapeHtml(sum.skipped)}</span>` : ""
+            }${roll!.truncated ? `　<span class="ov-sum-warn">${escapeHtml(UAT_TRUNCATED_NOTE)}</span>` : ""}</p>`
+          : ""
+      }
+      <div class="ov-uat-split">
+        ${uatBoardCol("pending", UAT_BOARD_LEFT, pendingUats.length ? `${pendingUats.length} 份` : "0 份", pendingRows, pendingUats.length, "目前沒有待測報告")}
+        ${uatBoardCol("fixes", UAT_BOARD_RIGHT, openFixes.length ? `${openFixes.length} 題` : "0 題", fixRows, openFixes.length, "目前沒有待修復", "以最新一輪報告為準——被重測取代的舊報告不列入")}
+      </div>
     </section>`;
   }
 
@@ -693,8 +729,7 @@ if (!requireAuth()) {
     root.innerHTML = `${warRoom(rows)}
       <div class="ov-focus">${hero(rows)}</div>
       ${prRadar()}
-      ${cardPendingUat()}
-      ${cardOpenFixes()}
+      ${cardUatBoard()}
       <div class="ov-pair">
         <section class="d-card ov-gov" id="${GOVERNANCE_ID}">${governanceInner(rows)}</section>
         ${cardProjects(rows)}
@@ -712,6 +747,21 @@ if (!requireAuth()) {
       } catch {
         /* 隱私模式寫不了 —— 摺疊狀態不值得為它報錯 */
       }
+    });
+
+    // 「顯示更多」只切 overflow，不重畫整卡 —— 重畫會把捲動位置丟掉。
+    root.querySelectorAll<HTMLButtonElement>("[data-uat-more]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const key = btn.dataset.uatMore;
+        if (key !== "pending" && key !== "fixes") return;
+        uatBoardOpen[key] = !uatBoardOpen[key];
+        const col = btn.closest(".ov-uat-col");
+        col?.classList.toggle("is-open", uatBoardOpen[key]);
+        btn.textContent = uatBoardOpen[key] ? UAT_BOARD_LESS : UAT_BOARD_MORE;
+        btn.setAttribute("aria-expanded", uatBoardOpen[key] ? "true" : "false");
+      });
     });
 
     // 待實測那一列直接落到報告本身（`uat.html?uat=…`），不繞儀表板 ——

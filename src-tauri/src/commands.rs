@@ -643,6 +643,38 @@ pub fn valid_history_name(name: &str) -> bool {
     }
 }
 
+/// History 頁傳來的 commit 識別碼。只收 hex，4–40 字。
+///
+/// 這是前端少數能把字串送進 `git show` 的入口。少了這道守衛，
+/// `HEAD`、`main`、`foo;rm` 都能變成 argv。hex 保證它只能是
+/// 一個物件名稱，不能是 ref 或選項。
+pub fn valid_commit_hash(s: &str) -> bool {
+    let n = s.len();
+    (4..=40).contains(&n) && s.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// `git show HASH -- PATH` 的路徑。相對、不穿越、不帶空段。
+pub fn valid_repo_rel_path(s: &str) -> bool {
+    if s.is_empty() || s.len() > 512 {
+        return false;
+    }
+    if s.starts_with('/') || s.starts_with('\\') || s.contains('\0') {
+        return false;
+    }
+    !s.split(['/', '\\']).any(|p| p.is_empty() || p == "." || p == "..")
+}
+
+fn utf8_prefix(s: &str, limit: usize) -> (String, bool) {
+    if s.len() <= limit {
+        return (s.to_string(), false);
+    }
+    let mut cut = limit;
+    while cut > 0 && !s.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    (s[..cut].to_string(), true)
+}
+
 /// 快照檔名用的時間戳。與 `now_iso` 同源（UTC），但格式是可以當檔名的那種。
 ///
 /// UTC 而不是本地時間：本地時間需要時區資料庫，為了一個檔名拉 `chrono`
@@ -1666,6 +1698,121 @@ pub fn git_changeset(
     Ok(Maybe::Ok(GitChangeset {
         status,
         stat,
+        patch,
+        truncated,
+    }))
+}
+
+/// 人眼看的 commit patch 上限。比 AI 那條 24KB 寬，因為這份
+/// 不會外送，只跨 IPC。400KB 仍擋得住把整個 Linux 歷史灌進 WebView。
+const VIEW_PATCH_LIMIT: usize = 400_000;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitFile {
+    path: String,
+    added: Option<i64>,
+    deleted: Option<i64>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitDiff {
+    hash: String,
+    subject: String,
+    body: String,
+    author: String,
+    email: String,
+    at: String,
+    files: Vec<CommitFile>,
+    patch: String,
+    truncated: bool,
+}
+
+fn parse_numstat(raw: &str) -> Vec<CommitFile> {
+    raw.lines()
+        .filter(|l| !l.trim().is_empty())
+        .filter_map(|l| {
+            let mut it = l.splitn(3, '\t');
+            let a = it.next()?;
+            let d = it.next()?;
+            let path = it.next()?.to_string();
+            if path.is_empty() {
+                return None;
+            }
+            Some(CommitFile {
+                path,
+                added: if a == "-" { None } else { a.parse().ok() },
+                deleted: if d == "-" { None } else { d.parse().ok() },
+            })
+        })
+        .collect()
+}
+
+/// 某個 commit 的說明、檔案清單、與（可選）單一檔的 patch。
+///
+/// **全部唯讀。** `hash` 必須是 hex；`path` 若有值必須是相對路徑。
+/// 兩個字串都會進 `git show` 的 argv，所以守衛在這裡，不在前端。
+#[tauri::command]
+pub fn git_commit_diff(
+    folder_path: String,
+    hash: String,
+    path: Option<String>,
+    roots: State<RegisteredRoots>,
+    overrides: State<CliOverrides>,
+) -> R<Maybe<GitCommitDiff>> {
+    let dir = PathBuf::from(&folder_path);
+    if !roots.contains_ancestor_of(&dir) && !roots.contains_ancestor_of(&dir.join("x")) {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "這個資料夾沒有註冊為專案根目錄".to_string(),
+        )));
+    }
+    if !valid_commit_hash(&hash) {
+        return Err("commit 識別碼只能是 4–40 位十六進位".into());
+    }
+    let file_path = path.unwrap_or_default();
+    if !file_path.is_empty() && !valid_repo_rel_path(&file_path) {
+        return Err("檔案路徑不合法".into());
+    }
+
+    let meta_fmt = format!("--format=%H\x1e%s\x1e%an\x1e%ae\x1e%cI\x1e%b");
+    let Some(meta) = exec::git(&dir, &["show", "-s", &meta_fmt, &hash], &overrides) else {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "找不到這個 commit，或這不是 git 專案".to_string(),
+        )));
+    };
+    let f: Vec<&str> = meta.split('\x1e').collect();
+    if f.len() < 5 {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "git show 回傳的格式無法解析".to_string(),
+        )));
+    }
+
+    let numstat = exec::git(&dir, &["show", "--format=", "--numstat", &hash], &overrides)
+        .unwrap_or_default();
+    let files = parse_numstat(&numstat);
+
+    let raw = if file_path.is_empty() {
+        exec::git(&dir, &["show", "--format=", "--unified=3", &hash], &overrides)
+            .unwrap_or_default()
+    } else {
+        exec::git(
+            &dir,
+            &["show", "--format=", "--unified=3", &hash, "--", &file_path],
+            &overrides,
+        )
+        .unwrap_or_default()
+    };
+    let (patch, truncated) = utf8_prefix(&raw, VIEW_PATCH_LIMIT);
+
+    Ok(Maybe::Ok(GitCommitDiff {
+        hash: f[0].to_string(),
+        subject: f[1].to_string(),
+        author: f[2].to_string(),
+        email: f[3].to_string(),
+        at: f[4].to_string(),
+        body: f.get(5).unwrap_or(&"").to_string(),
+        files,
         patch,
         truncated,
     }))

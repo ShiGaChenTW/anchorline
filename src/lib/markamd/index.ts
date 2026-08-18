@@ -4,7 +4,14 @@
  * 編輯台使用精簡適配層：即時 Markdown 預覽雙欄。
  */
 export { renderMarkdown, markamdMarkdownIt } from "./markdown";
-export { mdFieldHtml, bindMdField, type MdFieldOptions } from "./md-field";
+export {
+  mdFieldHtml,
+  bindMdField,
+  applyMdPaneMode,
+  setAllMdModes,
+  type MdFieldOptions,
+  type MdPaneMode,
+} from "./md-field";
 export {
   applySemanticHighlight,
   applyFocusHighlight,
