@@ -14,6 +14,7 @@ import {
   invalidateUatScan,
   loadUatScan,
   openFixesFrom,
+  pendingCountForProject,
   pendingUatsFrom,
   rollupPendingUats,
   uatRollupText,
@@ -304,6 +305,25 @@ describe("attributePendingUats（W2-1 跨專案歸屬）", () => {
     expect(got).toHaveLength(1);
     expect(got[0]!.title).toBe("新輪");
     expect(got[0]!.projectName).toBe("貝塔");
+  });
+
+  test("pendingCountForProject 只數歸到該專案的份，不把全站合計掛上去", () => {
+    const list = attributePendingUats(
+      [
+        { path: "/w/snote/plans/uat-a.md" },
+        { path: "/w/snote/plans/uat-b.md" },
+        { path: "/w/other/plans/uat-c.md" },
+        { path: "/tmp/orphan.md" },
+      ],
+      [
+        { id: "snote", name: "snote", rootPath: "/w/snote" },
+        { id: "other", name: "other", rootPath: "/w/other" },
+      ],
+    );
+    expect(pendingCountForProject(list, "snote")).toBe(2);
+    expect(pendingCountForProject(list, "other")).toBe(1);
+    expect(pendingCountForProject(list, "missing")).toBe(0);
+    expect(pendingCountForProject(list, null)).toBe(0);
   });
 });
 

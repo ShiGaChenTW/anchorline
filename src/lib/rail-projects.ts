@@ -299,7 +299,7 @@ function projActionsHtml(): string {
           on ? ' aria-current="page"' : ""
         }><span class="rail-proj-action-in"><svg class="ic" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${it.icon}</svg><span>${it.label}</span>${
           it.count
-            ? `<span class="count" data-nav-count="${it.count}" title="未測完的實測報告">0</span>`
+            ? `<span class="count" data-nav-count="${it.count}" title="這個專案未測完的實測報告">0</span>`
             : ""
         }</span></a>`;
       })

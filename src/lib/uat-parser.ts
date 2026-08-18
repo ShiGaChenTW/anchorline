@@ -82,8 +82,13 @@ export type UatReport = {
   title: string;
   created: string;
   updated: string;
-  /** 沿用 plan 的狀態詞彙子集：全題已測 = 已完成，否則進行中 */
+  /** 沿用 plan 的狀態詞彙子集：全題已測或有完成標記 = 已完成，否則進行中 */
   status: "進行中" | "已完成";
+  /**
+   * 使用者按「標記完成」寫進檔頭的時間戳。空字串＝沒有標記。
+   * 有值時報告算已完成，即使還有未測題；撤回就是把這一行從檔裡刪掉。
+   */
+  closedAt: string;
   items: UatItem[];
   path?: string;
   /** 沒錨點的題數。> 0 時 UI 要警告 —— 這些題勾不了 */
@@ -152,6 +157,7 @@ export function parseUatReport(text: string, path?: string): UatReport {
     created: "—",
     updated: "—",
     status: "進行中",
+    closedAt: "",
     items: [],
     path,
     unanchored: 0,
@@ -240,7 +246,14 @@ export function parseUatReport(text: string, path?: string): UatReport {
       continue;
     }
     if (!cur && (s.startsWith("**狀態：**") || s.startsWith("**狀態:**"))) {
-      // 狀態由題目結果推導；這行只在檔頭吞掉，避免它漏進 preamble。
+      // 狀態由題目結果＋完成標記推導；這行只在檔頭吞掉，避免它漏進 preamble。
+      continue;
+    }
+    if (
+      !cur &&
+      (s.startsWith("**完成標記：**") || s.startsWith("**完成標記:**"))
+    ) {
+      out.closedAt = s.replace(/\*\*完成標記[：:]\*\*/, "").trim();
       continue;
     }
 
@@ -330,8 +343,47 @@ export function parseUatReport(text: string, path?: string): UatReport {
         x.verdict !== "pending" &&
         !(VERDICT_NEEDS_NOTE.has(x.verdict) && !x.note),
     );
-  out.status = allTested ? "已完成" : "進行中";
+  out.status = out.closedAt || allTested ? "已完成" : "進行中";
   return out;
+}
+
+const CLOSED_LINE_RE = /^\*\*完成標記[：:]\*\*.*$/m;
+
+/**
+ * 寫入或撤回檔頭的完成標記。只動那一行與 **狀態：**，其餘位元組不變。
+ * 撤回之後若全題仍已測，狀態會維持已完成——那不是標記，是題目結果推導。
+ */
+export function setReportClosed(
+  text: string,
+  closed: boolean,
+  opts: { now?: string } = {},
+): { ok: true; text: string } | { ok: false; reason: string } {
+  if (!isUatText(text)) return { ok: false, reason: "這份不是 UAT 報告" };
+  const hadTrailingNewline = text.endsWith("\n");
+  const eol = eolOf(text);
+  let next = text;
+  if (closed) {
+    const stamp = (opts.now ?? "").trim() || new Date().toISOString();
+    const line = `**完成標記：** ${stamp}`;
+    if (CLOSED_LINE_RE.test(next)) {
+      next = next.replace(CLOSED_LINE_RE, line);
+    } else if (/^\*\*狀態[：:]\*\*.*$/m.test(next)) {
+      next = next.replace(/^(\*\*狀態[：:]\*\*.*)$/m, `$1${eol}${line}`);
+    } else {
+      next = next.replace(/^(#\s+UAT[:：].*)$/m, `$1${eol}${eol}${line}`);
+    }
+  } else {
+    next = next.replace(/(?:\r?\n)?\*\*完成標記[：:]\*\*.*(?=\r?\n|$)/, "");
+  }
+  const parsed = parseUatReport(next);
+  if (/^\*\*狀態[：:]\*\*.*$/m.test(next)) {
+    next = next.replace(/^\*\*狀態[：:]\*\*.*$/m, `**狀態：** ${parsed.status}`);
+  }
+  if (opts.now && /^\*\*最後更新[：:]\*\*.*$/m.test(next)) {
+    next = next.replace(/^\*\*最後更新[：:]\*\*.*$/m, `**最後更新：** ${opts.now}`);
+  }
+  if (hadTrailingNewline && !next.endsWith("\n")) next += eol;
+  return { ok: true, text: next };
 }
 
 /**

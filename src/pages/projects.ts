@@ -39,6 +39,16 @@ import {
   toast,
   updateUserRailFooter,
 } from "../lib/ui";
+import {
+  filterProjects,
+  nextProjectSort,
+  parseProjectSort,
+  projectFolderLabel,
+  projectSortIndicator,
+  sortProjects,
+  type ProjectSortKey,
+  type ProjectSortState,
+} from "../lib/project-list";
 
 if (!requireAuth()) {
   /* redirected */
@@ -201,11 +211,13 @@ if (!requireAuth()) {
   let view: ViewMode = (() => {
     try {
       const v = localStorage.getItem(VIEW_KEY);
-      return v === "list" || v === "card" || v === "folder" ? v : "card";
+      return v === "list" || v === "card" || v === "folder" ? v : "list";
     } catch {
-      return "card";
+      return "list";
     }
   })();
+  /** 與範本庫同一套三態。null = visibleProjects 原順序 */
+  let sort: ProjectSortState = null;
 
   function actionOf(p: Project): { href: string; label: string } {
     const href =
@@ -263,7 +275,79 @@ if (!requireAuth()) {
   }
 
   function renderFlatView(rows: Project[], mode: ViewMode): string {
-    return rows.map((p) => cardHtml(p, mode === "list")).join("");
+    if (mode === "list") return renderListTable(rows);
+    return rows.map((p) => cardHtml(p, false)).join("");
+  }
+
+  const LIST_COLS: { key: ProjectSortKey | null; label: string; cls?: string }[] = [
+    { key: "title", label: "標題" },
+    { key: "status", label: "狀態" },
+    { key: "pct", label: "進度", cls: "tv-num" },
+    { key: "updated", label: "更新" },
+    { key: "folder", label: "資料夾", cls: "tv-col-source" },
+    { key: null, label: "", cls: "tv-actions" },
+  ];
+
+  /**
+   * 與 PRD 範本庫同一套表：表頭可點、三態排序、標題＋一句說明。
+   * 動作欄沿用既有 data-*，委派 handler 不用改。
+   */
+  function renderListTable(rows: Project[]): string {
+    const head = LIST_COLS.map((c) => {
+      if (!c.key) return `<th class="${c.cls ?? ""}" aria-label="動作"></th>`;
+      const arrow = projectSortIndicator(sort, c.key);
+      const dir = sort && sort.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : "none";
+      return `<th class="tv-sortable ${c.cls ?? ""}" data-pl-sort="${c.key}" role="columnheader"
+                  aria-sort="${dir}" tabindex="0" title="點一下排序，再點反向，第三次回到預設">
+                ${escapeHtml(c.label)}${arrow ? `<span class="tv-sort-arrow">${arrow}</span>` : ""}
+              </th>`;
+    }).join("");
+
+    const body = rows
+      .map((p) => {
+        const st = STATUS[p.status];
+        const { href, label } = actionOf(p);
+        const display = projectDisplayName(p);
+        const blurb = (p.description ?? "").trim() || [p.owner, p.updated].filter(Boolean).join(" · ");
+        const folder = projectFolderLabel(p);
+        const untrack = canDelete(store.get().currentUser)
+          ? `<button type="button" class="btn btn-sm btn-ghost btn-untrack" data-untrack-id="${escapeHtml(p.id)}" data-untrack-label="✕" title="僅從工作區退出追蹤，不刪除磁碟檔案" style="color:var(--muted)">✕</button>`
+          : "";
+        const rename = `<button type="button" class="btn btn-sm btn-ghost" data-rename-project="${escapeHtml(p.id)}" title="自訂顯示名稱">重新命名</button>`;
+        return `<tr data-id="${escapeHtml(p.id)}" data-card-open="${escapeHtml(p.id)}" class="${p.id === store.get().activeProjectId ? "is-active" : ""}">
+          <td>
+            <a class="tv-title" href="dashboard.html" data-open-project="${escapeHtml(p.id)}">${escapeHtml(display)}</a>
+            <span class="tv-blurb tv-col-blurb">${escapeHtml(blurb || "—")}</span>
+          </td>
+          <td><span class="pill ${st.cls}">${st.label}</span>${tagsOf(p)}</td>
+          <td class="tv-num">${p.pct}%</td>
+          <td class="tv-num">${escapeHtml(p.updated || "—")}</td>
+          <td class="tv-col-source">${folder ? escapeHtml(folder) : "—"}</td>
+          <td class="tv-actions">
+            <a class="btn btn-sm btn-ghost row-action-main" href="${href}" data-open-project="${escapeHtml(p.id)}" style="color:var(--accent);font-weight:600">${escapeHtml(label)}</a>
+            ${rename}${untrack}
+          </td>
+        </tr>`;
+      })
+      .join("");
+
+    return `<table class="tv-list pl-list"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  function bindListSort(host: HTMLElement) {
+    host.querySelectorAll<HTMLElement>("[data-pl-sort]").forEach((th) => {
+      const apply = () => {
+        sort = nextProjectSort(sort, th.dataset.plSort as ProjectSortKey);
+        render();
+      };
+      th.onclick = apply;
+      th.onkeydown = (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          apply();
+        }
+      };
+    });
   }
 
   /**
@@ -297,7 +381,9 @@ if (!requireAuth()) {
             <span class="folder-group-count">${list.length}</span>
             <span class="folder-group-path mono">${pathHint}</span>
           </header>
-          <div class="folder-group-body sub-${sub}">${list.map((p) => cardHtml(p, true)).join("")}</div>
+          <div class="folder-group-body sub-${sub}">${
+            sub === "list" ? renderListTable(list) : list.map((p) => cardHtml(p, false)).join("")
+          }</div>
         </section>`;
       })
       .join("");
@@ -337,28 +423,14 @@ if (!requireAuth()) {
     const planHits = loadPlanHits();
     renderPlanBar(planHits);
 
-    const rows = projects.filter((p) => {
-      if (filter === "mine" && !p.mine) return false;
-      if (filter !== "all" && filter !== "mine" && p.status !== filter) return false;
-      // 標籤篩選是 AND：選了兩個就是「同時有這兩個標籤」，
-      // 不然選越多結果越多，篩選就失去意義
-      if (tagFilter.length) {
-        const own = (p.tags ?? []).map((t) => t.toLowerCase());
-        if (!tagFilter.every((t) => own.includes(t.toLowerCase()))) return false;
-      }
-      if (query) {
-        const q = query.toLowerCase();
-        return (
-          p.title.toLowerCase().includes(q) ||
-          (p.customName ?? "").toLowerCase().includes(q) ||
-          (p.description ?? "").toLowerCase().includes(q) ||
-          p.owner.includes(query) ||
-          p.tag.includes(q) ||
-          (p.tags ?? []).some((t) => t.toLowerCase().includes(q))
-        );
-      }
-      return true;
-    });
+    const rows = sortProjects(
+      filterProjects(projects, {
+        status: filter as "all" | "mine" | ProjectStatus,
+        tags: tagFilter,
+        q: query,
+      }),
+      sort,
+    );
 
     renderTagBar();
 
@@ -372,9 +444,15 @@ if (!requireAuth()) {
       return;
     }
 
-    tbody.className = `project-board-list view-${view}`;
+    tbody.className = view === "list" ? "tv-list-wrap" : `project-board-list view-${view}`;
+    if (view === "list") tbody.removeAttribute("role");
+    else tbody.setAttribute("role", "list");
     tbody.innerHTML =
       view === "folder" ? renderFolderView(rows) : renderFlatView(rows, view);
+    bindListSort(tbody);
+
+    const sortSel = document.getElementById("pl-sort-select") as HTMLSelectElement | null;
+    if (sortSel) sortSel.value = sort ? `${sort.key}:${sort.dir}` : "";
 
     renderStats(projects);
     renderFlow();
@@ -421,7 +499,7 @@ if (!requireAuth()) {
           window.setTimeout(() => {
             if (untrackBtn.dataset.confirming === "1") {
               untrackBtn.dataset.confirming = "";
-              untrackBtn.textContent = "退出追蹤";
+              untrackBtn.textContent = untrackBtn.dataset.untrackLabel || "退出追蹤";
               untrackBtn.classList.remove("btn-warn-confirm");
             }
           }, 4000);
@@ -537,6 +615,11 @@ if (!requireAuth()) {
 
   document.getElementById("q")?.addEventListener("input", (e) => {
     query = (e.target as HTMLInputElement).value.trim();
+    render();
+  });
+
+  document.getElementById("pl-sort-select")?.addEventListener("change", (e) => {
+    sort = parseProjectSort((e.target as HTMLSelectElement).value);
     render();
   });
 

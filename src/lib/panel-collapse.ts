@@ -290,14 +290,17 @@ export function initPanelCollapse() {
   );
 
   initTkColCollapse(".tk-rail", "tkRail", "btn-expand-tk-rail", "計劃", "left", "tk-rail-collapsed");
-  initTkColCollapse(
-    ".tk-side",
-    "tkSide",
-    "btn-expand-tk-side",
-    "結構檢查",
-    "right",
-    "tk-side-collapsed",
-  );
+  const onUatPage = /(?:^|\/)uat\.html(?:[?#]|$)/.test(location.pathname + location.href);
+  if (!onUatPage) {
+    initTkColCollapse(
+      ".tk-side",
+      "tkSide",
+      "btn-expand-tk-side",
+      "結構檢查",
+      "right",
+      "tk-side-collapsed",
+    );
+  }
 
   window.addEventListener("anchorline:panel-collapse", () => reflowWorkbench());
   reflowWorkbench();

@@ -4,6 +4,7 @@ import {
   isUatText,
   parseUatReport,
   serializeUatReport,
+  setReportClosed,
   setVerdict,
   validateUatSpec,
 } from "../src/lib/uat-parser";
@@ -439,6 +440,41 @@ describe("UAT parser：讀得回來，也守得住寫回邊界", () => {
 
     expect(parseUatReport(reverted.text).status).toBe("進行中");
     expect(reverted.text).toContain("**狀態：** 進行中");
+  });
+
+  test("完成標記讓還有未測題的報告算已完成，撤回後回到進行中", () => {
+    const marked = setReportClosed(baseReport(), true, { now: "2026-08-18 21:30" });
+    expect(marked.ok).toBe(true);
+    if (!marked.ok) return;
+    const parsed = parseUatReport(marked.text);
+    expect(parsed.closedAt).toBe("2026-08-18 21:30");
+    expect(parsed.status).toBe("已完成");
+    expect(marked.text).toContain("**完成標記：** 2026-08-18 21:30");
+    expect(marked.text).toContain("**狀態：** 已完成");
+
+    const opened = setReportClosed(marked.text, false, { now: "2026-08-18 21:31" });
+    expect(opened.ok).toBe(true);
+    if (!opened.ok) return;
+    const after = parseUatReport(opened.text);
+    expect(after.closedAt).toBe("");
+    expect(after.status).toBe("進行中");
+    expect(opened.text).not.toContain("**完成標記：**");
+    expect(opened.text).toContain("**狀態：** 進行中");
+  });
+
+  test("撤回完成標記時，全題已測的報告仍是已完成", () => {
+    const step1 = setVerdict(baseReport(), "AAAA1111", "pass", "", { now: "2026-08-18 21:00" });
+    if (!step1.ok) return;
+    const step2 = setVerdict(step1.text, "BBBB2222", "later", "", { now: "2026-08-18 21:01" });
+    if (!step2.ok) return;
+    const step3 = setVerdict(step2.text, "CCCC3333", "later", "", { now: "2026-08-18 21:02" });
+    if (!step3.ok) return;
+    const marked = setReportClosed(step3.text, true, { now: "2026-08-18 21:03" });
+    if (!marked.ok) return;
+    const opened = setReportClosed(marked.text, false, { now: "2026-08-18 21:04" });
+    if (!opened.ok) return;
+    expect(parseUatReport(opened.text).status).toBe("已完成");
+    expect(opened.text).not.toContain("**完成標記：**");
   });
 
   test("沒有 anc:t= 的題要算進 unanchored；找不到 id 時要明確失敗，不准亂改別題", () => {

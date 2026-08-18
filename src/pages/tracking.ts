@@ -57,6 +57,7 @@ import {
   parseUatReport,
   setEvidence,
   setExtras,
+  setReportClosed,
   setVerdict,
   uatProgress,
   UAT_VERDICTS,
@@ -257,6 +258,26 @@ if (__authed) {
   }
 
   /**
+   * 這個專案沒有任何實測報告時，三欄工作台（清單／內容／結構檢查）
+   * 全都不該出現。空殼加上「從左邊挑一份」是在假裝這裡有東西可挑。
+   */
+  function showUatWorkbench(hasReports: boolean) {
+    const shell = document.querySelector(".tk-shell") as HTMLElement | null;
+    const parent = shell?.parentElement;
+    if (!shell || !parent) return;
+    let empty = document.getElementById("uat-none");
+    if (!empty) {
+      empty = document.createElement("div");
+      empty.id = "uat-none";
+      empty.className = "uat-none";
+      empty.textContent = "尚未產出UAT報告";
+      parent.appendChild(empty);
+    }
+    shell.hidden = !hasReports;
+    empty.hidden = hasReports;
+  }
+
+  /**
    * 計劃清單依狀態分組。
    *
    * 13 份計劃裡有 9 份是 `未知 · 0/0 · 0%`（沒有 Plan Steps 區段的筆記檔），
@@ -284,13 +305,9 @@ if (__authed) {
       // 也不進「agent 正在寫」那一桶 —— 剛被寫出來的報告確實是最新的檔，
       // 但那一桶的語意是「別碰，agent 在動」，對實測報告剛好是相反的指示。
       if (p.uat) {
-        // 三種去向：可勾且沒測完 → 最上面等人動手；測完 → 已結束（做完的事
-        // 霸著最顯眼的位置，會把「等你動手」稀釋成「一疊做完的」）；
-        // 一題錨點都沒有（遺留表格版之類）→「沒有步驟的檔案」——它不可操作，
-        // 釘在最高優先組只是一份關不掉的幽靈報告。
-        const anchored = p.uat.items.some((x) => x.id);
-        if (!anchored) noSteps.push(entry);
-        else if (p.uat.status === "已完成") done.push(entry);
+        // 測完或有完成標記 → 已完成。沒錨點的進行中報告仍留在實測組，
+        // 不再丟進「沒有步驟的檔案」——那一組在 UAT 頁改放已完成。
+        if (p.uat.status === "已完成") done.push(entry);
         else uat.push(entry);
       } else if (live && p.path === trackingPath) tracked.push(entry);
       else if (p.meta.total_steps === 0) noSteps.push(entry);
@@ -300,6 +317,12 @@ if (__authed) {
         done.push(entry);
       else active.push(entry);
     });
+    if (IS_UAT_PAGE) {
+      return [
+        { key: "uat", label: "實測報告", items: uat, open: true },
+        { key: "done", label: "已完成", items: done, open: uat.length === 0 },
+      ].filter((g) => g.items.length);
+    }
     return [
       { key: "uat", label: "實測報告", items: uat, open: true },
       { key: "tracked", label: "agent 正在寫", items: tracked, open: true },
@@ -341,19 +364,20 @@ if (__authed) {
     const el = document.getElementById("plan-list");
     if (!el) return;
     if (!plans.length) {
+      if (IS_UAT_PAGE) {
+        showUatWorkbench(false);
+        return;
+      }
       const name = activeProjectName();
       const scope = name ? `「${name}」` : "當前專案";
-      el.innerHTML = IS_UAT_PAGE
-        ? `<div class="tk-empty">
-        <p>${escapeHtml(scope)} 的 <code>plans/</code> 還沒有實測報告。</p>
-        <p class="tk-empty-how">用 Uat skill 出題後，報告會出現在這裡。</p>
-      </div>`
-        : `<div class="tk-empty">
+      el.innerHTML = `<div class="tk-empty">
         <p>${escapeHtml(scope)} 的 <code>plans/</code> 還沒有計劃檔。</p>
         <p class="tk-empty-how">在專案資料夾建一個 <code>plans/</code>，放入含 <code>## Plan Steps</code> 的 markdown，這裡就會列出進度。</p>
       </div>`;
       return;
     }
+
+    if (IS_UAT_PAGE) showUatWorkbench(true);
 
     el.innerHTML = groupPlans()
       .map(
@@ -554,6 +578,15 @@ if (__authed) {
               })()
             : ""
         }
+        ${
+          canEditFiles()
+            ? r.closedAt
+              ? `<button type="button" class="tk-uat-send-btn" id="uat-unclose" title="刪掉檔頭的完成標記。若還有未測題，報告會回到進行中">撤回完成</button>`
+              : r.status === "進行中"
+                ? `<button type="button" class="tk-uat-send-btn" id="uat-close" title="在檔頭寫入完成標記，報告移到「已完成」。未測題不會被改掉，之後可以撤回">標記完成</button>`
+                : ""
+            : ""
+        }
       </div>
       <div class="tk-uat-fams" id="uat-fams" role="group" aria-label="交給哪一種 agent" hidden>
         ${HANDOFF_FAMILIES.map(
@@ -608,6 +641,16 @@ if (__authed) {
         closeoutArmedFor = null;
         void onCloseoutRound();
       };
+    }
+    const markBtn = document.getElementById("uat-close") as HTMLButtonElement | null;
+    if (markBtn) {
+      markBtn.onmousedown = keepFocus;
+      markBtn.onclick = () => void onSetReportClosed(true);
+    }
+    const unmarkBtn = document.getElementById("uat-unclose") as HTMLButtonElement | null;
+    if (unmarkBtn) {
+      unmarkBtn.onmousedown = keepFocus;
+      unmarkBtn.onclick = () => void onSetReportClosed(false);
     }
   }
 
@@ -697,6 +740,48 @@ if (__authed) {
     }
     // 這一下可能剛改變待辦分子（推成已完成／整份出清）——側欄 badge 立即
     // 失效重掃，不然它停在舊數字直到下次導頁（W1-5）。
+    invalidateUatBadge();
+    await refresh(true);
+  }
+
+  /**
+   * 使用者按「標記完成」／「撤回完成」。只動檔頭那一行，不改任何題目結果。
+   */
+  async function onSetReportClosed(closed: boolean) {
+    const p = plans[idx];
+    if (!p?.uat) return;
+    const guard = guardOf(p.path, p.raw);
+    const r = await safeApply(
+      guard,
+      (text) => {
+        const step = setReportClosed(text, closed, { now: nowStamp() });
+        return step.ok ? step.text : null;
+      },
+      { read: readFile, write: writeFile },
+    );
+    if (!r.ok) {
+      toast(r.reason);
+      await refresh(true);
+      return;
+    }
+    toast(closed ? "已標記完成" : "已撤回完成標記");
+    const st = store.get();
+    const proj = st.projects.find((x) => x.id === st.activeProjectId);
+    const root = proj?.importSummary?.rootPath;
+    if (root) {
+      const u = st.currentUser;
+      logEvent(root, {
+        project: proj!.id,
+        actor: {
+          kind: u.kind === "agent" ? ("agent" as const) : ("human" as const),
+          family: u.agentFamily ?? null,
+          name: u.name,
+        },
+        kind: closed ? "uat.report.closed" : "uat.report.reopen",
+        subject: `uat:${p.name}`,
+        payload: { title: p.uat.title },
+      });
+    }
     invalidateUatBadge();
     await refresh(true);
   }
@@ -1171,6 +1256,16 @@ if (__authed) {
    * 只會稀釋注意力。改成：只展開最該先處理的那一條，其餘收起來；PASS 不列。
    */
   function renderGates() {
+    if (IS_UAT_PAGE) {
+      const foot = document.getElementById("tui-footer");
+      if (foot) {
+        const p = plans[idx];
+        foot.innerHTML = `<span>${p?.uat ? escapeHtml(p.uat.title) : "UAT使用者測試"}</span>
+          <span class="tk-foot-sp"></span>
+          <span class="tk-keys"><kbd>j</kbd><kbd>k</kbd> 切報告</span>`;
+      }
+      return;
+    }
     const el = document.getElementById("gate-panel");
     if (!el) return;
     const report = evaluatePrdGates(store.get(), store.activeGateSpec());
@@ -1218,6 +1313,7 @@ if (__authed) {
    * 內容多半是「—」。改成有值才畫。
    */
   function renderLayers() {
+    if (IS_UAT_PAGE) return;
     const el = document.getElementById("layer-panel");
     if (!el) return;
     const hasPlan = plans.some((p) => p.meta.total_steps > 0);
@@ -1260,6 +1356,7 @@ if (__authed) {
    * 「回到工作」三行——context recovery，不是稽核。兩個價值主張分開。
    */
   function renderAudit() {
+    if (IS_UAT_PAGE) return;
     const el = document.getElementById("audit-panel");
     if (!el) return;
     const p = plans[idx];

@@ -144,6 +144,21 @@
           <button type="button" class="chip" data-filter="approved">已核准</button>
           <button type="button" class="chip" data-filter="mine">我的</button>
           <span class="spacer"></span>
+          <label class="tv-filter" id="pl-sort-wrap">
+            <span>排序</span>
+            <select id="pl-sort-select" aria-label="排序方式">
+              <option value="">預設順序</option>
+              <option value="title:asc">標題 ▲</option>
+              <option value="title:desc">標題 ▼</option>
+              <option value="status:asc">狀態 ▲</option>
+              <option value="status:desc">狀態 ▼</option>
+              <option value="pct:desc">進度高 → 低</option>
+              <option value="pct:asc">進度低 → 高</option>
+              <option value="updated:desc">更新近 → 遠</option>
+              <option value="updated:asc">更新遠 → 近</option>
+              <option value="folder:asc">資料夾 ▲</option>
+            </select>
+          </label>
           <div class="view-switch" role="group" aria-label="顯示方式" id="view-switch">
             <button type="button" class="chip" data-view="list" title="列表：一行一個，看得到最多專案">列表</button>
             <button type="button" class="chip" data-view="card" title="卡片：網格，兼顧資訊量與掃視">卡片</button>

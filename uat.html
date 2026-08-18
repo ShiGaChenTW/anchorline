@@ -11,10 +11,22 @@
      整頁套上只是在扮演「技術感」，代價是所有字都同一個重量、掃不動。 */
   .tk-shell {
     display: grid;
-    grid-template-columns: 268px minmax(0, 1fr) 300px;
+    grid-template-columns: 268px minmax(0, 1fr);
     min-height: 0;
     height: 100%;
   }
+  .tk-side,
+  #btn-expand-tk-side { display: none !important; }
+  .uat-none {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: var(--fs-5);
+    letter-spacing: 0.02em;
+  }
+  .uat-none[hidden] { display: none !important; }
   /* 收縮：那一欄整個 display:none，窄條頂上它的格線位置——
      窄條若當第四個 grid item 會被擠到第二列，整個版面塌掉。
      collapsed 規則的選擇器比 media query 裡的 .tk-shell 更具體，
@@ -22,17 +34,10 @@
   .tk-shell.tk-rail-collapsed > .tk-rail,
   .tk-shell.tk-side-collapsed > .tk-side { display: none; }
   @media (min-width: 1081px) {
-    .tk-shell.tk-rail-collapsed { grid-template-columns: 36px minmax(0, 1fr) 300px; }
-    .tk-shell.tk-side-collapsed { grid-template-columns: 268px minmax(0, 1fr) 36px; }
-    .tk-shell.tk-rail-collapsed.tk-side-collapsed {
-      grid-template-columns: 36px minmax(0, 1fr) 36px;
-    }
+    .tk-shell.tk-rail-collapsed { grid-template-columns: 36px minmax(0, 1fr); }
   }
   @media (max-width: 1080px) {
     .tk-shell { grid-template-columns: 240px minmax(0, 1fr); }
-    .tk-side { display: none; }
-    /* 結構檢查這一欄本來就藏起來了，它的展開窄條也不該冒出來 */
-    #btn-expand-tk-side { display: none !important; }
     .tk-shell.tk-rail-collapsed { grid-template-columns: 36px minmax(0, 1fr); }
   }
   @media (max-width: 820px) {
@@ -742,7 +747,7 @@
         </div>
       </div>
       <div class="content" style="padding:0;overflow:hidden;flex:1;min-height:0;display:flex;flex-direction:column">
-        <div class="tk-shell" style="flex:1">
+        <div class="tk-shell" style="flex:1" hidden>
           <div class="tk-rail">
             <div class="tk-hd">實測報告</div>
             <div id="plan-list"></div>
@@ -754,16 +759,9 @@
               <div id="step-list"></div>
             </div>
           </div>
-          <div class="tk-side">
-            <div class="tk-hd">結構檢查</div>
-            <div class="tk-side-body">
-              <div id="gate-panel"></div>
-              <div id="layer-panel"></div>
-              <div id="audit-panel"></div>
-            </div>
-          </div>
           <div class="tk-footer" id="tui-footer"></div>
         </div>
+        <div id="uat-none" class="uat-none">尚未產出UAT報告</div>
       </div>
     </main>
   </div>

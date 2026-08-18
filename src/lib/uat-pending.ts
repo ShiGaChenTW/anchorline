@@ -3,10 +3,10 @@
  *
  * ## 為什麼抽出來而不是各自數一次
  *
- * 總覽的「待實測」區塊與側欄 badge 回答的是同一個問題（「有幾份報告在等我
- * 動手」），而那個問題的判定條件有三條：是實測方言、狀態進行中、至少有一題
- * 有錨點。在兩個地方各寫一次，第一次改判定條件就會出現「側欄說 2、點進去
- * 只有 1」—— 而那種不一致沒有任何錯誤訊息，只會讓人不再相信那個數字。
+ * 總覽的「待實測」區塊數的是**全部專案**；側欄「UAT使用者測試」掛在
+ * **目前選中專案**底下，數的是這個專案。判定條件同一份（進行中、有錨點、
+ * 沒被 supersede），分母不同。把全站 11 份貼在單一專案動作列上，就是
+ * 「側欄說 11、點進去只有 1」那種沒有錯誤訊息、只會讓人不再相信數字的謊。
  *
  * ## 方言判定與 tracking 頁一字不差
  *
@@ -376,6 +376,18 @@ export function attributePendingUats<T extends { path: string; projectId?: strin
     // 沒中就原封不動回傳同一個物件 —— 不必為了「都走一次 spread」多配一份記憶體
     return hit ? { ...u, projectId: hit.p.id, projectName: hit.p.name } : u;
   });
+}
+
+/**
+ * 側欄專案動作列的分母：只數已經歸到這個專案的待實測報告。
+ * 歸不到的（沒綁資料夾）不進這個數字 —— 它們還在總覽收件匣裡。
+ */
+export function pendingCountForProject(
+  list: readonly { projectId?: string }[],
+  projectId: string | null | undefined,
+): number {
+  if (!projectId) return 0;
+  return list.filter((u) => u.projectId === projectId).length;
 }
 
 /**

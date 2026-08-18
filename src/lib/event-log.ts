@@ -63,7 +63,11 @@ export type EventKind =
   | "uat.report.submitted"
   // 「這一輪不測了」：剩餘題批次標暫時跳過。與逐題 `uat.verdict` 分開——
   // 收工是回合層級的一個決定，灌 N 筆判定事件會把統計裡的「測了幾題」灌水。
-  | "uat.round.closeout";
+  | "uat.round.closeout"
+  // 使用者按「標記完成」寫進檔頭。與全題測完推導的 `uat.report.done` 分開：
+  // 可以還有未測題就被標完成，也可以撤回。
+  | "uat.report.closed"
+  | "uat.report.reopen";
 
 export type LogEvent = {
   /** schema_version —— append-only 格式的唯一逃生口 */

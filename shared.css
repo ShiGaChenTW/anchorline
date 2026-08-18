@@ -13637,6 +13637,16 @@ p.gd-warn {
   padding: 12px 16px 24px;
   overflow-x: auto;
 }
+/* 專案清單表格：沿用範本庫 .tv-list，只補「目前專案」列與狀態旁的 chip */
+.project-board .tv-list-wrap {
+  padding: 0;
+}
+.pl-list tr.is-active {
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+.pl-list .p-tag {
+  margin-left: 6px;
+}
 .tv-list {
   width: 100%;
   border-collapse: collapse;

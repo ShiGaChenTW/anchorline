@@ -188,17 +188,15 @@ function syncActive(nav: Element, active: RailPage) {
 }
 
 /**
- * 未測完的實測報告數 —— **全部專案合計**。
+ * 未測完的實測報告數 —— **目前選中專案**。
  *
- * 這個 badge 回答的是「有幾份報告在等我動手」，而那個「我」不分專案：
- * agent 幫 B 專案出的實測題，人正在 A 專案工作時如果數不進來，那份報告
- * 就只剩喚醒導頁那一次曝光，錯過一次就從系統裡消失了。
- *
- * 以前還存了一個 `uatPendingFor`（這個數字是哪個專案算的），因為分母是
- * 當前專案，換專案就得作廢重掃。分母改成全專案之後那個作廢條件不存在了 ——
- * 換專案不會改變答案，所以只留一個「掃過了沒」的旗標。
+ * 這個 badge 掛在「這個專案可以做的事」底下。全站合計屬於總覽收件匣；
+ * 貼在單一專案動作列上，11 份會被讀成「這個專案有 11 份」。
+ * 掃仍走全部專案（共用快取），貼上去之前用 `pendingCountForProject` 收窄。
+ * 換專案不必重掃，只要用快取過的歸屬清單重算。
  */
 let uatPending = 0;
+let uatAttributed: { projectId?: string }[] = [];
 let uatScanned = false;
 let uatScanning = false;
 /** 掃描進行中又有人要求失效——掃完立刻補掃一次，不能把要求吞掉（Grok C5） */
@@ -211,6 +209,12 @@ let uatDirty = false;
  * 動態 import：這條路徑會拉進原生橋與 UAT parser，而側欄在每一頁都會建，
  * 沒有理由讓每一頁的首屏都等這幾個模組先解析完。
  */
+function applyUatBadge() {
+  const id = store.get().activeProjectId;
+  uatPending = id ? uatAttributed.filter((u) => u.projectId === id).length : 0;
+  setNavCount("uat", uatPending, true);
+}
+
 function refreshUatBadge() {
   if (uatScanning) {
     // 飛行中的那次掃描讀的是舊磁碟；直接 return 會讓 invalidate 被吞掉、
@@ -219,24 +223,28 @@ function refreshUatBadge() {
     return;
   }
   uatScanning = true;
-  void Promise.all([import("./uat-pending"), import("./tracking-bridge")])
-    .then(([uat, bridge]) => {
+  void Promise.all([import("./uat-pending"), import("./tracking-bridge"), import("../data/types")])
+    .then(([uat, bridge, types]) => {
       const st = store.get();
-      // uatScanDirs 而不是 plansDirsOf：收件匣與 badge 的範圍是全部專案（樣本
-      // 專案除外），tracking 頁的「只看當前專案」限定不適用於這裡。**範圍算法
-      // 五個曝光面共用同一支**，那串目錄同時是共用掃描快取的 key。
-      return uat.loadPendingUats(bridge.uatScanDirs(st));
-    })
-    .then((list) => {
-      uatPending = list.length;
+      // 掃仍走全部專案：共用快取的 key 與總覽相同。貼到側欄前才收窄到選中專案。
+      return uat.loadPendingUats(bridge.uatScanDirs(st)).then((list) => {
+        const refs = st.projects
+          .filter((p) => (st.showSamples ? true : !p.isSample))
+          .map((p) => ({
+            id: p.id,
+            name: types.projectDisplayName(p),
+            rootPath: p.importSummary?.rootPath,
+          }));
+        uatAttributed = uat.attributePendingUats(list, refs);
+      });
     })
     .catch(() => {
-      uatPending = 0;
+      uatAttributed = [];
     })
     .finally(() => {
       uatScanned = true;
       uatScanning = false;
-      setNavCount("uat", uatPending, true);
+      applyUatBadge();
       if (uatDirty) {
         uatDirty = false;
         refreshUatBadge();
@@ -295,12 +303,10 @@ export function refreshNavCounts() {
   // 「工作區」那一組用的是同一個 data-nav-count 機制，setNavCount() 已經涵蓋 ——
   // 之前另外掛一個 id 的做法退休了，兩套計數只會有一套先過期
 
-  // 待實測：整個 App 載入期間掃一次就夠 —— 分母是全部專案，換專案不會改變
-  // 這個數字，所以沒有「作廢重掃」的條件了（以前那條是換專案就作廢）。
-  // 掃完之後每次側欄重建都只是重貼快取值，因為重建會把 badge 洗回 0。
-  // 這不是輪詢：導頁會整頁重載，下一頁自然重掃一次。
+  // 待實測：掃一次全部專案；換專案只重算選中那一個的份數，不重掃磁碟。
+  // 側欄重建會把 badge 洗回 0，所以每次都要重貼。
   if (!uatScanned) refreshUatBadge();
-  setNavCount("uat", uatPending, true);
+  else applyUatBadge();
 }
 
 /** 從 pathname 推斷目前頁 */
