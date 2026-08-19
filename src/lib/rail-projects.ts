@@ -242,7 +242,7 @@ function ensureWorkspaceNav(nav: Element) {
     { href: WORKSPACE_HREFS[0], label: "專案總覽", icon: IC.dashboard, title: "所有專案的彙整儀表板" },
     { href: WORKSPACE_HREFS[1], label: "專案清單", icon: IC.projects, title: "可篩選、可搜尋的專案清單" },
     { href: WORKSPACE_HREFS[2], label: "審閱佇列", icon: IC.review, count: "review", title: "待審與待簽核的規格" },
-    { href: WORKSPACE_HREFS[3], label: "PRD 範本", icon: IC.templates, count: "templates", title: "整份 PRD 骨架與章節範本" },
+    { href: WORKSPACE_HREFS[3], label: "PRD 範本", icon: IC.templates, title: "整份 PRD 骨架與章節範本" },
     { href: WORKSPACE_HREFS[4], label: "OpenSpec 入口", icon: IC.tracking, title: "建立與追蹤 OpenSpec change" },
   ];
 
