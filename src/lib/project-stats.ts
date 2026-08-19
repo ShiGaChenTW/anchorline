@@ -136,6 +136,12 @@ export function formatBytes(n: number): string {
  */
 export function gitHeadline(g: GitStats | undefined): { text: string; tone: "ok" | "warn" | "info" } {
   if (!g) return { text: "這個資料夾不是 git 專案", tone: "info" };
+  if (g.commitCount === 0) {
+    if (g.dirtyCount > 0) {
+      return { text: `已起版控，${g.dirtyCount} 個檔案還沒提交`, tone: "warn" };
+    }
+    return { text: "已起版控，還沒有第一次提交", tone: "info" };
+  }
   if (g.dirtyCount > 0) {
     return { text: `${g.dirtyCount} 個檔案還沒提交`, tone: "warn" };
   }

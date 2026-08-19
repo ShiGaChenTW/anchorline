@@ -230,7 +230,9 @@ if (!requireAuth()) {
         ${
           hasActionableIssue(diagnoseGit(g))
             ? `<button type="button" class="btn btn-sm d-fix-btn" id="btn-git-doctor">版控健檢 <span>${diagnoseGit(g).filter((i) => i.level !== "info").length}</span></button>`
-            : ""
+            : !g
+              ? `<button type="button" class="btn btn-sm btn-primary" id="btn-git-init" title="在這個資料夾執行 git init">git init</button>`
+              : ""
         }
       </div>
       ${
@@ -242,7 +244,7 @@ if (!requireAuth()) {
              <dl class="d-facts">${facts
                .map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`)
                .join("")}</dl>`
-          : `<p class="d-hero-sub">用 <code>git init</code> 起版控後，這裡會顯示提交與推送狀態。</p>`
+          : `<p class="d-hero-sub">按「git init」在這個資料夾建立 <code>.git</code>。只做 init，不會 add、不會 commit。</p>`
       }
       </section>
     </div>`;
@@ -619,8 +621,47 @@ if (!requireAuth()) {
     document.getElementById("btn-git-doctor")?.addEventListener("click", () => {
       openGitDoctor(s.git);
     });
+    document.getElementById("btn-git-init")?.addEventListener("click", () => {
+      void runGitInit(s.folderPath);
+    });
     void loadGovernance(s.folderPath);
     void loadUatCards(s.folderPath);
+  }
+
+  /**
+   * 儀表板「不是 git 專案」時的唯一寫入動作。
+   *
+   * 跟版控健檢不同：健檢只給指令。這裡真的跑 `git init`，因為它可逆
+   * （刪掉 .git 就還原）、不外流、參數在 Rust 端寫死。不順便 add / commit。
+   */
+  async function runGitInit(folderPath: string) {
+    const p = activeProject();
+    const name = p ? projectDisplayName(p) : folderPath;
+    if (
+      !(await askConfirm({
+        title: `要在「${name}」執行 git init 嗎？`,
+        body: `會在這個資料夾建立 .git。只做 git init，不會 add、不會 commit。不想要的話刪掉 .git 就還原了。`,
+        confirmLabel: "執行 git init",
+      }))
+    ) {
+      return;
+    }
+    const btn = document.getElementById("btn-git-init") as HTMLButtonElement | null;
+    if (btn) btn.disabled = true;
+    try {
+      const r = await native.gitInit(folderPath);
+      if (isUnavailable(r)) {
+        toast(r.message);
+        return;
+      }
+      toast("已 git init");
+      cache.delete(folderPath);
+      await load(true);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "git init 失敗");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   async function load(force = false) {

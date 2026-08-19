@@ -19,7 +19,7 @@ pub mod testing {
     pub use crate::commands::{
         append_line, scan_plans, valid_commit_hash, valid_history_name, valid_repo_rel_path,
     };
-    pub use crate::exec::strip_ansi;
+    pub use crate::exec::{git_init, strip_ansi, CliOverrides, CliResult};
     pub use crate::paths::{
         append_allowed, domain_pack_writable, editable, normalize_line,
         uat_evidence_dest, uat_evidence_name_ok, RegisteredRoots,
@@ -79,6 +79,7 @@ pub fn run() {
             commands::git_commit_diff,
             commands::openspec_probe,
             commands::openspec_init,
+            commands::git_init,
             commands::scan_project,
             commands::list_snapshots,
             commands::write_snapshot,

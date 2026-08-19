@@ -8,8 +8,8 @@
 //! - 掃描的上限與去重
 
 use anchorline_lib::testing::{
-    append_line, domain_pack_writable, scan_plans, valid_commit_hash, valid_repo_rel_path,
-    RegisteredRoots,
+    append_line, domain_pack_writable, git_init, scan_plans, valid_commit_hash, valid_repo_rel_path,
+    CliOverrides, CliResult, RegisteredRoots,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -331,4 +331,27 @@ fn scan_plans_marks_kind_plan() {
     let scan = scan_plans(&[dir.to_string_lossy().to_string()], &[]);
     assert_eq!(scan.files[0].kind, "plan");
     assert_eq!(scan.files[0].change, "");
+}
+
+// ── git init（BRIDGE.md §4.7f）────────────────────────────────────────
+
+#[test]
+fn git_init_creates_repo_and_refuses_the_second_time() {
+    let dir = tmp("git-init");
+    let o = CliOverrides::default();
+    match git_init(&dir, &o) {
+        CliResult::Ok(_) => {}
+        CliResult::Missing(m) => panic!("git init 失敗：{m}"),
+    }
+    assert!(
+        dir.join(".git").exists(),
+        "git init 成功後必須有 .git"
+    );
+    match git_init(&dir, &o) {
+        CliResult::Missing(m) => assert!(
+            m.contains("已經是"),
+            "第二次該拒絕，實際：{m}"
+        ),
+        CliResult::Ok(_) => panic!("既有 repo 再 init 必須 Missing，不能當成功"),
+    }
 }

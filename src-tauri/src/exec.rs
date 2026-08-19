@@ -141,6 +141,7 @@ fn run(bin: &Path, args: &[&str], cwd: Option<&Path>) -> Option<String> {
 /// 只跑寫死的唯讀 git 子指令，資料夾當工作目錄傳入。
 ///
 /// 非 git 專案回 `None`，**不是錯誤** —— 呼叫端把 git 欄位留空即可。
+/// 寫入走旁邊的 `git_init`，不要從這裡接 `commit` / `push`。
 pub fn git(dir: &Path, args: &[&str], overrides: &CliOverrides) -> Option<String> {
     let bin = locate("git", overrides)?;
     let mut full: Vec<&str> = vec!["-C"];
@@ -150,12 +151,38 @@ pub fn git(dir: &Path, args: &[&str], overrides: &CliOverrides) -> Option<String
     run(&bin, &full, None).map(|s| s.trim_end().to_string())
 }
 
-// ── openspec ────────────────────────────────────────────────────────
-
 pub enum CliResult {
     Ok(String),
     Missing(String),
 }
+
+/// `git init` —— 與 `openspec_init` 同一類例外：可逆、不外流、參數寫死。
+///
+/// 不順便 add / commit：那會替使用者寫下一筆他沒看過的提交。
+/// 已經在 git work tree 裡就回 Missing，不重跑——`git init` 對既有 repo
+/// 是 no-op 成功，畫面會以為「按了沒反應」。
+pub fn git_init(dir: &Path, overrides: &CliOverrides) -> CliResult {
+    let Some(bin) = locate("git", overrides) else {
+        return CliResult::Missing(
+            "找不到 git。安裝：brew install git，或在設定裡指定路徑。".into(),
+        );
+    };
+    let Some(dir_s) = dir.to_str() else {
+        return CliResult::Missing("專案路徑不是有效的 UTF-8".into());
+    };
+    if git(dir, &["rev-parse", "--is-inside-work-tree"], overrides)
+        .map(|s| s.trim() == "true")
+        .unwrap_or(false)
+    {
+        return CliResult::Missing("這個資料夾已經是 git 專案".into());
+    }
+    match run(&bin, &["-C", dir_s, "init"], None) {
+        Some(out) => CliResult::Ok(out),
+        None => CliResult::Missing("git init 執行失敗".into()),
+    }
+}
+
+// ── openspec ────────────────────────────────────────────────────────
 
 pub fn openspec_list(dir: &Path, overrides: &CliOverrides) -> CliResult {
     match locate("openspec", overrides) {
@@ -169,14 +196,8 @@ pub fn openspec_list(dir: &Path, overrides: &CliOverrides) -> CliResult {
     }
 }
 
-/// `status --change <name>`。
-///
-/// **`name` 只能來自 `list --json` 自己的輸出**，不經過前端 —— 呼叫端負責保證。
-/// `openspec init` —— **這是這個檔案裡唯一會寫入使用者專案的 CLI 呼叫。**
-///
-/// 其餘全部唯讀。放行它的理由跟 git push 不同：建立 `openspec/` 骨架是
-/// 可逆的（刪掉資料夾就沒了）、不外流、參數在這裡寫死。
-/// 呼叫端仍然要先跟使用者確認。
+/// `openspec init` —— 寫入例外，理由與 `git_init` 相同：可逆、不外流、參數寫死。
+/// 建立 `openspec/` 骨架，刪掉資料夾就還原。呼叫端仍然要先跟使用者確認。
 pub fn openspec_init(dir: &Path, overrides: &CliOverrides) -> CliResult {
     match locate("openspec", overrides) {
         Some(bin) => match run(&bin, &["init"], Some(dir)) {
@@ -189,6 +210,9 @@ pub fn openspec_init(dir: &Path, overrides: &CliOverrides) -> CliResult {
     }
 }
 
+/// `status --change <name>`。
+///
+/// **`name` 只能來自 `list --json` 自己的輸出**，不經過前端 —— 呼叫端負責保證。
 pub fn openspec_status(dir: &Path, name: &str, overrides: &CliOverrides) -> Option<String> {
     let bin = locate("openspec", overrides)?;
     run(&bin, &["status", "--change", name, "--json"], Some(dir))

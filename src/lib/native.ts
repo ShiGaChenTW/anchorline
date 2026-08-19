@@ -276,10 +276,16 @@ export const native = {
   openspecProbe: (folderPath: string) =>
     call<{ initialized: boolean }>("openspec_probe", { folderPath }),
   /**
-   * `openspec init`。**這是唯一會寫入使用者專案的 action**（BRIDGE.md §4.7c）。
+   * `openspec init`。寫入例外（BRIDGE.md §4.7c）：可逆、不外流、參數寫死。
    * 呼叫端要先跟使用者確認。
    */
   openspecInit: (folderPath: string) => callMaybe<{ raw: string }>("openspec_init", { folderPath }),
+  /**
+   * `git init`。與 openspecInit 同一類例外（BRIDGE.md §4.7f）。
+   * 只 init，不 add、不 commit。已經是 git 專案會回 unavailable。
+   * 呼叫端要先跟使用者確認。
+   */
+  gitInit: (folderPath: string) => callMaybe<{ raw: string }>("git_init", { folderPath }),
   /** 專案分析報告用的資料夾掃描。副檔名白名單 + 上限，`truncated` 要顯示出來。 */
   scanProject: (folderPath: string) =>
     callMaybe<{ files: { path: string; text: string }[]; truncated: boolean }>("scan_project", {

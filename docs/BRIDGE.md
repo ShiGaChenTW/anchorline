@@ -53,7 +53,7 @@ const res = await invoke<TrackingScan>("tracking_scan", { plansDirs });
 
 | 程式 | 允許的呼叫 |
 |---|---|
-| `git` | `-C <dir>` + 寫死的唯讀子指令（`rev-parse` `log` `status` `remote` `rev-list` `describe` `worktree` `for-each-ref` `diff` `show`） |
+| `git` | `-C <dir>` + 寫死的唯讀子指令（`rev-parse` `log` `status` `remote` `rev-list` `describe` `worktree` `for-each-ref` `diff` `show`），以及一個寫入例外 `init`（見 §4.7f） |
 | `openspec` | `list --json` · `status --change <name> --json`。**`<name>` 只能來自 `list --json` 自己的輸出**，不經過前端 |
 | `gh` | `search prs --author=@me --state=open --limit 30 --json …`。**永遠不包含** `pr review` / `pr merge` / `pr comment` / 任何寫入 |
 | `onefetch` `fastfetch` | 固定旗標，唯讀 |
@@ -283,9 +283,9 @@ openspecProbe(folderPath: string) -> { initialized: boolean }
 openspecInit(folderPath: string)  -> Maybe<{ raw: string }>
 ```
 
-**`openspecInit` 是這座橋唯一會寫進使用者專案資料夾的 action。**
+**`openspecInit` 是寫入例外之一**（另外還有 `writeSnapshot` / `writeExport` / `gitInit`）。
 
-其餘全部唯讀。放行它的理由跟 `git push` 不同，三點都要成立才算數：
+放行它的理由跟 `git push` 不同，三點都要成立才算數：
 
 | | |
 |---|---|
@@ -300,6 +300,27 @@ openspecInit(folderPath: string)  -> Maybe<{ raw: string }>
 `openspecProbe` 用**檔案系統檢查**（`openspec/` 目錄在不在），刻意不呼叫 CLI：
 「CLI 沒裝」與「沒 init 過」是兩件事，混在一起會讓畫面對沒裝 CLI 的人說
 「請 init」，而他 init 不了。
+
+### 4.7f `gitInit`
+
+```ts
+gitInit(folderPath: string) -> Maybe<{ raw: string }>
+```
+
+在已註冊專案根目錄執行 `git init`。與 `openspecInit` 同一類例外：
+
+| | |
+|---|---|
+| 可逆 | 它建立的是 `.git/`，刪掉資料夾就還原 |
+| 不外流 | 只動本機檔案，沒有任何東西送出去 |
+| 參數寫死 | Rust 端跑的是常數 `["init"]`，前端只能說「對哪個資料夾做」 |
+
+**不順便 `add` / `commit`。** 那會替使用者寫下一筆他沒看過的提交。
+
+守衛與 `openspecInit` 相同：`folderPath` 必須是已註冊專案根，否則 Missing。
+已經在 git work tree 裡 → Missing（「這個資料夾已經是 git 專案」）。
+找不到 git → Missing。空字串路徑 → **Err**。
+**前端還要再跟使用者確認一次。**
 
 ### 4.7d `scanProject` / `listSnapshots` / `writeSnapshot`
 

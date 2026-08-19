@@ -239,8 +239,14 @@ const MANIFESTS: &[&str] = &[
 ];
 
 fn collect_git(root: &Path, o: &CliOverrides) -> Option<GitStats> {
-    let head = exec::git(root, &["rev-parse", "--short", "HEAD"], o)?;
+    // 存在性看 work tree，不看 HEAD。剛 `git init`、還沒第一次 commit
+    // 的資料夾也是 git 專案；用 HEAD 當判準會讓儀表板繼續說「不是 git 專案」。
+    let inside = exec::git(root, &["rev-parse", "--is-inside-work-tree"], o)?;
+    if inside.trim() != "true" {
+        return None;
+    }
     let g = |args: &[&str]| exec::git(root, args, o).unwrap_or_default();
+    let head = g(&["rev-parse", "--short", "HEAD"]);
 
     let dirty = g(&["status", "--porcelain"]);
     let dirty_count = dirty.lines().filter(|l| !l.trim().is_empty()).count();
@@ -277,7 +283,11 @@ fn collect_git(root: &Path, o: &CliOverrides) -> Option<GitStats> {
 
     Some(GitStats {
         head,
-        branch: g(&["rev-parse", "--abbrev-ref", "HEAD"]),
+        // 空 repo 的 `rev-parse --abbrev-ref HEAD` 會回 "HEAD"；
+        // `symbolic-ref` 才拿得到 init 時定下的分支名。
+        branch: exec::git(root, &["symbolic-ref", "--short", "HEAD"], o)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| g(&["rev-parse", "--abbrev-ref", "HEAD"])),
         last_message: g(&["log", "-1", "--pretty=%s"]),
         last_at: g(&["log", "-1", "--pretty=%cI"]),
         author: g(&["log", "-1", "--pretty=%an"]),
@@ -289,6 +299,45 @@ fn collect_git(root: &Path, o: &CliOverrides) -> Option<GitStats> {
         commit_count: g(&["rev-list", "--count", "HEAD"]).parse().unwrap_or(0),
         commits,
     })
+}
+
+#[cfg(test)]
+mod collect_git_tests {
+    use super::*;
+    use crate::exec::{CliOverrides, CliResult};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn tmp(name: &str) -> PathBuf {
+        let n = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let d = std::env::temp_dir().join(format!("sf-collect-git-{name}-{n}"));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn empty_init_counts_as_git_repo() {
+        let dir = tmp("empty");
+        let o = CliOverrides::default();
+        assert!(
+            collect_git(&dir, &o).is_none(),
+            "沒 init 過不該被當成 git 專案"
+        );
+        match exec::git_init(&dir, &o) {
+            CliResult::Ok(_) => {}
+            CliResult::Missing(m) => panic!("git init 失敗：{m}"),
+        }
+        let g = collect_git(&dir, &o).expect("剛 init、還沒 commit 也是 git 專案");
+        assert_eq!(g.commit_count, 0);
+        assert!(g.head.is_empty(), "空 repo 沒有 HEAD：{:?}", g.head);
+        assert!(!g.branch.is_empty(), "空 repo 也該有分支名");
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
 
 #[tauri::command]
@@ -1624,9 +1673,7 @@ pub fn openspec_probe(folder_path: String) -> R<OpenspecProbe> {
     })
 }
 
-/// `openspec init` —— **這個 App 唯一會寫入使用者專案的 CLI 呼叫。**
-///
-/// 界線的例外，理由寫在 `exec::openspec_init`：可逆、不外流、參數寫死。
+/// `openspec init` —— 寫入例外，理由寫在 `exec::openspec_init`。
 /// 路徑仍然要過已註冊根目錄的守衛，而且前端要先跟使用者確認。
 #[tauri::command]
 pub fn openspec_init(
@@ -1641,6 +1688,31 @@ pub fn openspec_init(
         )));
     }
     match exec::openspec_init(&dir, &overrides) {
+        CliResult::Ok(raw) => Ok(Maybe::Ok(RawOut { raw })),
+        CliResult::Missing(m) => Ok(Maybe::Missing(Unavailable::new(m))),
+    }
+}
+
+/// `git init` —— 與 `openspec_init` 同一類例外：可逆、不外流、參數寫死。
+///
+/// 只跑常數 `["init"]`。已經是 git 專案、找不到 git、路徑未註冊 → Missing。
+/// 前端必須先跟使用者確認。
+#[tauri::command]
+pub fn git_init(
+    folder_path: String,
+    roots: State<RegisteredRoots>,
+    overrides: State<CliOverrides>,
+) -> R<Maybe<RawOut>> {
+    if folder_path.is_empty() {
+        return Err("缺少 folderPath".into());
+    }
+    let dir = PathBuf::from(&folder_path);
+    if !roots.contains_ancestor_of(&dir) && !roots.contains_ancestor_of(&dir.join("x")) {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "這個資料夾沒有註冊為專案根目錄".to_string(),
+        )));
+    }
+    match exec::git_init(&dir, &overrides) {
         CliResult::Ok(raw) => Ok(Maybe::Ok(RawOut { raw })),
         CliResult::Missing(m) => Ok(Maybe::Missing(Unavailable::new(m))),
     }
@@ -1959,6 +2031,7 @@ pub fn ping() -> R<Pong> {
             "readLog",
             "openPath",
             "openspecStatus",
+            "gitInit",
             "ghStatus",
             "onefetch",
             "fastfetch",
