@@ -527,13 +527,15 @@ if (requireAuth()) {
       selectedProjectId = h.projectId;
       store.setActiveProject(h.projectId);
     }
-    kind = "feature";
+    // 第 1 步：類型。wishlist 選過的就是這次要寫的那一種。
+    kind = (h.kind ?? h.items[0]?.kind ?? "feature") as ChangeKind;
     const title = titleFromWishes(h.items);
     const titleEl = el("os-title") as HTMLInputElement | null;
-    if (titleEl && !titleEl.value.trim()) titleEl.value = title;
+    if (titleEl) titleEl.value = title;
     const slugEl = el("os-slug") as HTMLInputElement | null;
-    if (slugEl && !slugEl.dataset.edited) {
-      slugEl.value = deriveChangeSlug(title) ?? "";
+    if (slugEl) {
+      slugEl.value = deriveChangeSlug(title) ?? deriveChangeSlug(h.items[0]?.id ?? "") ?? "";
+      slugEl.dataset.edited = slugEl.value ? "1" : "";
     }
     const briefEl = el("os-ai-brief") as HTMLTextAreaElement | null;
     if (briefEl && !briefEl.value.trim()) briefEl.value = wishBrief;
@@ -541,10 +543,15 @@ if (requireAuth()) {
     const banner = el("os-wish-banner");
     const list = el("os-wish-banner-list");
     if (banner && list) {
+      const kindLabel = CHANGE_KIND_LABEL[kind] ?? kind;
       list.innerHTML = h.items
         .map((it) => `<li>${escapeHtml(it.text)}</li>`)
         .join("");
       banner.hidden = false;
+      const hint = banner.querySelector(".os-wish-banner-hint");
+      if (hint) {
+        hint.textContent = `已填入類型「${kindLabel}」與標題。可直接產出分析報告，再按 AI 撰寫初稿。`;
+      }
     }
   }
 

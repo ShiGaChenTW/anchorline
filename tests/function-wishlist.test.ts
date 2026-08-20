@@ -115,9 +115,10 @@ describe("add / update / archive / remove", () => {
   });
 
   test("存檔後出現在 Active，不在 Archive", () => {
-    const doc = addWish(emptyWishlist(), "希望側欄能搜尋章節", "AL-001", NOW)!;
+    const doc = addWish(emptyWishlist(), "希望側欄能搜尋章節", "AL-001", NOW, "bug")!;
     expect(doc.active).toHaveLength(1);
     expect(doc.active[0]!.id).toBe("AL-001");
+    expect(doc.active[0]!.kind).toBe("bug");
     expect(doc.active[0]!.text).toBe("希望側欄能搜尋章節");
     expect(doc.archive).toHaveLength(0);
   });
@@ -171,6 +172,8 @@ describe("serialize ↔ parse", () => {
     expect(round.active.map((x) => x.text)).toEqual(doc.active.map((x) => x.text));
     expect(round.archive.map((x) => x.text)).toEqual(doc.archive.map((x) => x.text));
     expect(round.archive[0]!.status).toBe(WISH_ARCHIVED_STATUS);
+    expect(round.active[0]!.kind).toBe("feature");
+    expect(round.archive[0]!.kind).toBe("feature");
   });
 
   test("空檔是空清單，不是丟錯", () => {
@@ -222,6 +225,23 @@ describe("handoff", () => {
     expect(parseWishHandoff(JSON.stringify({ projectId: "p", items: [] }))).toBeNull();
     expect(
       parseWishHandoff(JSON.stringify({ projectId: "p", items: [{ id: "AL-001", text: "做這個" }] })),
-    ).toEqual({ projectId: "p", items: [{ id: "AL-001", text: "做這個" }] });
+    ).toEqual({
+      projectId: "p",
+      kind: "feature",
+      items: [{ id: "AL-001", text: "做這個" }],
+    });
+    expect(
+      parseWishHandoff(
+        JSON.stringify({
+          projectId: "p",
+          kind: "bug",
+          items: [{ id: "AL-001", text: "修好崩潰", kind: "bug" }],
+        }),
+      ),
+    ).toEqual({
+      projectId: "p",
+      kind: "bug",
+      items: [{ id: "AL-001", text: "修好崩潰", kind: "bug" }],
+    });
   });
 });

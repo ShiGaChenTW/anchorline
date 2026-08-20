@@ -14,10 +14,28 @@ export const WISHLIST_LS_PREFIX = "anchorline:function-wishlist:";
 export const WISH_HANDOFF_KEY = "anchorline:openspec-wish";
 export const WISH_ARCHIVED_STATUS = "已寫 spec";
 
+export type WishKind = "feature" | "bug" | "maintenance";
+
+export const WISH_KIND_LABEL: Record<WishKind, string> = {
+  feature: "新功能",
+  bug: "Bug 修復",
+  maintenance: "維護／重構",
+};
+
+export const WISH_KINDS: WishKind[] = ["feature", "bug", "maintenance"];
+
+export function parseWishKind(raw: string | undefined | null): WishKind | null {
+  const s = (raw ?? "").trim();
+  if (s === "feature" || s === "bug" || s === "maintenance") return s;
+  return null;
+}
+
 export type WishlistItem = {
   id: string;
   text: string;
   created: string;
+  /** 對應 OpenSpec 入口第 1 步的類型 */
+  kind?: WishKind;
   /** 在 Archive 才有 */
   status?: string;
   archived?: string;
@@ -30,7 +48,8 @@ export type WishlistDoc = {
 
 export type WishHandoff = {
   projectId: string;
-  items: { id: string; text: string }[];
+  kind: WishKind;
+  items: { id: string; text: string; kind?: WishKind }[];
 };
 
 export function emptyWishlist(): WishlistDoc {
@@ -142,12 +161,13 @@ export function addWish(
   text: string,
   id: string,
   now: Date = new Date(),
+  kind: WishKind = "feature",
 ): WishlistDoc | null {
   const trimmed = normalizeText(text);
   if (!trimmed) return null;
   const taken = [...doc.active, ...doc.archive].some((it) => it.id === id);
   if (!id.trim() || taken) return null;
-  const item: WishlistItem = { id: id.trim(), text: trimmed, created: localStamp(now) };
+  const item: WishlistItem = { id: id.trim(), text: trimmed, created: localStamp(now), kind };
   return { ...doc, active: [...doc.active, item] };
 }
 
@@ -162,11 +182,18 @@ export function removeWish(doc: WishlistDoc, id: string): WishlistDoc | null {
   };
 }
 
-export function updateWish(doc: WishlistDoc, id: string, text: string): WishlistDoc | null {
+export function updateWish(
+  doc: WishlistDoc,
+  id: string,
+  text: string,
+  kind?: WishKind,
+): WishlistDoc | null {
   const trimmed = normalizeText(text);
   if (!trimmed) return null;
   const patch = (list: WishlistItem[]) =>
-    list.map((it) => (it.id === id ? { ...it, text: trimmed } : it));
+    list.map((it) =>
+      it.id === id ? { ...it, text: trimmed, ...(kind ? { kind } : {}) } : it,
+    );
   if (doc.active.some((it) => it.id === id)) return { ...doc, active: patch(doc.active) };
   if (doc.archive.some((it) => it.id === id)) return { ...doc, archive: patch(doc.archive) };
   return null;
@@ -205,13 +232,16 @@ export function serializeWishlist(doc: WishlistDoc): string {
   ];
   if (!doc.active.length) lines.push("（沒有）", "");
   for (const it of doc.active) {
-    lines.push(`### ${it.id}`, "", `created: ${it.created}`, "", it.text, "");
+    lines.push(`### ${it.id}`, "", `created: ${it.created}`);
+    if (it.kind) lines.push(`kind: ${it.kind}`);
+    lines.push("", it.text, "");
   }
   lines.push("## Archive", "");
   if (!doc.archive.length) lines.push("（沒有）", "");
   for (const it of doc.archive) {
     lines.push(`### ${it.id}`, "");
     lines.push(`created: ${it.created}`);
+    if (it.kind) lines.push(`kind: ${it.kind}`);
     lines.push(`status: ${it.status ?? WISH_ARCHIVED_STATUS}`);
     if (it.archived) lines.push(`archived: ${it.archived}`);
     lines.push("", it.text, "");
@@ -219,7 +249,7 @@ export function serializeWishlist(doc: WishlistDoc): string {
   return lines.join("\n").replace(/\n+$/, "\n");
 }
 
-const META_RE = /^(created|status|archived):\s*(.*)$/;
+const META_RE = /^(created|status|archived|kind):\s*(.*)$/;
 
 function parseSection(body: string): WishlistItem[] {
   const text = body.replace(/\r\n/g, "\n");
@@ -244,10 +274,12 @@ function parseSection(body: string): WishlistItem[] {
     while (i < lines.length && lines[i] === "") i++;
     const itemText = normalizeText(lines.slice(i).join("\n"));
     if (!itemText) continue;
+    const kind = parseWishKind(meta.kind);
     out.push({
       id,
       text: itemText,
       created: meta.created || "",
+      ...(kind ? { kind } : {}),
       ...(meta.status ? { status: meta.status } : {}),
       ...(meta.archived ? { archived: meta.archived } : {}),
     });
@@ -296,13 +328,18 @@ export function parseWishHandoff(raw: string | null): WishHandoff | null {
     const v = JSON.parse(raw) as Partial<WishHandoff>;
     if (typeof v.projectId !== "string" || !Array.isArray(v.items)) return null;
     const items = v.items
-      .map((it) => ({
-        id: typeof it?.id === "string" ? it.id : "",
-        text: typeof it?.text === "string" ? it.text : "",
-      }))
+      .map((it) => {
+        const kind = parseWishKind(typeof it?.kind === "string" ? it.kind : "");
+        return {
+          id: typeof it?.id === "string" ? it.id : "",
+          text: typeof it?.text === "string" ? it.text : "",
+          ...(kind ? { kind } : {}),
+        };
+      })
       .filter((it) => it.text.trim());
     if (!items.length) return null;
-    return { projectId: v.projectId, items };
+    const kind = parseWishKind(typeof v.kind === "string" ? v.kind : "") ?? items[0]?.kind ?? "feature";
+    return { projectId: v.projectId, kind, items };
   } catch {
     return null;
   }

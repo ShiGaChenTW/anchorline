@@ -40,17 +40,21 @@ import { absolutePathFor, groupOpenspecFiles, openspecFiles } from "../lib/opens
 import { canEditFiles, readFile, shortPath, writeFile } from "../lib/file-editor";
 import {
   addWish,
-  archiveWish,
   emptyWishlist,
+  parseWishKind,
   parseWishlist,
   removeWish,
   serializeWishlist,
   takeWishId,
   updateWish,
+  writeWishHandoff,
   wishlistLsKey,
   wishlistPath,
-  writeWishHandoff,
+  WISH_KIND_LABEL,
+  WISH_KINDS,
+  type WishKind,
   type WishlistDoc,
+  type WishlistItem,
 } from "../lib/function-wishlist";
 import { isNative, isUnavailable, native } from "../lib/native";
 import {
@@ -527,7 +531,8 @@ function renderWishlist() {
 
   const compose = wishComposing && wishDraftId
     ? `<div class="os-wish-compose">
-        <p class="os-wish-taken">編號 <span class="os-wish-id">${escapeHtml(wishDraftId)}</span>（存檔後才佔用；取消則退號）</p>
+        <p class="os-wish-taken">編號 <span class="os-wish-id">${escapeHtml(wishDraftId)}</span>（取消則退號）</p>
+        ${wishKindSelectHtml("os-wish-kind", undefined, true)}
         <textarea id="os-wish-text" rows="4" placeholder="期望的功能說明。寫完按存檔。"></textarea>
         <div class="os-wish-compose-actions">
           <button type="button" class="btn btn-sm btn-primary" id="os-wish-save">存檔</button>
@@ -566,7 +571,7 @@ function renderWishlist() {
       ${codeLabel}
       <span class="os-wish-count">${count || "—"}</span>
     </div>
-    <p class="os-wish-lead">點新增取號。勾選送出寫 spec；寫完標示已寫 spec。移除後該號可再用。</p>
+    <p class="os-wish-lead">點新增取號並選類型。下拉選「撰寫 Spec」會帶進 OpenSpec 入口。</p>
     ${codeForm}
     ${compose}
     <div class="os-wish-toolbar">
@@ -584,13 +589,24 @@ function renderWishlist() {
   (ta ?? code)?.focus();
 }
 
-function wishRowHtml(
-  it: { id: string; text: string; status?: string },
-  archived: boolean,
-): string {
+function wishKindSelectHtml(id: string, selected: WishKind | undefined, required: boolean): string {
+  const opts = WISH_KINDS.map(
+    (k) =>
+      `<option value="${k}"${selected === k ? " selected" : ""}>${escapeHtml(WISH_KIND_LABEL[k])}</option>`,
+  ).join("");
+  return `<label class="os-wish-kind-field">類型
+    <select id="${escapeHtml(id)}" ${required ? "required" : ""} aria-label="變更類型">
+      <option value="">請選擇</option>
+      ${opts}
+    </select>
+  </label>`;
+}
+
+function wishRowHtml(it: WishlistItem, archived: boolean): string {
   if (wishEditingId === it.id) {
     return `<div class="os-wish-item is-editing" data-wish-id="${escapeHtml(it.id)}">
       <p class="os-wish-taken">編號 <span class="os-wish-id">${escapeHtml(it.id)}</span></p>
+      ${wishKindSelectHtml("os-wish-edit-kind", it.kind, true)}
       <textarea data-wish-edit-text rows="3">${escapeHtml(it.text)}</textarea>
       <div class="os-wish-compose-actions">
         <button type="button" class="btn btn-sm btn-primary" data-wish-save-edit>儲存</button>
@@ -602,20 +618,25 @@ function wishRowHtml(
     ? ""
     : `<input type="checkbox" data-wish-check="${escapeHtml(it.id)}"${wishChecked.has(it.id) ? " checked" : ""} aria-label="選取 ${escapeHtml(it.id)}" />`;
   const badge = archived ? `<span class="os-wish-badge">${escapeHtml(it.status ?? "已寫 spec")}</span>` : "";
-  const archiveBtn = archived
-    ? ""
-    : `<button type="button" data-wish-archive="${escapeHtml(it.id)}">已寫 spec</button>`;
+  const kindChip = it.kind
+    ? `<span class="os-wish-kind-chip">${escapeHtml(WISH_KIND_LABEL[it.kind])}</span>`
+    : "";
+  const writeOpt = archived ? "" : `<option value="write-spec">撰寫 Spec</option>`;
   return `<div class="os-wish-item" data-wish-id="${escapeHtml(it.id)}">
     ${check}
     <div class="os-wish-item-body">
       <span class="os-wish-id">${escapeHtml(it.id)}</span>
+      ${kindChip}
       <span class="os-wish-item-text">${escapeHtml(it.text)}</span>
       ${badge}
     </div>
     <div class="os-wish-item-actions">
-      <button type="button" data-wish-edit="${escapeHtml(it.id)}">編輯</button>
-      ${archiveBtn}
-      <button type="button" data-wish-remove="${escapeHtml(it.id)}">移除</button>
+      <select class="os-wish-menu" data-wish-menu="${escapeHtml(it.id)}" aria-label="${escapeHtml(it.id)} 的動作">
+        <option value="" selected>動作</option>
+        <option value="edit">編輯</option>
+        ${writeOpt}
+        <option value="remove">移除</option>
+      </select>
     </div>
   </div>`;
 }
@@ -645,7 +666,8 @@ function bindWishlist() {
   });
   host.querySelector<HTMLButtonElement>("#os-wish-save")?.addEventListener("click", () => {
     const ta = host.querySelector<HTMLTextAreaElement>("#os-wish-text");
-    void commitNewWish(ta?.value ?? "");
+    const kindEl = host.querySelector<HTMLSelectElement>("#os-wish-kind");
+    void commitNewWish(ta?.value ?? "", parseWishKind(kindEl?.value ?? ""));
   });
   host.querySelector<HTMLButtonElement>("#os-wish-send")?.addEventListener("click", () => {
     void sendWishes();
@@ -660,13 +682,6 @@ function bindWishlist() {
       if (send) send.disabled = wishChecked.size === 0;
     });
   });
-  host.querySelectorAll<HTMLButtonElement>("[data-wish-edit]").forEach((b) => {
-    b.addEventListener("click", () => {
-      wishEditingId = b.dataset.wishEdit ?? null;
-      wishComposing = false;
-      renderWishlist();
-    });
-  });
   host.querySelectorAll<HTMLButtonElement>("[data-wish-cancel-edit]").forEach((b) => {
     b.addEventListener("click", () => {
       wishEditingId = null;
@@ -678,17 +693,24 @@ function bindWishlist() {
       const wrap = b.closest("[data-wish-id]");
       const id = wrap instanceof HTMLElement ? wrap.dataset.wishId ?? "" : "";
       const ta = wrap?.querySelector("textarea");
-      void commitEditWish(id, ta?.value ?? "");
+      const kindEl = wrap?.querySelector<HTMLSelectElement>("#os-wish-edit-kind");
+      void commitEditWish(id, ta?.value ?? "", parseWishKind(kindEl?.value ?? ""));
     });
   });
-  host.querySelectorAll<HTMLButtonElement>("[data-wish-archive]").forEach((b) => {
-    b.addEventListener("click", () => {
-      void commitArchiveWish(b.dataset.wishArchive ?? "");
-    });
-  });
-  host.querySelectorAll<HTMLButtonElement>("[data-wish-remove]").forEach((b) => {
-    b.addEventListener("click", () => {
-      void commitRemoveWish(b.dataset.wishRemove ?? "");
+  host.querySelectorAll<HTMLSelectElement>("[data-wish-menu]").forEach((sel) => {
+    sel.addEventListener("change", () => {
+      const id = sel.dataset.wishMenu ?? "";
+      const act = sel.value;
+      sel.value = "";
+      if (act === "edit") {
+        wishEditingId = id;
+        wishComposing = false;
+        renderWishlist();
+      } else if (act === "write-spec") {
+        void sendWishes([id]);
+      } else if (act === "remove") {
+        void commitRemoveWish(id);
+      }
     });
   });
 }
@@ -741,14 +763,18 @@ async function withWishLock(fn: () => Promise<void>) {
   }
 }
 
-async function commitNewWish(text: string) {
+async function commitNewWish(text: string, kind: WishKind | null) {
   await withWishLock(async () => {
     const id = wishDraftId;
     if (!id) {
       toast("先按新增取號");
       return;
     }
-    const next = addWish(wishDoc, text, id);
+    if (!kind) {
+      toast("先選這則是新功能、Bug 修復還是維護／重構");
+      return;
+    }
+    const next = addWish(wishDoc, text, id, new Date(), kind);
     if (!next) {
       toast("先寫一段期望的功能說明");
       return;
@@ -767,9 +793,13 @@ async function commitNewWish(text: string) {
   });
 }
 
-async function commitEditWish(id: string, text: string) {
+async function commitEditWish(id: string, text: string, kind: WishKind | null) {
   await withWishLock(async () => {
-    const next = updateWish(wishDoc, id, text);
+    if (!kind) {
+      toast("先選這則是新功能、Bug 修復還是維護／重構");
+      return;
+    }
+    const next = updateWish(wishDoc, id, text, kind);
     if (!next) {
       toast("編輯後不能是空的");
       return;
@@ -784,23 +814,6 @@ async function commitEditWish(id: string, text: string) {
     wishEditingId = null;
     renderWishlist();
     toast("已更新");
-  });
-}
-
-async function commitArchiveWish(id: string) {
-  await withWishLock(async () => {
-    const next = archiveWish(wishDoc, id);
-    if (!next) return;
-    try {
-      await persistWishlist(next);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "封存失敗");
-      return;
-    }
-    wishDoc = next;
-    wishChecked.delete(id);
-    renderWishlist();
-    toast("已標示已寫 spec，移入封存");
   });
 }
 
@@ -824,16 +837,19 @@ async function commitRemoveWish(id: string) {
   });
 }
 
-async function sendWishes() {
+async function sendWishes(ids?: string[]) {
   const p = activeProject();
-  const picked = wishDoc.active.filter((it) => wishChecked.has(it.id));
+  const want = ids?.length ? new Set(ids) : wishChecked;
+  const picked = wishDoc.active.filter((it) => want.has(it.id));
   if (!p || !picked.length) {
     toast("先勾選要寫成 spec 的願望");
     return;
   }
+  const kind = picked[0]?.kind ?? "feature";
   writeWishHandoff({
     projectId: p.id,
-    items: picked.map((it) => ({ id: it.id, text: it.text })),
+    kind,
+    items: picked.map((it) => ({ id: it.id, text: it.text, kind: it.kind })),
   });
   window.location.href = "openspec.html";
 }

@@ -10858,19 +10858,40 @@ html.hide-focus-strip #adhd-focus-strip {
   gap: 2px;
   flex: 0 0 auto;
 }
-.os-wish-item-actions button {
-  font-size: var(--fs-1);
-  padding: 2px 6px;
-  border: 0;
-  border-radius: 5px;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
+.os-wish-menu {
+  max-width: 7.5rem;
   font: inherit;
-}
-.os-wish-item-actions button:hover {
+  font-size: var(--fs-1);
   color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+.os-wish-kind-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-1);
+  color: var(--muted);
+}
+.os-wish-kind-field select {
+  font: inherit;
+  font-size: var(--fs-2);
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 8px;
+}
+.os-wish-kind-chip {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
   background: var(--inset);
+  font-size: var(--fs-1);
+  color: var(--fg-2);
 }
 .os-wish-item.is-editing {
   flex-direction: column;
