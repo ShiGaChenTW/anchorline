@@ -9,7 +9,7 @@
 
 use anchorline_lib::testing::{
     append_line, domain_pack_writable, git_init, scan_plans, valid_commit_hash, valid_repo_rel_path,
-    CliOverrides, CliResult, RegisteredRoots,
+    write_wishlist_file, wishlist_path, wishlist_writable, CliOverrides, CliResult, RegisteredRoots,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -232,6 +232,45 @@ fn domain_pack_blocks_symlink_escape() {
 
     assert!(domain_pack_writable(&real, "ok.md", &roots));
     assert!(!domain_pack_writable(&outside, "ok.md", &roots));
+}
+
+#[test]
+fn wishlist_only_writes_into_registered_dirs() {
+    let dir = tmp("wish-ok");
+    fs::create_dir_all(&dir).unwrap();
+    let other = tmp("wish-other");
+    fs::create_dir_all(&other).unwrap();
+    let roots = roots_with(&dir);
+
+    assert!(wishlist_writable(&dir, &roots));
+    assert!(!wishlist_writable(&other, &roots));
+    assert_eq!(
+        wishlist_path(&dir),
+        dir.join(".anchorline").join("function-wishlist.md")
+    );
+}
+
+#[test]
+fn write_wishlist_creates_the_fixed_file_and_overwrites() {
+    let dir = tmp("wish-write");
+    fs::create_dir_all(&dir).unwrap();
+    let roots = roots_with(&dir);
+
+    let p = write_wishlist_file(&dir, "# Function wish list\n", &roots).unwrap();
+    assert_eq!(p, wishlist_path(&dir));
+    assert_eq!(fs::read_to_string(&p).unwrap(), "# Function wish list\n");
+
+    write_wishlist_file(&dir, "second\n", &roots).unwrap();
+    assert_eq!(fs::read_to_string(&p).unwrap(), "second\n");
+}
+
+#[test]
+fn write_wishlist_rejects_unregistered_root() {
+    let dir = tmp("wish-noauth");
+    fs::create_dir_all(&dir).unwrap();
+    let roots = RegisteredRoots::default();
+    assert!(write_wishlist_file(&dir, "nope\n", &roots).is_err());
+    assert!(!wishlist_path(&dir).exists());
 }
 
 // ── 授權跨重啟保留 ────────────────────────────────────────────────

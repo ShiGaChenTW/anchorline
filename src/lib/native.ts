@@ -299,6 +299,12 @@ export const native = {
   /** 匯出檔進 `<root>/.anchorline/exports/`。**允許覆寫** —— 匯出是可重生的成品。 */
   writeExport: (folderPath: string, name: string, text: string) =>
     callMaybe<{ path: string }>("write_export", { folderPath, name, text }),
+  /**
+   * Function wish list。路徑寫死為 `<root>/.anchorline/function-wishlist.md`。
+   * **允許建新檔與覆寫**——第一次存檔時檔還不存在，`writeFile` 過不了。
+   */
+  writeWishlist: (folderPath: string, text: string) =>
+    callMaybe<{ path: string }>("write_wishlist", { folderPath, text }),
   ghStatus: () => callMaybe<{ raw: string; fetchedAt: string }>("gh_status"),
   onefetch: (folderPath: string) => callMaybe<{ raw: string }>("onefetch", { folderPath }),
   fastfetch: () => callMaybe<{ raw: string }>("fastfetch"),

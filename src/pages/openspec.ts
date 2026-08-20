@@ -47,6 +47,12 @@ import {
 import { sinceLabel as since } from "../lib/time-format";
 import { canQueryStatus, requestOpenspecStatus } from "../lib/status-bridge";
 import { nextArtifact, type OpenspecChange, type OpenspecResult } from "../lib/openspec-status";
+import {
+  briefFromWishes,
+  readWishHandoff,
+  titleFromWishes,
+  type WishHandoff,
+} from "../lib/function-wishlist";
 import { sinceLabel } from "../lib/time-format";
 import {
   bindModalDismiss,
@@ -83,6 +89,8 @@ if (requireAuth()) {
   let snapState = NO_SNAPSHOT;
   /** 勾了要寫哪幾份。key 是檔名 */
   const picked = new Set<string>();
+  /** 從 Function wish list 送來的願望正文。餵給 AI 初稿當「要寫什麼」。 */
+  let wishBrief = "";
 
   function projects(): Project[] {
     const st = store.get();
@@ -488,9 +496,10 @@ if (requireAuth()) {
    * 而它會很流暢地寫出一份跟這個 repo 沒有關係的提案。
    */
   async function aiContext(): Promise<string> {
+    const wish = wishBrief.trim() && `期望功能（來自 Function wish list）：\n${wishBrief.trim()}`;
     if (isNewProject()) {
       const brief = (el("os-ai-brief") as HTMLTextAreaElement | null)?.value.trim() ?? "";
-      return [brief && `使用者說明：\n${brief}`, prdContext()].filter(Boolean).join("\n\n");
+      return [wish, brief && `使用者說明：\n${brief}`, prdContext()].filter(Boolean).join("\n\n");
     }
     const root = currentProject()?.importSummary?.rootPath;
     let snap = "";
@@ -503,7 +512,40 @@ if (requireAuth()) {
         if (c.clamped) toast("分析報告較長，只送出前段給模型");
       }
     }
-    return [snap && `專案分析報告（${snapState.name}）：\n${snap}`, prdContext()].filter(Boolean).join("\n\n");
+    return [wish, snap && `專案分析報告（${snapState.name}）：\n${snap}`, prdContext()].filter(Boolean).join("\n\n");
+  }
+
+  function applyWishHandoff() {
+    const h = readWishHandoff();
+    if (!h) return;
+    consumeWishHandoff(h);
+  }
+
+  function consumeWishHandoff(h: WishHandoff) {
+    wishBrief = briefFromWishes(h.items);
+    if (h.projectId && projects().some((p) => p.id === h.projectId)) {
+      selectedProjectId = h.projectId;
+      store.setActiveProject(h.projectId);
+    }
+    kind = "feature";
+    const title = titleFromWishes(h.items);
+    const titleEl = el("os-title") as HTMLInputElement | null;
+    if (titleEl && !titleEl.value.trim()) titleEl.value = title;
+    const slugEl = el("os-slug") as HTMLInputElement | null;
+    if (slugEl && !slugEl.dataset.edited) {
+      slugEl.value = deriveChangeSlug(title) ?? "";
+    }
+    const briefEl = el("os-ai-brief") as HTMLTextAreaElement | null;
+    if (briefEl && !briefEl.value.trim()) briefEl.value = wishBrief;
+
+    const banner = el("os-wish-banner");
+    const list = el("os-wish-banner-list");
+    if (banner && list) {
+      list.innerHTML = h.items
+        .map((it) => `<li>${escapeHtml(it.text)}</li>`)
+        .join("");
+      banner.hidden = false;
+    }
   }
 
   /** 專案的 PRD 內容，給模型當背景。沒有就是空字串，prompt 會明講。 */
@@ -733,7 +775,12 @@ if (requireAuth()) {
   });
   el("osh-close")?.addEventListener("click", () => closeModal("os-help-modal"));
   el("osh-done")?.addEventListener("click", () => closeModal("os-help-modal"));
+  el("os-wish-banner-dismiss")?.addEventListener("click", () => {
+    const banner = el("os-wish-banner");
+    if (banner) banner.hidden = true;
+  });
 
+  applyWishHandoff();
   renderProjectPicker();
   renderReleasePicker();
   renderSteps();

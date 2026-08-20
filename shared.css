@@ -7711,6 +7711,7 @@ html.adhd-calm .review-focus-bar {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow-y: auto;
 }
 /* 章節固定七項，用自然高度，而且**不准被壓縮**（flex-shrink: 0）——
    剩下的空間留給 OpenSpec。
@@ -10592,7 +10593,8 @@ html.hide-focus-strip #adhd-focus-strip {
 .os-list {
   /* 展開時填滿章節與專案檔案之間的空間，而不是固定一小塊 */
   flex: 1 1 auto;
-  min-height: 0;
+  /* 0 會讓 Function wish list 被檔案樹擠成一條縫，存檔／送出都按不到 */
+  min-height: 11rem;
   overflow: auto;
   padding: 4px 6px 8px;
   display: flex;
@@ -10712,6 +10714,189 @@ html.hide-focus-strip #adhd-focus-strip {
   border-radius: 4px;
   background: var(--inset);
   font-size: var(--fs-1);
+}
+
+/* Function wish list：活在 OpenSpec 區塊裡，但是獨立一份文字檔的視圖 */
+.os-wish {
+  flex: 0 0 auto;
+  margin: 4px 0 8px;
+  padding: 8px 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.os-wish-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 8px 4px;
+}
+.os-wish-head h3 {
+  margin: 0;
+  font-size: var(--fs-2);
+  font-weight: 650;
+  color: var(--fg);
+}
+.os-wish-count {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: var(--fs-1);
+  color: var(--muted);
+}
+.os-wish-lead {
+  margin: 0 8px 6px;
+  font-size: var(--fs-1);
+  line-height: 1.4;
+  color: var(--muted);
+}
+.os-wish-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 6px 8px;
+}
+.os-wish-compose textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--fs-2);
+  line-height: 1.45;
+}
+.os-wish-compose textarea:focus {
+  outline: 2px solid color-mix(in oklab, var(--accent) 50%, transparent);
+  outline-offset: 1px;
+}
+.os-wish-compose-actions,
+.os-wish-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 6px 8px;
+}
+.os-wish-group {
+  margin: 8px 0 2px;
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-size: var(--fs-1);
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.os-wish-group span {
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--inset);
+  font-size: var(--fs-1);
+  color: var(--muted);
+}
+.os-wish-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 7px;
+}
+.os-wish-item:hover {
+  background: var(--inset);
+}
+.os-wish-item input[type="checkbox"] {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+.os-wish-item-body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.os-wish-item-text {
+  display: block;
+  font-size: var(--fs-2);
+  line-height: 1.45;
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.os-wish-item-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.os-wish-item-actions button {
+  font-size: var(--fs-1);
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+}
+.os-wish-item-actions button:hover {
+  color: var(--fg);
+  background: var(--inset);
+}
+.os-wish-item.is-editing {
+  flex-direction: column;
+  gap: 6px;
+}
+.os-wish-item.is-editing textarea {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--fs-2);
+}
+.os-wish-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--success) 16%, transparent);
+  color: var(--fg-2);
+  font-size: var(--fs-1);
+}
+.os-wish-banner {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg));
+}
+.os-wish-banner-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.os-wish-banner-head strong {
+  font-size: var(--fs-2);
+}
+.os-wish-banner-head button {
+  margin-left: auto;
+}
+.os-wish-banner ul {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+.os-wish-banner-hint {
+  margin: 8px 0 0;
+  font-size: var(--fs-1);
+  color: var(--muted);
 }
 
 /* ═══════════════════════════════════════════════════════════════

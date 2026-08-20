@@ -18,11 +18,13 @@ mod paths;
 pub mod testing {
     pub use crate::commands::{
         append_line, scan_plans, valid_commit_hash, valid_history_name, valid_repo_rel_path,
+        write_wishlist_file,
     };
     pub use crate::exec::{git_init, strip_ansi, CliOverrides, CliResult};
     pub use crate::paths::{
         append_allowed, domain_pack_writable, editable, normalize_line,
-        uat_evidence_dest, uat_evidence_name_ok, RegisteredRoots,
+        uat_evidence_dest, uat_evidence_name_ok, wishlist_path, wishlist_writable,
+        RegisteredRoots,
     };
 }
 
@@ -84,6 +86,7 @@ pub fn run() {
             commands::list_snapshots,
             commands::write_snapshot,
             commands::write_export,
+            commands::write_wishlist,
             commands::gh_status,
             commands::onefetch,
             commands::fastfetch,

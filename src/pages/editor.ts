@@ -39,6 +39,19 @@ import {
 import { absolutePathFor, groupOpenspecFiles, openspecFiles } from "../lib/openspec-tree";
 import { canEditFiles, readFile, shortPath, writeFile } from "../lib/file-editor";
 import {
+  addWish,
+  archiveWish,
+  emptyWishlist,
+  parseWishlist,
+  serializeWishlist,
+  updateWish,
+  wishlistLsKey,
+  wishlistPath,
+  writeWishHandoff,
+  type WishlistDoc,
+} from "../lib/function-wishlist";
+import { isNative, isUnavailable, native } from "../lib/native";
+import {
   changedLineCount,
   type LineMark,
   inlineDiff,
@@ -386,7 +399,7 @@ function renderFileTree() {
  * 不是內容。點檔名交給系統預設應用程式開。
  */
 function renderOpenSpec() {
-  const el = document.getElementById("openspec-list");
+  const el = document.getElementById("os-files") ?? document.getElementById("openspec-list");
   if (!el) return;
   const p = activeProject();
   const root = p?.importSummary?.rootPath ?? "";
@@ -398,41 +411,325 @@ function renderOpenSpec() {
 
   if (!p) {
     el.innerHTML = `<p class="os-empty">還沒有選擇專案。</p>`;
-    return;
-  }
-  if (!all.length) {
+  } else if (!all.length) {
     el.innerHTML = `<p class="os-empty">這份 PRD 還沒有對應的資料夾，掃不到 <code>openspec/</code>。</p>`;
-    return;
-  }
-  if (!files.length) {
+  } else if (!files.length) {
     el.innerHTML = `<p class="os-empty">專案目錄底下沒有 <code>openspec/</code> 資料夾。匯出 OpenSpec 後會出現在這裡。</p>`;
-    return;
+  } else {
+    el.innerHTML = groupOpenspecFiles(files)
+      .map((g) => {
+        const rows = g.rows
+          .map(
+            (r) => `<button type="button" class="os-row os-file-row"
+                data-os-path="${escapeHtml(absolutePathFor(root, r.rel))}"
+                title="開啟 ${escapeHtml(r.rel)}">
+              <span class="os-dot done"></span>
+              <span class="os-body">
+                <span class="os-head">${escapeHtml(r.name)}</span>
+                <span class="os-file">${escapeHtml(r.sub || g.label)}</span>
+              </span>
+            </button>`,
+          )
+          .join("");
+        return `<p class="os-group os-group--${g.kind}">${escapeHtml(g.label)}<span>${g.rows.length}</span></p>${rows}`;
+      })
+      .join("");
+
+    el.querySelectorAll<HTMLButtonElement>("[data-os-path]").forEach((btn) => {
+      btn.onclick = () => {
+        void openFileInEditor(btn.dataset.osPath ?? "");
+      };
+    });
   }
 
-  el.innerHTML = groupOpenspecFiles(files)
-    .map((g) => {
-      const rows = g.rows
-        .map(
-          (r) => `<button type="button" class="os-row os-file-row"
-              data-os-path="${escapeHtml(absolutePathFor(root, r.rel))}"
-              title="開啟 ${escapeHtml(r.rel)}">
-            <span class="os-dot done"></span>
-            <span class="os-body">
-              <span class="os-head">${escapeHtml(r.name)}</span>
-              <span class="os-file">${escapeHtml(r.sub || g.label)}</span>
-            </span>
-          </button>`,
-        )
-        .join("");
-      return `<p class="os-group os-group--${g.kind}">${escapeHtml(g.label)}<span>${g.rows.length}</span></p>${rows}`;
-    })
-    .join("");
+  const pid = p?.id ?? "";
+  if (!wishBooted || pid !== lastWishProjectId) {
+    wishBooted = true;
+    lastWishProjectId = pid;
+    void loadAndRenderWishlist();
+  }
+}
 
-  el.querySelectorAll<HTMLButtonElement>("[data-os-path]").forEach((btn) => {
-    btn.onclick = () => {
-      void openFileInEditor(btn.dataset.osPath ?? "");
-    };
+/**
+ * Function wish list。I/O 在這裡，判定在 `function-wishlist.ts`。
+ *
+ * 不跟檔案列表共用 innerHTML：`render()` 會重畫 OpenSpec 檔案，
+ * 願望的輸入框若被一起清掉，打到一半的字就沒了。
+ */
+let wishDoc: WishlistDoc = emptyWishlist();
+let wishChecked = new Set<string>();
+let wishComposing = false;
+let wishEditingId: string | null = null;
+let lastWishProjectId = "";
+let wishBooted = false;
+let wishBusy = false;
+
+async function loadAndRenderWishlist() {
+  wishDoc = await loadWishlist();
+  wishChecked = new Set();
+  wishComposing = false;
+  wishEditingId = null;
+  renderWishlist();
+}
+
+async function loadWishlist(): Promise<WishlistDoc> {
+  const p = activeProject();
+  if (!p) return emptyWishlist();
+  const root = p.importSummary?.rootPath;
+  if (root && canEditFiles()) {
+    try {
+      return parseWishlist(await readFile(wishlistPath(root)));
+    } catch {
+      /* 檔還不存在是常態，不是錯誤 */
+    }
+  }
+  try {
+    const raw = localStorage.getItem(wishlistLsKey(p.id));
+    return raw ? parseWishlist(raw) : emptyWishlist();
+  } catch {
+    return emptyWishlist();
+  }
+}
+
+async function persistWishlist(doc: WishlistDoc): Promise<void> {
+  const p = activeProject();
+  if (!p) throw new Error("還沒有選擇專案");
+  const text = serializeWishlist(doc);
+  const root = p.importSummary?.rootPath;
+  if (root && isNative()) {
+    const r = await native.writeWishlist(root, text);
+    if (isUnavailable(r)) throw new Error(r.message);
+  }
+  try {
+    localStorage.setItem(wishlistLsKey(p.id), text);
+  } catch {
+    /* quota —— 桌面版已經寫進檔了，瀏覽器版就只好說失敗 */
+    if (!isNative()) throw new Error("瀏覽器存檔失敗（空間可能滿了）");
+  }
+}
+
+function renderWishlist() {
+  const host = document.getElementById("os-wish");
+  if (!host) return;
+  const p = activeProject();
+  host.hidden = false;
+
+  const active = wishDoc.active;
+  const archived = wishDoc.archive;
+  const count = active.length + archived.length;
+
+  const compose = wishComposing
+    ? `<div class="os-wish-compose">
+        <textarea id="os-wish-text" rows="4" placeholder="期望的功能說明。寫完按存檔。"></textarea>
+        <div class="os-wish-compose-actions">
+          <button type="button" class="btn btn-sm btn-primary" id="os-wish-save">存檔</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="os-wish-cancel">取消</button>
+        </div>
+      </div>`
+    : "";
+
+  const activeRows = !p
+    ? `<p class="os-empty">先選一個專案，願望會跟著專案走。</p>`
+    : active.length
+      ? active.map((it) => wishRowHtml(it, false)).join("")
+      : `<p class="os-empty">還沒有願望。按新增，寫一段期望的功能說明。</p>`;
+
+  const archiveBlock = archived.length
+    ? `<p class="os-wish-group">封存<span>${archived.length}</span></p>
+       ${archived.map((it) => wishRowHtml(it, true)).join("")}`
+    : "";
+
+  host.innerHTML = `
+    <div class="os-wish-head">
+      <h3 id="os-wish-title">Function wish list</h3>
+      <span class="os-wish-count">${count || "—"}</span>
+    </div>
+    <p class="os-wish-lead">新增一段說明後存檔。勾選送出寫 spec；寫完標示已寫 spec 進封存。</p>
+    ${compose}
+    <div class="os-wish-toolbar">
+      <button type="button" class="btn btn-sm" id="os-wish-add"${p && !wishComposing ? "" : " disabled"}>新增</button>
+      <button type="button" class="btn btn-sm btn-primary" id="os-wish-send"${active.some((it) => wishChecked.has(it.id)) ? "" : " disabled"}>送出</button>
+    </div>
+    <p class="os-wish-group">Active<span>${active.length}</span></p>
+    <div id="os-wish-active">${activeRows}</div>
+    <div id="os-wish-archive">${archiveBlock}</div>
+  `;
+
+  bindWishlist();
+  const ta = document.getElementById("os-wish-text") as HTMLTextAreaElement | null;
+  ta?.focus();
+}
+
+function wishRowHtml(
+  it: { id: string; text: string; status?: string },
+  archived: boolean,
+): string {
+  if (wishEditingId === it.id) {
+    return `<div class="os-wish-item is-editing" data-wish-id="${escapeHtml(it.id)}">
+      <textarea data-wish-edit-text rows="3">${escapeHtml(it.text)}</textarea>
+      <div class="os-wish-compose-actions">
+        <button type="button" class="btn btn-sm btn-primary" data-wish-save-edit>儲存</button>
+        <button type="button" class="btn btn-sm btn-ghost" data-wish-cancel-edit>取消</button>
+      </div>
+    </div>`;
+  }
+  const check = archived
+    ? ""
+    : `<input type="checkbox" data-wish-check="${escapeHtml(it.id)}"${wishChecked.has(it.id) ? " checked" : ""} aria-label="選取這則願望" />`;
+  const badge = archived ? `<span class="os-wish-badge">${escapeHtml(it.status ?? "已寫 spec")}</span>` : "";
+  const archiveBtn = archived
+    ? ""
+    : `<button type="button" data-wish-archive="${escapeHtml(it.id)}">已寫 spec</button>`;
+  return `<div class="os-wish-item" data-wish-id="${escapeHtml(it.id)}">
+    ${check}
+    <div class="os-wish-item-body">
+      <span class="os-wish-item-text">${escapeHtml(it.text)}</span>
+      ${badge}
+    </div>
+    <div class="os-wish-item-actions">
+      <button type="button" data-wish-edit="${escapeHtml(it.id)}">編輯</button>
+      ${archiveBtn}
+    </div>
+  </div>`;
+}
+
+function bindWishlist() {
+  const host = document.getElementById("os-wish");
+  if (!host) return;
+
+  host.querySelector<HTMLButtonElement>("#os-wish-add")?.addEventListener("click", () => {
+    wishComposing = true;
+    wishEditingId = null;
+    renderWishlist();
   });
+  host.querySelector<HTMLButtonElement>("#os-wish-cancel")?.addEventListener("click", () => {
+    wishComposing = false;
+    renderWishlist();
+  });
+  host.querySelector<HTMLButtonElement>("#os-wish-save")?.addEventListener("click", () => {
+    const ta = host.querySelector<HTMLTextAreaElement>("#os-wish-text");
+    void commitNewWish(ta?.value ?? "");
+  });
+  host.querySelector<HTMLButtonElement>("#os-wish-send")?.addEventListener("click", () => {
+    void sendWishes();
+  });
+
+  host.querySelectorAll<HTMLInputElement>("[data-wish-check]").forEach((c) => {
+    c.addEventListener("change", () => {
+      const id = c.dataset.wishCheck ?? "";
+      if (c.checked) wishChecked.add(id);
+      else wishChecked.delete(id);
+      const send = host.querySelector<HTMLButtonElement>("#os-wish-send");
+      if (send) send.disabled = wishChecked.size === 0;
+    });
+  });
+  host.querySelectorAll<HTMLButtonElement>("[data-wish-edit]").forEach((b) => {
+    b.addEventListener("click", () => {
+      wishEditingId = b.dataset.wishEdit ?? null;
+      wishComposing = false;
+      renderWishlist();
+    });
+  });
+  host.querySelectorAll<HTMLButtonElement>("[data-wish-cancel-edit]").forEach((b) => {
+    b.addEventListener("click", () => {
+      wishEditingId = null;
+      renderWishlist();
+    });
+  });
+  host.querySelectorAll<HTMLButtonElement>("[data-wish-save-edit]").forEach((b) => {
+    b.addEventListener("click", () => {
+      const wrap = b.closest("[data-wish-id]");
+      const id = wrap instanceof HTMLElement ? wrap.dataset.wishId ?? "" : "";
+      const ta = wrap?.querySelector("textarea");
+      void commitEditWish(id, ta?.value ?? "");
+    });
+  });
+  host.querySelectorAll<HTMLButtonElement>("[data-wish-archive]").forEach((b) => {
+    b.addEventListener("click", () => {
+      void commitArchiveWish(b.dataset.wishArchive ?? "");
+    });
+  });
+}
+
+async function withWishLock(fn: () => Promise<void>) {
+  if (wishBusy) return;
+  wishBusy = true;
+  try {
+    await fn();
+  } finally {
+    wishBusy = false;
+  }
+}
+
+async function commitNewWish(text: string) {
+  await withWishLock(async () => {
+    const next = addWish(wishDoc, text);
+    if (!next) {
+      toast("先寫一段期望的功能說明");
+      return;
+    }
+    try {
+      await persistWishlist(next);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "存檔失敗");
+      return;
+    }
+    wishDoc = next;
+    wishComposing = false;
+    renderWishlist();
+    toast("已存進 Function wish list");
+  });
+}
+
+async function commitEditWish(id: string, text: string) {
+  await withWishLock(async () => {
+    const next = updateWish(wishDoc, id, text);
+    if (!next) {
+      toast("編輯後不能是空的");
+      return;
+    }
+    try {
+      await persistWishlist(next);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "存檔失敗");
+      return;
+    }
+    wishDoc = next;
+    wishEditingId = null;
+    renderWishlist();
+    toast("已更新");
+  });
+}
+
+async function commitArchiveWish(id: string) {
+  await withWishLock(async () => {
+    const next = archiveWish(wishDoc, id);
+    if (!next) return;
+    try {
+      await persistWishlist(next);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "封存失敗");
+      return;
+    }
+    wishDoc = next;
+    wishChecked.delete(id);
+    renderWishlist();
+    toast("已標示已寫 spec，移入封存");
+  });
+}
+
+async function sendWishes() {
+  const p = activeProject();
+  const picked = wishDoc.active.filter((it) => wishChecked.has(it.id));
+  if (!p || !picked.length) {
+    toast("先勾選要寫成 spec 的願望");
+    return;
+  }
+  writeWishHandoff({
+    projectId: p.id,
+    items: picked.map((it) => ({ id: it.id, text: it.text })),
+  });
+  window.location.href = "openspec.html";
 }
 
 /**

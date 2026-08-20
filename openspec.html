@@ -79,6 +79,15 @@
           <div id="os-open-body" aria-live="polite"></div>
         </section>
 
+        <aside class="os-wish-banner" id="os-wish-banner" hidden>
+          <div class="os-wish-banner-head">
+            <strong>來自 Function wish list</strong>
+            <button type="button" class="btn btn-sm btn-ghost" id="os-wish-banner-dismiss">關閉</button>
+          </div>
+          <ul id="os-wish-banner-list"></ul>
+          <p class="os-wish-banner-hint">已填入標題。按「AI 撰寫初稿」會把這些願望寫進 spec。</p>
+        </aside>
+
         <!--
           兩欄：左邊是三個步驟，右邊是**要產生的檔案內容**。
           內容放右邊而不是塞進第 3 步，是因為「按下去會發生什麼」該在按之前

@@ -90,6 +90,20 @@ impl RegisteredRoots {
     }
 }
 
+/// Function wish list 的落點。檔名寫死——前端不能說「寫到哪裡去」。
+pub const WISHLIST_FILE: &str = "function-wishlist.md";
+
+pub fn wishlist_path(root: &Path) -> PathBuf {
+    root.join(".anchorline").join(WISHLIST_FILE)
+}
+
+/// 建／覆寫 wishlist 的界線：資料夾必須是使用者親手選過的專案根（或其子路徑）。
+///
+/// 比 [`editable`] 鬆（允許建新檔），比 [`domain_pack_writable`] 緊（檔名不由前端決定）。
+pub fn wishlist_writable(dir: &Path, roots: &RegisteredRoots) -> bool {
+    roots.contains_ancestor_of(dir)
+}
+
 /// 領域包檔的建立界線。**比 [`editable`] 鬆一點（允許建新檔），但範圍窄得多。**
 ///
 /// `editable` 要求 `is_file()`，所以它建不了新檔——那是刻意的，寫入既有檔

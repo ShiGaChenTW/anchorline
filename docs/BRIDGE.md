@@ -283,7 +283,7 @@ openspecProbe(folderPath: string) -> { initialized: boolean }
 openspecInit(folderPath: string)  -> Maybe<{ raw: string }>
 ```
 
-**`openspecInit` 是寫入例外之一**（另外還有 `writeSnapshot` / `writeExport` / `gitInit`）。
+**`openspecInit` 是寫入例外之一**（另外還有 `writeSnapshot` / `writeExport` / `writeWishlist` / `gitInit`）。
 
 放行它的理由跟 `git push` 不同，三點都要成立才算數：
 
@@ -373,6 +373,16 @@ writeExport(folderPath, name, text)     -> Maybe<{ path: string }>
 與 `writeSnapshot` 相反，**允許覆寫**：報告是「當時的樣子」不可蓋，
 匯出是可重生的成品，同名重匯就是要新的那份。副檔名白名單 `.md`/`.html`/`.json`，
 檔名一樣擋路徑穿越。
+
+```ts
+writeWishlist(folderPath, text)     -> Maybe<{ path: string }>
+```
+
+Function wish list。**路徑寫死**為 `<root>/.anchorline/function-wishlist.md`——
+前端不能傳檔名。允許建新檔與覆寫：第一次存檔時檔還不存在，`writeFile`
+過不了 `editable` 的 `is_file()`；這份檔就是那一份清單，不是快照。
+
+資料夾必須是已註冊專案根。不可用時回 `{ unavailable: true, message }`，不是 reject。
 
 ### 4.8 `ghStatus`
 

@@ -1655,6 +1655,48 @@ pub fn write_export(
     }
 }
 
+/// Function wish list。檔名與目錄都寫死，前端只能說「寫進哪個已註冊根」。
+///
+/// `write_file` 建不了新檔；願望清單第一次存檔時檔還不存在。
+/// 覆寫是要的——這份檔就是那一份清單，不是快照。
+pub fn write_wishlist_file(
+    dir: &Path,
+    text: &str,
+    roots: &RegisteredRoots,
+) -> Result<PathBuf, String> {
+    if !paths::wishlist_writable(dir, roots) {
+        return Err("這個資料夾沒有註冊為專案根目錄".into());
+    }
+    if text.len() > MAX_TEXT_BYTES as usize {
+        return Err("願望清單太長，寫不進去".into());
+    }
+    let target = paths::wishlist_path(dir);
+    // 擋「dir 是已註冊根、但拼出來的路徑逃出 .anchorline」——路徑只由這裡組。
+    if target.file_name().and_then(|n| n.to_str()) != Some(paths::WISHLIST_FILE) {
+        return Err("wishlist 路徑不合法".into());
+    }
+    let Some(parent) = target.parent() else {
+        return Err("wishlist 路徑不合法".into());
+    };
+    fs::create_dir_all(parent).map_err(|e| format!("建不了 .anchorline/：{e}"))?;
+    fs::write(&target, text).map_err(|e| format!("寫不進去：{e}"))?;
+    Ok(target)
+}
+
+#[tauri::command]
+pub fn write_wishlist(
+    folder_path: String,
+    text: String,
+    roots: State<RegisteredRoots>,
+) -> R<Maybe<FilePath>> {
+    match write_wishlist_file(&PathBuf::from(&folder_path), &text, &roots) {
+        Ok(p) => Ok(Maybe::Ok(FilePath {
+            path: p.to_string_lossy().to_string(),
+        })),
+        Err(m) => Ok(Maybe::Missing(Unavailable::new(m))),
+    }
+}
+
 /// 這個資料夾有沒有 openspec 骨架。
 ///
 /// 判準是 `openspec/` 目錄存在 —— 不呼叫 CLI，因為「CLI 不在」與
@@ -2043,6 +2085,7 @@ pub fn ping() -> R<Pong> {
             "readUatEvidence",
             "deleteUatEvidence",
             "openUatEvidence",
+            "writeWishlist",
         ]
         .iter()
         .map(|s| s.to_string())
