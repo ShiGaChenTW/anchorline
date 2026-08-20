@@ -257,7 +257,7 @@ if (!requireAuth()) {
     return `<article class="project-card${p.id === store.get().activeProjectId ? " is-active" : ""}" data-id="${p.id}" role="listitem">
   <div class="project-card-main" data-card-open="${p.id}" role="link" tabindex="0" title="看這個專案的儀表板">
     <div class="project-card-title-row">
-      <a class="project-card-title" href="dashboard.html" data-open-project="${p.id}">${escapeHtml(display)}</a>
+      <a class="project-card-title" href="dashboard.html" data-open-project="${p.id}">${escapeHtml(display)}</a>${p.shortCode ? ` <span class="rail-proj-code">${escapeHtml(p.shortCode)}</span>` : ""}
       <span class="pill ${st.cls}">${st.label}</span>
       ${tagsOf(p)}
     </div>
@@ -316,7 +316,7 @@ if (!requireAuth()) {
         const rename = `<button type="button" class="btn btn-sm btn-ghost" data-rename-project="${escapeHtml(p.id)}" title="自訂顯示名稱">重新命名</button>`;
         return `<tr data-id="${escapeHtml(p.id)}" data-card-open="${escapeHtml(p.id)}" class="${p.id === store.get().activeProjectId ? "is-active" : ""}">
           <td>
-            <a class="tv-title" href="dashboard.html" data-open-project="${escapeHtml(p.id)}">${escapeHtml(display)}</a>
+            <a class="tv-title" href="dashboard.html" data-open-project="${escapeHtml(p.id)}">${escapeHtml(display)}</a>${p.shortCode ? ` <span class="rail-proj-code">${escapeHtml(p.shortCode)}</span>` : ""}
             <span class="tv-blurb tv-col-blurb">${escapeHtml(blurb || "—")}</span>
           </td>
           <td><span class="pill ${st.cls}">${st.label}</span>${tagsOf(p)}</td>

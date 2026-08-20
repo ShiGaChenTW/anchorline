@@ -18,6 +18,7 @@ import {
   withCustomSection,
 } from "./seed";
 import { draftRelease, validateVersion, type Release, type ReleaseItem, type ReleaseLevelId, type VersionPolicy, policyOf } from "../lib/release";
+import { normalizeShortCode } from "../lib/function-wishlist";
 import { canAddItem } from "../lib/release-track";
 import { logEvent } from "../lib/event-writer";
 import type {
@@ -383,6 +384,8 @@ export function migrateProject(raw: Record<string, unknown>, employees: Employee
     id: String(raw.id ?? `p_${Date.now()}`),
     title: String(raw.title ?? "未命名"),
     customName: raw.customName ? String(raw.customName) : undefined,
+    // 第四次：漏了這行，設過的簡寫重新載入就沒了，wishlist 取號會卡在「先設簡寫」。
+    shortCode: normalizeShortCode(String(raw.shortCode ?? "")) ?? undefined,
     description: raw.description ? String(raw.description) : undefined,
     status: (raw.status as Project["status"]) || "draft",
     pct: Number(raw.pct ?? 0),
@@ -1489,6 +1492,42 @@ export const store = {
           ? {
               ...p,
               customName: name || undefined,
+              updated: "剛剛",
+              lastFileAt: nowIso(),
+            }
+          : p,
+      ),
+    };
+    emit();
+    return { ok: true };
+  },
+
+  /**
+   * 專案簡寫（wishlist 取號前綴）。空字串＝清掉。
+   * 不合法的值拒收，不要截成看起來像成功。
+   */
+  setProjectShortCode(id: string, raw: string): { ok: boolean; reason?: string } {
+    const user = state.currentUser;
+    if (user.accessRole !== "admin" && user.accessRole !== "editor") {
+      return { ok: false, reason: "無權限改簡寫" };
+    }
+    if (!state.projects.some((p) => p.id === id)) {
+      return { ok: false, reason: "找不到專案" };
+    }
+    const trimmed = raw.trim();
+    let code: string | undefined;
+    if (trimmed) {
+      const next = normalizeShortCode(trimmed);
+      if (!next) return { ok: false, reason: "簡寫只能是 1 到 5 個英文字母" };
+      code = next;
+    }
+    state = {
+      ...state,
+      projects: state.projects.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              shortCode: code,
               updated: "剛剛",
               lastFileAt: nowIso(),
             }

@@ -54,3 +54,16 @@ describe("migrateProject × versionPolicy", () => {
     expect(migrateProject({ ...base, versionPolicy: "semver" }, []).versionPolicy).toBeUndefined();
   });
 });
+
+describe("migrateProject × shortCode", () => {
+  test("合法簡寫讀得回來、存成大寫", () => {
+    expect(migrateProject({ ...base, shortCode: "al" }, []).shortCode).toBe("AL");
+    expect(migrateProject({ ...base, shortCode: "SNOTE" }, []).shortCode).toBe("SNOTE");
+  });
+
+  test("不合法的值當作沒設 —— 不要寫進 state 讓取號用錯前綴", () => {
+    expect(migrateProject({ ...base }, []).shortCode).toBeUndefined();
+    expect(migrateProject({ ...base, shortCode: "AL1" }, []).shortCode).toBeUndefined();
+    expect(migrateProject({ ...base, shortCode: "TOOLONG" }, []).shortCode).toBeUndefined();
+  });
+});

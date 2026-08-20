@@ -64,6 +64,11 @@ export type Project = {
    * 未自訂則顯示 title（匯入時通常為資料夾名）。
    */
   customName?: string;
+  /**
+   * 專案簡寫：1–5 個英文字母，大寫。Function wish list 取號用
+   * （`SNOTE` + 流水號 → `SNOTE-001`）。未設就不能新增願望。
+   */
+  shortCode?: string;
   status: ProjectStatus;
   pct: number;
   owner: string;

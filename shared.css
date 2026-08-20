@@ -4858,6 +4858,35 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   gap: 6px;
   flex-wrap: wrap;
 }
+.rail-proj-code {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: var(--fs-1);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--inset);
+  color: var(--accent);
+}
+.rail-proj-code-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--mono);
+  font-size: var(--fs-3);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  outline: none;
+}
+.rail-proj-code-input:focus {
+  box-shadow: var(--focus-ring);
+}
 .rail-proj-tag {
   flex-shrink: 0;
   padding: 0 5px;
@@ -10867,6 +10896,44 @@ html.hide-focus-strip #adhd-focus-strip {
   background: color-mix(in oklab, var(--success) 16%, transparent);
   color: var(--fg-2);
   font-size: var(--fs-1);
+}
+.os-wish-id {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: var(--fs-1);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+  margin-right: 6px;
+}
+.os-wish-code {
+  font-family: var(--mono);
+  font-size: var(--fs-1);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--inset);
+  color: var(--accent);
+}
+.os-wish-taken {
+  margin: 0 0 4px;
+  font-size: var(--fs-1);
+  color: var(--muted);
+}
+.os-wish-compose input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: var(--fs-2);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .os-wish-banner {
   margin: 0 0 16px;

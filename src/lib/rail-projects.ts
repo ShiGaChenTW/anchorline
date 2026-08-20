@@ -484,6 +484,7 @@ const activeId = onWorkspacePage() ? "" : store.get().activeProjectId;
                 <span class="rail-proj-card-top">
                   <span class="rail-proj-status rail-proj-status--${statusTone(p)}" title="${statusLabel(p)}"></span>
                   <span class="rail-proj-card-title">${escapeHtml(name)}</span>
+                  ${p.shortCode ? `<span class="rail-proj-code" title="專案簡寫">${escapeHtml(p.shortCode)}</span>` : ""}
                 </span>
                 <span class="rail-proj-card-sub">${escapeHtml(when)}${badge}</span>
               </button>
@@ -578,6 +579,11 @@ function beginInlineRename(block: HTMLElement, id: string) {
       <span class="rail-proj-rename-hint">留空＝${escapeHtml(fallback)}</span>
     </label>
     <input type="text" class="rail-proj-rename-input" maxlength="80" value="${escapeHtml(current)}" />
+    <label class="rail-proj-rename-label">簡寫
+      <span class="rail-proj-rename-hint">1–5 個英文字母，wishlist 取號用</span>
+    </label>
+    <input type="text" class="rail-proj-code-input" maxlength="5" spellcheck="false" autocapitalize="characters"
+           value="${escapeHtml(p.shortCode ?? "")}" placeholder="例如 AL" />
     <div class="rail-proj-rename-actions">
       <button type="button" class="btn btn-sm btn-primary rail-proj-rename-save">儲存</button>
       <button type="button" class="btn btn-sm btn-ghost rail-proj-rename-cancel">取消</button>
@@ -586,11 +592,17 @@ function beginInlineRename(block: HTMLElement, id: string) {
   card.appendChild(form);
 
   const input = form.querySelector<HTMLInputElement>(".rail-proj-rename-input")!;
+  const codeInput = form.querySelector<HTMLInputElement>(".rail-proj-code-input")!;
   const save = () => {
     const next = input.value;
     const r = store.renameProject(id, next);
     if (!r.ok) {
       toast(r.reason ?? "重新命名失敗");
+      return;
+    }
+    const cr = store.setProjectShortCode(id, codeInput.value);
+    if (!cr.ok) {
+      toast(cr.reason ?? "簡寫不合法");
       return;
     }
     // 必須先解除 is-renaming 再重繪：subscribe 會跳過「編輯中」卡片
@@ -607,7 +619,12 @@ function beginInlineRename(block: HTMLElement, id: string) {
         if (ctx) ctx.textContent = name;
       }
     }
-    toast(next.trim() ? `已命名為「${next.trim()}」` : "已清除自訂名稱");
+    const bits = [
+      next.trim() ? `已命名為「${next.trim()}」` : "已清除自訂名稱",
+    ];
+    const code = store.get().projects.find((x) => x.id === id)?.shortCode;
+    if (code) bits.push(`簡寫 ${code}`);
+    toast(bits.join(" · "));
   };
   const cancel = () => {
     card.classList.remove("is-renaming");
@@ -634,6 +651,16 @@ function beginInlineRename(block: HTMLElement, id: string) {
     }
   });
   input.addEventListener("click", (ev) => ev.stopPropagation());
+  codeInput.addEventListener("click", (ev) => ev.stopPropagation());
+  codeInput.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      save();
+    } else if (ev.key === "Escape") {
+      ev.preventDefault();
+      cancel();
+    }
+  });
 
   // 下一個 frame 聚焦（WKWebView 較穩）
   requestAnimationFrame(() => {

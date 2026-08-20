@@ -37,6 +37,71 @@ export function emptyWishlist(): WishlistDoc {
   return { active: [], archive: [] };
 }
 
+/**
+ * 專案簡寫：只收 1–5 個英文字母，存成大寫。
+ * 多一個字、夾數字或符號都拒——默默截斷會讓人以為 ALONG 設成了 ALONG。
+ */
+export function normalizeShortCode(raw: string): string | null {
+  const s = raw.trim().toUpperCase();
+  if (!/^[A-Z]{1,5}$/.test(s)) return null;
+  return s;
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function formatWishId(code: string, n: number): string {
+  return `${code}-${String(n).padStart(3, "0")}`;
+}
+
+/** 這個 id 是不是 `簡寫-流水號`（如 SNOTE-001）。認不得就不是這個簡寫名下的號。 */
+export function wishNumberOf(id: string, code: string): number | null {
+  if (!code) return null;
+  const m = new RegExp(`^${escapeRe(code)}-(\\d+)$`, "i").exec(id);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isInteger(n) || n < 1) return null;
+  return n;
+}
+
+export function occupiedWishNumbers(
+  doc: WishlistDoc,
+  code: string,
+  extra: readonly string[] = [],
+): number[] {
+  const ids = [...doc.active, ...doc.archive].map((it) => it.id).concat([...extra]);
+  const out: number[] = [];
+  for (const id of ids) {
+    const n = wishNumberOf(id, code);
+    if (n != null) out.push(n);
+  }
+  return out;
+}
+
+/** 最小的沒被佔用的正整數。刪掉的號會從這裡回來。 */
+export function nextWishNumber(occupied: readonly number[]): number {
+  const used = new Set(occupied);
+  let n = 1;
+  while (used.has(n)) n += 1;
+  return n;
+}
+
+/**
+ * 點「新增」時取號。extra 放還沒存檔的草稿 id，避免連點兩次拿到同一個號。
+ * 簡寫不合法就回 null，呼叫端去請人先設簡寫。
+ */
+export function takeWishId(
+  doc: WishlistDoc,
+  code: string,
+  extra: readonly string[] = [],
+): string | null {
+  const normalized = normalizeShortCode(code);
+  if (!normalized) return null;
+  const n = nextWishNumber(occupiedWishNumbers(doc, normalized, extra));
+  return formatWishId(normalized, n);
+}
+
 export function wishlistPath(rootPath: string): string {
   const base = rootPath.replace(/\/+$/, "");
   return `${base}/${WISHLIST_REL}`;
@@ -72,11 +137,29 @@ function normalizeText(raw: string): string {
   return raw.replace(/\r\n/g, "\n").replace(/\s+$/g, "").replace(/^\s+/, "");
 }
 
-export function addWish(doc: WishlistDoc, text: string, now: Date = new Date()): WishlistDoc | null {
+export function addWish(
+  doc: WishlistDoc,
+  text: string,
+  id: string,
+  now: Date = new Date(),
+): WishlistDoc | null {
   const trimmed = normalizeText(text);
   if (!trimmed) return null;
-  const item: WishlistItem = { id: mintWishId(now), text: trimmed, created: localStamp(now) };
+  const taken = [...doc.active, ...doc.archive].some((it) => it.id === id);
+  if (!id.trim() || taken) return null;
+  const item: WishlistItem = { id: id.trim(), text: trimmed, created: localStamp(now) };
   return { ...doc, active: [...doc.active, item] };
+}
+
+/** 從 Active 或 Archive 拿掉。號因此釋出，下次新增可以再取。封存不算移除。 */
+export function removeWish(doc: WishlistDoc, id: string): WishlistDoc | null {
+  const inActive = doc.active.some((it) => it.id === id);
+  const inArchive = doc.archive.some((it) => it.id === id);
+  if (!inActive && !inArchive) return null;
+  return {
+    active: doc.active.filter((it) => it.id !== id),
+    archive: doc.archive.filter((it) => it.id !== id),
+  };
 }
 
 export function updateWish(doc: WishlistDoc, id: string, text: string): WishlistDoc | null {
