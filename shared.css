@@ -10608,11 +10608,15 @@ html.hide-focus-strip #adhd-focus-strip {
 /* Changes 清單本身從來沒有邊界／捲動設定——項目一多（20+ change 很常見）
    就會撐爆 .wb-col 那層 overflow:hidden，下半段（Archived、甚至整個
    「這個 Change 的檔案」）被裁掉，滑鼠滾輪對整欄無效因為欄本身不捲動。
-   跟 .os-list 用同一招：flex:1 讓它跟另一個長列表對分剩餘高度，各自
-   overflow:auto 自己捲。 */
+   一開始跟 .os-list 一樣給 flex:1，結果兩個 flex:1 搶剩餘空間時，
+   Changes 的自然內容（23 項 ≈ 700px）遠大於「這個 Change 的檔案」，
+   反而把它整個擠出可視範圍——點了 change 卻找不到檔案清單，右側自然
+   也開不了檔。改成有上限的 flex:0 1 auto + max-height：Changes 自己
+   捲動但**不跟 .os-list 搶空間**，選到的檔案清單保證還有 flex:1 可用。 */
 .osw-changes {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 8rem;
+  max-height: 40vh;
   overflow: auto;
 }
 
