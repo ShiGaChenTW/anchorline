@@ -1,4 +1,5 @@
 import type { AppState, Project, Section } from "../data/types";
+import { projectDisplayName } from "../data/types";
 import { CUSTOM_SECTION_ID } from "../data/seed";
 import { isNative, isUnavailable, native } from "./native";
 import { toast } from "./ui";
@@ -157,6 +158,53 @@ export function exportJsonFile(state: AppState) {
     JSON.stringify(payload, null, 2),
     "application/json;charset=utf-8",
   );
+}
+
+/**
+ * 專案 profile —— 交接用的 metadata 快照，也是給「其他軟體」讀這個資料夾時
+ * 認得出 Anchorline 專案身分的固定入口。
+ *
+ * 固定檔名（不加時間戳）：這份東西描述「現在」，交接對象與外部工具要找的
+ * 是最新版，不是某次匯出當下的快照——`write_export` 允許覆寫正合這個用途。
+ */
+export type ProjectProfile = {
+  schema: "anchorline.project-profile.v1";
+  exportedAt: string;
+  name: string;
+  shortCode: string | null;
+  status: Project["status"];
+  versionPolicy: "loose" | "strict";
+  domain: string;
+  description: string | null;
+  tags: string[];
+  owner: string;
+  anchorlineProjectId: string;
+};
+
+export function buildProjectProfile(project: Project): ProjectProfile {
+  return {
+    schema: "anchorline.project-profile.v1",
+    exportedAt: new Date().toISOString(),
+    name: projectDisplayName(project),
+    shortCode: project.shortCode ?? null,
+    status: project.status,
+    versionPolicy: project.versionPolicy ?? "loose",
+    domain: project.domain ?? "generic",
+    description: project.description?.trim() || null,
+    tags: project.tags ?? [],
+    owner: project.owner,
+    anchorlineProjectId: project.id,
+  };
+}
+
+export function exportProjectProfile(state: AppState, project?: Project | null) {
+  const p =
+    project ?? state.projects.find((x) => x.id === state.activeProjectId) ?? state.projects[0] ?? null;
+  if (!p) {
+    toast("沒有可匯出的專案");
+    return;
+  }
+  void deliver(state, p, "project.json", JSON.stringify(buildProjectProfile(p), null, 2), "application/json;charset=utf-8");
 }
 
 export function exportHtmlFile(state: AppState, project?: Project | null) {

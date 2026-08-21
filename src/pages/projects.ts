@@ -6,7 +6,13 @@ import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import {
   setBeginnerMode,
 } from "../lib/beginner-flow";
-import { exportHtmlFile, exportJsonFile, exportMarkdownFile, exportOpenspecBundle } from "../lib/export";
+import {
+  exportHtmlFile,
+  exportJsonFile,
+  exportMarkdownFile,
+  exportOpenspecBundle,
+  exportProjectProfile,
+} from "../lib/export";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
 import { DEFAULT_DOMAIN, listDomains } from "../data/domains";
 import {
@@ -1070,6 +1076,16 @@ if (!requireAuth()) {
       st.projects.find((p) => p.id === st.activeProjectId) ?? st.projects[0] ?? null;
     exportOpenspecBundle(st, active);
     toast("已匯出 OpenSpec：PRD.md · tasks.md · proposal.md");
+  });
+
+  document.getElementById("btn-export-profile")?.addEventListener("click", () => {
+    if (!canExport(store.get().currentUser)) {
+      toast("無權匯出");
+      return;
+    }
+    const st = store.get();
+    const active = st.projects.find((p) => p.id === st.activeProjectId) ?? st.projects[0] ?? null;
+    exportProjectProfile(st, active);
   });
 
   /* ─── tasks.md 回讀（OpenSpec 的另一半） ─── */
