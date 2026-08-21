@@ -19,6 +19,7 @@ import {
   type Suggestion,
 } from "../lib/dashboard-optimize";
 import { initHelpOverlay } from "../lib/help-overlay";
+import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import { diagnoseGit, hasActionableIssue, usesConventionalCommits } from "../lib/git-doctor";
 import {
   commitSystemVars,
@@ -62,8 +63,11 @@ import {
   type UatRollup,
 } from "../lib/uat-pending";
 
+// 第一行：攔截要先裝好才擋得住後面任何一行的 throw（見 loading-overlay.ts）
+beginBootOverlay({ autoHideAfter: 8000 });
+
 if (!requireAuth()) {
-  /* redirected */
+  // 導向登入中。**刻意不收遮罩** —— 收了只會讓使用者看到一頁馬上要離開的空殼
 } else {
   initTheme();
   initMobileNav("dashboard");
@@ -1307,16 +1311,26 @@ if (!requireAuth()) {
     load(true);
   });
 
-  load();
+  try {
+    // load() 是 async，但它的第一個 await 之前就已經跑完 syncChrome 與
+    // renderState —— 也就是說「拿到 pending promise」時畫面已經有真內容了。
+    // 所以遮罩在這裡同步收掉是對的：真的在量磁碟的那段，頁面自己會顯示
+    // 「正在量測資料夾…」，那是頁內狀態，不該再被整頁黑底蓋住。
+    load();
 
-  // 綁完資料夾就自己重量一次，不用使用者再按「重新量測」
-  let lastFolder = activeProject()?.importSummary?.rootPath ?? "";
-  store.subscribe(() => {
-    const now = activeProject()?.importSummary?.rootPath ?? "";
-    syncChrome(activeProject());
-    if (now !== lastFolder) {
-      lastFolder = now;
-      load(true);
-    }
-  });
+    // 綁完資料夾就自己重量一次，不用使用者再按「重新量測」
+    let lastFolder = activeProject()?.importSummary?.rootPath ?? "";
+    store.subscribe(() => {
+      const now = activeProject()?.importSummary?.rootPath ?? "";
+      syncChrome(activeProject());
+      if (now !== lastFolder) {
+        lastFolder = now;
+        load(true);
+      }
+    });
+  } catch (err) {
+    failBootOverlay(err);
+  } finally {
+    endBootOverlay();
+  }
 }

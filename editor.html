@@ -7,7 +7,17 @@
 <link rel="stylesheet" href="shared.css" />
 <script>(function(){try{var t=localStorage.getItem("anchorline:theme")||localStorage.getItem("specforge:theme");if(t==="warp")t="terminal";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"],terminal:["dark","#0d0b08"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
 </head>
-<body>
+<body aria-busy="true">
+<!-- 開場遮罩。**寫死在這裡**，因為用 JS 建的最快也要等 module 下載、解析、
+     執行完才出現 —— 而要蓋住的正好是那段時間（殼畫好了、內容區還空著）。
+     接手與收掉都在 src/lib/loading-overlay.ts：beginBootOverlay / endBootOverlay。 -->
+<div id="app-loading-overlay" class="load-back" role="status" aria-live="polite">
+  <div class="load-box">
+    <p class="load-text">載入中</p>
+    <span class="load-bar" role="progressbar" aria-label="讀取中"><i></i></span>
+    <p class="load-stall">比預期久了一點。如果畫面一直停在這裡，重新整理這一頁。</p>
+  </div>
+</div>
 <div class="app" data-od-id="app-editor">
   <div class="shell">
     <aside class="rail" data-od-id="rail">

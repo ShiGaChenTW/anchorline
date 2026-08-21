@@ -18,6 +18,7 @@ import { projectDisplayName, type Project } from "../data/types";
 import { askConfirm } from "../lib/ask";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
+import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import { syncRailContext } from "../lib/rail-projects";
 import {
   analysisVerdict,
@@ -31,8 +32,12 @@ import { initTheme } from "../lib/theme";
 import { sinceLabel } from "../lib/time-format";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
+// 第一行：攔截要先裝好才擋得住後面任何一行的 throw。8 秒硬上限只是最後一道
+// 保險——正常路徑由下面的 finally 收掉，這裡防的是「沒 throw 但也不回來」。
+beginBootOverlay({ autoHideAfter: 8000 });
+
 if (!requireAuth()) {
-  /* redirected */
+  // 導向登入中。**刻意不收遮罩** —— 收了只會讓使用者看到一頁馬上要離開的空殼
 } else {
   initTheme();
   initMobileNav("signoff");
@@ -449,9 +454,15 @@ if (!requireAuth()) {
     toast("已重新整理");
   });
 
-  render();
-  store.subscribe(() => {
-    // 別的分頁／別的頁面改了案子就跟著更新，但不要打斷正在打字的意見
-    if (!pending) render();
-  });
+  try {
+    render();
+    store.subscribe(() => {
+      // 別的分頁／別的頁面改了案子就跟著更新，但不要打斷正在打字的意見
+      if (!pending) render();
+    });
+  } catch (err) {
+    failBootOverlay(err);
+  } finally {
+    endBootOverlay();
+  }
 }
