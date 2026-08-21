@@ -14038,96 +14038,6 @@ p.gd-warn {
   padding: 28px clamp(24px, 5vw, 72px) 80px;
 }
 
-/* 開放迴圈帶 */
-/* 邊框一圈同粗。左邊加一條粗色條是最好認的 AI 版面痕跡，
-   而這一塊本來就靠位置（置頂）與底色取得優先權，不需要再插一支旗子。 */
-.os-open {
-  margin-bottom: 32px;
-  padding: 18px 20px;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
-}
-.os-open-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
-.os-open-head h2 {
-  margin: 0;
-  font-size: var(--fs-5);
-  letter-spacing: -0.02em;
-}
-.os-open-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-/* 掃描時間要標出來 —— 網路／磁碟資料不標新鮮度，使用者會以為是即時的 */
-.os-scanned {
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: var(--fs-2);
-}
-.os-open-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 0;
-  border-top: 1px solid var(--border-muted, var(--border));
-  flex-wrap: wrap;
-}
-.os-open-row:first-child {
-  border-top: 0;
-}
-.os-open-main {
-  flex: 1 1 260px;
-  min-width: 0;
-}
-.os-open-id {
-  display: block;
-  color: var(--fg);
-  font-family: var(--mono);
-  font-size: var(--fs-3);
-  font-weight: var(--weight-em);
-}
-.os-open-next {
-  display: block;
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: var(--fs-2);
-}
-/* 「幾天沒動」跟進度並排：兩個都是「要不要現在接手」的輸入 */
-.os-open-age {
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: var(--fs-2);
-  white-space: nowrap;
-}
-.os-open-pct {
-  min-width: 46px;
-  color: var(--accent);
-  font-family: var(--mono);
-  font-size: var(--fs-3);
-  font-weight: var(--weight-em);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-.os-open-bar {
-  flex: 0 0 100%;
-  height: 3px;
-  background: var(--border);
-  overflow: hidden;
-}
-.os-open-bar span {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-}
-
 /* 三步驟 */
 /*
  * 兩欄。左欄的三個步驟等高平均分散，右欄是檔案內容，兩欄總高相同。
@@ -14894,6 +14804,18 @@ p.gd-warn {
   outline: none;
   border-color: var(--accent);
   box-shadow: var(--focus-ring);
+}
+/* 帶入願望：吃滿一整列，落在專案列下方 —— 它是「選了專案才存在」的欄位。
+   [hidden] 要覆寫，否則 .os-scope-field 的 inline-flex 會把 hidden 蓋掉 */
+.os-wish-pick {
+  flex-basis: 100%;
+}
+.os-wish-pick select {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.os-wish-pick[hidden] {
+  display: none;
 }
 .os-scope-note {
   color: var(--muted);

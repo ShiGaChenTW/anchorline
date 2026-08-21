@@ -117,12 +117,10 @@ function nextStepForPage(page: RailPage | null): NextStep {
         href: "editor.html",
       };
     case "openspec":
-      // 這一頁的功能是「開新坑」，所以它的下一步要先問還沒收完的坑。
-      // 空字串會讓 renderContextFocus 整條移掉 —— 那正是這頁原本的狀態，
-      // 也是全站唯一沒有下一步的頁面。
+      // 這一頁的功能是「開新坑」，進行中的 change 不在這裡（回總覽看）。
       return {
         label: "下一步",
-        detail: "先看上面還沒收完的 change；真的要開新的，從「這次是哪一種」開始。",
+        detail: "從「這次是哪一種」開始；專案有願望的話，可用「帶入願望」代填。",
       };
     default:
       return {

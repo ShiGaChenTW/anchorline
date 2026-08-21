@@ -1,11 +1,5 @@
 /**
- * OpenSpec 入口。
- *
- * ## 版面順序是這一頁的主要設計決定
- *
- * 這一頁的功能是**開新的 change**。若預設動線是「進來 → 開一個新的」，
- * 介面就是在替「開很多坑收不完」加速。所以進行中的 change 置頂：
- * 開新坑之前先看見還沒收完的坑，要不要繼續開是一個有意識的決定。
+ * OpenSpec 入口：開新的 change。
  *
  * ## 一次只指一個
  *
@@ -45,15 +39,19 @@ import {
   snapshotLine,
 } from "../lib/snapshot-bridge";
 import { sinceLabel as since } from "../lib/time-format";
-import { canQueryStatus, requestOpenspecStatus } from "../lib/status-bridge";
-import { nextArtifact, type OpenspecChange, type OpenspecResult } from "../lib/openspec-status";
 import {
   briefFromWishes,
+  emptyWishlist,
+  parseWishlist,
   readWishHandoff,
   titleFromWishes,
+  wishOptionLabel,
+  wishlistLsKey,
+  wishlistPath,
   type WishHandoff,
+  type WishlistDoc,
 } from "../lib/function-wishlist";
-import { sinceLabel } from "../lib/time-format";
+import { canEditFiles, readFile } from "../lib/file-editor";
 import {
   bindModalDismiss,
   closeModal,
@@ -73,9 +71,6 @@ if (requireAuth()) {
   updateUserRailFooter(toRailUser(store.get().currentUser));
 
   let selectedProjectId = store.get().activeProjectId ?? "";
-  let report: OpenspecResult | null = null;
-  /** 上次掃描完成的時間。null = 還沒掃過 */
-  let scannedAt: string | null = null;
   /** null = 還沒選類型，第 2、3 步因此鎖著 */
   let kind: ChangeKind | null = null;
   /**
@@ -114,56 +109,6 @@ if (requireAuth()) {
     if (!n) return;
     n.textContent = text;
     n.className = `os-feedback os-feedback--${tone}`;
-  }
-
-  // ── 開放迴圈帶 ────────────────────────────────────────────────
-
-  /** list 有 `lastModified`，status 沒有 —— 兩邊用 change 名稱對起來 */
-  function lastModifiedOf(name: string): string | null {
-    if (!report?.available) return null;
-    return report.listed?.find((l) => l.name === name)?.lastModified || null;
-  }
-
-  function progressOf(c: OpenspecChange): number {
-    const done = c.artifacts.filter((a) => a.status === "done" || a.status === "skipped").length;
-    return c.artifacts.length ? Math.round((done / c.artifacts.length) * 100) : 0;
-  }
-
-  function renderOpenLoops() {
-    const host = el("os-open");
-    const body = el("os-open-body");
-    const scanned = el("os-scanned");
-    if (!host || !body) return;
-
-    const p = currentProject();
-    const open = report?.available ? report.changes.filter((c) => !c.isComplete) : [];
-
-    // 沒有專案、沒綁資料夾、讀不到、或全部收完 —— 整條收起來。
-    // 一個空的開放迴圈帶仍然佔注意力，而它什麼都沒在說。
-    if (!p || !open.length) {
-      host.hidden = true;
-      return;
-    }
-    host.hidden = false;
-
-    if (scanned) scanned.textContent = scannedAt ? `掃描於 ${sinceLabel(scannedAt, Date.now())}` : "掃描中…";
-
-    body.innerHTML = open
-      .map((c) => {
-        const pct = progressOf(c);
-        const next = nextArtifact(c);
-        const age = lastModifiedOf(c.name);
-        return `<div class="os-open-row">
-          <div class="os-open-main">
-            <span class="os-open-id">${escapeHtml(c.name)}</span>
-            <span class="os-open-next">${next ? `下一步：${escapeHtml(next.outputPath)}` : "等待前置條件"}</span>
-          </div>
-          <span class="os-open-age">${age ? escapeHtml(sinceLabel(age, Date.now())) : "—"}</span>
-          <span class="os-open-pct">${pct}%</span>
-          <span class="os-open-bar"><span style="width:${pct}%"></span></span>
-        </div>`;
-      })
-      .join("");
   }
 
   // ── 三步驟 ───────────────────────────────────────────────────
@@ -237,6 +182,64 @@ if (requireAuth()) {
           : "先建立或匯入一個專案";
     }
   }
+
+  // ── 帶入願望 ─────────────────────────────────────────────────
+
+  /** 與編輯台同一套讀法：桌面版讀專案資料夾裡的檔，瀏覽器版退 localStorage。 */
+  let wishDoc: WishlistDoc = emptyWishlist();
+
+  async function loadWishlist(): Promise<WishlistDoc> {
+    const p = currentProject();
+    if (!p) return emptyWishlist();
+    const root = p.importSummary?.rootPath;
+    if (root && canEditFiles()) {
+      try {
+        return parseWishlist(await readFile(wishlistPath(root)));
+      } catch {
+        /* 檔還不存在是常態，不是錯誤 */
+      }
+    }
+    try {
+      const raw = localStorage.getItem(wishlistLsKey(p.id));
+      return raw ? parseWishlist(raw) : emptyWishlist();
+    } catch {
+      return emptyWishlist();
+    }
+  }
+
+  async function refreshWishPicker() {
+    wishDoc = await loadWishlist();
+    renderWishPicker();
+  }
+
+  function renderWishPicker() {
+    const wrap = el("os-wish-pick-wrap");
+    const sel = el("os-wish-pick") as HTMLSelectElement | null;
+    if (!wrap || !sel) return;
+    const items = wishDoc.active;
+    wrap.hidden = !items.length;
+    sel.innerHTML =
+      `<option value="">（選一條願望，自動填下方）</option>` +
+      items
+        .map((it) => `<option value="${escapeHtml(it.id)}">${escapeHtml(wishOptionLabel(it))}</option>`)
+        .join("");
+    sel.value = "";
+  }
+
+  el("os-wish-pick")?.addEventListener("change", (e) => {
+    const sel = e.target as HTMLSelectElement;
+    const it = wishDoc.active.find((w) => w.id === sel.value);
+    sel.value = ""; // 歸位，同一條願望才能重選一次（重選 = 重新帶入）
+    if (!it) return;
+    const brief = el("os-ai-brief") as HTMLTextAreaElement | null;
+    if (brief) brief.value = ""; // consume 只填空欄，先清掉舊願望的說明才換得掉
+    consumeWishHandoff({
+      projectId: currentProject()?.id ?? "",
+      kind: it.kind ?? "feature",
+      items: [{ id: it.id, text: it.text, kind: it.kind }],
+    });
+    renderSteps();
+  });
 
   // ── 版號 ─────────────────────────────────────────────────────
 
@@ -362,27 +365,6 @@ if (requireAuth()) {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  // ── 掃描 ─────────────────────────────────────────────────────
-
-  async function refresh() {
-    const p = currentProject();
-    report = null;
-    scannedAt = null;
-    renderOpenLoops();
-
-    if (!p?.importSummary?.rootPath || !canQueryStatus()) {
-      report = {
-        available: false,
-        reason: !canQueryStatus() ? "OpenSpec 狀態需要桌面版原生橋。" : "尚未綁定專案資料夾。",
-      };
-      renderOpenLoops();
-      return;
-    }
-    report = await requestOpenspecStatus(p.importSummary.rootPath);
-    scannedAt = new Date().toISOString();
-    renderOpenLoops();
-  }
-
   // ── 綁定 ─────────────────────────────────────────────────────
 
   document.querySelectorAll<HTMLButtonElement>(".os-kind").forEach((btn) => {
@@ -445,7 +427,7 @@ if (requireAuth()) {
     renderReleasePicker();
     void checkInit();
     void refreshSnapshot();
-    void refresh();
+    void refreshWishPicker();
   });
 
   el("os-init-run")?.addEventListener("click", async () => {
@@ -478,7 +460,6 @@ if (requireAuth()) {
       }
       toast("openspec init 完成");
       await checkInit();
-      void refresh();
     } catch (e) {
       if (warn) warn.textContent = e instanceof Error ? e.message : String(e);
     } finally {
@@ -755,8 +736,6 @@ if (requireAuth()) {
     return r.ok ? "已收進選定的版號。" : `版號未收：${r.reason ?? "失敗"}`;
   }
 
-  el("os-refresh")?.addEventListener("click", () => void refresh());
-
   // ── 操作說明 ─────────────────────────────────────────────────
 
   /** 切到某一條路線的說明。開啟時跟著目前選中的類型走 —— 已經選了新功能
@@ -791,14 +770,13 @@ if (requireAuth()) {
   renderProjectPicker();
   renderReleasePicker();
   renderSteps();
-  renderOpenLoops();
   void checkInit();
   void refreshSnapshot();
-  void refresh();
+  void refreshWishPicker();
 
   store.subscribe(() => {
     updateUserRailFooter(toRailUser(store.get().currentUser));
-    // 側欄換了專案就要重掃 —— 只重畫的話會停在上一個專案的 change 清單，
+    // 側欄換了專案就要重讀 —— 只重畫的話會停在上一個專案的版號與願望，
     // 而且沒有任何提示說「這不是你現在選的那個」
     const active = store.get().activeProjectId ?? "";
     if (active && active !== selectedProjectId) {
@@ -807,10 +785,9 @@ if (requireAuth()) {
       renderReleasePicker();
       void checkInit();
       void refreshSnapshot();
-      void refresh();
+      void refreshWishPicker();
       return;
     }
     renderReleasePicker();
-    renderOpenLoops();
   });
 }

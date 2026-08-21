@@ -316,6 +316,16 @@ export function titleFromWishes(items: readonly { text: string }[]): string {
   return first.slice(0, 40);
 }
 
+/**
+ * OpenSpec 入口「帶入願望」下拉的選項文字。
+ * id 認人、類型決定第 1 步選哪張卡、正文第一行認內容 ——
+ * 三個都在同一行，使用者才選得到對的那一條，不必先回編輯台比對。
+ */
+export function wishOptionLabel(it: { id: string; text: string; kind?: WishKind }): string {
+  const kind = it.kind ? WISH_KIND_LABEL[it.kind] : "未分類";
+  return `${it.id} · ${kind} · ${titleFromWishes([it])}`;
+}
+
 export function briefFromWishes(items: readonly { text: string }[]): string {
   return items
     .map((it, i) => `${i + 1}. ${it.text.trim()}`)
