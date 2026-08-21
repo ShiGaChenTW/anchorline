@@ -43,6 +43,7 @@ describe("itemsFromProbe", () => {
       "proj-hist",
       "proj-uat",
       "proj-rename",
+      "proj-close",
     ]);
   });
 

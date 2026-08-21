@@ -8,7 +8,7 @@
 <style>
   /* 這一頁的專屬樣式。三欄骨架直接沿用 shared.css 的 .wb / .wb-col ——
      跟工作台-PRD 同一套，換頁時欄寬與邊框不會跳。
-     檔案列（.os-row）、願望清單（.os-wish-*）、原始檔檢視（.fv-*）
+     願望清單（.os-wish-*）、原始檔檢視（.fv-*）
      也全部沿用既有 class，不另做一套外觀。 */
 
   /* 左欄要塞三塊（change 選單／檔案／願望），整欄自己捲 */
@@ -98,7 +98,6 @@
     font-size: var(--fs-1);
     color: var(--muted);
   }
-  .osw-groups { padding: 0 6px 10px; }
 </style>
 <script>(function(){try{var t=localStorage.getItem("anchorline:theme")||localStorage.getItem("specforge:theme");if(t==="warp")t="terminal";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"],terminal:["dark","#0d0b08"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
 </head>
@@ -202,19 +201,6 @@
               <span class="mono" id="osw-change-count">—</span>
             </div>
             <div class="osw-changes" id="osw-changes" role="listbox" aria-label="OpenSpec changes"></div>
-
-            <div class="wb-head wb-head--sub os-bar">
-              <h2>這個 Change 的檔案</h2>
-              <span class="mono" id="os-count">—</span>
-              <button type="button" class="ft-collapse" id="btn-openspec-toggle"
-                      aria-expanded="true" aria-controls="openspec-list" title="收合檔案清單">
-                <span aria-hidden="true">‹</span>
-              </button>
-            </div>
-            <div class="os-list" id="openspec-list" aria-label="OpenSpec 資料夾內容">
-              <div id="os-files"></div>
-              <div id="osw-other-groups" class="osw-groups"></div>
-            </div>
           </div>
 
           <!-- 中欄：原始檔案檢視／編輯 -->

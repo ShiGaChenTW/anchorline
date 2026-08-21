@@ -191,11 +191,6 @@ function changeEntries(groups: OsGroup[]): ChangeEntry[] {
     });
 }
 
-/** root（`openspec/` 直屬）與 `specs/*` —— 不屬於任何 change，但也不能消失 */
-function otherGroups(groups: OsGroup[]): OsGroup[] {
-  return groups.filter((g) => g.kind !== "change");
-}
-
 /**
  * 目前選的 change。
  *
@@ -234,7 +229,7 @@ async function selectChange(id: string) {
   render();
 
   // 點了 change 就直接把它排第一的檔案（通常是 proposal.md）打開——
-  // 不用使用者再多點一次「這個 Change 的檔案」卡片裡的項目。瀏覽器版
+  // 檔案清單面板拿掉之後，這是中欄唯一還會自動開檔的入口。瀏覽器版
   // 沒有檔案系統可讀，開不了就別跳錯誤，維持原本「選一個檔案」的空狀態。
   const first = currentEntry()?.group.rows[0];
   if (first && canEditFiles()) {
@@ -288,87 +283,6 @@ function renderChanges() {
 
   host.querySelectorAll<HTMLButtonElement>("[data-osw-change]").forEach((btn) => {
     btn.onclick = () => void selectChange(btn.dataset.oswChange ?? "");
-  });
-}
-
-/**
- * 選中 change 的檔案清單。
- *
- * 分群與排序沿用 `groupOpenspecFiles`（proposal 先於 tasks 是有意義的順序，
- * 不是字母序），這裡只挑出屬於這個 change 的那一群。
- */
-function renderChangeFiles() {
-  const el = document.getElementById("os-files");
-  if (!el) return;
-  const p = activeProject();
-  const root = p?.importSummary?.rootPath ?? "";
-  const entry = currentEntry();
-  const openPath = openFile?.path ?? "";
-
-  const countEl = document.getElementById("os-count");
-  if (countEl) countEl.textContent = entry ? `${entry.group.rows.length} 檔` : "無";
-
-  if (!entry) {
-    el.innerHTML = `<p class="os-empty">選一個 change，它的 proposal／tasks／design／specs 會列在這裡。</p>`;
-    return;
-  }
-
-  el.innerHTML = entry.group.rows
-    .map((r) => {
-      const abs = absolutePathFor(root, r.rel);
-      return `<button type="button" class="os-row os-file-row${abs === openPath ? " is-open" : ""}"
-          data-os-path="${escapeHtml(abs)}"
-          title="開啟 ${escapeHtml(r.rel)}">
-        <span class="os-dot done"></span>
-        <span class="os-body">
-          <span class="os-head">${escapeHtml(r.name)}</span>
-          <span class="os-file">${escapeHtml(r.sub || entry.label)}</span>
-        </span>
-      </button>`;
-    })
-    .join("");
-
-  el.querySelectorAll<HTMLButtonElement>("[data-os-path]").forEach((btn) => {
-    btn.onclick = () => {
-      void openFileInEditor(btn.dataset.osPath ?? "");
-    };
-  });
-}
-
-/** `openspec/` 直屬與 `specs/*`：不屬於任何 change，但仍然要開得到 */
-function renderOtherGroups() {
-  const el = document.getElementById("osw-other-groups");
-  if (!el) return;
-  const p = activeProject();
-  const root = p?.importSummary?.rootPath ?? "";
-  const groups = otherGroups(osGroups());
-  if (!groups.length) {
-    el.innerHTML = "";
-    return;
-  }
-  el.innerHTML = groups
-    .map((g) => {
-      const rows = g.rows
-        .map(
-          (r) => `<button type="button" class="os-row os-file-row"
-              data-os-path="${escapeHtml(absolutePathFor(root, r.rel))}"
-              title="開啟 ${escapeHtml(r.rel)}">
-            <span class="os-dot done"></span>
-            <span class="os-body">
-              <span class="os-head">${escapeHtml(r.name)}</span>
-              <span class="os-file">${escapeHtml(r.sub || g.label)}</span>
-            </span>
-          </button>`,
-        )
-        .join("");
-      return `<p class="os-group os-group--${g.kind}">${escapeHtml(g.label)}<span>${g.rows.length}</span></p>${rows}`;
-    })
-    .join("");
-
-  el.querySelectorAll<HTMLButtonElement>("[data-os-path]").forEach((btn) => {
-    btn.onclick = () => {
-      void openFileInEditor(btn.dataset.osPath ?? "");
-    };
   });
 }
 
@@ -1589,8 +1503,6 @@ async function restoreOpenFile() {
 function render() {
   syncProjectChrome();
   renderChanges();
-  renderChangeFiles();
-  renderOtherGroups();
   renderFileView();
   renderSide();
   syncUser();
@@ -1620,7 +1532,6 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-initCollapsible("btn-openspec-toggle", "openspec-list", "anchorline:osw-files-collapsed", "檔案清單");
 initCollapsible("btn-wish-toggle", "os-wish", "anchorline:osw-wish-collapsed", "願望清單");
 
 try {
@@ -1659,7 +1570,6 @@ try {
       return;
     }
     renderChanges();
-    renderChangeFiles();
   });
 } catch (err) {
   failBootOverlay(err);

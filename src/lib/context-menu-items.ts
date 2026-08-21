@@ -45,6 +45,8 @@ export function itemsFromProbe(p: CtxProbe): MenuItem[] {
     push("proj-hist", "提交與 Diff");
     push("proj-uat", "UAT");
     push("proj-rename", "重新命名");
+    sep();
+    push("proj-close", "關閉專案");
   }
 
   if (p.href && !p.href.startsWith("javascript:")) {

@@ -6,6 +6,7 @@
  * input 的選取清掉。
  */
 import { store } from "../data/store";
+import { askConfirm } from "./ask";
 import { itemsFromProbe, type CtxProbe, type MenuItem } from "./context-menu-items";
 import { toast } from "./ui";
 
@@ -172,6 +173,18 @@ async function runAction(id: string, el: Element | null, probe: CtxProbe): Promi
         `[data-rename-id="${CSS.escape(probe.projectId)}"]`,
       );
       btn?.click();
+    } else if (id === "proj-close") {
+      const title = store.get().projects.find((p) => p.id === probe.projectId)?.title ?? "這個專案";
+      const confirmed = await askConfirm({
+        title: `關閉「${title}」？`,
+        body: "只會從專案清單移除，資料夾與檔案內容都不會變動，之後可以重新匯入。",
+        confirmLabel: "關閉專案",
+        danger: true,
+      });
+      if (!confirmed) return;
+      const r = store.untrackProject(probe.projectId);
+      if (!r.ok) toast(r.reason ?? "無法關閉專案");
+      else toast(`已關閉「${title}」· 檔案未動`);
     }
   }
 }

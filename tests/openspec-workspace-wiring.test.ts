@@ -167,10 +167,17 @@ describe("editor.html 瘦身成 PRD-only", () => {
 describe("openspec-workspace.html 的三欄", () => {
   const html = () => read("openspec-workspace.html");
 
-  test("左欄三塊都在", () => {
+  test("左欄兩塊都在", () => {
     const h = html();
-    for (const id of ["osw-changes", "os-files", "os-wish"]) {
+    for (const id of ["osw-changes", "os-wish"]) {
       expect(h).toContain(`id="${id}"`);
+    }
+  });
+
+  test("「這個 Change 的檔案」面板已經拿掉（2026-08-21 拍板：點 change 就直接開第一個檔案）", () => {
+    const h = html();
+    for (const id of ["os-files", "os-count", "osw-other-groups", "openspec-list", "btn-openspec-toggle"]) {
+      expect(h).not.toContain(`id="${id}"`);
     }
   });
 

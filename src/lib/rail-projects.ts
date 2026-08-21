@@ -415,17 +415,11 @@ const activeId = onWorkspacePage() ? "" : store.get().activeProjectId;
         .map((p) => {
           const name = projectDisplayName(p);
           const on = p.id === activeId ? " on" : "";
-          const when = formatLastUpdate(p.lastFileAt || p.importSummary?.scannedAt || p.updated);
           const folderHint = p.sourceFolder && !p.customName
             ? escapeHtml(p.sourceFolder)
             : p.customName
               ? escapeHtml(p.sourceFolder || p.title)
               : "";
-          const badge = p.isImported
-            ? `<span class="rail-proj-tag">匯入</span>`
-            : p.isSample
-              ? `<span class="rail-proj-tag sample">範例</span>`
-              : `<span class="rail-proj-tag new">新建</span>`;
           return `
             <article class="rail-proj-card${on}" data-project-id="${escapeHtml(p.id)}" role="listitem" title="${escapeHtml(name)}${folderHint ? ` · ${folderHint}` : ""}">
               <button type="button" class="rail-proj-card-main" data-open-id="${escapeHtml(p.id)}">
@@ -434,7 +428,6 @@ const activeId = onWorkspacePage() ? "" : store.get().activeProjectId;
                   <span class="rail-proj-card-title">${escapeHtml(name)}</span>
                   ${p.shortCode ? `<span class="rail-proj-code" title="專案簡寫">${escapeHtml(p.shortCode)}</span>` : ""}
                 </span>
-                <span class="rail-proj-card-sub">${escapeHtml(when)}${badge}</span>
               </button>
               <button type="button" class="rail-proj-card-rename" data-rename-id="${escapeHtml(p.id)}" title="自訂專案名稱" aria-label="重新命名 ${escapeHtml(name)}">✎</button>
             </article>${on ? projActionsHtml() : ""}`;

@@ -970,7 +970,7 @@ body.is-resizing .main {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 14px 10px;
+  padding: 16px 14px 14px;
   border-bottom: 0;
   min-width: 0;
 }
@@ -1013,7 +1013,7 @@ body.is-resizing .main {
   font-family: var(--mono);
 }
 .rail-theme-row {
-  padding: 0 12px 12px;
+  padding: 8px 12px 16px;
   border-bottom: 1px solid var(--border);
 }
 .rail-theme-switch {
@@ -3491,11 +3491,11 @@ html.adhd-calm .adhd-toolbar-focus-detail {
 .theme-switch {
   display: inline-flex;
   align-items: center;
-  padding: 2px;
+  padding: 3px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--inset);
-  gap: 0;
+  gap: 2px;
   flex-shrink: 0;
   max-width: 100%;
   flex-wrap: nowrap; /* 禁止換行，避免第二列跑到左上與燈號重疊 */
@@ -3509,7 +3509,7 @@ html.adhd-calm .adhd-toolbar-focus-detail {
   font-size: var(--fs-1);
   font-weight: var(--weight-em);
   letter-spacing: 0.02em;
-  padding: 4px 7px;
+  padding: 6px 9px;
   border-radius: calc(var(--radius-md) - 2px);
   cursor: pointer;
   line-height: 1.2;
@@ -4592,7 +4592,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
 .rail-projects {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
   /* 縮到內容大小，但最多吃滿可用空間。
      用 1 1 auto 的話容器會比內容高，底下就多出一塊「看起來像區塊、
      但沒有內容也不能點」的空容器 —— 那正是使用者回報的東西。 */
@@ -4641,7 +4641,7 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
-  padding: 10px 10px 10px 12px;
+  padding: 7px 10px 7px 12px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -4682,20 +4682,6 @@ html .emp-card-controls .btn-del-emp:focus-visible {
   color: var(--fg);
   /* 1.25 會把底線與下伸部切掉（Fork_WTF、Project_sysapp-tui 這種名字很常見） */
   line-height: 1.45;
-}
-.rail-proj-card-sub {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  /* 右邊留給改名鍵，避免 hover 時蓋到時間字 */
-  padding: 0 28px 0 14px;
-  font-size: var(--fs-1);
-  line-height: 1.3;
-  color: var(--meta);
-  font-weight: 400;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .rail-proj-card-rename {
   position: absolute;
@@ -5671,10 +5657,6 @@ html.adhd-calm .rail-proj-card {
 html.adhd-calm .rail-proj-card-title {
   font-size: var(--fs-4);
 }
-html.adhd-calm .rail-proj-card-sub {
-  font-size: var(--fs-1);
-  opacity: 0.9;
-}
 html.adhd-calm .rail-projects {
   gap: 10px;
 }
@@ -6591,11 +6573,6 @@ html.adhd-calm .rail-proj-card-title {
   font-size: var(--fs-4);
   font-weight: 650;
   letter-spacing: -0.015em;
-}
-html.adhd-calm .rail-proj-card-sub {
-  font-size: var(--fs-2);
-  color: var(--meta);
-  opacity: 0.9;
 }
 
 /* 按鈕字重一致 */
@@ -7673,13 +7650,6 @@ html.adhd-calm .review-focus-bar {
   min-height: 0;
   max-height: 46vh;
   overflow: auto;
-}
-/* OpenSpec 收起來時，把它和「專案檔案」兩條標題列推到欄位最下方。
-   用 margin-top: auto 吸掉剩餘空間，而不是叫 #outline 去長高 ——
-   #outline 有 max-height 安全閥，長不滿就會在標題列下方留一塊空白。
-   :has 不支援的環境只是維持原位，不會壞版。 */
-[data-od-id="outline-col"]:has(#openspec-list[hidden]) .os-bar {
-  margin-top: auto;
 }
 .file-tree-host {
   flex: 0 0 auto;
@@ -10594,25 +10564,10 @@ html.hide-focus-strip #adhd-focus-strip {
    編輯台大綱欄：OpenSpec 章節 + Task List
    兩個都是「從既有資料推出來的視圖」，不是另外要人維護的清單。
    ═══════════════════════════════════════════════════════════════ */
-.os-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.os-bar .mono {
-  font-size: var(--fs-1);
-  color: var(--muted);
-}
-
 /* Changes 清單本身從來沒有邊界／捲動設定——項目一多（20+ change 很常見）
-   就會撐爆 .wb-col 那層 overflow:hidden，下半段（Archived、甚至整個
-   「這個 Change 的檔案」）被裁掉，滑鼠滾輪對整欄無效因為欄本身不捲動。
-   一開始跟 .os-list 一樣給 flex:1，結果兩個 flex:1 搶剩餘空間時，
-   Changes 的自然內容（23 項 ≈ 700px）遠大於「這個 Change 的檔案」，
-   反而把它整個擠出可視範圍——點了 change 卻找不到檔案清單，右側自然
-   也開不了檔。改成有上限的 flex:0 1 auto + max-height：Changes 自己
-   捲動但**不跟 .os-list 搶空間**，選到的檔案清單保證還有 flex:1 可用。 */
+   就會撐爆 .wb-col 那層 overflow:hidden，下半段（Archived）被裁掉，
+   滑鼠滾輪對整欄無效因為欄本身不捲動。給有上限的 flex:0 1 auto +
+   max-height：Changes 自己捲動，不會把整欄撐爆。 */
 .osw-changes {
   flex: 0 1 auto;
   min-height: 8rem;
@@ -10620,85 +10575,10 @@ html.hide-focus-strip #adhd-focus-strip {
   overflow: auto;
 }
 
-.os-list {
-  /* 展開時填滿章節與專案檔案之間的空間，而不是固定一小塊 */
-  flex: 1 1 auto;
-  /* 0 會讓 Function wish list 被檔案樹擠成一條縫，存檔／送出都按不到 */
-  min-height: 11rem;
-  overflow: auto;
-  padding: 4px 6px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.os-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 5px 8px;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.os-row:hover {
-  background: var(--inset);
-}
-.os-file-row {
-  cursor: pointer;
-}
-.os-dot {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--meta);
-}
-.os-dot.done {
-  background: var(--success);
-}
-.os-dot.warn {
-  background: var(--warn);
-}
-.os-body {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-.os-head {
-  display: block;
-  font-size: var(--fs-2);
-  font-weight: 600;
-  color: var(--fg);
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.os-file {
-  display: block;
-  font-size: var(--fs-1);
-  color: var(--muted);
-  line-height: 1.35;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* OpenSpec / Task List 的收合鍵：跟專案檔案同一顆按鈕樣式，
    差別是狀態掛在按鈕自己身上（專案檔案掛在整個 outline-col）。 */
 .ft-collapse.is-collapsed span {
   transform: rotate(90deg);
-}
-/* 計數靠右、收合鍵在最右 */
-.os-bar {
-  justify-content: flex-start;
-}
-.os-bar .mono {
-  margin-left: auto;
 }
 
 /* OpenSpec 區塊：分群小標與空狀態 */
@@ -10863,11 +10743,21 @@ html.hide-focus-strip #adhd-focus-strip {
   max-width: 7.5rem;
   font: inherit;
   font-size: var(--fs-1);
-  color: var(--fg);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   padding: 3px 6px;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+.os-wish-menu:hover {
+  background: var(--inset);
+  color: var(--fg);
+  border-color: var(--border-muted);
 }
 .os-wish-kind-field {
   display: flex;
