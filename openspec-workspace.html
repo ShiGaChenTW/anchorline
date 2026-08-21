@@ -184,8 +184,19 @@
 
       <div class="content" style="overflow:hidden;display:flex;flex-direction:column">
         <div class="wb" data-od-id="workbench">
-          <!-- 左欄：change 選單 → 這個 change 的檔案 → 願望清單 -->
+          <!-- 左欄：願望清單 → change 選單 → 這個 change 的檔案。
+               願望清單放最前面——Changes 常常一長串（20+ 項很常見），排在前面
+               會把願望清單擠到捲軸下面，變得要找才看得到。 -->
           <div class="wb-col osw-left" data-od-id="osw-left-col">
+            <div class="wb-head">
+              <h2>Function Wish List</h2>
+              <button type="button" class="ft-collapse" id="btn-wish-toggle"
+                      aria-expanded="true" aria-controls="os-wish" title="收合願望清單">
+                <span aria-hidden="true">‹</span>
+              </button>
+            </div>
+            <div id="os-wish" class="os-wish" hidden></div>
+
             <div class="wb-head">
               <h2>Changes</h2>
               <span class="mono" id="osw-change-count">—</span>
@@ -204,15 +215,6 @@
               <div id="os-files"></div>
               <div id="osw-other-groups" class="osw-groups"></div>
             </div>
-
-            <div class="wb-head wb-head--sub">
-              <h2>Function Wish List</h2>
-              <button type="button" class="ft-collapse" id="btn-wish-toggle"
-                      aria-expanded="true" aria-controls="os-wish" title="收合願望清單">
-                <span aria-hidden="true">‹</span>
-              </button>
-            </div>
-            <div id="os-wish" class="os-wish" hidden></div>
           </div>
 
           <!-- 中欄：原始檔案檢視／編輯 -->
