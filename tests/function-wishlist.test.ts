@@ -17,6 +17,7 @@ import {
   titleFromWishes,
   updateWish,
   wishNumberOf,
+  wishOptionLabel,
   wishlistPath,
   WISH_ARCHIVED_STATUS,
 } from "../src/lib/function-wishlist";
@@ -217,6 +218,16 @@ describe("handoff", () => {
 
   test("brief 把勾到的願望編成給模型的清單", () => {
     expect(briefFromWishes([{ text: "A" }, { text: "B" }])).toBe("1. A\n\n2. B");
+  });
+
+  test("帶入下拉的選項文字：id · 類型 · 正文第一行", () => {
+    expect(wishOptionLabel({ id: "AL-001", text: "側欄搜尋\n細節", kind: "feature" })).toBe(
+      "AL-001 · 新功能 · 側欄搜尋",
+    );
+    expect(wishOptionLabel({ id: "SNOTE-002", text: "匯出筆記" , kind: "bug" })).toBe(
+      "SNOTE-002 · Bug 修復 · 匯出筆記",
+    );
+    expect(wishOptionLabel({ id: "X-003", text: "清死碼" })).toBe("X-003 · 未分類 · 清死碼");
   });
 
   test("壞掉的 handoff JSON 是沒有，不是丟錯", () => {

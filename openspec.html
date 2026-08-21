@@ -62,23 +62,6 @@
         </div>
       </header>
       <div class="content os-content">
-        <!--
-          順序是這一頁的主要設計決定：**還沒收完的坑，排在開新坑之前。**
-          這頁的功能就是開新的 change，而預設動線若是「進來 → 開一個新的」，
-          介面等於在替「開很多坑收不完」加速。所以進行中的 change 置頂，
-          沒有進行中的才輪到下面的建立流程當主角。
-        -->
-        <section class="os-open" id="os-open" aria-labelledby="os-open-title" hidden>
-          <div class="os-open-head">
-            <h2 id="os-open-title">還沒收完的 change</h2>
-            <div class="os-open-meta">
-              <span id="os-scanned" class="os-scanned">—</span>
-              <button type="button" class="btn btn-sm btn-ghost" id="os-refresh">重新掃描</button>
-            </div>
-          </div>
-          <div id="os-open-body" aria-live="polite"></div>
-        </section>
-
         <aside class="os-wish-banner" id="os-wish-banner" hidden>
           <div class="os-wish-banner-head">
             <strong>來自 Function wish list</strong>
@@ -112,6 +95,11 @@
                 <span class="os-init-warn" id="os-init-warn"></span>
                 <button type="button" class="btn btn-sm" id="os-init-run">一鍵 openspec init</button>
               </div>
+              <!-- 選了專案且它有未封存的願望才出現；選一條 = 帶入類型／標題／願望正文 -->
+              <label class="os-scope-field os-wish-pick" id="os-wish-pick-wrap" hidden>
+                <span>帶入願望</span>
+                <select id="os-wish-pick" aria-label="帶入 Function wish list 的願望"></select>
+              </label>
             </div>
             <div class="os-kinds" id="os-kinds" role="radiogroup" aria-label="變更類型">
               <button type="button" class="os-kind" data-kind="feature" role="radio" aria-checked="false">

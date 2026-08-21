@@ -55,6 +55,14 @@ import {
 } from "../lib/prd-versions";
 import { canResolveComment, migrateComments, projectOfComment } from "../lib/comment-scope";
 import { canEditContent } from "../lib/permissions";
+import {
+  appendInto,
+  findOrphans,
+  visibleValues,
+  withoutField,
+  type OrphanEntry,
+  type OrphanRef,
+} from "../lib/orphan-content";
 import { applyMeta, metaFromSections, orphanSectionIds, pickDomain } from "../lib/section-meta";
 import { DEFAULT_DOMAIN, domainPacks, reloadUserPacks } from "./domains";
 import { autoRescanUserDomains } from "../lib/user-domains";
@@ -1654,6 +1662,125 @@ export const store = {
   /** 目前專案有正文、但不屬於目前領域的章節 id（UI 用來提示孤兒內容） */
   orphanSectionIds(): string[] {
     return orphanSectionIds(state.sections, state.sectionValues);
+  },
+
+  /**
+   * 這個專案的孤兒正文，逐段列出。
+   *
+   * 用 `sectionsFor(pid)` 與 `projectSectionValues[pid]` —— **不能用 active
+   * 的 `sections` / `sectionValues`**。不同專案的骨架不一樣，拿 active 那份
+   * 去算別的專案，會把人家好端端的內容判成孤兒，或反過來把真的孤兒漏掉。
+   * 正上方的 `orphanSectionIds()` 就是 active-only 的那一版，不要照抄。
+   */
+  orphansOf(projectId: string): OrphanEntry[] {
+    return findOrphans(
+      this.sectionsFor(projectId),
+      visibleValues(state.projectSectionValues[projectId] ?? {}, state.prdDrafts[projectId] ?? {}),
+    );
+  },
+
+  /**
+   * 所有已知領域包攤平後的章節池，只給孤兒面板查「原本叫什麼名字」用——
+   * 跟 `sectionsFor()` 不同，這份不代表任何專案現在的骨架，純粹是一本
+   * 「這個 id 曾經在哪個領域包裡叫什麼」的字典。id 撞名時後面覆蓋前面，
+   * 查標題不要求唯一。查不到（多半是 `applyFullTemplate()` 套的一次性範本，
+   * 不屬於任何領域包）就是真的查不到，`labelForOrphan` 會照實回退成原始 id。
+   */
+  orphanLabelPool(): Section[] {
+    const byId = new Map<string, Section>();
+    for (const name of Object.keys(domainPacks())) {
+      for (const s of domainSections(name)) byId.set(s.id, s);
+    }
+    return [...byId.values()];
+  },
+
+  /**
+   * 這段孤兒是不是真的孤兒——`sectionId`／`fieldKey` 是否都不在目前骨架裡。
+   * `moveOrphan`／`dropOrphan` 呼叫前都要過這關，理由見那兩支的註解。
+   */
+  isOrphanRef(projectId: string, ref: OrphanRef): boolean {
+    const target = this.sectionsFor(projectId).find((s) => s.id === ref.sectionId);
+    return !target?.fields.some((f) => f.key === ref.fieldKey);
+  },
+
+  /**
+   * 把一段孤兒搬進現有章節的某個欄位。
+   *
+   * 落點寫進**草稿**而不是正文：跟 AI 產出、跟套範本的示範內容同一條規則——
+   * 使用者要看過、按過存檔，才算他認可的字。來源則直接從已儲存正文移除，
+   * 因為孤兒沒有「草稿／已儲存」的分別，它只活在正文袋裡。
+   *
+   * 來源的草稿也要一起清掉。留著的話 `saveSections()` 會照草稿自己的
+   * sectionId 寫回正文 —— 孤兒在存檔那一刻復活，而且不會有任何訊息。
+   */
+  moveOrphan(projectId: string, from: OrphanRef, to: OrphanRef): { ok: boolean; reason?: string } {
+    if (!canEditContent(state.currentUser)) return { ok: false, reason: "目前身分無法編輯內文" };
+    const docs = state.projectSectionValues[projectId] ?? {};
+    const drafts = state.prdDrafts[projectId] ?? {};
+    // 孤兒可能只活在草稿裡（換骨架前打了字但還沒存）——只看已存的會找不到，
+    // 明明有字卻回「找不到」是騙使用者
+    const text = drafts[from.sectionId]?.[from.fieldKey] ?? docs[from.sectionId]?.[from.fieldKey];
+    if (typeof text !== "string" || !text.trim()) return { ok: false, reason: "找不到這一段孤兒內容" };
+    // 來源必須真的是孤兒——否則呼叫端傳一個還在骨架裡的章節，這支會把正常
+    // 內容當孤兒搬走，使用者毫無防備地永久失去一段還在用的正文
+    if (!this.isOrphanRef(projectId, from)) {
+      return { ok: false, reason: "來源不是孤兒內容，不能用這個動作搬移" };
+    }
+
+    // 落點必須在骨架裡，否則搬完只是換一個位置繼續當孤兒
+    const target = this.sectionsFor(projectId).find((s) => s.id === to.sectionId);
+    if (!target?.fields.some((f) => f.key === to.fieldKey)) {
+      return { ok: false, reason: "落點章節或欄位不在目前結構裡" };
+    }
+
+    // 疊在「現在看得到的值」上：有草稿接草稿，沒有才接已儲存的。
+    // 一律用已儲存的當底，會把使用者還沒存的那段字吃掉。
+    const base = drafts[to.sectionId]?.[to.fieldKey] ?? docs[to.sectionId]?.[to.fieldKey] ?? "";
+
+    const nextDrafts = withoutField(
+      { ...drafts, [to.sectionId]: { ...(drafts[to.sectionId] ?? {}), [to.fieldKey]: appendInto(base, text) } },
+      from,
+    );
+
+    state = {
+      ...state,
+      projectSectionValues: { ...state.projectSectionValues, [projectId]: withoutField(docs, from) },
+      prdDrafts: { ...state.prdDrafts, [projectId]: nextDrafts },
+      ...(projectId === state.activeProjectId ? { sectionValues: withoutField(docs, from) } : {}),
+    };
+    touchProjectMeta(projectId);
+    emit();
+    return { ok: true };
+  },
+
+  /**
+   * 永久刪掉一段孤兒。沒有垃圾桶、沒有 undo —— 擋在前面的是 UI 的確認對話框。
+   * 來源的草稿一併清掉，理由同 `moveOrphan`：留著會在存檔時復活。
+   */
+  dropOrphan(projectId: string, from: OrphanRef): { ok: boolean; reason?: string } {
+    if (!canEditContent(state.currentUser)) return { ok: false, reason: "目前身分無法編輯內文" };
+    const docs = state.projectSectionValues[projectId] ?? {};
+    // 理由同 moveOrphan：孤兒可能只活在草稿裡，只看已存的會誤判成「找不到」
+    const text = state.prdDrafts[projectId]?.[from.sectionId]?.[from.fieldKey] ?? docs[from.sectionId]?.[from.fieldKey];
+    if (typeof text !== "string" || !text.trim()) return { ok: false, reason: "找不到這一段孤兒內容" };
+    // 理由同 moveOrphan：擋住呼叫端拿還在骨架裡的章節來當孤兒永久刪除
+    if (!this.isOrphanRef(projectId, from)) {
+      return { ok: false, reason: "來源不是孤兒內容，不能用這個動作刪除" };
+    }
+
+    const nextDocs = withoutField(docs, from);
+    state = {
+      ...state,
+      projectSectionValues: { ...state.projectSectionValues, [projectId]: nextDocs },
+      prdDrafts: {
+        ...state.prdDrafts,
+        [projectId]: withoutField(state.prdDrafts[projectId] ?? {}, from),
+      },
+      ...(projectId === state.activeProjectId ? { sectionValues: nextDocs } : {}),
+    };
+    touchProjectMeta(projectId);
+    emit();
+    return { ok: true };
   },
 
   /* ─── 專案自己的章節結構 ─── */
