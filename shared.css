@@ -11993,6 +11993,136 @@ p.gd-warn {
   border-radius: 0 4px 4px 0;
 }
 
+/* ── 孤兒正文：章節清單下方的可展開面板 ──────────────────────────
+   跟上面 .domain-orphans 同一套語彙（中性色、左側細槓、--surface 底），
+   差別在這一塊是能動手的：它多了展開頭、逐段內容與兩個動作。
+   顏色一律走 token，三個主題各自的 [data-theme] 區塊已經定義了這裡用到的
+   每一個 —— 寫死任何一個色值都會讓 terminal 或 github 其中一邊變成孤島。 */
+.orphan-box {
+  margin: 4px 12px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+/* 展開頭：整條可點。用 warn 而不是 danger —— 內容沒有掉，紅色會讓人以為出事了 */
+.orphan-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--fg);
+  font-size: var(--fs-1);
+  line-height: 1.5;
+}
+.orphan-head:hover {
+  background: var(--inset);
+}
+.orphan-caret {
+  font-size: 9px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.orphan-head-t {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.orphan-body {
+  padding: 0 9px 9px;
+  border-top: 1px solid var(--border);
+}
+.orphan-note {
+  margin: 8px 0;
+  font-size: var(--fs-1);
+  line-height: 1.5;
+  color: var(--muted);
+}
+.orphan-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.orphan-item {
+  padding: 8px;
+  border-left: 2px solid var(--border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--inset);
+}
+.orphan-item-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: var(--fs-1);
+}
+/* 原始 sectionId，多半已經不在骨架裡。等寬是為了讓它看起來就是個內部代號 */
+.orphan-src {
+  color: var(--fg);
+}
+.orphan-fld {
+  color: var(--muted);
+}
+/* 全文不截斷 —— 使用者要判斷「這段還要不要」，看不到全部就沒得判斷。
+   長內容給捲軸而不是省略號：省略號會逼他先搬回去才能讀完再決定 */
+.orphan-text {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-1);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.orphan-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.orphan-acts .orphan-to {
+  flex: 1 1 100%;
+  min-width: 0;
+  min-height: var(--ctl-h-md);
+  padding: 0 30px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: var(--fs-1);
+}
+.orphan-acts .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.orphan-del {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.orphan-del:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.orphan-readonly {
+  margin: 0;
+  font-size: var(--fs-1);
+  color: var(--muted);
+}
+
 /* 領域包清單（偏好設定） */
 .domain-pack-list {
   margin-top: 10px;

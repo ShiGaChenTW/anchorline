@@ -29,6 +29,7 @@ import { fieldNo, numberedFieldLabel } from "../lib/field-number";
 import { bindMdField, mdFieldHtml, setAllMdModes, type MdPaneMode } from "../lib/markamd";
 import { renderMarkdown } from "../lib/markamd/markdown";
 import { canEditContent } from "../lib/permissions";
+import { labelForOrphan, type OrphanRef } from "../lib/orphan-content";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
 import {
   buildFileTree,
@@ -1062,7 +1063,155 @@ function renderOutline() {
   const pct = document.getElementById("outline-pct");
   if (pct) pct.textContent = `${avg}%`;
 
+  renderOrphans();
   renderOpenSpec();
+}
+
+/**
+ * 孤兒面板的展開狀態。
+ *
+ * 預設收起：這是「有東西掉在結構外面」的提示，不是主線工作區，預設攤開會
+ * 把章節清單推到摺線下。狀態放模組層而不是掛在節點上 —— 每次 render() 都
+ * 重建 innerHTML，記在 DOM 上的展開狀態會在下一次重繪時無聲消失。
+ */
+let orphanOpen = false;
+
+/**
+ * 章節列表下方的孤兒正文面板。
+ *
+ * 這是 `applyFullTemplate()` / `setProjectDomain()` 換掉骨架之後，那些「有字
+ * 但沒有畫面」的內容唯一的出口。上方 `#domain-orphans` 那則提示只說得出
+ * 「有 N 節不屬於目前領域」，說完就沒有下文；這裡才是能動手的地方。
+ *
+ * **不做自動配對。** 下拉沒有預選值，落點一律由使用者指。猜「三行摘要」該
+ * 進「問題」猜錯的代價，是他得先把我們搬錯的東西搬回去 —— 比不猜還貴。
+ */
+function renderOrphans() {
+  const host = document.getElementById("orphan-panel");
+  if (!host) return;
+
+  const pid = store.get().activeProjectId;
+  // 用 orphansOf(pid) 而不是 orphanSectionIds()：後者是 active-only 且以「節」
+  // 為單位，這裡要的是逐「欄位」的可處理清單
+  const list = pid ? store.orphansOf(pid) : [];
+
+  // 沒有孤兒就整塊不存在。常駐一個「0 段」的欄位是純噪音，而且會讓使用者
+  // 以為這個專案有需要處理的東西
+  if (!pid || !list.length) {
+    host.hidden = true;
+    host.innerHTML = "";
+    return;
+  }
+  host.hidden = false;
+
+  const known = sections();
+  const canEdit = editable();
+  // 查標題用更大的池子：orphan 的定義就是「不在 known 裡」，用 known 去查
+  // 自己一定查不到，只會永遠退回原始 id。orphanLabelPool() 是攤平所有已知
+  // 領域包的字典，換領域包造成的孤兒才有機會查到原本的章節編號與標題；
+  // 套一次性範本（applyFullTemplate）造成的孤兒本來就不屬於任何領域包，
+  // 查不到是誠實的結果，不是 bug。
+  const labelPool = store.orphanLabelPool();
+
+  // 落點池 = 目前骨架的所有「章節 × 欄位」。候選只能從這裡來 —— 搬到不在
+  // 骨架裡的地方，只是換一個位置繼續當孤兒
+  const targets: { ref: OrphanRef; label: string }[] = [];
+  for (const s of known) {
+    for (const f of s.fields) {
+      targets.push({
+        ref: { sectionId: s.id, fieldKey: f.key },
+        label: `${s.n} ${s.title} · ${f.label}`,
+      });
+    }
+  }
+
+  const itemsHtml = list
+    .map((e, i) => {
+      // 用 labelPool（所有領域包攤平），不是 known（目前骨架）——orphan 的
+      // 定義就是不在 known 裡，用 known 查一定落空，永遠只看得到原始 id
+      const lb = labelForOrphan(e, labelPool);
+      const acts = canEdit
+        ? `<div class="orphan-acts">
+             <select class="orphan-to" data-i="${i}" aria-label="把這一段搬到哪一節">
+               <option value="" selected>搬到…（選章節與欄位）</option>
+               ${targets.map((t, ti) => `<option value="${ti}">${escapeHtml(t.label)}</option>`).join("")}
+             </select>
+             <button type="button" class="btn btn-sm" data-orphan-move="${i}" disabled>搬移</button>
+             <button type="button" class="btn btn-sm orphan-del" data-orphan-del="${i}">刪除</button>
+           </div>`
+        : `<p class="orphan-readonly">目前身分無法編輯內文，只能檢視。</p>`;
+      return `<li class="orphan-item">
+        <div class="orphan-item-head">
+          <span class="orphan-src mono">${escapeHtml(lb.section)}</span>
+          <span class="orphan-fld">${escapeHtml(lb.field)}</span>
+        </div>
+        <pre class="orphan-text">${escapeHtml(e.text)}</pre>
+        ${acts}
+      </li>`;
+    })
+    .join("");
+
+  host.innerHTML = `<button type="button" class="orphan-head" id="orphan-toggle"
+          aria-expanded="${orphanOpen}" aria-controls="orphan-body">
+      <span class="orphan-caret" aria-hidden="true">${orphanOpen ? "▾" : "▸"}</span>
+      <span class="orphan-head-t">有 ${list.length} 段內容不屬於目前結構</span>
+    </button>
+    ${
+      orphanOpen
+        ? `<div class="orphan-body" id="orphan-body">
+             <p class="orphan-note">換過章節骨架留下的。內容沒有掉，只是目前的結構裡沒有它的位置。</p>
+             <ul class="orphan-list">${itemsHtml}</ul>
+           </div>`
+        : ""
+    }`;
+
+  const toggle = host.querySelector<HTMLButtonElement>("#orphan-toggle");
+  // 只重畫這一塊：展開收合不改任何內容，走 render() 會順手把游標從
+  // 使用者正在打字的 textarea 上踢掉
+  if (toggle) toggle.onclick = () => { orphanOpen = !orphanOpen; renderOrphans(); };
+
+  // 「搬移」在選到落點之前一律停用。沒有預選值代表預設狀態就是「還沒選」，
+  // 按鈕必須跟著那個狀態走，否則按下去只會得到一句「落點不在結構裡」
+  host.querySelectorAll<HTMLSelectElement>(".orphan-to").forEach((sel) => {
+    sel.onchange = () => {
+      const btn = host.querySelector<HTMLButtonElement>(`[data-orphan-move="${sel.dataset.i}"]`);
+      if (btn) btn.disabled = sel.value === "";
+    };
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-orphan-move]").forEach((btn) => {
+    btn.onclick = () => {
+      const i = Number(btn.dataset.orphanMove);
+      const entry = list[i];
+      const sel = host.querySelector<HTMLSelectElement>(`.orphan-to[data-i="${i}"]`);
+      const t = sel && sel.value !== "" ? targets[Number(sel.value)] : undefined;
+      if (!entry || !t) return;
+      const r = store.moveOrphan(pid, { sectionId: entry.sectionId, fieldKey: entry.fieldKey }, t.ref);
+      // 落點寫進草稿不是正文 —— 訊息要說出「還沒存」，否則使用者會以為搬完就定案了
+      toast(r.ok ? `已搬到「${t.label}」—— 尚未儲存` : (r.reason ?? "搬不動"));
+      if (r.ok) render();
+    };
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-orphan-del]").forEach((btn) => {
+    btn.onclick = async () => {
+      const entry = list[Number(btn.dataset.orphanDel)];
+      if (!entry) return;
+      const lb = labelForOrphan(entry, labelPool);
+      // 沒有垃圾桶、沒有 undo，擋在前面的只有這一句話，所以它必須把話講死
+      if (
+        !(await askConfirm({
+          title: `永久刪除「${lb.section} · ${lb.field}」這一段內容？刪掉就沒有了 —— 沒有垃圾桶，也無法復原。`,
+          danger: true,
+        }))
+      ) {
+        return;
+      }
+      const r = store.dropOrphan(pid, { sectionId: entry.sectionId, fieldKey: entry.fieldKey });
+      toast(r.ok ? "已永久刪除" : (r.reason ?? "刪不掉"));
+      if (r.ok) render();
+    };
+  });
 }
 
 /**
