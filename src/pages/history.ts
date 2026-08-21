@@ -9,6 +9,7 @@ import { projectDisplayName, type Project } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { parsePorcelain } from "../lib/commit-message";
 import { initHelpOverlay } from "../lib/help-overlay";
+import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import { renderMarkdown } from "../lib/markamd/markdown";
 import { isUnavailable, native } from "../lib/native";
 import {
@@ -39,14 +40,19 @@ type LoadedCommit = {
   truncated: boolean;
 };
 
+// 第一行：攔截要先裝好才擋得住後面任何一行的 throw（見 loading-overlay.ts）
+beginBootOverlay({ autoHideAfter: 8000 });
+
 if (!requireAuth()) {
-  /* redirected */
+  /* redirected —— 刻意不收遮罩，收了只會讓使用者看到一頁馬上要離開的空殼 */
 } else {
   initTheme();
   initMobileNav("history");
   bindLogout();
   initHelpOverlay();
-  void boot();
+  boot()
+    .catch((err) => failBootOverlay(err))
+    .finally(() => endBootOverlay());
 }
 
 async function boot(): Promise<void> {

@@ -30,10 +30,14 @@ const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 const BOOT_PAGES = [
   "dashboard",
   "editor",
+  "history",
   "openspec-workspace",
   "overview",
+  "projects",
+  "releases",
   "review",
   "signoff",
+  "tracking",
   "write",
 ] as const;
 
@@ -157,7 +161,14 @@ describe("每一頁都要收掉自己的遮罩", () => {
    * 收掉那一步一定要在 `finally`（或等價的無條件路徑）。放在 try 尾巴
    * 的話，第一次 render 一 throw 就再也不會執行到。
    */
-  test.each(BOOT_PAGES.filter((p) => p !== "overview"))("%s.ts 的收掉走 finally", (page) => {
+  // overview 用自己的 showLoading/hideLoading；tracking／history 的第一次
+  // render 卡在一個 async boot 函式的 await 之後，收掉走的是那個 promise 的
+  // `.finally()`，不是字面上的 `finally { }` 區塊 —— 三者都不符合這條正規
+  // 表示式，刻意排除。
+  const SYNC_FINALLY_PAGES = BOOT_PAGES.filter(
+    (p) => p !== "overview" && p !== "tracking" && p !== "history",
+  );
+  test.each(SYNC_FINALLY_PAGES)("%s.ts 的收掉走 finally", (page) => {
     expect(read(`src/pages/${page}.ts`)).toMatch(/finally\s*\{[^}]*endBootOverlay\(\)/);
   });
 });
@@ -174,5 +185,34 @@ describe("刻意不轉的地方", () => {
     const html = read("settings.html");
     expect(html).toContain('id="uf-state"');
     expect(html).not.toContain('id="app-loading-overlay"');
+  });
+});
+
+describe("不叫 <page>.ts 的頁面", () => {
+  /**
+   * `index.html` 載入的是 `hub.ts`（不是 `index.ts`），所以進不了
+   * 依檔名配對的 BOOT_PAGES 迴圈，另外單獨守。
+   */
+  test("index.html 有靜態遮罩，hub.ts 有接管與收掉", () => {
+    const html = read("index.html");
+    expect(html).toContain('id="app-loading-overlay"');
+    expect(html).toContain('class="load-stall"');
+    const src = read("src/pages/hub.ts");
+    expect(src).toContain("beginBootOverlay(");
+    expect(src).toContain("failBootOverlay(");
+    expect(src).toMatch(/finally\s*\{[^}]*endBootOverlay\(\)/);
+  });
+
+  /**
+   * `uat.html` 載入的是 `uat.ts`，但那個檔案只有 `import "./tracking"` ——
+   * 遮罩的接管／收掉邏輯全部借 tracking.ts 的（同一個模組、同一份頂層程式碼、
+   * 同一個 `#app-loading-overlay` id，跑在哪個頁面都認得出來）。這裡守的是
+   * 「借用關係還在」，不是重複守 tracking.ts 自己的邏輯。
+   */
+  test("uat.html 有靜態遮罩，uat.ts 借 tracking.ts 的接管邏輯", () => {
+    const html = read("uat.html");
+    expect(html).toContain('id="app-loading-overlay"');
+    const src = read("src/pages/uat.ts");
+    expect(src).toContain('import "./tracking"');
   });
 });

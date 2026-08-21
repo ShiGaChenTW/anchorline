@@ -6,6 +6,7 @@ import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import {
   setBeginnerMode,
 } from "../lib/beginner-flow";
+import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import {
   exportHtmlFile,
   exportJsonFile,
@@ -56,8 +57,11 @@ import {
   type ProjectSortState,
 } from "../lib/project-list";
 
+// 第一行：攔截要先裝好才擋得住後面任何一行的 throw（見 loading-overlay.ts）
+beginBootOverlay({ autoHideAfter: 8000 });
+
 if (!requireAuth()) {
-  /* redirected */
+  /* redirected —— 刻意不收遮罩，收了只會讓使用者看到一頁馬上要離開的空殼 */
 } else {
   initTheme();
   initMobileNav("projects");
@@ -1512,6 +1516,12 @@ if (!requireAuth()) {
 
   // TUI 快捷由 initRailNav 統一綁定
 
-  render();
-  store.subscribe(render);
+  try {
+    render();
+    store.subscribe(render);
+  } catch (err) {
+    failBootOverlay(err);
+  } finally {
+    endBootOverlay();
+  }
 }

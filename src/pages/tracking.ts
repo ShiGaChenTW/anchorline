@@ -1,6 +1,7 @@
 import { store } from "../data/store";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { deriveFlowLayers } from "../lib/flow-layers";
+import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import {
@@ -71,6 +72,9 @@ import { canonUatPath } from "../lib/uat-pending";
 import { reconcileNoteDraft, setNoteDraft } from "../lib/uat-note-draft";
 import { isUatPage, UAT_HANDOFF_EVENT, UAT_QUERY_KEY } from "../lib/uat-handoff";
 import { renderMarkdown } from "../lib/markamd";
+
+// 第一行：攔截要先裝好才擋得住後面任何一行的 throw（見 loading-overlay.ts）
+beginBootOverlay({ autoHideAfter: 8000 });
 
 /** 壞行由 parseLog 跳過，不會毀掉整份。 */
 let auditEvents: LogEvent[] = [];
@@ -2176,6 +2180,10 @@ if (__authed) {
     }
   }
 
-  void refresh(true);
+  // 第一次 render 在 refresh() 的 await 之後才發生（掃描要問 Rust 端），
+  // 遮罩收掉的時機跟著它 —— 不是同步的 finally，是這個 promise 落地時。
+  refresh(true)
+    .catch((err) => failBootOverlay(err))
+    .finally(() => endBootOverlay());
   store.subscribe(() => render(true));
 }

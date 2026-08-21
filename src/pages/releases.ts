@@ -23,6 +23,7 @@ import {
   type ReleaseItem,
 } from "../lib/release";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
+import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 import {
@@ -39,6 +40,9 @@ import { isDesktop, requestProjectStats, type ProjectStats } from "../lib/projec
 import { requestOpenspecStatus } from "../lib/status-bridge";
 import type { OpenspecChange } from "../lib/openspec-status";
 import { attachDiffSummary } from "../lib/diff-summary";
+
+// 第一行：攔截要先裝好才擋得住後面任何一行的 throw（見 loading-overlay.ts）
+beginBootOverlay({ autoHideAfter: 8000 });
 
 if (requireAuth()) {
   initTheme();
@@ -739,7 +743,13 @@ async function loadOpenspecChanges(): Promise<void> {
   render();
 }
 
-render();
+try {
+  render();
+} catch (err) {
+  failBootOverlay(err);
+} finally {
+  endBootOverlay();
+}
 
 // 交辦的 Agent 跑完時狀態列要自己翻頁，不能等使用者重新整理。
 // **只在工作單狀態變了才重畫**：這一頁沒有全域 subscribe 是刻意的 ——
