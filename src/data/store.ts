@@ -21,6 +21,7 @@ import { draftRelease, validateVersion, type Release, type ReleaseItem, type Rel
 import { normalizeShortCode } from "../lib/function-wishlist";
 import { canAddItem } from "../lib/release-track";
 import { logEvent } from "../lib/event-writer";
+import { isNative, native } from "../lib/native";
 import type {
   AgentFamily,
   AgentJob,
@@ -41,7 +42,7 @@ import type {
   Template,
   WorkflowStageDef,
 } from "./types";
-import { emptySectionValues } from "../lib/export";
+import { buildProjectProfile, emptySectionValues } from "../lib/export";
 import {
   allStagesSettled,
   canCommit,
@@ -690,6 +691,26 @@ function audit(
   }
 }
 
+/**
+ * `project.json` 自動同步——名稱／簡寫／版號政策／描述／標籤／資料夾綁定
+ * 這些欄位一變就順手重寫一次，不必使用者記得手動按「匯出 Profile」。
+ *
+ * 只在桌面殼裡動作：瀏覽器版沒有真正的資料夾可以寫，`native.writeExport`
+ * 在那裡會退成瀏覽器下載——自動觸發的下載對使用者是意外，不是幫忙。
+ * 沒有 rootPath 一樣跳過，理由與 `audit()` 相同。
+ */
+function syncProfile(state: AppState, projectId: string): void {
+  if (!isNative()) return;
+  try {
+    const p = state.projects.find((x) => x.id === projectId);
+    const root = p?.importSummary?.rootPath;
+    if (!p || !root) return;
+    void native.writeExport(root, "project.json", JSON.stringify(buildProjectProfile(p), null, 2));
+  } catch {
+    /* 同步失敗不影響業務動作 */
+  }
+}
+
 export const store = {
   get(): AppState {
     return state;
@@ -900,6 +921,7 @@ export const store = {
       ),
     };
     emit();
+    syncProfile(state, projectId);
   },
 
   setProjects(projects: Project[]) {
@@ -1030,6 +1052,7 @@ export const store = {
     };
     syncApprovalsFromActiveCase();
     emit();
+    for (const id of ids) syncProfile(state, id);
     return { ok: true, projectIds: ids };
   },
 
@@ -1422,6 +1445,7 @@ export const store = {
       ),
     };
     emit();
+    syncProfile(state, id);
   },
 
   /**
@@ -1460,6 +1484,7 @@ export const store = {
       ),
     };
     emit();
+    syncProfile(state, id);
   },
 
   /** 目前所有專案用過的標籤，依使用次數多到少 —— 給輸入建議與篩選列用 */
@@ -1499,6 +1524,7 @@ export const store = {
       ),
     };
     emit();
+    syncProfile(state, id);
     return { ok: true };
   },
 
@@ -1535,6 +1561,7 @@ export const store = {
       ),
     };
     emit();
+    syncProfile(state, id);
     return { ok: true };
   },
 
@@ -2770,6 +2797,7 @@ export const store = {
       ),
     };
     emit();
+    syncProfile(state, projectId);
     return { ok: true };
   },
 
