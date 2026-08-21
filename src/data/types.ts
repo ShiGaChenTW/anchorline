@@ -578,6 +578,16 @@ export type AppState = {
   locked: boolean;
   pendingInsert: string | null;
   activeSectionId: string;
+  /**
+   * OpenSpec 工作區上次開的 change（`openspec/changes/<id>` 的目錄名）。
+   *
+   * 跟 `activeSectionId` 同一種東西：「上次停在哪」。空字串代表沒有記憶，
+   * 頁面會自己退回第一個未封存的 change —— 記的那個可能已經被封存或改名，
+   * 所以消費端一律要對現有清單驗過再用，不能直接信任。
+   */
+  activeOpenSpecChange: string;
+  /** 同上，記的是上次開的檔案絕對路徑。檔可能已經不在，讀失敗就清掉。 */
+  activeOpenSpecFile: string;
   settings: AISettings;
   /** 是否展示種子範例專案與範例內文 */
   showSamples: boolean;

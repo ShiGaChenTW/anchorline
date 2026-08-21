@@ -1165,6 +1165,17 @@ if (__authed) {
     const pct = prog.pct;
 
     if (sum) {
+      // OpenSpec 的 tasks.md 有一個這一頁給不了的下一步：看 proposal／design、
+      // 改 spec 本文。帶著 change 與檔案路徑跳過去，落點就是同一份檔 ——
+      // 不帶參數的話對面只會開「上次那個」，等於要人自己再找一次。
+      const toWorkspace =
+        p.meta.dialect === "openspec" && p.meta.change
+          ? `<p class="tk-prog-m">
+              <a class="btn btn-sm btn-ghost"
+                 href="openspec-workspace.html?change=${encodeURIComponent(p.meta.change)}&file=${encodeURIComponent(p.path)}"
+                 title="在 OpenSpec 工作區開啟這個 change">在 OpenSpec 工作區開啟</a>
+            </p>`
+          : "";
       sum.innerHTML = `
         <h2 class="tk-title">${escapeHtml(p.meta.title)}</h2>
         <div class="tk-do">
@@ -1178,6 +1189,7 @@ if (__authed) {
             ${p.meta.skipped_steps ? ` · 其中跳過 ${p.meta.skipped_steps}` : ""}
             · 更新 ${escapeHtml(p.meta.updated)}
           </p>
+          ${toWorkspace}
         </div>
       `;
     }

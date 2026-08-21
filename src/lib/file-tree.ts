@@ -188,7 +188,10 @@ function renderNode(node: TreeNode, depth: number, activeSectionId: string): str
     ? ` type="button" data-ft-section="${escapeHtml(node.sectionId)}"`
     : "";
 
-  return `<${tag} class="ft-row ft-file ft-role-${node.role}${active ? " is-active" : ""}"${attrs} style="${pad}" title="${escapeHtml(node.path)}">
+  // `data-ft-path` 帶原始相對路徑，讓「在中欄開這個檔」這種消費端不必去讀
+  // `title`（那是給滑鼠的，不是 API）。編輯台只綁 `data-ft-section`，多這個
+  // 屬性對它沒有影響；OpenSpec 工作區綁的是這一個。
+  return `<${tag} class="ft-row ft-file ft-role-${node.role}${active ? " is-active" : ""}"${attrs} data-ft-path="${escapeHtml(node.path)}" style="${pad}" title="${escapeHtml(node.path)}">
     <span class="ft-name">${escapeHtml(node.name)}</span>${badge}
   </${tag}>`;
 }

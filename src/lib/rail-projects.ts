@@ -280,6 +280,9 @@ function projActionsHtml(): string {
     { href: "write.html", label: "PRD 審閱監控", icon: IC.write },
     { href: "signoff.html", label: "簽核管理", icon: IC.signoff },
     { href: "editor.html", label: "編輯工作台", icon: IC.editor },
+    // OpenSpec 從編輯台拆出來之後自己一頁。排在編輯台後面 —— PRD 先於 spec
+    // 是這條流程本來的順序。
+    { href: "openspec-workspace.html", label: "OpenSpec 工作區", icon: IC.templates },
     // 計數 = 未測完的實測報告。由 rail-nav 的 refreshNavCounts 填值（0 不顯示），
     // 走的是「審閱佇列／範本」早就在用的 data-nav-count 機制，不另做一套。
     { href: "tracking.html", label: "Task Tracking", icon: IC.tracking },

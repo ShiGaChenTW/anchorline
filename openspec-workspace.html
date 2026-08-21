@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpenSpec 工作區 · Anchorline</title>
+<link rel="stylesheet" href="shared.css" />
+<style>
+  /* 這一頁的專屬樣式。三欄骨架直接沿用 shared.css 的 .wb / .wb-col ——
+     跟編輯工作台同一套，換頁時欄寬與邊框不會跳。
+     檔案列（.os-row）、願望清單（.os-wish-*）、原始檔檢視（.fv-*）、
+     檔案樹（.ft-*）也全部沿用既有 class，不另做一套外觀。 */
+
+  /* 左欄要塞四塊（change 選單／檔案／願望／檔案樹），整欄自己捲 */
+  .osw-left { overflow: auto; }
+
+  /* ── change 選單 ── */
+  .osw-changes { padding: 6px; display: flex; flex-direction: column; gap: 1px; }
+  .osw-change {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 9px;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 160ms ease;
+  }
+  .osw-change:hover { background: var(--inset); }
+  .osw-change:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .osw-change.on { background: color-mix(in oklab, var(--accent) 15%, transparent); }
+  .osw-change-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--fs-3);
+    color: var(--fg-2);
+  }
+  .osw-change.on .osw-change-name { color: var(--fg); font-weight: 600; }
+  .osw-change-n {
+    flex: 0 0 auto;
+    font-family: var(--mono);
+    font-size: var(--fs-1);
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+
+  /* ── 右欄：進度 / 健康狀態 ── */
+  .osw-side-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px 12px; }
+  .osw-card {
+    margin: 0 0 12px;
+    padding: 10px 11px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+  }
+  .osw-card > h3 {
+    margin: 0 0 8px;
+    font-size: var(--fs-1);
+    font-family: var(--font-body);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .osw-bar {
+    height: 5px;
+    border-radius: 99px;
+    background: var(--inset);
+    overflow: hidden;
+    margin: 6px 0;
+  }
+  .osw-bar > i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+  .osw-num {
+    font-family: var(--mono);
+    font-size: var(--fs-2);
+    font-variant-numeric: tabular-nums;
+    color: var(--fg-2);
+  }
+  .osw-note { margin: 6px 0 0; font-size: var(--fs-2); color: var(--muted); line-height: 1.5; }
+  .osw-art { display: flex; align-items: center; gap: 7px; padding: 4px 0; font-size: var(--fs-2); }
+  .osw-art-name { flex: 1 1 auto; min-width: 0; color: var(--fg-2); }
+  .osw-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .osw-dot.done { background: #3fb950; }
+  .osw-dot.ready { background: var(--accent); }
+  .osw-dot.blocked { background: #f85149; }
+  .osw-dot.skipped { background: var(--border); }
+  .osw-tag {
+    flex: 0 0 auto;
+    font-family: var(--mono);
+    font-size: var(--fs-1);
+    color: var(--muted);
+  }
+  .osw-groups { padding: 0 6px 10px; }
+</style>
+<script>(function(){try{var t=localStorage.getItem("anchorline:theme")||localStorage.getItem("specforge:theme");if(t==="warp")t="terminal";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"],terminal:["dark","#0d0b08"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
+</head>
+<body>
+<div class="app" data-od-id="app-openspec-workspace">
+  <div class="shell">
+    <aside class="rail" data-od-id="rail">
+      <div class="rail-brand">
+        <div class="rail-logo">AL</div>
+        <div class="rail-brand-text">
+          <strong>Anchorline</strong>
+          <span>anchorline.local</span>
+        </div>
+      </div>
+      <div class="rail-theme-row">
+        <div class="theme-switch rail-theme-switch" data-theme-switch data-od-id="theme-switch" role="group" aria-label="設計主題">
+          <button type="button" data-theme-value="kami" aria-pressed="false">LIGHT</button>
+          <button type="button" data-theme-value="github" aria-pressed="true">DARK</button>
+          <button type="button" data-theme-value="terminal" aria-pressed="false">TERMINAL</button>
+        </div>
+      </div>
+      <nav class="rail-nav">
+        <div class="nav-label">工作區</div>
+        <a class="nav-item" href="editor.html" data-od-id="nav-editor">編輯工作台</a>
+        <a class="nav-item active" href="openspec-workspace.html" data-od-id="nav-openspec-workspace">OpenSpec 工作區</a>
+        <a class="nav-item" href="tracking.html" data-od-id="nav-tracking">Task Tracking</a>
+        <a class="nav-item" href="settings.html" data-od-id="nav-settings">偏好設定</a>
+      </nav>
+      <div class="rail-foot rail-foot--user" aria-label="目前使用者">
+        <div class="rail-user">
+          <div class="avatar" data-user-avatar aria-hidden="true">S</div>
+          <div class="rail-user-body">
+            <div class="rail-user-top">
+              <div class="rail-foot-meta" data-user-meta>
+                <div class="rail-foot-name">—</div>
+                <div class="rail-foot-title">—</div>
+              </div>
+              <button type="button" class="btn btn-sm btn-ghost btn-logout" data-logout title="登出">登出</button>
+            </div>
+            <div class="rail-user-role-row">
+              <span class="role-badge role-tone-editor" data-user-role-badge>—</span>
+              <span class="rail-user-kind" data-user-kind>人員</span>
+            </div>
+            <div class="rail-user-perms" data-user-perms role="list" aria-label="權限摘要">
+              <span class="perm-chip" role="listitem">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main" data-od-id="main-openspec-workspace">
+      <div class="toolbar context-toolbar context-surface-toolbar" data-context="openspec-workspace" data-od-id="toolbar">
+        <div class="context-frame-top">
+          <span class="context-kicker">07 / OPENSPEC</span>
+          <span class="context-state">SPECIFYING</span>
+        </div>
+        <div class="context-title-block">
+          <h1 data-od-id="page-title">載入中…</h1>
+          <div class="sub" data-od-id="page-sub">選擇專案後開始</div>
+        </div>
+        <div class="context-frame-bottom">
+          <span class="context-path">project / openspec</span>
+          <div class="context-actions">
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-osw-refresh"
+                    title="重新掃描 openspec/ 與任務進度">重新整理</button>
+            <a class="btn btn-ghost btn-sm" href="openspec.html" id="btn-osw-new">開新 change</a>
+            <a class="btn btn-ghost" href="editor.html">回編輯工作台</a>
+          </div>
+        </div>
+      </div>
+      <p id="perm-banner" hidden class="sub" style="margin:0;padding:8px 16px;background:var(--warn-bg);color:var(--fg);border-bottom:1px solid var(--border);font-size: var(--fs-3)"></p>
+
+      <div class="content" style="overflow:hidden;display:flex;flex-direction:column">
+        <div class="wb" data-od-id="workbench">
+          <!-- 左欄：change 選單 → 這個 change 的檔案 → 願望清單 → 專案檔案樹 -->
+          <div class="wb-col osw-left" data-od-id="osw-left-col">
+            <div class="wb-head">
+              <h2>Changes</h2>
+              <span class="mono" id="osw-change-count">—</span>
+            </div>
+            <div class="osw-changes" id="osw-changes" role="listbox" aria-label="OpenSpec changes"></div>
+
+            <div class="wb-head wb-head--sub os-bar">
+              <h2>這個 Change 的檔案</h2>
+              <span class="mono" id="os-count">—</span>
+              <button type="button" class="ft-collapse" id="btn-openspec-toggle"
+                      aria-expanded="true" aria-controls="openspec-list" title="收合檔案清單">
+                <span aria-hidden="true">‹</span>
+              </button>
+            </div>
+            <div class="os-list" id="openspec-list" aria-label="OpenSpec 資料夾內容">
+              <div id="os-files"></div>
+              <div id="osw-other-groups" class="osw-groups"></div>
+            </div>
+
+            <div class="wb-head wb-head--sub">
+              <h2>Function Wish List</h2>
+              <button type="button" class="ft-collapse" id="btn-wish-toggle"
+                      aria-expanded="true" aria-controls="os-wish" title="收合願望清單">
+                <span aria-hidden="true">‹</span>
+              </button>
+            </div>
+            <div id="os-wish" class="os-wish" hidden></div>
+
+            <div class="ft-resize" id="file-tree-resize" role="separator" aria-orientation="horizontal"
+                 aria-label="調整專案檔案高度" title="上下拖曳調整高度"></div>
+            <div class="wb-head wb-head--sub ft-bar" id="file-tree-bar">
+              <h2>專案檔案</h2>
+              <button type="button" class="ft-collapse" id="btn-file-tree-toggle"
+                      aria-expanded="true" aria-controls="file-tree" title="收合專案檔案">
+                <span aria-hidden="true">‹</span>
+              </button>
+            </div>
+            <div class="file-tree-host" id="file-tree" aria-label="專案資料夾結構"></div>
+          </div>
+
+          <!-- 中欄：原始檔案檢視／編輯 -->
+          <div class="wb-col editor-pane" data-od-id="osw-file-col">
+            <div class="wb-head">
+              <h2 id="sec-label">選一個檔案</h2>
+            </div>
+            <div class="editor-body" id="editor-body" data-od-id="osw-file-body"></div>
+          </div>
+
+          <!-- 右欄：任務進度 / openspec status / change 健康狀態。
+               class 與 data-od-id 沿用 coach —— `resize-panels.ts` 的
+               `initWorkbenchResize()` 靠 `.coach` / `coach-col` 認出「右邊那一欄」，
+               認不出來時它只會寫三軌的 grid-template-columns，第四個 grid item
+               （也就是這一欄）會被擠到第二列。不報錯，只是版面塌掉。 -->
+          <div class="wb-col coach" data-od-id="coach-col">
+            <div class="wb-head">
+              <h2>這個 Change</h2>
+              <span class="pill pill-review" id="osw-health-pill">—</span>
+            </div>
+            <div class="coach-body osw-side-body" id="osw-side-body"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module" src="/src/pages/openspec-workspace.ts"></script>
+</body>
+</html>

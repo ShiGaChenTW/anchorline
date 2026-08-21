@@ -14,6 +14,7 @@ export type RailPage =
   | "overview"
   | "templates"
   | "openspec"
+  | "openspec-workspace"
   | "review"
   | "tracking"
   | "history"
@@ -89,6 +90,19 @@ export const RAIL_ITEMS: RailItem[] = [
   // 它跟總覽／清單／審閱佇列一樣是跨專案的東西
   { page: "templates", href: "templates.html", label: "PRD 範本", odId: "nav-templates", icon: IC.templates, count: true, hidden: true },
   { page: "openspec", href: "openspec.html", label: "OpenSpec 入口", odId: "nav-openspec", icon: IC.tracking, hidden: true },
+  // OpenSpec 工作區跟 editor／tracking 同一類（對「某一個專案」做的事），
+  // 不是跟 templates／openspec 同一類（跨專案）—— 所以入口掛在選中的專案
+  // 卡片底下（rail-projects.ts 的 projActionsHtml），這裡只是登記它存在。
+  //
+  // ⚠️ 漏了這一筆的症狀跟 releases 那次一模一樣：`detectRailPage()` 回 null，
+  // `auth.ts` 的 `if (page && …) initRailNav(page)` 整段跳過，側欄不重建，
+  // 頁面停在 HTML 裡那份靜態導覽 —— 而且不報錯。
+  //
+  // 比對順序也要成立：`detectRailPage()` 依 href 長度由長到短掃，
+  // `openspec-workspace.html`（23 字）排在 `openspec.html`（13 字）前面，
+  // 所以工作區不會被入口頁攔截。反向不成立（`openspec.html` 不是
+  // `openspec-workspace.html` 的子字串），兩邊都不會誤判。
+  { page: "openspec-workspace", href: "openspec-workspace.html", label: "OpenSpec 工作區", odId: "nav-openspec-workspace", icon: IC.templates, hidden: true },
   // 審閱佇列改掛在「工作區」區塊標題右側（rail-projects.ts）
   { page: "review", href: "review.html", label: "審閱佇列", odId: "nav-review", icon: IC.review, count: true, hidden: true },
   // 管理中心與 Agent 管理是系統設定，不是日常導覽 —— 入口改在設定彈窗的

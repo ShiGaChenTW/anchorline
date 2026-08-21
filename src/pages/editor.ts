@@ -27,7 +27,6 @@ import {
 import { exportMarkdownFile } from "../lib/export";
 import { fieldNo, numberedFieldLabel } from "../lib/field-number";
 import { bindMdField, mdFieldHtml, setAllMdModes, type MdPaneMode } from "../lib/markamd";
-import { renderMarkdown } from "../lib/markamd/markdown";
 import { canEditContent } from "../lib/permissions";
 import { labelForOrphan, type OrphanRef } from "../lib/orphan-content";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
@@ -37,38 +36,9 @@ import {
   SECTION_TO_OPENSPEC,
   sourceFileForSection,
 } from "../lib/file-tree";
-import { absolutePathFor, groupOpenspecFiles, openspecFiles } from "../lib/openspec-tree";
-import { canEditFiles, readFile, shortPath, writeFile } from "../lib/file-editor";
-import {
-  addWish,
-  emptyWishlist,
-  parseWishKind,
-  parseWishlist,
-  removeWish,
-  serializeWishlist,
-  takeWishId,
-  updateWish,
-  writeWishHandoff,
-  wishlistLsKey,
-  wishlistPath,
-  WISH_KIND_LABEL,
-  WISH_KINDS,
-  type WishKind,
-  type WishlistDoc,
-  type WishlistItem,
-} from "../lib/function-wishlist";
-import { isNative, isUnavailable, native } from "../lib/native";
-import {
-  changedLineCount,
-  type LineMark,
-  inlineDiff,
-  loadSnapshots,
-  markChangedLines,
-  pushSnapshot,
-  relativeTime,
-  visibleSegs,
-  type Seg,
-} from "../lib/file-history";
+// OpenSpec 檔案清單、Function wish list、原始檔案檢視／編輯（含 diff 背板與
+// 版本快照）已整批搬到 `openspec-workspace.ts`。這一頁只剩 PRD：
+// 章節表單、教練、gate、送審。
 import { initHelpOverlay } from "../lib/help-overlay";
 import { askForProjectFolder } from "../lib/project-folder";
 import { initFocusMode, renderProgress } from "../lib/focus-mode";
@@ -227,41 +197,6 @@ function savedValuesFor(s: Section): Record<string, string> {
  */
 let lastTreeSig = "__init__";
 
-/**
- * 大綱欄的可收合區塊。三塊共用一支：OpenSpec 章節、Task List、專案檔案。
- * 收合狀態各自記在 localStorage —— 每次開編輯台都要重收一次是懲罰。
- */
-function initCollapsible(btnId: string, bodyId: string, storageKey: string, label: string) {
-  const btn = document.getElementById(btnId) as HTMLButtonElement | null;
-  const body = document.getElementById(bodyId) as HTMLElement | null;
-  if (!btn || !body) return;
-
-  const apply = (collapsed: boolean) => {
-    body.hidden = collapsed;
-    btn.classList.toggle("is-collapsed", collapsed);
-    btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    btn.title = `${collapsed ? "展開" : "收合"} ${label}`;
-  };
-
-  let collapsed = false;
-  try {
-    collapsed = localStorage.getItem(storageKey) === "1";
-  } catch {
-    /* private mode */
-  }
-  apply(collapsed);
-
-  btn.addEventListener("click", () => {
-    collapsed = !collapsed;
-    apply(collapsed);
-    try {
-      localStorage.setItem(storageKey, collapsed ? "1" : "0");
-    } catch {
-      /* private mode */
-    }
-  });
-}
-
 const FT_COLLAPSE_KEY = "anchorline:file-tree-collapsed";
 
 const FT_HEIGHT_KEY = "anchorline:file-tree-height";
@@ -371,11 +306,11 @@ function renderFileTree() {
   host.innerHTML = renderFileTreeHtml(tree, activeId);
 
   host.querySelectorAll<HTMLButtonElement>("[data-ft-section]").forEach((btn) => {
-    btn.onclick = async () => {
+    btn.onclick = () => {
       const sid = btn.dataset.ftSection!;
       const i = sections().findIndex((s) => s.id === sid);
       if (i < 0) return;
-      if (!(await goToSection(sid))) return;
+      store.setActiveSection(sid);
       idx = i;
       render();
     };
@@ -394,465 +329,6 @@ function renderFileTree() {
       btn.parentElement?.classList.toggle("is-collapsed", open);
     };
   });
-}
-
-/**
- * OpenSpec：偵測專案資料夾底下有沒有 `openspec/`，有就列出裡面的檔案。
- *
- * 分群與排序的邏輯在 `lib/openspec-tree.ts`（純函式、有測試）——
- * 這裡只負責畫出來與接點擊。
- *
- * App 只存掃到的路徑不存內文，所以這一塊回答的是「有沒有、有哪些」，
- * 不是內容。點檔名交給系統預設應用程式開。
- */
-function renderOpenSpec() {
-  const el = document.getElementById("os-files") ?? document.getElementById("openspec-list");
-  if (!el) return;
-  const p = activeProject();
-  const root = p?.importSummary?.rootPath ?? "";
-  const all = p?.importSummary?.allPaths ?? [];
-  const files = openspecFiles(all);
-
-  const countEl = document.getElementById("os-count");
-  if (countEl) countEl.textContent = files.length ? `${files.length} 檔` : "無";
-
-  if (!p) {
-    el.innerHTML = `<p class="os-empty">還沒有選擇專案。</p>`;
-  } else if (!all.length) {
-    el.innerHTML = `<p class="os-empty">這份 PRD 還沒有對應的資料夾，掃不到 <code>openspec/</code>。</p>`;
-  } else if (!files.length) {
-    el.innerHTML = `<p class="os-empty">專案目錄底下沒有 <code>openspec/</code> 資料夾。匯出 OpenSpec 後會出現在這裡。</p>`;
-  } else {
-    el.innerHTML = groupOpenspecFiles(files)
-      .map((g) => {
-        const rows = g.rows
-          .map(
-            (r) => `<button type="button" class="os-row os-file-row"
-                data-os-path="${escapeHtml(absolutePathFor(root, r.rel))}"
-                title="開啟 ${escapeHtml(r.rel)}">
-              <span class="os-dot done"></span>
-              <span class="os-body">
-                <span class="os-head">${escapeHtml(r.name)}</span>
-                <span class="os-file">${escapeHtml(r.sub || g.label)}</span>
-              </span>
-            </button>`,
-          )
-          .join("");
-        return `<p class="os-group os-group--${g.kind}">${escapeHtml(g.label)}<span>${g.rows.length}</span></p>${rows}`;
-      })
-      .join("");
-
-    el.querySelectorAll<HTMLButtonElement>("[data-os-path]").forEach((btn) => {
-      btn.onclick = () => {
-        void openFileInEditor(btn.dataset.osPath ?? "");
-      };
-    });
-  }
-
-  const pid = p?.id ?? "";
-  if (!wishBooted || pid !== lastWishProjectId) {
-    wishBooted = true;
-    lastWishProjectId = pid;
-    void loadAndRenderWishlist();
-  }
-}
-
-/**
- * Function wish list。I/O 在這裡，判定在 `function-wishlist.ts`。
- *
- * 不跟檔案列表共用 innerHTML：`render()` 會重畫 OpenSpec 檔案，
- * 願望的輸入框若被一起清掉，打到一半的字就沒了。
- */
-let wishDoc: WishlistDoc = emptyWishlist();
-let wishChecked = new Set<string>();
-let wishComposing = false;
-/** 點新增時取到的號。取消或存檔後退還／入檔。 */
-let wishDraftId: string | null = null;
-let wishSettingCode = false;
-let wishEditingId: string | null = null;
-let lastWishProjectId = "";
-let wishBooted = false;
-let wishBusy = false;
-
-async function loadAndRenderWishlist() {
-  wishDoc = await loadWishlist();
-  wishChecked = new Set();
-  wishComposing = false;
-  wishDraftId = null;
-  wishSettingCode = false;
-  wishEditingId = null;
-  renderWishlist();
-}
-
-async function loadWishlist(): Promise<WishlistDoc> {
-  const p = activeProject();
-  if (!p) return emptyWishlist();
-  const root = p.importSummary?.rootPath;
-  if (root && canEditFiles()) {
-    try {
-      return parseWishlist(await readFile(wishlistPath(root)));
-    } catch {
-      /* 檔還不存在是常態，不是錯誤 */
-    }
-  }
-  try {
-    const raw = localStorage.getItem(wishlistLsKey(p.id));
-    return raw ? parseWishlist(raw) : emptyWishlist();
-  } catch {
-    return emptyWishlist();
-  }
-}
-
-async function persistWishlist(doc: WishlistDoc): Promise<void> {
-  const p = activeProject();
-  if (!p) throw new Error("還沒有選擇專案");
-  const text = serializeWishlist(doc);
-  const root = p.importSummary?.rootPath;
-  if (root && isNative()) {
-    const r = await native.writeWishlist(root, text);
-    if (isUnavailable(r)) throw new Error(r.message);
-  }
-  try {
-    localStorage.setItem(wishlistLsKey(p.id), text);
-  } catch {
-    /* quota —— 桌面版已經寫進檔了，瀏覽器版就只好說失敗 */
-    if (!isNative()) throw new Error("瀏覽器存檔失敗（空間可能滿了）");
-  }
-}
-
-function renderWishlist() {
-  const host = document.getElementById("os-wish");
-  if (!host) return;
-  const p = activeProject();
-  host.hidden = false;
-
-  const active = wishDoc.active;
-  const archived = wishDoc.archive;
-  const count = active.length + archived.length;
-
-  const compose = wishComposing && wishDraftId
-    ? `<div class="os-wish-compose">
-        <p class="os-wish-taken">編號 <span class="os-wish-id">${escapeHtml(wishDraftId)}</span>（取消則退號）</p>
-        ${wishKindSelectHtml("os-wish-kind", undefined, true)}
-        <textarea id="os-wish-text" rows="4" placeholder="期望的功能說明。寫完按存檔。"></textarea>
-        <div class="os-wish-compose-actions">
-          <button type="button" class="btn btn-sm btn-primary" id="os-wish-save">存檔</button>
-          <button type="button" class="btn btn-sm btn-ghost" id="os-wish-cancel">取消</button>
-        </div>
-      </div>`
-    : "";
-
-  const codeForm = wishSettingCode
-    ? `<div class="os-wish-compose">
-        <p class="os-wish-taken">這個專案還沒有簡寫。設 1–5 個英文字母後才取號。</p>
-        <input id="os-wish-code" type="text" maxlength="5" spellcheck="false" autocapitalize="characters"
-               placeholder="例如 AL" aria-label="專案簡寫" />
-        <div class="os-wish-compose-actions">
-          <button type="button" class="btn btn-sm btn-primary" id="os-wish-code-save">設定並新增</button>
-          <button type="button" class="btn btn-sm btn-ghost" id="os-wish-cancel">取消</button>
-        </div>
-      </div>`
-    : "";
-
-  const activeRows = !p
-    ? `<p class="os-empty">先選一個專案，願望會跟著專案走。</p>`
-    : active.length
-      ? active.map((it) => wishRowHtml(it, false)).join("")
-      : `<p class="os-empty">還沒有願望。按新增，寫一段期望的功能說明。</p>`;
-
-  const archiveBlock = archived.length
-    ? `<p class="os-wish-group">封存<span>${archived.length}</span></p>
-       ${archived.map((it) => wishRowHtml(it, true)).join("")}`
-    : "";
-
-  const codeLabel = p?.shortCode ? `<span class="os-wish-code" title="專案簡寫">${escapeHtml(p.shortCode)}</span>` : "";
-  host.innerHTML = `
-    <div class="os-wish-head">
-      <h3 id="os-wish-title">Function wish list</h3>
-      ${codeLabel}
-      <span class="os-wish-count">${count || "—"}</span>
-    </div>
-    <p class="os-wish-lead">點新增取號並選類型。下拉選「撰寫 Spec」會帶進 OpenSpec 入口。</p>
-    ${codeForm}
-    ${compose}
-    <div class="os-wish-toolbar">
-      <button type="button" class="btn btn-sm" id="os-wish-add"${p && !wishComposing && !wishSettingCode ? "" : " disabled"}>新增</button>
-      <button type="button" class="btn btn-sm btn-primary" id="os-wish-send"${active.some((it) => wishChecked.has(it.id)) ? "" : " disabled"}>送出</button>
-    </div>
-    <p class="os-wish-group">Active<span>${active.length}</span></p>
-    <div id="os-wish-active">${activeRows}</div>
-    <div id="os-wish-archive">${archiveBlock}</div>
-  `;
-
-  bindWishlist();
-  const ta = document.getElementById("os-wish-text") as HTMLTextAreaElement | null;
-  const code = document.getElementById("os-wish-code") as HTMLInputElement | null;
-  (ta ?? code)?.focus();
-}
-
-function wishKindSelectHtml(id: string, selected: WishKind | undefined, required: boolean): string {
-  const opts = WISH_KINDS.map(
-    (k) =>
-      `<option value="${k}"${selected === k ? " selected" : ""}>${escapeHtml(WISH_KIND_LABEL[k])}</option>`,
-  ).join("");
-  return `<label class="os-wish-kind-field">類型
-    <select id="${escapeHtml(id)}" ${required ? "required" : ""} aria-label="變更類型">
-      <option value="">請選擇</option>
-      ${opts}
-    </select>
-  </label>`;
-}
-
-function wishRowHtml(it: WishlistItem, archived: boolean): string {
-  if (wishEditingId === it.id) {
-    return `<div class="os-wish-item is-editing" data-wish-id="${escapeHtml(it.id)}">
-      <p class="os-wish-taken">編號 <span class="os-wish-id">${escapeHtml(it.id)}</span></p>
-      ${wishKindSelectHtml("os-wish-edit-kind", it.kind, true)}
-      <textarea data-wish-edit-text rows="3">${escapeHtml(it.text)}</textarea>
-      <div class="os-wish-compose-actions">
-        <button type="button" class="btn btn-sm btn-primary" data-wish-save-edit>儲存</button>
-        <button type="button" class="btn btn-sm btn-ghost" data-wish-cancel-edit>取消</button>
-      </div>
-    </div>`;
-  }
-  const check = archived
-    ? ""
-    : `<input type="checkbox" data-wish-check="${escapeHtml(it.id)}"${wishChecked.has(it.id) ? " checked" : ""} aria-label="選取 ${escapeHtml(it.id)}" />`;
-  const badge = archived ? `<span class="os-wish-badge">${escapeHtml(it.status ?? "已寫 spec")}</span>` : "";
-  const kindChip = it.kind
-    ? `<span class="os-wish-kind-chip">${escapeHtml(WISH_KIND_LABEL[it.kind])}</span>`
-    : "";
-  const writeOpt = archived ? "" : `<option value="write-spec">撰寫 Spec</option>`;
-  return `<div class="os-wish-item" data-wish-id="${escapeHtml(it.id)}">
-    ${check}
-    <div class="os-wish-item-body">
-      <span class="os-wish-id">${escapeHtml(it.id)}</span>
-      ${kindChip}
-      <span class="os-wish-item-text">${escapeHtml(it.text)}</span>
-      ${badge}
-    </div>
-    <div class="os-wish-item-actions">
-      <select class="os-wish-menu" data-wish-menu="${escapeHtml(it.id)}" aria-label="${escapeHtml(it.id)} 的動作">
-        <option value="" selected>動作</option>
-        <option value="edit">編輯</option>
-        ${writeOpt}
-        <option value="remove">移除</option>
-      </select>
-    </div>
-  </div>`;
-}
-
-function bindWishlist() {
-  const host = document.getElementById("os-wish");
-  if (!host) return;
-
-  host.querySelector<HTMLButtonElement>("#os-wish-add")?.addEventListener("click", () => {
-    beginNewWish();
-  });
-  host.querySelector<HTMLButtonElement>("#os-wish-code-save")?.addEventListener("click", () => {
-    const input = host.querySelector<HTMLInputElement>("#os-wish-code");
-    void saveShortCodeAndAdd(input?.value ?? "");
-  });
-  host.querySelector<HTMLInputElement>("#os-wish-code")?.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter") {
-      ev.preventDefault();
-      void saveShortCodeAndAdd((ev.target as HTMLInputElement).value);
-    }
-  });
-  host.querySelector<HTMLButtonElement>("#os-wish-cancel")?.addEventListener("click", () => {
-    wishComposing = false;
-    wishDraftId = null;
-    wishSettingCode = false;
-    renderWishlist();
-  });
-  host.querySelector<HTMLButtonElement>("#os-wish-save")?.addEventListener("click", () => {
-    const ta = host.querySelector<HTMLTextAreaElement>("#os-wish-text");
-    const kindEl = host.querySelector<HTMLSelectElement>("#os-wish-kind");
-    void commitNewWish(ta?.value ?? "", parseWishKind(kindEl?.value ?? ""));
-  });
-  host.querySelector<HTMLButtonElement>("#os-wish-send")?.addEventListener("click", () => {
-    void sendWishes();
-  });
-
-  host.querySelectorAll<HTMLInputElement>("[data-wish-check]").forEach((c) => {
-    c.addEventListener("change", () => {
-      const id = c.dataset.wishCheck ?? "";
-      if (c.checked) wishChecked.add(id);
-      else wishChecked.delete(id);
-      const send = host.querySelector<HTMLButtonElement>("#os-wish-send");
-      if (send) send.disabled = wishChecked.size === 0;
-    });
-  });
-  host.querySelectorAll<HTMLButtonElement>("[data-wish-cancel-edit]").forEach((b) => {
-    b.addEventListener("click", () => {
-      wishEditingId = null;
-      renderWishlist();
-    });
-  });
-  host.querySelectorAll<HTMLButtonElement>("[data-wish-save-edit]").forEach((b) => {
-    b.addEventListener("click", () => {
-      const wrap = b.closest("[data-wish-id]");
-      const id = wrap instanceof HTMLElement ? wrap.dataset.wishId ?? "" : "";
-      const ta = wrap?.querySelector("textarea");
-      const kindEl = wrap?.querySelector<HTMLSelectElement>("#os-wish-edit-kind");
-      void commitEditWish(id, ta?.value ?? "", parseWishKind(kindEl?.value ?? ""));
-    });
-  });
-  host.querySelectorAll<HTMLSelectElement>("[data-wish-menu]").forEach((sel) => {
-    sel.addEventListener("change", () => {
-      const id = sel.dataset.wishMenu ?? "";
-      const act = sel.value;
-      sel.value = "";
-      if (act === "edit") {
-        wishEditingId = id;
-        wishComposing = false;
-        renderWishlist();
-      } else if (act === "write-spec") {
-        void sendWishes([id]);
-      } else if (act === "remove") {
-        void commitRemoveWish(id);
-      }
-    });
-  });
-}
-
-function beginNewWish() {
-  const p = activeProject();
-  if (!p) {
-    toast("先選一個專案");
-    return;
-  }
-  wishEditingId = null;
-  if (!p.shortCode) {
-    wishSettingCode = true;
-    wishComposing = false;
-    wishDraftId = null;
-    renderWishlist();
-    document.getElementById("os-wish-code")?.focus();
-    return;
-  }
-  const id = takeWishId(wishDoc, p.shortCode, wishDraftId ? [wishDraftId] : []);
-  if (!id) {
-    toast("簡寫不合法，請到側欄專案卡片改簡寫");
-    return;
-  }
-  wishDraftId = id;
-  wishComposing = true;
-  wishSettingCode = false;
-  renderWishlist();
-}
-
-async function saveShortCodeAndAdd(raw: string) {
-  const p = activeProject();
-  if (!p) return;
-  const r = store.setProjectShortCode(p.id, raw);
-  if (!r.ok) {
-    toast(r.reason ?? "簡寫不合法");
-    return;
-  }
-  wishSettingCode = false;
-  beginNewWish();
-}
-
-async function withWishLock(fn: () => Promise<void>) {
-  if (wishBusy) return;
-  wishBusy = true;
-  try {
-    await fn();
-  } finally {
-    wishBusy = false;
-  }
-}
-
-async function commitNewWish(text: string, kind: WishKind | null) {
-  await withWishLock(async () => {
-    const id = wishDraftId;
-    if (!id) {
-      toast("先按新增取號");
-      return;
-    }
-    if (!kind) {
-      toast("先選這則是新功能、Bug 修復還是維護／重構");
-      return;
-    }
-    const next = addWish(wishDoc, text, id, new Date(), kind);
-    if (!next) {
-      toast("先寫一段期望的功能說明");
-      return;
-    }
-    try {
-      await persistWishlist(next);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "存檔失敗");
-      return;
-    }
-    wishDoc = next;
-    wishComposing = false;
-    wishDraftId = null;
-    renderWishlist();
-    toast(`已存檔 ${id}`);
-  });
-}
-
-async function commitEditWish(id: string, text: string, kind: WishKind | null) {
-  await withWishLock(async () => {
-    if (!kind) {
-      toast("先選這則是新功能、Bug 修復還是維護／重構");
-      return;
-    }
-    const next = updateWish(wishDoc, id, text, kind);
-    if (!next) {
-      toast("編輯後不能是空的");
-      return;
-    }
-    try {
-      await persistWishlist(next);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "存檔失敗");
-      return;
-    }
-    wishDoc = next;
-    wishEditingId = null;
-    renderWishlist();
-    toast("已更新");
-  });
-}
-
-async function commitRemoveWish(id: string) {
-  if (!id) return;
-  if (!(await askConfirm({ title: `移除 ${id}？這個編號之後可以再取。`, danger: true }))) return;
-  await withWishLock(async () => {
-    const next = removeWish(wishDoc, id);
-    if (!next) return;
-    try {
-      await persistWishlist(next);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "移除失敗");
-      return;
-    }
-    wishDoc = next;
-    wishChecked.delete(id);
-    if (wishEditingId === id) wishEditingId = null;
-    renderWishlist();
-    toast(`已移除 ${id}，編號可再用`);
-  });
-}
-
-async function sendWishes(ids?: string[]) {
-  const p = activeProject();
-  const want = ids?.length ? new Set(ids) : wishChecked;
-  const picked = wishDoc.active.filter((it) => want.has(it.id));
-  if (!p || !picked.length) {
-    toast("先勾選要寫成 spec 的願望");
-    return;
-  }
-  const kind = picked[0]?.kind ?? "feature";
-  writeWishHandoff({
-    projectId: p.id,
-    kind,
-    items: picked.map((it) => ({ id: it.id, text: it.text, kind: it.kind })),
-  });
-  window.location.href = "openspec.html";
 }
 
 /**
@@ -970,10 +446,10 @@ function renderOutline() {
     .join("");
 
   el.querySelectorAll(".sec").forEach((btn) => {
-    (btn as HTMLButtonElement).onclick = async () => {
+    (btn as HTMLButtonElement).onclick = () => {
       const i = Number((btn as HTMLElement).dataset.i);
       const s = sections()[i];
-      if (s && !(await goToSection(s.id))) return;
+      if (s) store.setActiveSection(s.id);
       idx = i;
       render();
     };
@@ -1064,7 +540,6 @@ function renderOutline() {
   if (pct) pct.textContent = `${avg}%`;
 
   renderOrphans();
-  renderOpenSpec();
 }
 
 /**
@@ -1214,481 +689,6 @@ function renderOrphans() {
   });
 }
 
-/**
- * OpenSpec 檔案在編輯欄裡就地開啟。
- *
- * 為什麼不叫外部程式：點一個 proposal.md 是為了「看一眼順手改一句」，
- * 跳出去開別的編輯器等於離開現在的情境，回來還要重新找位置。
- *
- * 不自動存檔 —— 這是使用者專案裡的真實檔案，不是 App 自己的資料。
- * PRD 章節可以邊打邊存是因為那是 App 的東西，這裡不是。
- */
-let openFile: { path: string; original: string } | null = null;
-
-/**
- * 閱讀模式：把 Markdown 原始碼換成排版後的內容。
- *
- * 大部分時候點開 `proposal.md` 是為了**讀**，不是為了改一個字。等寬字 +
- * 滿版 `|---|---|` 表格 + 一堆反引號，讀起來要自己在腦裡跑一次 Markdown。
- *
- * 狀態放在模組層而不是每個檔各自記：換檔時模式要留著 —— 一路讀下來的人
- * 不該每點一個檔就被丟回原始碼。非 `.md` 的檔不給切（渲染出來會是一坨）。
- */
-let fileReadMode = false;
-
-function isMarkdownPath(path: string): boolean {
-  return /\.(md|markdown|mdx)$/i.test(path);
-}
-
-function fileIsDirty(): boolean {
-  if (!openFile) return false;
-  const ta = document.getElementById("fv-text") as HTMLTextAreaElement | null;
-  return Boolean(ta && ta.value !== openFile.original);
-}
-
-/** 有未存變更時攔一次。回 true 代表可以繼續。 */
-async function confirmLeaveFile(): Promise<boolean> {
-  if (!fileIsDirty()) return true;
-  return askConfirm({
-    title: `「${shortPath(openFile!.path)}」有還沒存的變更，要放棄嗎？`,
-    danger: true,
-  });
-}
-
-async function closeFileView(force = false) {
-  if (!force && !(await confirmLeaveFile())) return false;
-  openFile = null;
-  render();
-  return true;
-}
-
-/**
- * 切換 PRD 章節的唯一入口。
- *
- * `renderEditor()` 的第一行是 `if (renderFileView()) return;` —— 只要 `openFile`
- * 還在，章節內容就永遠畫不出來。而原本六個 `store.setActiveSection()` 呼叫點
- * 沒有任何一個會清掉它，所以「點過 OpenSpec 的檔案之後再點 PRD 章節，編輯區
- * 一片空白」。修在這裡而不是六個點各補一次：真正的事件是「換章節」，只有一個。
- *
- * 有未存變更時仍會攔一次 —— 換章節跟關檔一樣會讓編輯中的內容離開視野。
- */
-async function goToSection(id: string): Promise<boolean> {
-  if (openFile) {
-    if (!(await confirmLeaveFile())) return false;
-    // 直接清掉而不呼叫 closeFileView()：下面的 setActiveSection 會觸發 render，
-    // 不需要為了同一次操作畫兩遍。
-    openFile = null;
-  }
-  store.setActiveSection(id);
-  return true;
-}
-
-/**
- * 換章節但不攔截。⚠️ 無條件清掉 openFile，呼叫前要確定那是你要的。
- *
- * 唯一的呼叫點是模組層級的「插入待處理範本」那一段（render() 之後）。那裡是
- * 初始化時跑一次，`openFile` 必為 null（唯一的賦值點在 openFileInEditor，需要
- * 使用者先開檔），所以實務上它跟 goToSection() 等價、不會少問任何一次。
- *
- * 之所以不直接用 goToSection()：那會讓 async 傳染到模組層級的初始化路徑，
- * 為了一個永遠不會觸發的確認框付出全域代價。
- *
- * 但這個函式本身沒有守門 —— 對任何 openFile 可能非空的呼叫點，用 goToSection()。
- */
-function switchSectionForced(id: string) {
-  openFile = null;
-  store.setActiveSection(id);
-}
-
-async function openFileInEditor(path: string) {
-  if (!canEditFiles()) {
-    toast("在編輯欄開檔需要桌面版 App");
-    return;
-  }
-  if (!(await confirmLeaveFile())) return;
-  const label = document.getElementById("sec-label");
-  if (label) label.textContent = "讀取中…";
-  try {
-    const text = await readFile(path);
-    openFile = { path, original: text };
-    // 換檔要重建，不能被上面的「同一個檔就跳過」擋掉
-    document.getElementById("fv-text")?.remove();
-    render();
-    (document.getElementById("fv-text") as HTMLTextAreaElement | null)?.focus();
-  } catch (e) {
-    toast(e instanceof Error ? e.message : "讀取失敗");
-    render();
-  }
-}
-
-/**
- * 存檔前把改過的行標成橘色。
- *
- * textarea 沒辦法把部分文字上色，所以用「背板」：一個和 textarea 完全對齊、
- * 字體度量一致的 div 疊在底下畫色塊，textarea 自己的文字保持不透明蓋在上面。
- * 這是唯一不用換成 contenteditable（會壞掉 undo、輸入法、拼字）的做法。
- */
-function renderHighlightBackdrop() {
-  if (!openFile) return;
-  const ta = document.getElementById("fv-text") as HTMLTextAreaElement | null;
-  const back = document.getElementById("fv-backdrop");
-  if (!ta || !back) return;
-
-  const marks = markChangedLines(openFile.original, ta.value);
-  // 編輯層只認 added / modified —— removed 的內容不在 textarea 裡，
-  // 畫進來字數就會多於實際文字，游標位置跟畫面對不上。
-  const byIndex = new Map(
-    marks.filter((m) => m.kind !== "removed").map((m) => [m.index, m]),
-  );
-  const lines = ta.value.split("\n");
-
-  // 只畫 same + add：兩者串起來剛好等於 textarea 現在的文字，才不會錯位。
-  // 被刪掉的字不在 textarea 裡，硬畫進來游標位置就會跟畫面對不上 ——
-  // 所以刪除線那一份放在「顯示刪除」的唯讀檢視與滑過的浮層裡。
-  back.innerHTML = lines
-    .map((ln, i) => {
-      const m = byIndex.get(i);
-      if (!m) return `<span class="fv-line">${escapeHtml(ln) || "&nbsp;"}</span>`;
-      const segs =
-        m.kind === "modified" ? visibleSegs(inlineDiff(m.before ?? "", ln)) : [{ text: ln, kind: "add" as const }];
-      const inner =
-        segs.map((sg) => `<span class="fv-${sg.kind}">${escapeHtml(sg.text)}</span>`).join("") ||
-        "&nbsp;";
-      return `<span class="fv-line fv-changed" data-fv-line="${i}"
-        data-before="${escapeHtml(m.before ?? "")}"
-        data-kind="${m.kind}">${inner}</span>`;
-    })
-    .join("\n");
-  back.scrollTop = ta.scrollTop;
-  back.scrollLeft = ta.scrollLeft;
-
-  renderDiffPane();
-
-  // 內容變動的唯一漏斗（還原、還原快照、儲存都會走到這）。閱讀模式開著時
-  // 順手重畫排版 —— 不然按「還原」之後畫面上還是還原前的內容，而且沒有徵兆。
-  const readPane = document.getElementById("fv-read-pane");
-  if (readPane && !readPane.hidden) readPane.innerHTML = renderMarkdown(ta.value);
-
-  const state = document.getElementById("fv-state");
-  if (state) {
-    const n = marks.length;
-    state.textContent = n ? `${n} 行未儲存` : "已同步";
-    state.className = `fv-state${n ? " is-dirty" : ""}`;
-  }
-}
-
-/** 片段 → HTML。新增藍字、刪除紅字加刪除線。 */
-function segsHtml(segs: readonly Seg[]): string {
-  return segs
-    .map((sg) => `<span class="fv-${sg.kind}">${escapeHtml(sg.text)}</span>`)
-    .join("");
-}
-
-/**
- * 對比欄：完整的字級 diff，含被刪掉的字（紅字 + 刪除線）。
- *
- * 為什麼獨立一欄而不是畫在編輯層上：被刪掉的字**不在 textarea 裡**，
- * 畫進編輯層會讓畫面字數多於實際內容，游標位置就跟畫面對不上 ——
- * 你點某個位置，游標會跑到別的地方。所以編輯層只畫「沒動 + 新增」
- * （兩者串起來等於現在的文字），刪除的部分交給這一欄，兩邊捲動同步。
- *
- * 有改動時自動出現，沒改動時自動收起 —— 不必記得去按哪顆按鈕。
- */
-function renderDiffPane() {
-  if (!openFile) return;
-  const host = document.getElementById("fv-review");
-  const ta = document.getElementById("fv-text") as HTMLTextAreaElement | null;
-  const wrap = document.getElementById("fv-diff-wrap");
-  if (!host || !ta || !wrap) return;
-
-  const marks = markChangedLines(openFile.original, ta.value);
-  const hidden = wrap.dataset.forceHidden === "1";
-  // 對比欄是給編輯用的。閱讀模式下它會從排版內容底下冒出來一整片等寬字 ——
-  // 使用者剛按的是「不要看原始碼」。
-  const reading = document.getElementById("fv-read-pane")?.hidden === false;
-  wrap.hidden = hidden || reading || marks.length === 0;
-  if (wrap.hidden) return;
-
-  // removed 沒有對應的「改之後」行，用 index 當插入點掛在那一行之前。
-  // 同一個 index 可能有好幾行被刪，所以是陣列不是單一值。
-  const removedAt = new Map<number, string[]>();
-  const byIndex = new Map<number, LineMark>();
-  for (const m of marks) {
-    if (m.kind === "removed") {
-      const list = removedAt.get(m.index) ?? [];
-      list.push(m.before ?? "");
-      removedAt.set(m.index, list);
-    } else {
-      byIndex.set(m.index, m);
-    }
-  }
-  const lines = ta.value.split("\n");
-
-  const rowsHtml: string[] = [];
-  const pushRemoved = (at: number) => {
-    for (const gone of removedAt.get(at) ?? []) {
-      rowsHtml.push(
-        `<span class="fv-line fv-changed fv-line-removed"><span class="fv-del">${
-          escapeHtml(gone) || "&nbsp;"
-        }</span></span>`,
-      );
-    }
-  };
-
-  lines.forEach((ln, i) => {
-    pushRemoved(i);
-    const m = byIndex.get(i);
-    if (!m) {
-      rowsHtml.push(`<span class="fv-line">${escapeHtml(ln) || "&nbsp;"}</span>`);
-      return;
-    }
-    const inner =
-      m.kind === "modified"
-        ? segsHtml(inlineDiff(m.before ?? "", ln))
-        : `<span class="fv-add">${escapeHtml(ln) || "&nbsp;"}</span>`;
-    rowsHtml.push(`<span class="fv-line fv-changed">${inner || "&nbsp;"}</span>`);
-  });
-  // 刪在檔案最後面的那幾行，掛在尾端
-  pushRemoved(lines.length);
-
-  host.innerHTML = rowsHtml.join("\n");
-  host.scrollTop = ta.scrollTop;
-}
-
-/** 滑過改動的行 → 顯示改之前 / 改之後與修改人 */
-function bindChangeTooltip(host: HTMLElement) {
-  let tip: HTMLElement | null = null;
-  const hide = () => {
-    tip?.remove();
-    tip = null;
-  };
-  host.addEventListener("mouseover", (e) => {
-    const line = (e.target as HTMLElement).closest(".fv-changed") as HTMLElement | null;
-    if (!line) return;
-    hide();
-    const kind = line.dataset.kind === "added" ? "新增" : "取代";
-    const before = line.dataset.before ?? "";
-    tip = document.createElement("div");
-    tip.className = "fv-tip";
-    tip.innerHTML = `
-      <p class="fv-tip-head">${kind} · 尚未儲存</p>
-      ${
-        before
-          ? `<p class="fv-tip-row"><span class="fv-tip-tag old">對比</span><code>${segsHtml(
-              inlineDiff(before, line.textContent ?? ""),
-            )}</code></p>`
-          : `<p class="fv-tip-row"><span class="fv-tip-tag old">對比</span><em>（原本沒有這一行，整行都是新增）</em></p>`
-      }
-      <p class="fv-tip-who">${escapeHtml(store.get().currentUser?.name ?? "—")}</p>
-    `;
-    document.body.appendChild(tip);
-    const r = line.getBoundingClientRect();
-    tip.style.top = `${Math.round(r.bottom + 6)}px`;
-    tip.style.left = `${Math.round(Math.min(r.left, window.innerWidth - tip.offsetWidth - 12))}px`;
-  });
-  host.addEventListener("mouseout", (e) => {
-    if (!(e.target as HTMLElement).closest(".fv-changed")) return;
-    hide();
-  });
-  host.addEventListener("scroll", hide, true);
-
-  // 背板現在疊在 textarea 上面，改過的行會吃掉點擊。
-  // 點下去要能把游標放進那一行，不然橘色行等於變成不能編輯。
-  host.addEventListener("mousedown", (e) => {
-    const line = (e.target as HTMLElement).closest(".fv-changed") as HTMLElement | null;
-    if (!line) return;
-    e.preventDefault();
-    const ta = document.getElementById("fv-text") as HTMLTextAreaElement | null;
-    if (!ta) return;
-    const i = Number(line.dataset.fvLine ?? "0");
-    const lines = ta.value.split("\n");
-    const start = lines.slice(0, i).reduce((n, l) => n + l.length + 1, 0);
-    ta.focus();
-    ta.setSelectionRange(start + lines[i].length, start + lines[i].length);
-    hide();
-  });
-}
-
-function snapshotListHtml(path: string): string {
-  const snaps = loadSnapshots(path);
-  if (!snaps.length) {
-    return `<p class="fv-hist-empty">還沒有快照。每次儲存前會自動留一份存檔前的內容。</p>`;
-  }
-  return `<ul class="fv-hist-list">${snaps
-    .map(
-      (sn, i) => `<li class="fv-hist-item">
-        <div class="fv-hist-meta">
-          <strong>${escapeHtml(relativeTime(sn.at))}</strong>
-          <span>${escapeHtml(sn.author)} · 改了 ${sn.changed} 行</span>
-          <time>${escapeHtml(sn.at.slice(0, 16).replace("T", " "))}</time>
-        </div>
-        <button type="button" class="btn btn-sm" data-fv-restore="${i}">還原這一版</button>
-      </li>`,
-    )
-    .join("")}</ul>`;
-}
-
-function renderFileView(): boolean {
-  if (!openFile) return false;
-  const label = document.getElementById("sec-label");
-  if (label) label.textContent = shortPath(openFile.path);
-
-  const body = document.getElementById("editor-body");
-  if (!body) return true;
-
-  // 已經開著同一個檔就什麼都不做。
-  // render() 會被 store 的每一次 emit 觸發（自動存檔、追蹤刷新、側欄重繪…），
-  // 無條件重建 textarea 等於每次都把使用者正在打的字換回磁碟原文 ——
-  // 打一個字就消失，看起來就是「不能編輯」。
-  const existing = document.getElementById("fv-text") as HTMLTextAreaElement | null;
-  if (existing && existing.dataset.path === openFile.path) return true;
-
-  body.innerHTML = `
-    <div class="fv">
-      <div class="fv-bar">
-        <span class="fv-path mono" title="${escapeHtml(openFile.path)}">${escapeHtml(shortPath(openFile.path))}</span>
-        <span class="fv-state" id="fv-state"></span>
-        <button type="button" class="btn btn-sm" id="fv-read" aria-pressed="false"
-                ${isMarkdownPath(openFile.path) ? "" : "hidden"}>閱讀模式</button>
-        <button type="button" class="btn btn-sm" id="fv-hist">版本紀錄</button>
-        <button type="button" class="btn btn-sm" id="fv-revert">還原</button>
-        <button type="button" class="btn btn-sm btn-primary" id="fv-save">儲存</button>
-        <button type="button" class="btn btn-sm btn-ghost" id="fv-close">回章節</button>
-      </div>
-      <div class="fv-stack">
-        <div class="fv-backdrop" id="fv-backdrop" aria-hidden="true"></div>
-        <textarea id="fv-text" class="fv-text" spellcheck="false"
-                  data-path="${escapeHtml(openFile.path)}"
-                  aria-label="${escapeHtml(shortPath(openFile.path))}">${escapeHtml(openFile.original)}</textarea>
-      </div>
-      <div class="fv-read mdv-prose" id="fv-read-pane" hidden></div>
-      <div class="fv-diff-wrap" id="fv-diff-wrap" hidden>
-        <p class="fv-diff-head">
-          對比 · <span class="fv-add">新增</span> / <span class="fv-del">刪除</span>
-          <button type="button" class="btn btn-sm btn-ghost" id="fv-diff-hide">收起</button>
-        </p>
-        <div class="fv-review" id="fv-review" aria-label="含刪除內容的字級對比"></div>
-      </div>
-      <div class="fv-hist" id="fv-hist-panel" hidden></div>
-      <p class="fv-note" id="fv-note">改過但還沒存的行會標成橘色，滑過去看得到改前／改後與修改人。儲存前會自動留一份快照。</p>
-    </div>
-  `;
-
-  const ta = document.getElementById("fv-text") as HTMLTextAreaElement;
-  const backdrop = document.getElementById("fv-backdrop") as HTMLElement;
-  renderHighlightBackdrop();
-  bindChangeTooltip(backdrop);
-
-  ta.addEventListener("input", renderHighlightBackdrop);
-  // 背板要跟著捲，不然色塊會跟文字錯開
-  ta.addEventListener("scroll", () => {
-    backdrop.scrollTop = ta.scrollTop;
-    backdrop.scrollLeft = ta.scrollLeft;
-  });
-
-  const histPanel = document.getElementById("fv-hist-panel") as HTMLElement;
-  const refreshHist = () => {
-    histPanel.innerHTML = snapshotListHtml(openFile!.path);
-    histPanel.querySelectorAll<HTMLButtonElement>("[data-fv-restore]").forEach((b) => {
-      b.addEventListener("click", async () => {
-        const snaps = loadSnapshots(openFile!.path);
-        const sn = snaps[Number(b.dataset.fvRestore)];
-        if (!sn) return;
-        if (!(await askConfirm({ title: `要把編輯區還原成 ${relativeTime(sn.at)} 的內容嗎？（還原後仍需按儲存才會寫回磁碟）`, danger: true })))
-          return;
-        ta.value = sn.text;
-        renderHighlightBackdrop();
-        toast("已還原到編輯區 —— 確認後按儲存");
-      });
-    });
-  };
-
-  const save = async () => {
-    if (!openFile) return;
-    const changed = changedLineCount(openFile.original, ta.value);
-    if (!changed) {
-      toast("沒有變更");
-      return;
-    }
-    try {
-      // 先留存檔前的內容當快照，再寫入 —— 順序反了就沒有東西可以還原
-      pushSnapshot(openFile.path, {
-        at: new Date().toISOString(),
-        author: store.get().currentUser?.name ?? "—",
-        text: openFile.original,
-        changed,
-      });
-      await writeFile(openFile.path, ta.value);
-      openFile.original = ta.value;
-      renderHighlightBackdrop();
-      if (!histPanel.hidden) refreshHist();
-      toast(`已儲存 · 改了 ${changed} 行`);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "儲存失敗");
-    }
-  };
-
-  document.getElementById("fv-save")?.addEventListener("click", save);
-  document.getElementById("fv-revert")?.addEventListener("click", () => {
-    ta.value = openFile!.original;
-    renderHighlightBackdrop();
-  });
-  document.getElementById("fv-close")?.addEventListener("click", () => void closeFileView());
-  const diffWrap = document.getElementById("fv-diff-wrap") as HTMLElement;
-  const review = document.getElementById("fv-review") as HTMLElement;
-  document.getElementById("fv-diff-hide")?.addEventListener("click", () => {
-    diffWrap.dataset.forceHidden = "1";
-    diffWrap.hidden = true;
-  });
-  // 兩欄捲動同步，不然行對不上就失去對比的意義
-  ta.addEventListener("scroll", () => {
-    review.scrollTop = ta.scrollTop;
-  });
-
-  document.getElementById("fv-hist")?.addEventListener("click", () => {
-    histPanel.hidden = !histPanel.hidden;
-    if (!histPanel.hidden) refreshHist();
-  });
-
-  // ── 閱讀模式 ────────────────────────────────────────────────────
-  // 渲染的是 `ta.value` 而不是 `openFile.original`：還沒存的修改也要看得到，
-  // 否則「改完切過去確認排版」會拿到磁碟上的舊內容 —— 而且完全看不出來。
-  const stack = body.querySelector(".fv-stack") as HTMLElement;
-  const readPane = document.getElementById("fv-read-pane") as HTMLElement;
-  const readBtn = document.getElementById("fv-read") as HTMLButtonElement | null;
-  const note = document.getElementById("fv-note") as HTMLElement | null;
-  const applyReadMode = () => {
-    const on = fileReadMode && isMarkdownPath(openFile!.path);
-    stack.hidden = on;
-    readPane.hidden = !on;
-    if (on) readPane.innerHTML = renderMarkdown(ta.value);
-    if (readBtn) {
-      readBtn.textContent = on ? "原始碼" : "閱讀模式";
-      readBtn.setAttribute("aria-pressed", String(on));
-      readBtn.classList.toggle("btn-primary", on);
-    }
-    if (note) {
-      note.textContent = on
-        ? "閱讀模式顯示排版後的內容（含未儲存的修改）。要改字請切回原始碼。"
-        : "改過但還沒存的行會標成橘色，滑過去看得到改前／改後與修改人。儲存前會自動留一份快照。";
-    }
-    // 對比欄是給編輯看的；閱讀時收起來，切回去再由 renderDiffPane 決定要不要出現
-    if (on) diffWrap.hidden = true;
-    else renderHighlightBackdrop();
-  };
-  readBtn?.addEventListener("click", () => {
-    fileReadMode = !fileReadMode;
-    applyReadMode();
-  });
-  applyReadMode();
-  ta.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-      e.preventDefault();
-      void save();
-    }
-  });
-  return true;
-}
 
 /**
  * 儲存目前這一節的草稿。
@@ -1827,8 +827,14 @@ function syncEditorModeTabs(): void {
   applyEditorMode(currentEditorMode(), false);
 }
 
+/**
+ * 中欄只畫 PRD 章節表單。
+ *
+ * 以前這裡第一行是 `if (renderFileView()) return;` —— 中欄在「章節表單」與
+ * 「原始檔案內容」之間切換，由 `openFile` 是不是 null 決定。那條分支連同
+ * 整個檔案檢視已經搬到 `openspec-workspace.ts`，這裡不再有第二種狀態。
+ */
 function renderEditor() {
-  if (renderFileView()) return;
   const list = sections();
   const s = list[idx];
   if (!s) return;
@@ -2366,11 +1372,11 @@ function renderBeginnerCoach() {
   `;
 
   bar.querySelectorAll("[data-sec]").forEach((btn) => {
-    (btn as HTMLButtonElement).onclick = async () => {
+    (btn as HTMLButtonElement).onclick = () => {
       const id = (btn as HTMLElement).dataset.sec!;
       const i = sections().findIndex((s) => s.id === id);
       if (i >= 0) {
-        if (!(await goToSection(id))) return;
+        store.setActiveSection(id);
         idx = i;
         render();
       }
@@ -2428,14 +1434,14 @@ if (pending && editable()) {
     const next = cur ? `${cur}\n\n${pending}` : pending;
     store.setSectionDraft(s.id, s.fields[0].key, next);
     if (s.status === "empty") store.updateSection(s.id, { status: "warn" });
-    switchSectionForced(s.id);
+    store.setActiveSection(s.id);
     toast(`已插入到「${s.n} ${s.title}」`);
   }
 } else if (pending && !editable()) {
   toast("目前身分無法插入範本到內文");
 }
 
-document.getElementById("domain-select")?.addEventListener("change", async (e) => {
+document.getElementById("domain-select")?.addEventListener("change", (e) => {
   const next = (e.target as HTMLSelectElement).value;
   const st = store.get();
   if (!editable() || !st.activeProjectId) return;
@@ -2447,25 +1453,24 @@ document.getElementById("domain-select")?.addEventListener("change", async (e) =
   // 章節集合換了，目前游標可能指到已經不存在的一節
   idx = 0;
   const first = sections()[0];
-  // 換領域等於整組章節換掉，開著的檔案檢視必須讓位
-  if (first) await goToSection(first.id);
+  if (first) store.setActiveSection(first.id);
   const orphans = store.orphanSectionIds().length;
   toast(orphans ? `已換領域 — ${orphans} 個章節的內容暫時收起，沒有刪除` : "已換領域");
   render();
 });
 
-document.getElementById("btn-prev")?.addEventListener("click", async () => {
+document.getElementById("btn-prev")?.addEventListener("click", () => {
   if (idx > 0) {
-    if (!(await goToSection(sections()[idx - 1]!.id))) return;
+    store.setActiveSection(sections()[idx - 1]!.id);
     idx--;
     render();
   }
 });
 
-document.getElementById("btn-next")?.addEventListener("click", async () => {
+document.getElementById("btn-next")?.addEventListener("click", () => {
   const list = sections();
   if (idx < list.length - 1) {
-    if (!(await goToSection(list[idx + 1]!.id))) return;
+    store.setActiveSection(list[idx + 1]!.id);
     idx++;
     render();
   } else {
@@ -2582,7 +1587,6 @@ document.getElementById("editor-body")?.addEventListener(
 // ⌥F 快捷鍵與狀態還原；同步執行，不能靠 rAF（分頁在背景時 rAF 不觸發）
 initFileTreeCollapse();
 initFileTreeResize();
-initCollapsible("btn-openspec-toggle", "openspec-list", "anchorline:openspec-collapsed", "OpenSpec 章節");
 initFocusMode();
 initHyperfocusGuard();
 render();

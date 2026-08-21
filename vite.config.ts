@@ -98,6 +98,9 @@ export default defineConfig(({ command }) => ({
         overview: resolve(root, "overview.html"),
         templates: resolve(root, "templates.html"),
         openspec: resolve(root, "openspec.html"),
+        // 漏了這一筆 dev server 照常運作（vite dev 直接吃檔案系統），
+        // 但 `bun run build` 不會產出這一頁 —— 正式版點側欄的入口會 404。
+        "openspec-workspace": resolve(root, "openspec-workspace.html"),
         review: resolve(root, "review.html"),
         settings: resolve(root, "settings.html"),
         admin: resolve(root, "admin.html"),

@@ -353,6 +353,8 @@ function seedState(): AppState {
     locked: false,
     pendingInsert: null,
     activeSectionId: "summary",
+    activeOpenSpecChange: "",
+    activeOpenSpecFile: "",
     settings: structuredClone(DEFAULT_SETTINGS),
     showSamples: isTest,
     agentJobs: [],
@@ -588,6 +590,13 @@ function load(): AppState {
       prdDrafts: (parsed.prdDrafts as AppState["prdDrafts"] | undefined) ?? {},
       prdVersions: (parsed.prdVersions as AppState["prdVersions"] | undefined) ?? {},
       sampleSectionValues: parsed.sampleSectionValues ?? null,
+      // 舊存檔沒有這兩個欄位。`...parsed` 不會蓋掉 base 的空字串（JSON 不帶
+      // undefined），但型別上仍可能是 undefined —— 明寫一次比較誠實，也擋掉
+      // 有人手動塞非字串進 localStorage 的情況。
+      activeOpenSpecChange:
+        typeof parsed.activeOpenSpecChange === "string" ? parsed.activeOpenSpecChange : "",
+      activeOpenSpecFile:
+        typeof parsed.activeOpenSpecFile === "string" ? parsed.activeOpenSpecFile : "",
       // 舊存檔的留言沒有 projectId。掛到當時的 active 專案 —— 那是唯一
       // 說得出口的猜測（留言本來就是在某個專案的審閱頁上寫的），而且
       // 不掛的話它們會變成孤兒：任何專案都看不到、也永遠無法標記已解決。
@@ -1981,6 +1990,26 @@ export const store = {
 
   setActiveSection(id: string) {
     state = { ...state, activeSectionId: id };
+    emit();
+  },
+
+  /**
+   * OpenSpec 工作區上次開的 change。
+   *
+   * 值相同就整個跳過 —— `emit()` 會 persist 並通知所有 listener，而這一支
+   * 會在 render 路徑上被呼叫到（頁面進場時要把記憶寫回去）。無條件 emit
+   * 等於每次重繪都觸發下一次重繪。
+   */
+  setActiveOpenSpecChange(id: string) {
+    if (state.activeOpenSpecChange === id) return;
+    state = { ...state, activeOpenSpecChange: id };
+    emit();
+  },
+
+  /** 同上，記的是檔案絕對路徑。傳空字串代表「沒有開著的檔」。 */
+  setActiveOpenSpecFile(path: string) {
+    if (state.activeOpenSpecFile === path) return;
+    state = { ...state, activeOpenSpecFile: path };
     emit();
   },
 

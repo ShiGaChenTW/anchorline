@@ -58,6 +58,7 @@ export type MobileNavPage =
   | "signoff"
   | "templates"
   | "openspec"
+  | "openspec-workspace"
   | "review"
   | "tracking"
   | "history"
@@ -87,11 +88,19 @@ export function initMobileNav(active: MobileNavPage) {
   const highlight =
     active === "uat" || active === "history"
       ? "tracking"
-      : active === "admin" || active === "agents" || active === "templates" || active === "openspec" || active === "write"
-      ? active === "templates" || active === "openspec" || active === "write"
-        ? "editor"
-        : "settings"
-      : active;
+      : active === "admin" ||
+          active === "agents" ||
+          active === "templates" ||
+          active === "openspec" ||
+          active === "openspec-workspace" ||
+          active === "write"
+        ? active === "templates" ||
+          active === "openspec" ||
+          active === "openspec-workspace" ||
+          active === "write"
+          ? "editor"
+          : "settings"
+        : active;
   bar.innerHTML = items
     .map(
       (it) =>
