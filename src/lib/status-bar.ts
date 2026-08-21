@@ -11,7 +11,7 @@ import { escapeHtml } from "./ui";
 
 const PAGE_LABEL: Record<RailPage, string> = {
   projects: "專案列表",
-  editor: "編輯工作台",
+  editor: "工作台-PRD",
   write: "PRD 審閱監控",
   signoff: "簽核管理",
   dashboard: "專案儀表板",
@@ -19,7 +19,7 @@ const PAGE_LABEL: Record<RailPage, string> = {
   overview: "全部專案總覽",
   templates: "PRD 範本",
   openspec: "OpenSpec 入口",
-  "openspec-workspace": "OpenSpec 工作區",
+  "openspec-workspace": "工作台-OpenSpec",
   review: "審閱佇列",
   tracking: "Task Tracking",
   history: "提交與 Diff",

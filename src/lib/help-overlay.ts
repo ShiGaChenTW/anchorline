@@ -12,7 +12,7 @@ const DEFAULT_SECTIONS: HelpSection[] = [
     title: "導覽",
     items: [
       { keys: "1", desc: "專案列表" },
-      { keys: "2", desc: "編輯工作台" },
+      { keys: "2", desc: "工作台-PRD" },
       { keys: "3", desc: "範本庫" },
       { keys: "4", desc: "審閱佇列" },
       { keys: "5", desc: "計劃追蹤" },

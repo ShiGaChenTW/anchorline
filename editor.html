@@ -30,7 +30,7 @@
         <div class="nav-label">工作區</div>
         <a class="nav-item active" href="editor.html" data-od-id="nav-editor">
           <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086zM11.189 6.25 9.75 4.81l-6.286 6.287a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064l6.286-6.286z"/></svg>
-          編輯工作台
+          工作台-PRD
         </a>
         <a class="nav-item" href="templates.html" data-od-id="nav-templates">
           <svg class="ic" viewBox="0 0 16 16" fill="currentColor"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v3.5A1.75 1.75 0 0 1 14.25 7H1.75A1.75 1.75 0 0 1 0 5.25v-3.5zM1.75 1a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25H1.75zM0 10.75C0 9.784.784 9 1.75 9h12.5c.966 0 1.75.784 1.75 1.75v3.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25v-3.5zm1.75-.75a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25H1.75z"/></svg>
@@ -112,18 +112,8 @@
             <div class="section-list" id="outline" role="listbox" aria-label="章節"></div>
             <!-- 孤兒正文：有內容、但 sectionId 不在目前骨架裡。整塊的生死由 JS 決定 -->
             <div class="orphan-box" id="orphan-panel" hidden></div>
-            <!-- OpenSpec 檔案清單與 Function wish list 已搬到 openspec-workspace.html。
-                 這一欄現在只回答 PRD 的問題：章節大綱、領域、孤兒內容、專案檔案。 -->
-            <div class="ft-resize" id="file-tree-resize" role="separator" aria-orientation="horizontal"
-                 aria-label="調整專案檔案高度" title="上下拖曳調整高度"></div>
-            <div class="wb-head wb-head--sub ft-bar" id="file-tree-bar">
-              <h2>專案檔案</h2>
-              <button type="button" class="ft-collapse" id="btn-file-tree-toggle"
-                      aria-expanded="true" aria-controls="file-tree" title="收合專案檔案">
-                <span aria-hidden="true">‹</span>
-              </button>
-            </div>
-            <div class="file-tree-host" id="file-tree" aria-label="專案資料夾結構"></div>
+            <!-- OpenSpec 檔案清單、Function wish list、專案檔案樹已搬到 openspec-workspace.html。
+                 這一欄現在只回答 PRD 的問題：章節大綱、領域、孤兒內容。 -->
           </div>
 
           <!-- Editor -->

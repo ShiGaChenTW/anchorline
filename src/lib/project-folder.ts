@@ -49,7 +49,7 @@ async function pickNative(projectId: string) {
     return;
   }
   if (r.cancelled) {
-    toast("已取消，稍後可從編輯台的「專案檔案」再指定");
+    toast("已取消，稍後可從專案儀表板的「指定專案資料夾」再指定");
     return;
   }
   bind(projectId, r.folderName || "專案資料夾", r.folderPath, r.files.map((f) => f.path));

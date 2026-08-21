@@ -90,7 +90,7 @@ describe("側欄與狀態列的註冊點", () => {
   });
 
   test("狀態列有對應的頁面名稱（少一個 key 會讓 tsc 擋下來，這裡是說明用）", () => {
-    expect(read("src/lib/status-bar.ts")).toContain(`"openspec-workspace": "OpenSpec 工作區"`);
+    expect(read("src/lib/status-bar.ts")).toContain(`"openspec-workspace": "工作台-OpenSpec"`);
   });
 
   test("入口掛在專案卡片底下，不是固定側欄項目", () => {
@@ -148,11 +148,15 @@ describe("editor.html 瘦身成 PRD-only", () => {
     expect(editor()).not.toContain(`id="os-wish"`);
   });
 
-  test("PRD 那四塊留著：章節大綱、領域選單、孤兒面板、專案檔案樹", () => {
+  test("PRD 那三塊留著：章節大綱、領域選單、孤兒面板", () => {
     const h = editor();
-    for (const id of ["outline", "domain-select", "orphan-panel", "file-tree"]) {
+    for (const id of ["outline", "domain-select", "orphan-panel"]) {
       expect(h).toContain(`id="${id}"`);
     }
+  });
+
+  test("專案檔案樹已經移除（2026-08-21 拍板：兩個工作台側欄都不留）", () => {
+    expect(editor()).not.toContain(`id="file-tree"`);
   });
 
   test("教練欄不動", () => {
@@ -163,11 +167,15 @@ describe("editor.html 瘦身成 PRD-only", () => {
 describe("openspec-workspace.html 的三欄", () => {
   const html = () => read("openspec-workspace.html");
 
-  test("左欄四塊都在", () => {
+  test("左欄三塊都在", () => {
     const h = html();
-    for (const id of ["osw-changes", "os-files", "os-wish", "file-tree"]) {
+    for (const id of ["osw-changes", "os-files", "os-wish"]) {
       expect(h).toContain(`id="${id}"`);
     }
+  });
+
+  test("專案檔案樹已經移除（2026-08-21 拍板：兩個工作台側欄都不留）", () => {
+    expect(html()).not.toContain(`id="file-tree"`);
   });
 
   test("中欄是原始檔案檢視的落點", () => {

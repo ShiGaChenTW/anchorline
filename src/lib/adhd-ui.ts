@@ -131,7 +131,7 @@ function nextStepForPage(page: RailPage | null): NextStep {
 }
 
 /**
- * 全站：工具列 + 焦點條合併為單一 chrome（對齊編輯工作台）
+ * 全站：工具列 + 焦點條合併為單一 chrome（對齊工作台-PRD）
  * 避免標題列與「下一步」雙層重複、雙 CTA。
  */
 /** 引導列是否被使用者收起來 */

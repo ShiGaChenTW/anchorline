@@ -579,7 +579,7 @@ export type AppState = {
   pendingInsert: string | null;
   activeSectionId: string;
   /**
-   * OpenSpec 工作區上次開的 change（`openspec/changes/<id>` 的目錄名）。
+   * 工作台-OpenSpec上次開的 change（`openspec/changes/<id>` 的目錄名）。
    *
    * 跟 `activeSectionId` 同一種東西：「上次停在哪」。空字串代表沒有記憶，
    * 頁面會自己退回第一個未封存的 change —— 記的那個可能已經被封存或改名，

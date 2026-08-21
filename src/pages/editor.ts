@@ -30,17 +30,11 @@ import { bindMdField, mdFieldHtml, setAllMdModes, type MdPaneMode } from "../lib
 import { canEditContent } from "../lib/permissions";
 import { labelForOrphan, type OrphanRef } from "../lib/orphan-content";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
-import {
-  buildFileTree,
-  renderFileTreeHtml,
-  SECTION_TO_OPENSPEC,
-  sourceFileForSection,
-} from "../lib/file-tree";
+import { SECTION_TO_OPENSPEC, sourceFileForSection } from "../lib/file-tree";
 // OpenSpec 檔案清單、Function wish list、原始檔案檢視／編輯（含 diff 背板與
 // 版本快照）已整批搬到 `openspec-workspace.ts`。這一頁只剩 PRD：
 // 章節表單、教練、gate、送審。
 import { initHelpOverlay } from "../lib/help-overlay";
-import { askForProjectFolder } from "../lib/project-folder";
 import { initFocusMode, renderProgress } from "../lib/focus-mode";
 import {
   bindResumeTracking,
@@ -125,7 +119,7 @@ function syncProjectChrome() {
   const stInfo = (p && statusMap[p.status]) || { label: "—", tone: "draft" as const, cls: "pill pill-draft" };
 
   syncRailContext({
-    mode: "編輯工作台",
+    mode: "工作台-PRD",
     projectName: name,
     statusLabel: stInfo.label,
     statusTone: stInfo.tone,
@@ -187,148 +181,6 @@ function valuesFor(s: Section): Record<string, string> {
 /** 這一節已儲存的內容 —— 異動高亮的基準 */
 function savedValuesFor(s: Section): Record<string, string> {
   return store.get().sectionValues[s.id] ?? {};
-}
-
-/**
- * 上層：專案資料夾檔案樹（哪些是 PRD 來源、哪些是 OpenSpec 產出）
- *
- * 用簽章擋掉不必要的重繪：store 每次按鍵都 emit，無條件重建會清掉
- * 使用者的展開／捲動狀態。
- */
-let lastTreeSig = "__init__";
-
-const FT_COLLAPSE_KEY = "anchorline:file-tree-collapsed";
-
-const FT_HEIGHT_KEY = "anchorline:file-tree-height";
-
-/**
- * 檔案樹高度拖曳。
- * 「章節」與「專案檔案」誰該多分一點，只有當下在做什麼的你知道 ——
- * 寫死一個比例一定會有人不滿意，給把手比猜便宜。
- */
-function initFileTreeResize() {
-  const col = document.querySelector('[data-od-id="outline-col"]') as HTMLElement | null;
-  const grip = document.getElementById("file-tree-resize") as HTMLElement | null;
-  const host = document.getElementById("file-tree") as HTMLElement | null;
-  if (!col || !grip || !host) return;
-
-  const MIN = 90;
-  const apply = (h: number) => col.style.setProperty("--ft-h", `${Math.round(h)}px`);
-
-  try {
-    const saved = Number(localStorage.getItem(FT_HEIGHT_KEY));
-    if (saved >= MIN) apply(saved);
-  } catch {
-    /* private mode */
-  }
-
-  let startY = 0;
-  let startH = 0;
-  const max = () => Math.max(MIN, col.clientHeight - 180); // 章節至少留 180px
-
-  const onMove = (e: PointerEvent) => {
-    // 把手在檔案樹「上方」，往上拖 = 變高，所以要取負號
-    apply(Math.min(max(), Math.max(MIN, startH - (e.clientY - startY))));
-  };
-  const onUp = () => {
-    // 監聽掛在 window：滑鼠拖到把手外面（很常見）仍然要跟得上，
-    // 而且 setPointerCapture 失敗時不會整個拖不動。
-    window.removeEventListener("pointermove", onMove);
-    window.removeEventListener("pointerup", onUp);
-    grip.classList.remove("is-dragging");
-    document.body.style.userSelect = "";
-    try {
-      localStorage.setItem(FT_HEIGHT_KEY, String(host.offsetHeight));
-    } catch {
-      /* private mode */
-    }
-  };
-
-  grip.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    startY = e.clientY;
-    startH = host.offsetHeight;
-    grip.classList.add("is-dragging");
-    document.body.style.userSelect = "none";
-    try {
-      grip.setPointerCapture(e.pointerId);
-    } catch {
-      /* 沒有 capture 也能拖，只是拖太快可能掉幀 */
-    }
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  });
-}
-
-
-/** 檔案樹收合成一條標題列。狀態要留著 —— 每次開編輯台都要重收一次是懲罰。 */
-function initFileTreeCollapse() {
-  const col = document.querySelector('[data-od-id="outline-col"]') as HTMLElement | null;
-  const btn = document.getElementById("btn-file-tree-toggle") as HTMLButtonElement | null;
-  if (!col || !btn) return;
-
-  const apply = (collapsed: boolean) => {
-    col.classList.toggle("ft-collapsed", collapsed);
-    btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    btn.title = collapsed ? "展開專案檔案" : "收合專案檔案";
-  };
-
-  let collapsed = false;
-  try {
-    collapsed = localStorage.getItem(FT_COLLAPSE_KEY) === "1";
-  } catch {
-    /* private mode */
-  }
-  apply(collapsed);
-
-  btn.addEventListener("click", () => {
-    collapsed = !collapsed;
-    apply(collapsed);
-    try {
-      localStorage.setItem(FT_COLLAPSE_KEY, collapsed ? "1" : "0");
-    } catch {
-      /* private mode */
-    }
-  });
-}
-
-function renderFileTree() {
-  const host = document.getElementById("file-tree");
-  if (!host) return;
-  const p = activeProject();
-  const sig = `${p?.id ?? ""}|${p?.sourceFolder ?? ""}|${
-    p?.importSummary?.allPaths?.length ?? 0
-  }|${sections()[idx]?.id ?? ""}`;
-  if (sig === lastTreeSig) return;
-  lastTreeSig = sig;
-  const tree = p ? buildFileTree(p, sections()) : null;
-  const activeId = sections()[idx]?.id ?? "";
-  host.innerHTML = renderFileTreeHtml(tree, activeId);
-
-  host.querySelectorAll<HTMLButtonElement>("[data-ft-section]").forEach((btn) => {
-    btn.onclick = () => {
-      const sid = btn.dataset.ftSection!;
-      const i = sections().findIndex((s) => s.id === sid);
-      if (i < 0) return;
-      store.setActiveSection(sid);
-      idx = i;
-      render();
-    };
-  });
-
-  // 空狀態的出口：手動新建的 PRD 也能在這裡補綁資料夾
-  const bindBtn = document.getElementById("ft-bind-folder");
-  if (bindBtn && p) {
-    bindBtn.addEventListener("click", () => askForProjectFolder(p.id, projectDisplayName(p)));
-  }
-
-  host.querySelectorAll<HTMLButtonElement>("[data-ft-dir]").forEach((btn) => {
-    btn.onclick = () => {
-      const open = btn.getAttribute("aria-expanded") !== "false";
-      btn.setAttribute("aria-expanded", open ? "false" : "true");
-      btn.parentElement?.classList.toggle("is-collapsed", open);
-    };
-  });
 }
 
 /**
@@ -409,7 +261,6 @@ function outlineFieldsHtml(s: Section): string {
 }
 
 function renderOutline() {
-  renderFileTree();
   renderDomainBar();
   const el = document.getElementById("outline");
   if (!el) return;
@@ -1585,11 +1436,7 @@ document.getElementById("editor-body")?.addEventListener(
 );
 
 // ⌥F 快捷鍵與狀態還原；同步執行，不能靠 rAF（分頁在背景時 rAF 不觸發）
-initFileTreeCollapse();
-initFileTreeResize();
 initFocusMode();
 initHyperfocusGuard();
 render();
-// 綁定資料夾後檔案樹要立刻長出來；簽章比對讓打字時的 emit 不會觸發重繪
-store.subscribe(renderFileTree);
 } // end __authed

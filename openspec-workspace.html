@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>OpenSpec 工作區 · Anchorline</title>
+<title>工作台-OpenSpec · Anchorline</title>
 <link rel="stylesheet" href="shared.css" />
 <style>
   /* 這一頁的專屬樣式。三欄骨架直接沿用 shared.css 的 .wb / .wb-col ——
-     跟編輯工作台同一套，換頁時欄寬與邊框不會跳。
-     檔案列（.os-row）、願望清單（.os-wish-*）、原始檔檢視（.fv-*）、
-     檔案樹（.ft-*）也全部沿用既有 class，不另做一套外觀。 */
+     跟工作台-PRD 同一套，換頁時欄寬與邊框不會跳。
+     檔案列（.os-row）、願望清單（.os-wish-*）、原始檔檢視（.fv-*）
+     也全部沿用既有 class，不另做一套外觀。 */
 
-  /* 左欄要塞四塊（change 選單／檔案／願望／檔案樹），整欄自己捲 */
+  /* 左欄要塞三塊（change 選單／檔案／願望），整欄自己捲 */
   .osw-left { overflow: auto; }
 
   /* ── change 選單 ── */
@@ -122,8 +122,8 @@
       </div>
       <nav class="rail-nav">
         <div class="nav-label">工作區</div>
-        <a class="nav-item" href="editor.html" data-od-id="nav-editor">編輯工作台</a>
-        <a class="nav-item active" href="openspec-workspace.html" data-od-id="nav-openspec-workspace">OpenSpec 工作區</a>
+        <a class="nav-item" href="editor.html" data-od-id="nav-editor">工作台-PRD</a>
+        <a class="nav-item active" href="openspec-workspace.html" data-od-id="nav-openspec-workspace">工作台-OpenSpec</a>
         <a class="nav-item" href="tracking.html" data-od-id="nav-tracking">Task Tracking</a>
         <a class="nav-item" href="settings.html" data-od-id="nav-settings">偏好設定</a>
       </nav>
@@ -166,7 +166,7 @@
             <button type="button" class="btn btn-ghost btn-sm" id="btn-osw-refresh"
                     title="重新掃描 openspec/ 與任務進度">重新整理</button>
             <a class="btn btn-ghost btn-sm" href="openspec.html" id="btn-osw-new">開新 change</a>
-            <a class="btn btn-ghost" href="editor.html">回編輯工作台</a>
+            <a class="btn btn-ghost" href="editor.html">回工作台-PRD</a>
           </div>
         </div>
       </div>
@@ -174,7 +174,7 @@
 
       <div class="content" style="overflow:hidden;display:flex;flex-direction:column">
         <div class="wb" data-od-id="workbench">
-          <!-- 左欄：change 選單 → 這個 change 的檔案 → 願望清單 → 專案檔案樹 -->
+          <!-- 左欄：change 選單 → 這個 change 的檔案 → 願望清單 -->
           <div class="wb-col osw-left" data-od-id="osw-left-col">
             <div class="wb-head">
               <h2>Changes</h2>
@@ -203,17 +203,6 @@
               </button>
             </div>
             <div id="os-wish" class="os-wish" hidden></div>
-
-            <div class="ft-resize" id="file-tree-resize" role="separator" aria-orientation="horizontal"
-                 aria-label="調整專案檔案高度" title="上下拖曳調整高度"></div>
-            <div class="wb-head wb-head--sub ft-bar" id="file-tree-bar">
-              <h2>專案檔案</h2>
-              <button type="button" class="ft-collapse" id="btn-file-tree-toggle"
-                      aria-expanded="true" aria-controls="file-tree" title="收合專案檔案">
-                <span aria-hidden="true">‹</span>
-              </button>
-            </div>
-            <div class="file-tree-host" id="file-tree" aria-label="專案資料夾結構"></div>
           </div>
 
           <!-- 中欄：原始檔案檢視／編輯 -->

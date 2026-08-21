@@ -3115,7 +3115,7 @@ html.reduce-motion .attn-expand-enter {
     border-color var(--motion-fast) var(--ease-standard);
 }
 
-/* 全站頁面 chrome：標題 + 下一步 + 動作（對齊編輯工作台） */
+/* 全站頁面 chrome：標題 + 下一步 + 動作（對齊工作台-PRD） */
 .toolbar.adhd-page-chrome,
 .toolbar.adhd-editor-chrome {
   display: flex;

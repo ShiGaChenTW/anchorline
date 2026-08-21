@@ -1173,7 +1173,7 @@ if (__authed) {
           ? `<p class="tk-prog-m">
               <a class="btn btn-sm btn-ghost"
                  href="openspec-workspace.html?change=${encodeURIComponent(p.meta.change)}&file=${encodeURIComponent(p.path)}"
-                 title="在 OpenSpec 工作區開啟這個 change">在 OpenSpec 工作區開啟</a>
+                 title="在工作台-OpenSpec 開啟這個 change">在工作台-OpenSpec 開啟</a>
             </p>`
           : "";
       sum.innerHTML = `

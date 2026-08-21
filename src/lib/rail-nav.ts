@@ -71,10 +71,10 @@ export const IC = {
 export const RAIL_ITEMS: RailItem[] = [
   // 專案列表不進側欄 —— 側欄上方已經是專案清單本身，再放一個入口是重複
   { page: "projects", href: "projects.html", label: "專案列表", odId: "nav-projects", icon: IC.projects, count: true, hidden: true },
-  // 編輯工作台／Task Tracking 都是「對某個專案」做的事，改成掛在
+  // 工作台-PRD／Task Tracking 都是「對某個專案」做的事，改成掛在
   // 選中的專案卡片底下（rail-projects.ts 的 projActionsHtml）。
   // 留在固定導覽區會讓人得自己把「我選的是哪個專案」跟按鈕接起來。
-  { page: "editor", href: "editor.html", label: "編輯工作台", odId: "nav-editor", icon: IC.editor, hidden: true },
+  { page: "editor", href: "editor.html", label: "工作台-PRD", odId: "nav-editor", icon: IC.editor, hidden: true },
   { page: "write", href: "write.html", label: "PRD 審閱監控", odId: "nav-write", icon: IC.write, hidden: true },
   { page: "signoff", href: "signoff.html", label: "簽核管理", odId: "nav-signoff", icon: IC.signoff, hidden: true },
   { page: "tracking", href: "tracking.html", label: "Task Tracking", odId: "nav-tracking", icon: IC.tracking, hidden: true },
@@ -90,7 +90,7 @@ export const RAIL_ITEMS: RailItem[] = [
   // 它跟總覽／清單／審閱佇列一樣是跨專案的東西
   { page: "templates", href: "templates.html", label: "PRD 範本", odId: "nav-templates", icon: IC.templates, count: true, hidden: true },
   { page: "openspec", href: "openspec.html", label: "OpenSpec 入口", odId: "nav-openspec", icon: IC.tracking, hidden: true },
-  // OpenSpec 工作區跟 editor／tracking 同一類（對「某一個專案」做的事），
+  // 工作台-OpenSpec 跟 editor／tracking 同一類（對「某一個專案」做的事），
   // 不是跟 templates／openspec 同一類（跨專案）—— 所以入口掛在選中的專案
   // 卡片底下（rail-projects.ts 的 projActionsHtml），這裡只是登記它存在。
   //
@@ -102,7 +102,7 @@ export const RAIL_ITEMS: RailItem[] = [
   // `openspec-workspace.html`（23 字）排在 `openspec.html`（13 字）前面，
   // 所以工作區不會被入口頁攔截。反向不成立（`openspec.html` 不是
   // `openspec-workspace.html` 的子字串），兩邊都不會誤判。
-  { page: "openspec-workspace", href: "openspec-workspace.html", label: "OpenSpec 工作區", odId: "nav-openspec-workspace", icon: IC.templates, hidden: true },
+  { page: "openspec-workspace", href: "openspec-workspace.html", label: "工作台-OpenSpec", odId: "nav-openspec-workspace", icon: IC.templates, hidden: true },
   // 審閱佇列改掛在「工作區」區塊標題右側（rail-projects.ts）
   { page: "review", href: "review.html", label: "審閱佇列", odId: "nav-review", icon: IC.review, count: true, hidden: true },
   // 管理中心與 Agent 管理是系統設定，不是日常導覽 —— 入口改在設定彈窗的

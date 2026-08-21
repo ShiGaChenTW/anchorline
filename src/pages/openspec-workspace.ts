@@ -1,9 +1,9 @@
 /**
- * OpenSpec 工作區 —— 從編輯工作台拆出來的獨立頁面（方案 B）。
+ * 工作台-OpenSpec —— 從工作台-PRD 拆出來的獨立頁面（方案 B）。
  *
  * ## 為什麼要拆
  *
- * 編輯工作台原本一欄塞六件事（PRD 章節大綱、領域選單、孤兒內容、OpenSpec 檔案
+ * 工作台-PRD 原本一欄塞六件事（PRD 章節大綱、領域選單、孤兒內容、OpenSpec 檔案
  * 清單、Function wish list、專案檔案樹），中欄還要在「PRD 章節表單」與「原始
  * 檔案內容」之間切換 —— 靠一個 module 變數 `openFile` 是不是 null 決定畫哪一種。
  * 右欄的寫作教練是 PRD 專用，看 OpenSpec 檔案時完全不相關。
@@ -13,7 +13,6 @@
  * ## 這一頁的三欄
  *
  * - 左：change 選單（active／archived）→ 該 change 的檔案 → Function wish list
- *   → 專案檔案樹
  * - 中：原始檔案檢視／編輯（唯一真正從 editor.ts 搬過來的邏輯）
  * - 右：任務進度（`plan-parser` 讀 tasks.md）、`openspec status` 的判讀、健康狀態
  *
@@ -31,7 +30,6 @@ import { projectDisplayName } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { syncRailContext } from "../lib/rail-projects";
 import { canEditContent } from "../lib/permissions";
-import { buildFileTree, renderFileTreeHtml } from "../lib/file-tree";
 import {
   absolutePathFor,
   groupOpenspecFiles,
@@ -71,7 +69,6 @@ import {
 } from "../lib/file-history";
 import { renderMarkdown } from "../lib/markamd/markdown";
 import { initHelpOverlay } from "../lib/help-overlay";
-import { askForProjectFolder } from "../lib/project-folder";
 import { parsePlanMeta, planProgress, type PlanMeta } from "../lib/plan-parser";
 import { openspecRootsOf, requestTrackingScan } from "../lib/tracking-bridge";
 import {
@@ -112,7 +109,7 @@ function syncProjectChrome() {
     (p?.sourceFolder && p.sourceFolder.trim()) || (p?.tag && p.tag.trim()) || (p?.id ?? "—");
 
   syncRailContext({
-    mode: "OpenSpec 工作區",
+    mode: "工作台-OpenSpec",
     projectName: name,
     statusLabel: currentChangeId() || "無 change",
     statusTone: "review",
@@ -360,52 +357,6 @@ function renderOtherGroups() {
   });
 }
 
-// ── 專案檔案樹 ────────────────────────────────────────────────────────
-
-/**
- * 用簽章擋掉不必要的重繪：store 每次 emit 都會叫到這裡，無條件重建會清掉
- * 使用者的展開與捲動狀態。
- */
-let lastTreeSig = "__init__";
-
-function renderFileTree() {
-  const host = document.getElementById("file-tree");
-  if (!host) return;
-  const p = activeProject();
-  // 簽章要含路徑本身，不能只算數量 —— 同數量的重新掃描（換了一個檔）
-  // 用 length 比不出差異，樹會停在舊的清單上，點下去的檔案早就不是那個了。
-  const sig = `${p?.id ?? ""}|${p?.sourceFolder ?? ""}|${
-    p?.importSummary?.allPaths?.join(",") ?? ""
-  }|${openFile?.path ?? ""}`;
-  if (sig === lastTreeSig) return;
-  lastTreeSig = sig;
-  const tree = p ? buildFileTree(p, store.get().sections) : null;
-  host.innerHTML = renderFileTreeHtml(tree, "");
-
-  // 空狀態的出口：手動新建的 PRD 也能在這裡補綁資料夾
-  const bindBtn = document.getElementById("ft-bind-folder");
-  if (bindBtn && p) {
-    bindBtn.addEventListener("click", () => askForProjectFolder(p.id, projectDisplayName(p)));
-  }
-
-  // 在這一頁，點檔案樹的檔案是「在中欄打開它」——不是跳到某個 PRD 章節
-  // （那是編輯台的語意，這一頁沒有章節可跳）。
-  const root = p?.importSummary?.rootPath ?? "";
-  host.querySelectorAll<HTMLElement>("[data-ft-path]").forEach((node) => {
-    node.addEventListener("click", () => {
-      void openFileInEditor(absolutePathFor(root, node.dataset.ftPath ?? ""));
-    });
-  });
-
-  host.querySelectorAll<HTMLButtonElement>("[data-ft-dir]").forEach((btn) => {
-    btn.onclick = () => {
-      const open = btn.getAttribute("aria-expanded") !== "false";
-      btn.setAttribute("aria-expanded", open ? "false" : "true");
-      btn.parentElement?.classList.toggle("is-collapsed", open);
-    };
-  });
-}
-
 /** 可收合區塊。狀態各自記在 localStorage —— 每次進來都要重收一次是懲罰。 */
 function initCollapsible(btnId: string, bodyId: string, storageKey: string, label: string) {
   const btn = document.getElementById(btnId) as HTMLButtonElement | null;
@@ -432,90 +383,6 @@ function initCollapsible(btnId: string, bodyId: string, storageKey: string, labe
     apply(collapsed);
     try {
       localStorage.setItem(storageKey, collapsed ? "1" : "0");
-    } catch {
-      /* private mode */
-    }
-  });
-}
-
-const FT_COLLAPSE_KEY = "anchorline:file-tree-collapsed";
-const FT_HEIGHT_KEY = "anchorline:file-tree-height";
-
-function initFileTreeResize() {
-  const col = document.querySelector('[data-od-id="osw-left-col"]') as HTMLElement | null;
-  const grip = document.getElementById("file-tree-resize") as HTMLElement | null;
-  const host = document.getElementById("file-tree") as HTMLElement | null;
-  if (!col || !grip || !host) return;
-
-  const MIN = 90;
-  const apply = (h: number) => col.style.setProperty("--ft-h", `${Math.round(h)}px`);
-
-  try {
-    const saved = Number(localStorage.getItem(FT_HEIGHT_KEY));
-    if (saved >= MIN) apply(saved);
-  } catch {
-    /* private mode */
-  }
-
-  let startY = 0;
-  let startH = 0;
-  const max = () => Math.max(MIN, col.clientHeight - 180);
-
-  const onMove = (e: PointerEvent) => {
-    apply(Math.min(max(), Math.max(MIN, startH - (e.clientY - startY))));
-  };
-  const onUp = () => {
-    window.removeEventListener("pointermove", onMove);
-    window.removeEventListener("pointerup", onUp);
-    grip.classList.remove("is-dragging");
-    document.body.style.userSelect = "";
-    try {
-      localStorage.setItem(FT_HEIGHT_KEY, String(host.offsetHeight));
-    } catch {
-      /* private mode */
-    }
-  };
-
-  grip.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    startY = e.clientY;
-    startH = host.offsetHeight;
-    grip.classList.add("is-dragging");
-    document.body.style.userSelect = "none";
-    try {
-      grip.setPointerCapture(e.pointerId);
-    } catch {
-      /* 沒有 capture 也能拖 */
-    }
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  });
-}
-
-function initFileTreeCollapse() {
-  const col = document.querySelector('[data-od-id="osw-left-col"]') as HTMLElement | null;
-  const btn = document.getElementById("btn-file-tree-toggle") as HTMLButtonElement | null;
-  if (!col || !btn) return;
-
-  const apply = (collapsed: boolean) => {
-    col.classList.toggle("ft-collapsed", collapsed);
-    btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    btn.title = collapsed ? "展開專案檔案" : "收合專案檔案";
-  };
-
-  let collapsed = false;
-  try {
-    collapsed = localStorage.getItem(FT_COLLAPSE_KEY) === "1";
-  } catch {
-    /* private mode */
-  }
-  apply(collapsed);
-
-  btn.addEventListener("click", () => {
-    collapsed = !collapsed;
-    apply(collapsed);
-    try {
-      localStorage.setItem(FT_COLLAPSE_KEY, collapsed ? "1" : "0");
     } catch {
       /* private mode */
     }
@@ -1709,7 +1576,6 @@ function render() {
   renderChanges();
   renderChangeFiles();
   renderOtherGroups();
-  renderFileTree();
   renderFileView();
   renderSide();
   syncUser();
@@ -1726,7 +1592,6 @@ function render() {
 document.getElementById("btn-osw-refresh")?.addEventListener("click", () => {
   // 檔案清單來自 store 的 importSummary（重掃資料夾是專案頁的事），
   // 這顆按鈕重取的是右欄那兩份會過期的資料。
-  lastTreeSig = "__init__";
   void refreshSideData(true);
   void loadAndRenderWishlist();
   toast("已重新整理");
@@ -1740,8 +1605,6 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-initFileTreeCollapse();
-initFileTreeResize();
 initCollapsible("btn-openspec-toggle", "openspec-list", "anchorline:osw-files-collapsed", "檔案清單");
 initCollapsible("btn-wish-toggle", "os-wish", "anchorline:osw-wish-collapsed", "願望清單");
 
@@ -1779,6 +1642,5 @@ store.subscribe(() => {
   }
   renderChanges();
   renderChangeFiles();
-  renderFileTree();
 });
 } // end __authed

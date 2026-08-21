@@ -1994,7 +1994,7 @@ export const store = {
   },
 
   /**
-   * OpenSpec 工作區上次開的 change。
+   * 工作台-OpenSpec上次開的 change。
    *
    * 值相同就整個跳過 —— `emit()` 會 persist 並通知所有 listener，而這一支
    * 會在 render 路徑上被呼叫到（頁面進場時要把記憶寫回去）。無條件 emit

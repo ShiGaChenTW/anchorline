@@ -40,7 +40,7 @@ export const PROMPTS: PromptDef[] = [
   {
     id: "draft-section",
     label: "一鍵生稿／AI 撰寫（逐節）",
-    where: "編輯工作台「一鍵生稿」· PRD 審閱監控「AI 撰寫」· AI 潤色工作台改寫",
+    where: "工作台-PRD「一鍵生稿」· PRD 審閱監控「AI 撰寫」· AI 潤色工作台改寫",
     temperature: 0.2,
     jsonMode: true,
     vars: ["lang", "persona", "discipline", "example", "styleSample"],
@@ -66,7 +66,7 @@ Match the tone and rhythm of this sample (structure only — never copy its cont
   {
     id: "critique-section",
     label: "本機＋AI 評估",
-    where: "編輯工作台「本機＋AI 評估」· AI 潤色工作台掃描",
+    where: "工作台-PRD「本機＋AI 評估」· AI 潤色工作台掃描",
     temperature: 0.2,
     jsonMode: true,
     vars: ["lang", "persona"],
@@ -79,7 +79,7 @@ Each warning/suggestion must point at a concrete gap in the given content; 3-7 i
   {
     id: "polish",
     label: "語調潤色／去 AI 味",
-    where: "編輯工作台「語調潤色」「去 AI 味」",
+    where: "工作台-PRD「語調潤色」「去 AI 味」",
     temperature: 0.5,
     jsonMode: false,
     vars: ["lang", "modeHint"],

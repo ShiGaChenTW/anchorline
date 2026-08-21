@@ -40,7 +40,7 @@ export function itemsFromProbe(p: CtxProbe): MenuItem[] {
   if (p.projectId) {
     sep();
     push("proj-dash", "開啟儀表板");
-    push("proj-edit", "編輯工作台");
+    push("proj-edit", "工作台-PRD");
     push("proj-track", "Task Tracking");
     push("proj-hist", "提交與 Diff");
     push("proj-uat", "UAT");

@@ -184,7 +184,7 @@ function bumpCounts() {
 /**
  * 選中專案後掛在那張卡片底下的動作列。
  *
- * 「編輯工作台」與「Task Tracking」都是**對某一個專案**做的事，放在固定導覽區
+ * 「工作台-PRD」與「Task Tracking」都是**對某一個專案**做的事，放在固定導覽區
  * 等於要人先在腦裡把「我選的是哪個專案」跟「這顆按鈕會作用在誰身上」接起來。
  * 貼在卡片下方，主詞就寫在正上方一行。
  *
@@ -220,7 +220,7 @@ const WORKSPACE_HREFS = ["overview.html", "projects.html", "review.html", "templ
  * 現在這一頁是不是跨專案視圖。
  *
  * 是的話，下面的專案清單**不標選中、也不展開那三個動作**：這四頁看的是
- * 全部專案，卻同時把某一張卡片標亮並在它底下列出「PRD 審閱監控／編輯工作台／
+ * 全部專案，卻同時把某一張卡片標亮並在它底下列出「PRD 審閱監控／工作台-PRD／
  * Task Tracking」，等於宣稱你正在那個專案裡 —— 你不在。而且那三個入口一旦
  * 出現就會被點，點下去才發現它帶你去的是「上次選的那個」，不是你剛剛在看的。
  */
@@ -279,10 +279,10 @@ function projActionsHtml(): string {
   const items: { href: string; label: string; icon: string; count?: string }[] = [
     { href: "write.html", label: "PRD 審閱監控", icon: IC.write },
     { href: "signoff.html", label: "簽核管理", icon: IC.signoff },
-    { href: "editor.html", label: "編輯工作台", icon: IC.editor },
+    { href: "editor.html", label: "工作台-PRD", icon: IC.editor },
     // OpenSpec 從編輯台拆出來之後自己一頁。排在編輯台後面 —— PRD 先於 spec
     // 是這條流程本來的順序。
-    { href: "openspec-workspace.html", label: "OpenSpec 工作區", icon: IC.templates },
+    { href: "openspec-workspace.html", label: "工作台-OpenSpec", icon: IC.templates },
     // 計數 = 未測完的實測報告。由 rail-nav 的 refreshNavCounts 填值（0 不顯示），
     // 走的是「審閱佇列／範本」早就在用的 data-nav-count 機制，不另做一套。
     { href: "tracking.html", label: "Task Tracking", icon: IC.tracking },
