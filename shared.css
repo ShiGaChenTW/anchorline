@@ -10605,6 +10605,17 @@ html.hide-focus-strip #adhd-focus-strip {
   color: var(--muted);
 }
 
+/* Changes 清單本身從來沒有邊界／捲動設定——項目一多（20+ change 很常見）
+   就會撐爆 .wb-col 那層 overflow:hidden，下半段（Archived、甚至整個
+   「這個 Change 的檔案」）被裁掉，滑鼠滾輪對整欄無效因為欄本身不捲動。
+   跟 .os-list 用同一招：flex:1 讓它跟另一個長列表對分剩餘高度，各自
+   overflow:auto 自己捲。 */
+.osw-changes {
+  flex: 1 1 auto;
+  min-height: 8rem;
+  overflow: auto;
+}
+
 .os-list {
   /* 展開時填滿章節與專案檔案之間的空間，而不是固定一小塊 */
   flex: 1 1 auto;
