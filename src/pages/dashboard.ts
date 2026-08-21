@@ -129,12 +129,15 @@ if (!requireAuth()) {
     const name = p ? projectDisplayName(p) : "未選擇專案";
     const desc = p?.description ?? "";
     return `<section class="d-hero d-ident">
-        <p class="d-eyebrow">專案</p>
+        <div class="d-ident-eyebrow-row">
+          <p class="d-eyebrow">專案</p>
+          <p class="d-eyebrow d-ident-code-eyebrow">簡寫</p>
+        </div>
         <div class="d-ident-name-row">
           <input type="text" id="d-name" class="d-ident-name" value="${escapeHtml(name)}"
-                 aria-label="專案名稱" placeholder="未命名專案" />
+                 maxlength="40" aria-label="專案名稱" placeholder="未命名專案" />
           <input type="text" id="d-code" class="d-ident-code" value="${escapeHtml(p?.shortCode ?? "")}"
-                 maxlength="5" spellcheck="false" autocapitalize="characters"
+                 maxlength="5" spellcheck="false" autocapitalize="characters" autocomplete="off"
                  aria-label="專案簡寫" placeholder="簡寫" />
         </div>
         <textarea id="d-desc" class="d-ident-desc" rows="1" aria-label="專案介紹"
@@ -778,6 +781,17 @@ if (!requireAuth()) {
     const codeEl = document.getElementById("d-code") as HTMLInputElement | null;
     if (codeEl && codeEl.dataset.bound !== "1") {
       codeEl.dataset.bound = "1";
+      // 邊打邊擋：只留英文字母、即時轉大寫。用「插入點前的合法字元數」重算游標，
+      // 不然過濾掉字元後游標會跳到最後面，打到一半就變成從頭打。
+      codeEl.addEventListener("input", () => {
+        const caret = codeEl.selectionStart ?? codeEl.value.length;
+        const cleanedBefore = codeEl.value.slice(0, caret).toUpperCase().replace(/[^A-Z]/g, "");
+        const cleaned = codeEl.value.toUpperCase().replace(/[^A-Z]/g, "");
+        if (cleaned !== codeEl.value) {
+          codeEl.value = cleaned;
+          codeEl.setSelectionRange(cleanedBefore.length, cleanedBefore.length);
+        }
+      });
       const save = () => {
         const v = codeEl.value.trim();
         if (v === (p.shortCode ?? "")) return;

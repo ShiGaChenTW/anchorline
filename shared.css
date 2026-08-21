@@ -9340,6 +9340,27 @@ button.ft-row:focus-visible {
   margin-bottom: 8px;
 }
 
+/* 「專案」「簡寫」兩個 eyebrow 同一排，簡寫那欄跟下面的簡寫輸入框同寬，
+   兩排的欄寬對上，字才會落在輸入框正上方而不是隨便飄。 */
+.d-ident-eyebrow-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.d-ident-eyebrow-row .d-eyebrow {
+  flex: 1;
+  margin-bottom: 0;
+}
+/* 簡寫輸入框比卡寬（.d-ident-name-row 那組 +12px/-6px hack），所以往右多推
+   6px 才會疊在輸入框正上方——不然字會偏左一點點。 */
+.d-ident-code-eyebrow {
+  flex: 0 0 auto;
+  width: 5.5ch;
+  margin-right: -6px;
+  text-align: center;
+}
+
 .d-ident-name-row {
   display: flex;
   align-items: center;
