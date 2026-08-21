@@ -36,6 +36,16 @@ import { policyOf } from "../lib/release";
 import { isNative, isUnavailable, native } from "../lib/native";
 import type { GitIssue } from "../lib/git-doctor";
 import { askForProjectFolder } from "../lib/project-folder";
+import { canEditFiles, readFile } from "../lib/file-editor";
+import {
+  emptyWishlist,
+  parseWishlist,
+  renameWishlistCode,
+  serializeWishlist,
+  wishlistLsKey,
+  wishlistPath,
+  type WishlistDoc,
+} from "../lib/function-wishlist";
 import { syncRailContext } from "../lib/rail-projects";
 import {
   formatBytes,
@@ -142,7 +152,14 @@ if (!requireAuth()) {
                  maxlength="40" aria-label="專案名稱" placeholder="未命名專案" />
           <input type="text" id="d-code" class="d-ident-code" value="${escapeHtml(p?.shortCode ?? "")}"
                  maxlength="5" spellcheck="false" autocapitalize="characters" autocomplete="off"
-                 aria-label="專案簡寫" placeholder="簡寫" />
+                 aria-label="專案簡寫" placeholder="簡寫"
+                 ${p?.shortCode ? "readonly" : ""} />
+          <div class="d-ident-code-actions" id="d-code-actions">
+            <button type="button" class="btn btn-sm btn-ghost" id="d-code-edit"
+                    title="簡寫會影響 wish list 編號等功能，要改請先解鎖" ${p?.shortCode ? "" : "hidden"}>編輯</button>
+            <button type="button" class="btn btn-sm" id="d-code-save" hidden>存檔</button>
+            <button type="button" class="btn btn-sm btn-ghost" id="d-code-cancel" hidden>取消</button>
+          </div>
         </div>
         <textarea id="d-desc" class="d-ident-desc" rows="1" aria-label="專案介紹"
                   placeholder="一句話說明這個專案在做什麼">${escapeHtml(desc)}</textarea>
@@ -752,6 +769,45 @@ if (!requireAuth()) {
   }
 
   /**
+   * Wish list 的讀寫（跟 openspec-workspace.ts 那份同路數：桌面版讀資料夾裡的
+   * 檔案，瀏覽器版退回 localStorage）。只有簡寫改名要動到既有願望的 id 時才用得到，
+   * 平常這一頁不碰 wish list——複製過來而不是抽共用模組，是因為那份要跟
+   * `activeProject()`／收合狀態等 openspec-workspace 專屬的畫面狀態綁在一起，
+   * 硬拆共用只會多一層間接，這裡只需要「給一個 Project，讀或寫它的 wish list」。
+   */
+  async function loadWishlistFor(proj: Project): Promise<WishlistDoc> {
+    const root = proj.importSummary?.rootPath;
+    if (root && canEditFiles()) {
+      try {
+        return parseWishlist(await readFile(wishlistPath(root)));
+      } catch {
+        /* 檔還不存在是常態，不是錯誤 */
+      }
+    }
+    try {
+      const raw = localStorage.getItem(wishlistLsKey(proj.id));
+      return raw ? parseWishlist(raw) : emptyWishlist();
+    } catch {
+      return emptyWishlist();
+    }
+  }
+
+  async function persistWishlistFor(proj: Project, doc: WishlistDoc): Promise<void> {
+    const text = serializeWishlist(doc);
+    const root = proj.importSummary?.rootPath;
+    if (root && isNative()) {
+      const r = await native.writeWishlist(root, text);
+      if (isUnavailable(r)) throw new Error(r.message);
+    }
+    try {
+      localStorage.setItem(wishlistLsKey(proj.id), text);
+    } catch {
+      /* quota —— 桌面版已經寫進檔了，瀏覽器版就只好說失敗 */
+      if (!isNative()) throw new Error("瀏覽器存檔失敗（空間可能滿了）");
+    }
+  }
+
+  /**
    * 名稱與介紹就地編輯：blur 或 Enter 存檔，沒有儲存按鈕。
    * 存檔不重繪整頁 —— 重繪會把游標踢掉，那是最惱人的編輯體驗。
    */
@@ -785,6 +841,11 @@ if (!requireAuth()) {
     const codeEl = document.getElementById("d-code") as HTMLInputElement | null;
     if (codeEl && codeEl.dataset.bound !== "1") {
       codeEl.dataset.bound = "1";
+      const codeEditBtn = document.getElementById("d-code-edit") as HTMLButtonElement | null;
+      const codeSaveBtn = document.getElementById("d-code-save") as HTMLButtonElement | null;
+      const codeCancelBtn = document.getElementById("d-code-cancel") as HTMLButtonElement | null;
+      let beforeEdit = codeEl.value;
+
       // 邊打邊擋：只留英文字母、即時轉大寫。用「插入點前的合法字元數」重算游標，
       // 不然過濾掉字元後游標會跳到最後面，打到一半就變成從頭打。
       codeEl.addEventListener("input", () => {
@@ -796,26 +857,105 @@ if (!requireAuth()) {
           codeEl.setSelectionRange(cleanedBefore.length, cleanedBefore.length);
         }
       });
-      const save = () => {
-        const v = codeEl.value.trim();
-        if (v === (p.shortCode ?? "")) return;
+
+      /** 存過的專案物件會被 state 整包換掉，`p` 這個閉包捕捉的參照不會跟著更新 */
+      const currentCode = () => store.get().projects.find((x) => x.id === p.id)?.shortCode ?? "";
+
+      /**
+       * 三種狀態，不是「鎖／不鎖」兩種：
+       * - locked：已經設過簡寫，唯讀＋只顯示「編輯」——安全機制生效中。
+       * - editing：按過「編輯」，解鎖可打字＋顯示「存檔」「取消」。
+       * - free：從來沒設過簡寫，可以直接打字，不顯示任何按鈕——
+       *   跟名稱欄一樣是 blur/Enter 就存的輕量流程，第一次輸入不需要安全機制。
+       */
+      type CodeMode = "locked" | "editing" | "free";
+      const setMode = (mode: CodeMode): void => {
+        codeEl!.readOnly = mode === "locked";
+        codeEditBtn?.toggleAttribute("hidden", mode !== "locked");
+        codeSaveBtn?.toggleAttribute("hidden", mode !== "editing");
+        codeCancelBtn?.toggleAttribute("hidden", mode !== "editing");
+      };
+      const modeFor = (code: string): CodeMode => (code ? "locked" : "free");
+
+      /**
+       * 已經設過簡寫、現在要改：wish list 既有編號不會自動跟著換，
+       * 存檔前一定要先問過，而且問的就是「順便把 wish list 也更名」這件事——
+       * 不是分開兩顆按鈕、兩次確認，按下確定就是兩件事一起做。
+       * 第一次輸入（prior 是空字串）不用問——還沒有舊值需要保護。
+       */
+      const commit = async (): Promise<void> => {
+        const v = codeEl!.value.trim();
+        const prior = currentCode();
+        if (v === prior) {
+          setMode(modeFor(prior));
+          return;
+        }
+        if (prior) {
+          const ok = await askConfirm({
+            title: `簡寫要從「${prior}」改成「${v || "（清空）"}」嗎？`,
+            body: v
+              ? `既有以「${prior}-」開頭的 wish list 編號會一併換成「${v}-」（流水號不變）；` +
+                `其他直接讀取簡寫的功能（例如匯出 Profile）下次會自動用新簡寫，不用另外處理。`
+              : `清空後 wish list 會沒有簡寫可用，新增願望前得先重新設定。既有以「${prior}-」開頭的編號不會被清掉或更名。`,
+            confirmLabel: "確定更名",
+            danger: true,
+          });
+          if (!ok) {
+            codeEl!.value = prior;
+            setMode(modeFor(prior));
+            return;
+          }
+        }
         const r = store.setProjectShortCode(p.id, v);
         if (!r.ok) {
           toast(r.reason ?? "簡寫不合法");
-          codeEl.value = p.shortCode ?? "";
+          codeEl!.value = prior;
+          setMode(modeFor(prior));
           return;
         }
-        const saved = store.get().projects.find((x) => x.id === p.id)?.shortCode ?? "";
-        codeEl.value = saved;
+        const saved = currentCode();
+        codeEl!.value = saved;
+        beforeEdit = saved;
+        if (prior && saved && saved !== prior) {
+          try {
+            const doc = await loadWishlistFor(p);
+            await persistWishlistFor(p, renameWishlistCode(doc, prior, saved));
+          } catch (e) {
+            toast(e instanceof Error ? `wish list 更名失敗：${e.message}` : "wish list 更名失敗");
+          }
+        }
         toast(saved ? `簡寫已設為 ${saved}` : "已清除簡寫");
+        setMode(modeFor(saved));
       };
-      codeEl.addEventListener("blur", save);
+
+      codeEditBtn?.addEventListener("click", () => {
+        beforeEdit = codeEl!.value;
+        setMode("editing");
+        codeEl!.focus();
+        codeEl!.select();
+      });
+      codeCancelBtn?.addEventListener("click", () => {
+        codeEl!.value = beforeEdit;
+        setMode(modeFor(beforeEdit));
+      });
+      codeSaveBtn?.addEventListener("click", () => void commit());
+      codeEl.addEventListener("blur", () => {
+        // 只有「從來沒設過」的自由輸入狀態才在 blur 時直接存——
+        // locked 沒法打字所以不會觸發，editing 一定要按「存檔」才算數。
+        if (!currentCode()) void commit();
+      });
       codeEl.addEventListener("keydown", (e) => {
-        if ((e as KeyboardEvent).key === "Enter") {
+        const key = (e as KeyboardEvent).key;
+        if (key === "Enter") {
           e.preventDefault();
-          codeEl.blur();
+          if (!codeEl!.readOnly) void commit();
+        } else if (key === "Escape" && !codeEl!.readOnly && currentCode()) {
+          codeEl!.value = beforeEdit;
+          setMode("locked");
         }
       });
+
+      setMode(modeFor(currentCode()));
     }
 
     const policyBtn = document.getElementById("d-policy-strict");

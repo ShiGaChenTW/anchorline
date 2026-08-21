@@ -9340,40 +9340,43 @@ button.ft-row:focus-visible {
   margin-bottom: 8px;
 }
 
-/* 「專案」「簡寫」兩個 eyebrow 同一排，簡寫那欄跟下面的簡寫輸入框同寬，
-   兩排的欄寬對上，字才會落在輸入框正上方而不是隨便飄。 */
-.d-ident-eyebrow-row {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-.d-ident-eyebrow-row .d-eyebrow {
-  flex: 1;
-  margin-bottom: 0;
-}
-/* 簡寫輸入框比卡寬（.d-ident-name-row 那組 +12px/-6px hack），所以往右多推
-   6px 才會疊在輸入框正上方——不然字會偏左一點點。寬度跟 .d-ident-code
-   乘同一個 --fs-7，不能各自用 em——這裡的字級（.d-eyebrow 的 fs-2）比
-   輸入框小很多，各自的 em 換算出來的 px 對不上，標籤會偏出框外。 */
-.d-ident-code-eyebrow {
-  flex: 0 0 auto;
-  width: calc(var(--fs-7) * 4.2);
-  margin-right: -6px;
-  text-align: center;
-}
-
+/* 「專案」「簡寫」兩個 eyebrow 跟下面輸入框那排共用同一組
+   grid-template-columns，兩排的容器寬度（含 -6px/+12px 的出血 hack）也
+   完全一樣——欄寬用同一份定義保證對得上，不再各自算一次再手動加補償
+   偏移（舊版簡寫欄要往右多推 6px 才會疊上輸入框，改一邊很容易忘改
+   另一邊，之後又要重算一次偏移量）。專案名稱欄故意只占一半寬（縮短
+   50%），簡寫欄維持原本的字元寬度公式，第三欄留給簡寫的鎖定／編輯／
+   存檔按鈕，且不需要在 eyebrow 那排放對應內容，寬度自然收成 0。 */
+.d-ident-eyebrow-row,
 .d-ident-name-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 50%) calc(var(--fs-7) * 4.2) auto;
   align-items: center;
   gap: 6px;
   margin-left: -6px;
   width: calc(100% + 12px);
 }
+.d-ident-eyebrow-row {
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+.d-ident-eyebrow-row .d-eyebrow {
+  margin-bottom: 0;
+}
+.d-ident-code-eyebrow {
+  text-align: center;
+}
+
 .d-ident-name-row .d-ident-name {
-  flex: 1;
   width: auto;
   margin-left: 0;
+}
+/* 第三欄：簡寫的鎖定／編輯／存檔／取消按鈕。同一時間最多顯示兩顆
+   （編輯；或存檔＋取消），彼此留一點間距不要黏在一起。 */
+.d-ident-code-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .d-ident-name,
@@ -9400,17 +9403,21 @@ button.ft-row:focus-visible {
   letter-spacing: -0.022em;
   line-height: 1.25;
 }
-/* 簡寫：跟名稱同一排右側。row 自己已經吃了 -6px 的對齊，這裡不能再疊一次，
-   不然簡寫框會比名稱框多縮進去 6px。寬度用 ch 量不準——粗體大寫字母比
-   ch 量的「0」寬，5.5ch 在 fs-7 這個字級下會把第 5 個字母切掉。改成直接乘
-   --fs-7（而不是 em）：上面 .d-ident-code-eyebrow 標籤字級比較小，用 em 兩邊
-   算出來的 px 會對不齊，乘同一個變數才能保證兩者寬度真的一樣。 */
+/* 簡寫：寬度交給 grid 的第二欄（跟 .d-ident-code-eyebrow 同一份
+   calc(--fs-7 * 4.2) 公式），這裡不用再重複宣告一次寬度——兩處各寫一次
+   最容易的失誤就是改一邊忘了改另一邊，欄寬就會兜不上。 */
 .d-ident-code {
-  flex: 0 0 auto;
-  width: calc(var(--fs-7) * 4.2);
+  width: auto;
   margin-left: 0;
   text-align: center;
   text-transform: uppercase;
+}
+.d-ident-code:read-only {
+  color: var(--fg-2);
+  cursor: default;
+}
+.d-ident-code:read-only:hover {
+  box-shadow: none;
 }
 /* 說明行：與 .d-hero-sub 同級 */
 .d-ident-desc {
@@ -9437,6 +9444,11 @@ button.ft-row:focus-visible {
   outline: none;
   background: var(--inset);
   box-shadow: inset 0 0 0 1px var(--accent);
+}
+/* 鎖住時 focus（例如點進去選字複製）不該長得像可以編輯 */
+.d-ident-code:read-only:focus {
+  background: none;
+  box-shadow: none;
 }
 
 /* ── 版號紀錄：一版一列，版號｜雜湊｜日期 三欄對齊 ── */

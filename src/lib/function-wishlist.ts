@@ -84,6 +84,21 @@ export function wishNumberOf(id: string, code: string): number | null {
   return n;
 }
 
+/**
+ * 專案簡寫改名：既有願望的 id（`舊簡寫-001` 這種）跟著換成新簡寫，流水號不變。
+ *
+ * 為什麼要主動搬，不能放著不管：簡寫是 wish list 取號的前綴，id 不會因為
+ * 專案設定改了就自動重算——放著不管，舊願望會變成沒人認得的孤兒 id，
+ * 而新願望從新簡寫的 001 開始編，兩批號碼各管各的，看起來像兩個專案。
+ */
+export function renameWishlistCode(doc: WishlistDoc, oldCode: string, newCode: string): WishlistDoc {
+  const rename = (it: WishlistItem): WishlistItem => {
+    const n = wishNumberOf(it.id, oldCode);
+    return n == null ? it : { ...it, id: formatWishId(newCode, n) };
+  };
+  return { active: doc.active.map(rename), archive: doc.archive.map(rename) };
+}
+
 export function occupiedWishNumbers(
   doc: WishlistDoc,
   code: string,

@@ -12,6 +12,7 @@ import {
   parseWishHandoff,
   parseWishlist,
   removeWish,
+  renameWishlistCode,
   serializeWishlist,
   takeWishId,
   titleFromWishes,
@@ -88,6 +89,29 @@ describe("wishNumberOf / nextWishNumber", () => {
     expect(formatWishId("SNOTE", 1)).toBe("SNOTE-001");
     expect(formatWishId("SNOTE", 3)).toBe("SNOTE-003");
     expect(formatWishId("SNOTE", 12)).toBe("SNOTE-012");
+  });
+});
+
+describe("renameWishlistCode", () => {
+  test("active／archive 兩邊都認得的 id 換前綴，流水號不變", () => {
+    const doc = {
+      active: [
+        { id: "AL-001", text: "a", created: "x" },
+        { id: "AL-003", text: "b", created: "x" },
+      ],
+      archive: [{ id: "AL-002", text: "c", created: "x", status: "已寫 spec" }],
+    };
+    const renamed = renameWishlistCode(doc, "AL", "SNOTE");
+    expect(renamed.active.map((it) => it.id)).toEqual(["SNOTE-001", "SNOTE-003"]);
+    expect(renamed.archive.map((it) => it.id)).toEqual(["SNOTE-002"]);
+  });
+
+  test("不認得舊簡寫的 id（別的專案手動塞進來的）原樣留著", () => {
+    const doc = {
+      active: [{ id: "OTHER-001", text: "a", created: "x" }],
+      archive: [],
+    };
+    expect(renameWishlistCode(doc, "AL", "SNOTE").active[0]?.id).toBe("OTHER-001");
   });
 });
 
