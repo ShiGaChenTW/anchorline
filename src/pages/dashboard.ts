@@ -130,8 +130,13 @@ if (!requireAuth()) {
     const desc = p?.description ?? "";
     return `<section class="d-hero d-ident">
         <p class="d-eyebrow">專案</p>
-        <input type="text" id="d-name" class="d-ident-name" value="${escapeHtml(name)}"
-               aria-label="專案名稱" placeholder="未命名專案" />
+        <div class="d-ident-name-row">
+          <input type="text" id="d-name" class="d-ident-name" value="${escapeHtml(name)}"
+                 aria-label="專案名稱" placeholder="未命名專案" />
+          <input type="text" id="d-code" class="d-ident-code" value="${escapeHtml(p?.shortCode ?? "")}"
+                 maxlength="5" spellcheck="false" autocapitalize="characters"
+                 aria-label="專案簡寫" placeholder="簡寫" />
+        </div>
         <textarea id="d-desc" class="d-ident-desc" rows="1" aria-label="專案介紹"
                   placeholder="一句話說明這個專案在做什麼">${escapeHtml(desc)}</textarea>
         <div class="d-ident-tags" id="d-tags">${tagsInnerHtml(p)}</div>
@@ -766,6 +771,31 @@ if (!requireAuth()) {
         if ((e as KeyboardEvent).key === "Enter") {
           e.preventDefault();
           nameEl.blur();
+        }
+      });
+    }
+
+    const codeEl = document.getElementById("d-code") as HTMLInputElement | null;
+    if (codeEl && codeEl.dataset.bound !== "1") {
+      codeEl.dataset.bound = "1";
+      const save = () => {
+        const v = codeEl.value.trim();
+        if (v === (p.shortCode ?? "")) return;
+        const r = store.setProjectShortCode(p.id, v);
+        if (!r.ok) {
+          toast(r.reason ?? "簡寫不合法");
+          codeEl.value = p.shortCode ?? "";
+          return;
+        }
+        const saved = store.get().projects.find((x) => x.id === p.id)?.shortCode ?? "";
+        codeEl.value = saved;
+        toast(saved ? `簡寫已設為 ${saved}` : "已清除簡寫");
+      };
+      codeEl.addEventListener("blur", save);
+      codeEl.addEventListener("keydown", (e) => {
+        if ((e as KeyboardEvent).key === "Enter") {
+          e.preventDefault();
+          codeEl.blur();
         }
       });
     }

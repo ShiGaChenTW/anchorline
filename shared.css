@@ -9340,8 +9340,22 @@ button.ft-row:focus-visible {
   margin-bottom: 8px;
 }
 
+.d-ident-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: -6px;
+  width: calc(100% + 12px);
+}
+.d-ident-name-row .d-ident-name {
+  flex: 1;
+  width: auto;
+  margin-left: 0;
+}
+
 .d-ident-name,
-.d-ident-desc {
+.d-ident-desc,
+.d-ident-code {
   display: block;
   width: calc(100% + 12px);
   padding: 2px 6px;
@@ -9356,11 +9370,21 @@ button.ft-row:focus-visible {
   overflow: hidden;
 }
 /* 名稱：比 git 狀態句小一階，讓「現在該做什麼」仍是卡片裡最大的字 */
-.d-ident-name {
+.d-ident-name,
+.d-ident-code {
   font-size: var(--fs-7);
   font-weight: 650;
   letter-spacing: -0.022em;
   line-height: 1.25;
+}
+/* 簡寫：跟名稱同一排右側，寬度只夠留 5 個字母。row 自己已經吃了 -6px 的對齊，
+   這裡不能再疊一次，不然簡寫框會比名稱框多縮進去 6px。 */
+.d-ident-code {
+  flex: 0 0 auto;
+  width: 5.5ch;
+  margin-left: 0;
+  text-align: center;
+  text-transform: uppercase;
 }
 /* 說明行：與 .d-hero-sub 同級 */
 .d-ident-desc {
@@ -9370,17 +9394,20 @@ button.ft-row:focus-visible {
   color: var(--fg-2);
 }
 .d-ident-name::placeholder,
-.d-ident-desc::placeholder {
+.d-ident-desc::placeholder,
+.d-ident-code::placeholder {
   color: var(--muted);
   font-weight: 400;
 }
 /* 可編輯的線索只在游標經過時出現，閒置時完全是文字 */
 .d-ident-name:hover,
-.d-ident-desc:hover {
+.d-ident-desc:hover,
+.d-ident-code:hover {
   box-shadow: inset 0 0 0 1px var(--border);
 }
 .d-ident-name:focus,
-.d-ident-desc:focus {
+.d-ident-desc:focus,
+.d-ident-code:focus {
   outline: none;
   background: var(--inset);
   box-shadow: inset 0 0 0 1px var(--accent);
