@@ -8,6 +8,7 @@ import { fieldNo } from "../lib/field-number";
 import { canApproveProject, canEditContent, canPeerReview } from "../lib/permissions";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
 import { initHelpOverlay } from "../lib/help-overlay";
+import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import { renderMarkdown } from "../lib/markamd/markdown";
 import { applySemanticHighlight } from "../lib/markamd/semantic-highlight";
 import { diffDocs } from "../lib/prd-versions";
@@ -23,6 +24,11 @@ import {
   syncMotionPreferenceClass,
 } from "../lib/attention-motion";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+
+// 第一行：攔截要先裝好才擋得住後面任何一行的 throw（見 loading-overlay.ts）。
+// 8 秒硬上限是最後一道保險——正常路徑由檔尾的 finally 收掉，這裡防的是
+// 「沒 throw 但也不回來」。
+beginBootOverlay({ autoHideAfter: 8000 });
 
 // plans/*.md 只在開發時預嵌。
 // eager glob 會把「這個 repo 自己的」內部規劃文件整包打進 bundle ——
@@ -861,14 +867,20 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// 預設留言收合；簽核 details 展開淡入
-expandComments(false);
-document.querySelector(".review-approvals-wrap")?.addEventListener("toggle", (e) => {
-  const d = e.currentTarget;
-  if (!(d instanceof HTMLDetailsElement) || !d.open) return;
-  expandEnter(d.querySelector(".approval-strip") ?? d);
-});
+try {
+  // 預設留言收合；簽核 details 展開淡入
+  expandComments(false);
+  document.querySelector(".review-approvals-wrap")?.addEventListener("toggle", (e) => {
+    const d = e.currentTarget;
+    if (!(d instanceof HTMLDetailsElement) || !d.open) return;
+    expandEnter(d.querySelector(".approval-strip") ?? d);
+  });
 
-render();
-store.subscribe(render);
+  render();
+  store.subscribe(render);
+} catch (err) {
+  failBootOverlay(err);
+} finally {
+  endBootOverlay();
+}
 } // end __authed

@@ -50,6 +50,7 @@ import {
   type ProjectCandidate,
 } from "../lib/folder-import";
 import { initHelpOverlay } from "../lib/help-overlay";
+import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import { isNative, native } from "../lib/native";
 import { canEditContent } from "../lib/permissions";
 import { CHARS_PER_MIN, DEFAULT_TARGET } from "../lib/focus-mode";
@@ -58,6 +59,11 @@ import { syncRailContext } from "../lib/rail-projects";
 import { initTheme } from "../lib/theme";
 import { bindModalDismiss, closeModal, escapeHtml, initMobileNav, openModal, toast, updateUserRailFooter } from "../lib/ui";
 import { starterScaffold } from "../lib/writing-assist";
+
+// 第一行：攔截要先裝好才擋得住後面任何一行的 throw（見 loading-overlay.ts）。
+// 8 秒硬上限是最後一道保險——正常路徑由檔尾的 finally 收掉，這裡防的是
+// 「沒 throw 但也不回來」。
+beginBootOverlay({ autoHideAfter: 8000 });
 
 if (!requireAuth()) {
   /* redirected */
@@ -1141,5 +1147,11 @@ if (!requireAuth()) {
     scanFiles((e.target as HTMLInputElement).files);
   });
 
-  render();
+  try {
+    render();
+  } catch (err) {
+    failBootOverlay(err);
+  } finally {
+    endBootOverlay();
+  }
 }

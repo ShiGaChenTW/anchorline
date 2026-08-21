@@ -35,6 +35,7 @@ import { SECTION_TO_OPENSPEC, sourceFileForSection } from "../lib/file-tree";
 // 版本快照）已整批搬到 `openspec-workspace.ts`。這一頁只剩 PRD：
 // 章節表單、教練、gate、送審。
 import { initHelpOverlay } from "../lib/help-overlay";
+import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import { initFocusMode, renderProgress } from "../lib/focus-mode";
 import {
   bindResumeTracking,
@@ -49,6 +50,11 @@ import { initTheme } from "../lib/theme";
 import { renderDiffSummary } from "../lib/diff-summary";
 import { changedFieldCount } from "../lib/prd-versions";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+
+// 第一行：攔截要先裝好才擋得住後面任何一行的 throw（見 loading-overlay.ts）。
+// 8 秒硬上限是最後一道保險——正常路徑由檔尾的 finally 收掉，這裡防的是
+// 「沒 throw 但也不回來」。
+beginBootOverlay({ autoHideAfter: 8000 });
 
 /** MarkaMD 雙欄欄位清理 */
 let unbindMd: (() => void) | null = null;
@@ -1435,8 +1441,14 @@ document.getElementById("editor-body")?.addEventListener(
   true,
 );
 
-// ⌥F 快捷鍵與狀態還原；同步執行，不能靠 rAF（分頁在背景時 rAF 不觸發）
-initFocusMode();
-initHyperfocusGuard();
-render();
+try {
+  // ⌥F 快捷鍵與狀態還原；同步執行，不能靠 rAF（分頁在背景時 rAF 不觸發）
+  initFocusMode();
+  initHyperfocusGuard();
+  render();
+} catch (err) {
+  failBootOverlay(err);
+} finally {
+  endBootOverlay();
+}
 } // end __authed

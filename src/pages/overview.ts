@@ -11,7 +11,12 @@ import type { AppState, Project } from "../data/types";
 import { projectDisplayName } from "../data/types";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
-import { hideLoading, showLoading } from "../lib/loading-overlay";
+import {
+  beginBootOverlay,
+  failBootOverlay,
+  hideLoading,
+  showLoading,
+} from "../lib/loading-overlay";
 import { evaluatePrdGates } from "../lib/prd-gates";
 import {
   formatBytes,
@@ -50,6 +55,12 @@ import {
   UAT_BOARD_TITLE,
   uatBoardNeedsMore,
 } from "../lib/uat-board";
+
+// 第一行：攔截要先裝好才擋得住後面任何一行的 throw（見 loading-overlay.ts）。
+// 這一頁**不用** endBootOverlay 收尾：下面那個 showLoading 會就地接手同一個
+// 元素（並解除開場攔截），最後由 `hideLoading()` 在兩個查詢都回來時收掉。
+// 8 秒硬上限只在「showLoading 都還沒跑到」時才有機會發動。
+beginBootOverlay({ autoHideAfter: 8000 });
 
 if (!requireAuth()) {
   /* redirected */
@@ -871,14 +882,22 @@ if (!requireAuth()) {
    * 原本 450ms 的遮罩快到根本看不見 —— 「有出現但你沒看到」跟「沒出現」
    * 對使用者是同一件事。
    */
-  showLoading("專案統計中", { minMs: 1100, autoHideAfter: 6000 });
+  try {
+    // 這一行同時是「開場遮罩交棒給頁面自己的遮罩」的那一刻：showLoading 會
+    // 沿用 HTML 裡已經在畫面上的同一個元素，所以中間不會閃一下。
+    showLoading("專案統計中", { minMs: 1100, autoHideAfter: 6000 });
 
-  render();
-  store.subscribe(render);
-  store.subscribe(() => void refreshOpenspec());
-  // 載入時掃一次就好。不進 render()、不輪詢 —— 它是磁碟 I/O，而 render 會被
-  // store 訂閱觸發很多次（與 PR 雷達不進 render 是同一個理由）。
-  void loadUatLists();
-  void Promise.allSettled([refreshOpenspec(), refreshGh()]).then(() => hideLoading());
-  window.setInterval(() => void refreshGh(), GH_REFRESH_MS);
+    render();
+    store.subscribe(render);
+    store.subscribe(() => void refreshOpenspec());
+    // 載入時掃一次就好。不進 render()、不輪詢 —— 它是磁碟 I/O，而 render 會被
+    // store 訂閱觸發很多次（與 PR 雷達不進 render 是同一個理由）。
+    void loadUatLists();
+    void Promise.allSettled([refreshOpenspec(), refreshGh()]).then(() => hideLoading());
+    window.setInterval(() => void refreshGh(), GH_REFRESH_MS);
+  } catch (err) {
+    // 這裡**不能**用 finally 收遮罩：收掉的時機由上面那條 allSettled 決定，
+    // 無條件收會把「還在查 gh」的那幾秒的遮罩提早拆掉。失敗才換錯誤畫面。
+    failBootOverlay(err);
+  }
 }

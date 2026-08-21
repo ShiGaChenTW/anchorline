@@ -69,6 +69,7 @@ import {
 } from "../lib/file-history";
 import { renderMarkdown } from "../lib/markamd/markdown";
 import { initHelpOverlay } from "../lib/help-overlay";
+import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import { parsePlanMeta, planProgress, type PlanMeta } from "../lib/plan-parser";
 import { openspecRootsOf, requestTrackingScan } from "../lib/tracking-bridge";
 import {
@@ -80,6 +81,11 @@ import {
 } from "../lib/openspec-status";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+
+// 第一行：攔截要先裝好才擋得住後面任何一行的 throw（見 loading-overlay.ts）。
+// 這一頁是整個功能的起因——「殼畫好了、標題寫著載入中、內容欄整片空白」
+// 就是在這裡被看到的。8 秒硬上限防的是「沒 throw 但也不回來」。
+beginBootOverlay({ autoHideAfter: 8000 });
 
 const __authed = requireAuth();
 if (__authed) {
@@ -1608,39 +1614,47 @@ document.addEventListener("keydown", (e) => {
 initCollapsible("btn-openspec-toggle", "openspec-list", "anchorline:osw-files-collapsed", "檔案清單");
 initCollapsible("btn-wish-toggle", "os-wish", "anchorline:osw-wish-collapsed", "願望清單");
 
-applyEntryIntent();
-render();
-void refreshSideData();
-void restoreOpenFile();
+try {
+  applyEntryIntent();
+  render();
+  // 側欄資料與上次開著的檔案都是非同步的：拿到 pending promise 時三欄
+  // 已經有真內容了，所以遮罩不等它們——那段改由頁內的狀態自己表達。
+  void refreshSideData();
+  void restoreOpenFile();
 
-// 綁定資料夾後檔案樹與清單要立刻長出來。平常只做這三格局部重繪，但
-// rootPath 或 activeProjectId 變了代表整頁的前提都變了 —— 頁首、右側
-// 任務／健康卡片、Wish List 全部還停在舊狀態，非做一次完整 render()
-// 不可，否則要重整頁面才會跟上。兩個都要追蹤：只看 root 會漏掉「兩個
-// 專案剛好共用同一個 root」；只看 projectId 會漏掉「同專案換綁資料夾」。
-let lastBoundRoot = activeProject()?.importSummary?.rootPath ?? "";
-let lastProjectId = activeProject()?.id ?? "";
-store.subscribe(() => {
-  const p = activeProject();
-  const root = p?.importSummary?.rootPath ?? "";
-  const pid = p?.id ?? "";
-  const switchedProject = pid !== lastProjectId;
-  if (switchedProject || root !== lastBoundRoot) {
-    lastProjectId = pid;
-    lastBoundRoot = root;
-    // 專案是在別處（例如上方的專案切換器）被換掉的，這裡攔不住那次切換。
-    // 留著舊專案開著的檔案比丟掉使用者還沒存的修改更危險 —— 中欄會用新
-    // 專案的畫面繼續寫舊專案的檔案。強制關閉，用 toast 講清楚發生了什麼。
-    if (switchedProject && openFile) {
-      openFile = null;
-      store.setActiveOpenSpecFile("");
-      toast("已切換專案，原本開著的檔案已關閉");
+  // 綁定資料夾後檔案樹與清單要立刻長出來。平常只做這三格局部重繪，但
+  // rootPath 或 activeProjectId 變了代表整頁的前提都變了 —— 頁首、右側
+  // 任務／健康卡片、Wish List 全部還停在舊狀態，非做一次完整 render()
+  // 不可，否則要重整頁面才會跟上。兩個都要追蹤：只看 root 會漏掉「兩個
+  // 專案剛好共用同一個 root」；只看 projectId 會漏掉「同專案換綁資料夾」。
+  let lastBoundRoot = activeProject()?.importSummary?.rootPath ?? "";
+  let lastProjectId = activeProject()?.id ?? "";
+  store.subscribe(() => {
+    const p = activeProject();
+    const root = p?.importSummary?.rootPath ?? "";
+    const pid = p?.id ?? "";
+    const switchedProject = pid !== lastProjectId;
+    if (switchedProject || root !== lastBoundRoot) {
+      lastProjectId = pid;
+      lastBoundRoot = root;
+      // 專案是在別處（例如上方的專案切換器）被換掉的，這裡攔不住那次切換。
+      // 留著舊專案開著的檔案比丟掉使用者還沒存的修改更危險 —— 中欄會用新
+      // 專案的畫面繼續寫舊專案的檔案。強制關閉，用 toast 講清楚發生了什麼。
+      if (switchedProject && openFile) {
+        openFile = null;
+        store.setActiveOpenSpecFile("");
+        toast("已切換專案，原本開著的檔案已關閉");
+      }
+      render();
+      void refreshSideData();
+      return;
     }
-    render();
-    void refreshSideData();
-    return;
-  }
-  renderChanges();
-  renderChangeFiles();
-});
+    renderChanges();
+    renderChangeFiles();
+  });
+} catch (err) {
+  failBootOverlay(err);
+} finally {
+  endBootOverlay();
+}
 } // end __authed

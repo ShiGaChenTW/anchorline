@@ -91,7 +91,7 @@
           <span class="context-state">READY FOR REVIEW</span>
         </div>
         <div class="context-title-block">
-          <h1 data-od-id="page-title">審閱 · 載入中…</h1>
+          <h1 data-od-id="page-title">未選擇專案</h1>
           <div class="sub" data-od-id="page-sub">載入專案後顯示審閱狀態</div>
         </div>
         <div class="context-frame-bottom">
@@ -111,7 +111,7 @@
 
       <!-- ADHD：簽核預設收合 -->
       <details class="review-approvals-wrap" data-od-id="approvals-wrap">
-        <summary class="review-approvals-summary" id="approvals-summary">簽核進度 · 載入中…</summary>
+        <summary class="review-approvals-summary" id="approvals-summary">簽核進度</summary>
         <div class="approval-strip" data-od-id="approvals"></div>
       </details>
 
@@ -126,8 +126,11 @@
               <span class="pill pill-draft" data-od-id="doc-status">—</span>
               <span class="mono" data-od-id="doc-slug">—</span>
             </div>
-            <h1 data-od-id="doc-title">載入中…</h1>
-            <p class="lede" data-od-id="doc-lede">讀取規格內容…</p>
+            <!-- 兩者都由 renderDoc() 填；`—` 沿用上面 doc-status／doc-slug
+                 的同一套佔位寫法。doc-title 之後還會被 syncChrome 收起來
+                 （頁標題已經是文件名），這裡不寫死任何看起來像進度的字。 -->
+            <h1 data-od-id="doc-title">—</h1>
+            <p class="lede" data-od-id="doc-lede">—</p>
             <div class="meta-line" data-od-id="doc-meta"></div>
             <section class="rv-diff" id="rv-diff" hidden aria-label="這一版相對主線的變更"></section>
             <div class="review-doc-body" id="review-doc-body" data-od-id="review-doc-body">
