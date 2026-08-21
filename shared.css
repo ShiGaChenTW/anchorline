@@ -1025,82 +1025,6 @@ body.is-resizing .main {
   min-width: 0;
 }
 
-/* 目前工作區（專案名從 titlebar 移到側欄） */
-.rail-context {
-  margin: 0 10px 8px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in oklab, var(--accent) 28%, var(--border));
-  background: color-mix(in oklab, var(--accent) 8%, var(--bg));
-  min-width: 0;
-}
-.rail-context-kicker {
-  font-size: var(--fs-1);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 2px;
-}
-.rail-context-mode {
-  font-size: var(--fs-2);
-  font-weight: 600;
-  color: var(--accent);
-  margin-bottom: 4px;
-}
-.rail-context-project {
-  font-size: var(--fs-4);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.3;
-  color: var(--fg);
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-.rail-context-status {
-  display: inline-block;
-  margin-top: 6px;
-  font-size: var(--fs-1);
-  font-weight: 650;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--fg-2);
-}
-.rail-context-status--review {
-  color: color-mix(in oklab, var(--warn) 50%, var(--fg));
-  border-color: color-mix(in oklab, var(--warn) 40%, var(--border));
-  background: color-mix(in oklab, var(--warn) 12%, transparent);
-}
-.rail-context-status--ok {
-  color: var(--success);
-  border-color: color-mix(in oklab, var(--success) 35%, var(--border));
-  background: color-mix(in oklab, var(--success) 10%, transparent);
-}
-.rail-context-status--warn {
-  color: var(--danger);
-  border-color: color-mix(in oklab, var(--danger) 35%, var(--border));
-  background: color-mix(in oklab, var(--danger) 10%, transparent);
-}
-.rail-context-status--draft {
-  color: var(--muted);
-}
-.rail-context-meta {
-  margin-top: 5px;
-  font-size: var(--fs-1);
-  color: var(--muted);
-  line-height: 1.35;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-html.adhd-calm .rail-context {
-  margin: 0 8px 10px;
-  padding: 12px;
-}
-html.adhd-calm .rail-context-project {
-  font-size: var(--fs-4);
-}
 
 .rail-nav {
   padding: 10px 8px;
@@ -3548,9 +3472,6 @@ html.adhd-calm .adhd-toolbar-focus-detail {
   .adhd-toolbar-focus {
     max-width: none;
   }
-}
-.rail-context-project {
-  transition: opacity var(--motion-fast) var(--ease-standard);
 }
 .review-sec-pill {
   transition:
@@ -12002,20 +11923,6 @@ p.gd-warn {
 .tk-step-handoff:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   側欄：「目前」卡固定在品牌列下方
-   ═══════════════════════════════════════════════════════════════ */
-.rail-context {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  flex: 0 0 auto;
-}
-.rail-context-status[hidden],
-.rail-context-meta[hidden] {
-  display: none;
 }
 
 /* ── 領域包：章節清單上方的領域選擇與孤兒提示 ────────────────── */

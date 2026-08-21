@@ -28,43 +28,14 @@ export type RailContextOpts = {
  * 根本不會建立這張卡 —— 所以它在某些頁面「消失」不是被隱藏，是從來沒生成過。
  * 改成側欄一初始化就先把骨架放好，四頁再各自填細節。
  */
-function ensureContextCard(): HTMLElement | null {
-  const rail = document.querySelector(".rail");
-  if (!rail) return null;
-  let el = document.getElementById("rail-context");
-  if (el) return el;
-  el = document.createElement("div");
-  el.id = "rail-context";
-  el.className = "rail-context";
-  el.setAttribute("role", "status");
-  el.setAttribute("aria-live", "polite");
-  el.setAttribute("aria-label", "目前工作區");
-  el.innerHTML = `
-    <div class="rail-context-kicker">目前</div>
-    <div class="rail-context-mode"></div>
-    <div class="rail-context-project"></div>
-    <div class="rail-context-status rail-context-status--draft" hidden></div>
-    <div class="rail-context-meta" hidden></div>
-  `;
-  const brand = rail.querySelector(".rail-brand");
-  if (brand) brand.insertAdjacentElement("afterend", el);
-  else rail.prepend(el);
-  return el;
-}
-
-function setText(root: HTMLElement, sel: string, text: string) {
-  const n = root.querySelector(sel);
-  if (n && n.textContent !== text) n.textContent = text;
-}
-
 /**
- * 沒有呼叫 syncRailContext 的頁面也要有這張卡。
- * 從目前頁面與 active 專案推一組合理的預設值。
+ * 沒有呼叫 syncRailContext 的頁面也要跑一次品牌名同步。
+ * 「目前工作區」那張卡（#rail-context）2026-08-21 已經整個拿掉——
+ * Scott 直接標紅圈要求移除，側欄已經有專案清單，這張卡片是重複資訊。
+ * 保留這個函式名稱與呼叫點是因為 rail-nav.ts 每頁 bootstrap 都會呼叫，
+ * 拆呼叫點比讓它變成空翻譯層風險更高。
  */
 export function ensureRailContextDefaults(pageLabel: string) {
-  if (document.getElementById("rail-context")?.querySelector(".rail-context-mode")?.textContent) {
-    return; // 已經有頁面填過細節就不要覆蓋
-  }
   const st = store.get();
   const cur = st.projects.find((p) => p.id === st.activeProjectId);
   syncRailContext({
@@ -75,39 +46,13 @@ export function ensureRailContextDefaults(pageLabel: string) {
   });
 }
 
-export function syncRailContext(opts: RailContextOpts) {
-  const el = ensureContextCard();
-  if (!el) return;
-
-  const name = (opts.projectName ?? "").trim() || "未選擇專案";
-  const tone = opts.statusTone ?? "draft";
-  const status = (opts.statusLabel ?? "").trim();
-  const meta = (opts.meta ?? "").trim();
-
-  // 逐欄位更新，不重建 innerHTML。
-  // 這張卡每次 store emit 都會被同步一次；整塊重畫的代價是每次都閃一下，
-  // 而且會把使用者選取的文字、hover 狀態一併清掉。
-  setText(el, ".rail-context-mode", opts.mode);
-  const proj = el.querySelector(".rail-context-project") as HTMLElement | null;
-  if (proj && proj.textContent !== name) {
-    proj.textContent = name;
-    proj.title = name;
-  }
-
-  const st = el.querySelector(".rail-context-status") as HTMLElement | null;
-  if (st) {
-    st.hidden = !status;
-    if (status && st.textContent !== status) st.textContent = status;
-    st.className = `rail-context-status rail-context-status--${tone}`;
-    st.hidden = !status;
-  }
-  const mt = el.querySelector(".rail-context-meta") as HTMLElement | null;
-  if (mt) {
-    mt.hidden = !meta;
-    if (meta && mt.textContent !== meta) mt.textContent = meta;
-  }
-
-  // 側欄品牌名固定（titlebar 已移除）
+/**
+ * 曾經同時做兩件事：畫「目前工作區」卡片、把側欄品牌名固定成 Anchorline。
+ * 卡片已經拿掉（見上），只剩品牌名這件事還有人依賴——四個頁面
+ * （dashboard/editor/overview/review）呼叫這支只是為了它，函式簽章
+ * 不動，裡面已經沒有卡片可畫了。
+ */
+export function syncRailContext(_opts: RailContextOpts) {
   document.querySelectorAll(".rail-brand strong, .rail-brand-text strong").forEach((n) => {
     n.textContent = "Anchorline";
   });
@@ -612,16 +557,6 @@ function beginInlineRename(block: HTMLElement, id: string) {
     card.classList.remove("is-renaming");
     form.remove();
     renderRailProjects();
-    // 側欄「目前」區塊也同步新名稱
-    const active = store.get().activeProjectId === id;
-    if (active) {
-      const p2 = store.get().projects.find((x) => x.id === id);
-      if (p2) {
-        const name = projectDisplayName(p2);
-        const ctx = document.querySelector(".rail-context-project");
-        if (ctx) ctx.textContent = name;
-      }
-    }
     const bits = [
       next.trim() ? `已命名為「${next.trim()}」` : "已清除自訂名稱",
     ];
