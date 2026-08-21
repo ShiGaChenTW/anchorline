@@ -232,6 +232,15 @@ async function selectChange(id: string) {
   // 換 change 等於換一整組檔案，右欄的資料要跟著重取
   void refreshSideData();
   render();
+
+  // 點了 change 就直接把它排第一的檔案（通常是 proposal.md）打開——
+  // 不用使用者再多點一次「這個 Change 的檔案」卡片裡的項目。瀏覽器版
+  // 沒有檔案系統可讀，開不了就別跳錯誤，維持原本「選一個檔案」的空狀態。
+  const first = currentEntry()?.group.rows[0];
+  if (first && canEditFiles()) {
+    const root = activeProject()?.importSummary?.rootPath ?? "";
+    void openFileInEditor(absolutePathFor(root, first.rel));
+  }
 }
 
 function renderChanges() {

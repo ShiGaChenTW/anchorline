@@ -195,6 +195,26 @@ describe("openspec-workspace.html 的三欄", () => {
   });
 });
 
+describe("點 change 直接開它的第一個檔案", () => {
+  /**
+   * Scott 回報：點了 change 還要再去「這個 Change 的檔案」卡片點一次才看得到
+   * 內容，多一步。selectChange() 現在要在切換 change 後自己把第一個檔案
+   * （通常是 proposal.md，group.rows 的排序已經保證 proposal 排最前面）
+   * 打開，不用使用者自己動手選檔案。
+   *
+   * 跟這個檔案其餘測試同一套路數：對原始碼字串斷言，不 import 頁面模組
+   * （見檔首說明）。
+   */
+  test("selectChange 换完 change 後呼叫 openFileInEditor 開第一個檔案", () => {
+    const src = read("src/pages/openspec-workspace.ts");
+    const fn = src.slice(src.indexOf("async function selectChange"), src.indexOf("function renderChanges"));
+    expect(fn).toContain("currentEntry()?.group.rows[0]");
+    expect(fn).toContain("openFileInEditor(");
+    // 瀏覽器版沒有檔案系統，開不了檔——不能無條件呼叫，一定要先過 canEditFiles() 這關
+    expect(fn).toMatch(/if\s*\(first\s*&&\s*canEditFiles\(\)\)/);
+  });
+});
+
 describe("檔案樹的 data-ft-path", () => {
   /**
    * OpenSpec 工作區靠這個屬性把「點檔案樹的檔」接到中欄開檔。
