@@ -9353,10 +9353,12 @@ button.ft-row:focus-visible {
   margin-bottom: 0;
 }
 /* 簡寫輸入框比卡寬（.d-ident-name-row 那組 +12px/-6px hack），所以往右多推
-   6px 才會疊在輸入框正上方——不然字會偏左一點點。 */
+   6px 才會疊在輸入框正上方——不然字會偏左一點點。寬度跟 .d-ident-code
+   乘同一個 --fs-7，不能各自用 em——這裡的字級（.d-eyebrow 的 fs-2）比
+   輸入框小很多，各自的 em 換算出來的 px 對不上，標籤會偏出框外。 */
 .d-ident-code-eyebrow {
   flex: 0 0 auto;
-  width: 5.5ch;
+  width: calc(var(--fs-7) * 4.2);
   margin-right: -6px;
   text-align: center;
 }
@@ -9398,11 +9400,14 @@ button.ft-row:focus-visible {
   letter-spacing: -0.022em;
   line-height: 1.25;
 }
-/* 簡寫：跟名稱同一排右側，寬度只夠留 5 個字母。row 自己已經吃了 -6px 的對齊，
-   這裡不能再疊一次，不然簡寫框會比名稱框多縮進去 6px。 */
+/* 簡寫：跟名稱同一排右側。row 自己已經吃了 -6px 的對齊，這裡不能再疊一次，
+   不然簡寫框會比名稱框多縮進去 6px。寬度用 ch 量不準——粗體大寫字母比
+   ch 量的「0」寬，5.5ch 在 fs-7 這個字級下會把第 5 個字母切掉。改成直接乘
+   --fs-7（而不是 em）：上面 .d-ident-code-eyebrow 標籤字級比較小，用 em 兩邊
+   算出來的 px 會對不齊，乘同一個變數才能保證兩者寬度真的一樣。 */
 .d-ident-code {
   flex: 0 0 auto;
-  width: 5.5ch;
+  width: calc(var(--fs-7) * 4.2);
   margin-left: 0;
   text-align: center;
   text-transform: uppercase;
