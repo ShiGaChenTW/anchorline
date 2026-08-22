@@ -21,13 +21,14 @@
           <div class="rail-logo" aria-hidden="true">AL</div>
           <div>
             <h1>Anchorline 首次設定</h1>
-            <p>正式版 · 無示範資料 · 三步開始協作</p>
+            <p>正式版 · 無示範資料 · 四步開始協作</p>
           </div>
         </div>
         <nav class="onboard-steps" id="onboard-steps" aria-label="引導步驟">
           <span data-step="0" class="on">1 管理員</span>
           <span data-step="1">2 專案導入</span>
           <span data-step="2">3 Agent 互動</span>
+          <span data-step="3">4 開發工具</span>
         </nav>
       </header>
 
@@ -111,6 +112,22 @@
         </label>
         <p class="hint">可略過；之後仍可在 Agent 管理或管理中心新增。</p>
         <p class="login-error" id="ob-err-2" role="alert"></p>
+      </section>
+
+      <!-- Step 3: CLI + skill -->
+      <section class="onboard-pane" data-pane="3" hidden aria-labelledby="ob-t3">
+        <h2 id="ob-t3">開發工具</h2>
+        <p class="onboard-lead">Anchorline 不自己實作 git 與 OpenSpec，它讀它們的輸出。缺的那個只會讓對應的畫面顯示一行提示，不會壞掉——所以這一步可以直接跳過，之後在「偏好設定」補。</p>
+        <div class="onboard-tools" id="ob-tools" aria-live="polite">
+          <p class="hint">偵測中…</p>
+        </div>
+        <button type="button" class="btn btn-sm" id="ob-tools-recheck">重新偵測</button>
+        <div class="onboard-skill">
+          <h3>OpenSpec 的 skill 是每個專案各一份</h3>
+          <p class="hint">CLI 全域裝一次就好；<code>.claude/skills/openspec-*</code>（<code>/openspec-propose</code> 那些指令）是 <code>openspec init</code> 在<strong>專案資料夾裡</strong>建的，所以每個新專案都要跑一次。這一步偵測不到它——這時候還沒有專案。</p>
+          <p class="hint">綁好資料夾之後到「OpenSpec 入口」，缺的話那一頁會紅字提示並給一顆「一鍵 openspec init」，它會把骨架與 skill 一起裝好。裝完 Claude Code 要重開才吃得到那些指令。</p>
+        </div>
+        <p class="login-error" id="ob-err-3" role="alert"></p>
       </section>
 
       <footer class="onboard-foot">

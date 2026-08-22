@@ -5288,6 +5288,58 @@ body.onboard-body {
 .onboard-list strong {
   color: var(--fg);
 }
+.onboard-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.onboard-tool {
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 8px;
+  font-size: var(--fs-3);
+  color: var(--fg-2);
+}
+/* 已安裝與找不到只差左邊那條色帶。整塊染色會讓「三個都缺」看起來像三個錯誤，
+   但它們是選用的——沒裝不是壞掉。 */
+.onboard-tool.is-ok {
+  border-left-color: #3fb950;
+}
+.onboard-tool.is-missing {
+  border-left-color: var(--accent);
+}
+.onboard-tool strong {
+  color: var(--fg);
+  margin-right: 8px;
+}
+.onboard-tool-state {
+  font-size: var(--fs-1);
+  color: var(--muted);
+}
+.onboard-tool code {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: var(--fs-2);
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+.onboard-tool .hint {
+  margin: 5px 0 0;
+}
+.onboard-skill {
+  margin: 14px 0 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.onboard-skill h3 {
+  margin: 0 0 6px;
+  font-size: var(--fs-3);
+  color: var(--fg);
+}
+
 .onboard-check {
   display: flex;
   gap: 10px;

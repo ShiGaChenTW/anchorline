@@ -198,11 +198,25 @@ pub fn openspec_list(dir: &Path, overrides: &CliOverrides) -> CliResult {
 
 /// `openspec init` —— 寫入例外，理由與 `git_init` 相同：可逆、不外流、參數寫死。
 /// 建立 `openspec/` 骨架，刪掉資料夾就還原。呼叫端仍然要先跟使用者確認。
+/// 抽成常數是為了能被測試盯住。少了 `--tools`，這顆按鈕會靜默地什麼都不做。
+pub const OPENSPEC_INIT_ARGS: [&str; 3] = ["init", "--tools", "claude"];
+
 pub fn openspec_init(dir: &Path, overrides: &CliOverrides) -> CliResult {
     match locate("openspec", overrides) {
-        Some(bin) => match run(&bin, &["init"], Some(dir)) {
+        // `--tools claude` 不能省。裸的 `openspec init` 是**互動式**的，會問要設定
+        // 哪些 AI 工具；從 GUI 起的行程沒有 TTY，於是它直接 exit 1 印
+        // 「Use --tools all, --tools none, or --tools claude,cursor,...」，
+        // 什麼都不建立。實測過（2026-08-22）：舊版這顆按鈕從來沒有成功過，
+        // 而使用者看到的只有一句「openspec init 執行失敗」。
+        //
+        // 帶上 claude 之後它會一次建好兩邊：`openspec/`（changes + specs +
+        // config.yaml）與 `.claude/skills/openspec-*` ＋ `.claude/commands/opsx`。
+        // 後者就是「OpenSpec 的 skill」——它是**每個專案各一份**，不是全域裝一次。
+        Some(bin) => match run(&bin, &OPENSPEC_INIT_ARGS, Some(dir)) {
             Some(out) => CliResult::Ok(out),
-            None => CliResult::Missing("openspec init 執行失敗".to_string()),
+            None => CliResult::Missing(
+                "openspec init 執行失敗。這個資料夾可能已經初始化過，或 openspec 版本太舊（--tools 需要 1.x）。".to_string(),
+            ),
         },
         None => CliResult::Missing(
             "找不到 openspec。安裝：npm i -g @fission-ai/openspec，或在設定裡指定路徑。".into(),
@@ -285,6 +299,21 @@ pub fn strip_ansi(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// `openspec init` 沒有 `--tools` 就是互動式的，而 GUI 起的行程沒有 TTY：
+    /// 它 exit 1 印一行 usage，什麼都不建立，使用者只看到「執行失敗」。
+    /// 實測過 2026-08-22（openspec 1.6.0）。這一題守的是「有人覺得參數多餘」。
+    #[test]
+    fn openspec_init_is_non_interactive() {
+        assert!(
+            OPENSPEC_INIT_ARGS.contains(&"--tools"),
+            "少了 --tools 會讓 openspec init 進互動模式而靜默失敗"
+        );
+        assert!(
+            OPENSPEC_INIT_ARGS.contains(&"claude"),
+            "要裝的是 .claude/skills/openspec-*，工具名不能漏"
+        );
+    }
+
     use super::*;
 
     #[test]

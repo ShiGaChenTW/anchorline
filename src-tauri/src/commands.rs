@@ -1802,13 +1802,28 @@ pub fn write_wishlist(
 #[serde(rename_all = "camelCase")]
 pub struct OpenspecProbe {
     initialized: bool,
+    /// `.claude/skills/openspec-*` 在不在。
+    ///
+    /// 與 `initialized` 分開回報，因為它們會各自缺席：手動建 `openspec/` 的
+    /// 專案有骨架但沒 skill；用別的 AI 工具跑過 init 的（`--tools cursor`）
+    /// 也是。把兩者合成一個布林，畫面就沒辦法只講缺的那一半。
+    has_claude_skills: bool,
 }
+
+/// skill 認一個就夠——四個是 openspec 自己一起裝的，不會只掉其中一個；
+/// 逐一比對只是把 openspec 的內部檔名清單抄一份到這裡，那份會過期。
+const OPENSPEC_SKILL_MARKER: &str = "openspec-propose";
 
 #[tauri::command]
 pub fn openspec_probe(folder_path: String) -> R<OpenspecProbe> {
-    let dir = PathBuf::from(&folder_path).join("openspec");
+    let root = PathBuf::from(&folder_path);
     Ok(OpenspecProbe {
-        initialized: dir.is_dir(),
+        initialized: root.join("openspec").is_dir(),
+        has_claude_skills: root
+            .join(".claude")
+            .join("skills")
+            .join(OPENSPEC_SKILL_MARKER)
+            .is_dir(),
     })
 }
 
@@ -2190,6 +2205,40 @@ pub fn ping() -> R<Pong> {
         .chain(extra)
         .collect(),
     })
+}
+
+#[cfg(test)]
+mod openspec_probe_tests {
+    use super::*;
+
+    #[test]
+    fn skeleton_and_skill_are_reported_independently() {
+        let dir = std::env::temp_dir().join("anc-osprobe");
+        std::fs::remove_dir_all(&dir).ok();
+
+        // 只有骨架，沒有 skill —— 手動建 openspec/ 或用別的 AI 工具跑過 init
+        // 的專案就長這樣。合成一個布林的話，畫面沒辦法只講缺的那一半。
+        std::fs::create_dir_all(dir.join("openspec")).unwrap();
+        let r = openspec_probe(dir.to_string_lossy().to_string()).unwrap();
+        assert!(r.initialized);
+        assert!(!r.has_claude_skills);
+
+        std::fs::create_dir_all(dir.join(".claude/skills").join(OPENSPEC_SKILL_MARKER)).unwrap();
+        let r = openspec_probe(dir.to_string_lossy().to_string()).unwrap();
+        assert!(r.initialized && r.has_claude_skills);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_folder_with_neither_reports_neither() {
+        let dir = std::env::temp_dir().join("anc-osprobe-empty");
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::create_dir_all(&dir).unwrap();
+        let r = openspec_probe(dir.to_string_lossy().to_string()).unwrap();
+        assert!(!r.initialized && !r.has_claude_skills);
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
 
 #[cfg(test)]

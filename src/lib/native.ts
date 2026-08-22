@@ -274,7 +274,7 @@ export const native = {
   /** 這個資料夾有沒有 openspec 骨架。純檔案系統檢查，不呼叫 CLI —— 
       「CLI 不在」與「沒 init 過」是兩件事。 */
   openspecProbe: (folderPath: string) =>
-    call<{ initialized: boolean }>("openspec_probe", { folderPath }),
+    call<{ initialized: boolean; hasClaudeSkills: boolean }>("openspec_probe", { folderPath }),
   /**
    * `openspec init`。寫入例外（BRIDGE.md §4.7c）：可逆、不外流、參數寫死。
    * 呼叫端要先跟使用者確認。

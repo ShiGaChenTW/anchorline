@@ -152,8 +152,18 @@ if (requireAuth()) {
     }
     try {
       const r = await native.openspecProbe(root);
-      box.hidden = r.initialized;
-      if (!r.initialized) warn.textContent = "這個專案還沒有 openspec/ —— change 放回去不會被讀到。";
+      // 骨架與 skill 是兩件事，各自會缺席。只講缺的那一半，不然畫面會對一個
+      // 已經有 openspec/ 的專案說「還沒有 openspec/」。
+      const missing = [
+        r.initialized ? "" : "openspec/ 骨架",
+        r.hasClaudeSkills ? "" : "Claude 的 OpenSpec skill（.claude/skills/openspec-*）",
+      ].filter(Boolean);
+      box.hidden = missing.length === 0;
+      if (missing.length) {
+        warn.textContent = r.initialized
+          ? `這個專案缺 ${missing.join("、")} —— agent 沒有 /openspec-propose 之類的指令可用。`
+          : `這個專案缺 ${missing.join("、")} —— change 放回去不會被讀到。`;
+      }
     } catch {
       box.hidden = true;
     }
@@ -496,10 +506,14 @@ if (requireAuth()) {
         title: [
           `要在「${projectDisplayName(p!)}」執行 openspec init 嗎？`,
           "",
-          `它會在 ${root} 底下建立 openspec/ 骨架。`,
+          `它會在 ${root} 底下建立兩樣東西：`,
+          "  · openspec/（changes、specs、config.yaml）",
+          "  · .claude/skills/openspec-*　與　.claude/commands/opsx",
           "",
-          "這是這個 App 唯一會寫進你專案資料夾的動作。",
-          "不想要的話刪掉那個資料夾就還原了。",
+          "第二樣就是 OpenSpec 的 skill —— 它是每個專案各一份，不是全域裝一次。",
+          "裝完 Claude Code 要重開才吃得到那些指令。",
+          "",
+          "不想要的話刪掉那兩個資料夾就還原了。",
         ].join("\n"),
         danger: true,
       }))

@@ -2,6 +2,8 @@ import { APP_VARIANT } from "../data/seed";
 import { store } from "../data/store";
 import { initTheme } from "../lib/theme";
 import { setBeginnerMode } from "../lib/beginner-flow";
+import { isNative, native } from "../lib/native";
+import { escapeHtml } from "../lib/ui";
 
 initTheme();
 
@@ -17,7 +19,7 @@ if (!store.needsOnboarding()) {
 }
 
 let step = 0;
-const MAX = 2;
+const MAX = 3;
 let importFile: { name: string; text: string } | null = null;
 
 function $(id: string) {
@@ -42,6 +44,68 @@ function setStep(n: number) {
   if (next) next.hidden = step === MAX;
   if (finish) finish.hidden = step !== MAX;
 }
+
+// ── 開發工具偵測 ─────────────────────────────────────────────────────
+//
+// 三個 CLI 都是**選用**的，所以這一步從不擋人往下走。它存在的理由是時機：
+// 缺 openspec 的症狀（OpenSpec 那幾頁顯示不出狀態）出現得比安裝晚很多，
+// 到那時候使用者已經不記得自己跳過了什麼。在這裡講一次最便宜。
+
+const TOOLS: { id: string; name: string; why: string; install: string }[] = [
+  {
+    id: "git",
+    name: "git",
+    why: "沒有它就沒有 commit、沒有專案統計，也沒有治理覆蓋率",
+    install: "xcode-select --install",
+  },
+  {
+    id: "openspec",
+    name: "openspec",
+    why: "OpenSpec 那幾頁的狀態、進度與健康度都讀它的輸出",
+    install: "npm i -g @fission-ai/openspec",
+  },
+  {
+    id: "gh",
+    name: "gh",
+    why: "PR 雷達要用；不裝只是那張卡片空著",
+    install: "brew install gh",
+  },
+];
+
+async function renderTools() {
+  const host = $("ob-tools");
+  if (!host) return;
+  if (!isNative()) {
+    // 瀏覽器版沒有辦法看到 PATH。講「偵測不到」會被讀成「沒裝」，那是兩件事。
+    host.innerHTML = `<p class="hint">瀏覽器版看不到你的 PATH，偵測要在桌面版 App 才做得到。</p>`;
+    return;
+  }
+  host.innerHTML = `<p class="hint">偵測中…</p>`;
+  let found: Record<string, string | null> = {};
+  try {
+    found = await native.probeClis();
+  } catch {
+    host.innerHTML = `<p class="hint">偵測失敗。可以先跳過，之後在「偏好設定」指定路徑。</p>`;
+    return;
+  }
+  host.innerHTML = TOOLS.map((t) => {
+    const path = found[t.id];
+    return path
+      ? `<div class="onboard-tool is-ok">
+           <strong>${escapeHtml(t.name)}</strong>
+           <span class="onboard-tool-state">已安裝</span>
+           <code>${escapeHtml(path)}</code>
+         </div>`
+      : `<div class="onboard-tool is-missing">
+           <strong>${escapeHtml(t.name)}</strong>
+           <span class="onboard-tool-state">找不到</span>
+           <p class="hint">${escapeHtml(t.why)}</p>
+           <code>${escapeHtml(t.install)}</code>
+         </div>`;
+  }).join("");
+}
+
+$("ob-tools-recheck")?.addEventListener("click", () => void renderTools());
 
 function err(pane: number, msg: string) {
   const el = $(`ob-err-${pane}`);
@@ -183,6 +247,13 @@ $("ob-next")?.addEventListener("click", () => {
       return;
     }
     setStep(2);
+    return;
+  }
+  if (step === 2) {
+    setStep(3);
+    // 進到這一步才偵測。放在進場一次跑掉的話，使用者填管理員資料的那段時間
+    // 裡結果就過期了——而這一步正好是他可能開另一個終端機去裝東西的時候。
+    void renderTools();
     return;
   }
   // 最後一步：若「下一步」仍可見（hidden 被 CSS 蓋掉），改走完成
