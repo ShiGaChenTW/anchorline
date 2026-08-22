@@ -61,7 +61,35 @@ GitHub 的 CODEOWNERS 與 branch protection 只認人，不認 AI 族系，抓�
 
 ## 安裝
 
-目前請自行建置（未簽章產物的發布流程還在做）：
+### macOS — Homebrew
+
+```bash
+brew install --cask shigachentw/tap/anchorline
+```
+
+⚠️ **產物未簽章**，所以第一次開會被 Gatekeeper 擋（Homebrew 預設會蓋
+quarantine 屬性）。裝完跑一次：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Anchorline.app"
+```
+
+或在 Finder 對 `Anchorline.app` 按住 Control 點一下，選「打開」。
+
+更新與移除：
+
+```bash
+brew upgrade --cask anchorline
+brew uninstall --cask anchorline
+```
+
+### 直接下載
+
+[Releases](https://github.com/ShiGaChenTW/anchorline/releases) 有 macOS
+（universal `.dmg`）、Windows、Linux 的產物。Gatekeeper／SmartScreen 的
+處理同上。
+
+### 自行建置
 
 ```bash
 git clone https://github.com/ShiGaChenTW/anchorline.git
