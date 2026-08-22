@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  changeStatus,
   nextArtifact,
   openspecHeadline,
   openspecProgressPct,
@@ -132,5 +133,30 @@ describe("openspecHeadline", () => {
 
   test("沒有 change：明講，不顯示 0%", () => {
     expect(openspecHeadline({ available: true, changes: [] })).toBe("沒有進行中的 change");
+  });
+});
+
+describe("changeStatus", () => {
+  const at = (closed: number, total: number) => ({ archived: false, progress: { closed, total } });
+
+  test("封存的一律算收工，不必再看 tasks", () => {
+    expect(changeStatus({ archived: true, progress: null })).toBe("done");
+    expect(changeStatus({ archived: true, progress: { closed: 0, total: 9 } })).toBe("done");
+  });
+
+  test("勾完才算 done", () => {
+    expect(changeStatus(at(9, 9))).toBe("done");
+    expect(changeStatus(at(8, 9))).toBe("wip");
+    expect(changeStatus(at(0, 9))).toBe("todo");
+  });
+
+  test("進度未知只能算待實作 —— 讀不到不等於做完了", () => {
+    // 瀏覽器版讀不到磁碟時全部走這條。反過來判會把還沒開工的 change 藏起來。
+    expect(changeStatus({ archived: false, progress: null })).toBe("todo");
+  });
+
+  test("tasks.md 一條步驟都沒有時算待實作，不算 100%", () => {
+    // 0/0 用除法算會是 NaN 或被當成完成，這裡明確擋掉
+    expect(changeStatus(at(0, 0))).toBe("todo");
   });
 });

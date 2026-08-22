@@ -3,6 +3,7 @@ import {
   absolutePathFor,
   groupOpenspecFiles,
   openspecFiles,
+  specRows,
 } from "../src/lib/openspec-tree";
 
 /** Project_Border-loom_rust 實際掃到的 17 個路徑（2026-08-08） */
@@ -166,5 +167,31 @@ describe("absolutePathFor", () => {
     expect(absolutePathFor("/Users/s/loom", "loom-extra/openspec/a.md")).toBe(
       "/Users/s/loom/loom-extra/openspec/a.md",
     );
+  });
+});
+
+describe("specRows", () => {
+  const rows = (paths: string[]) => specRows(groupOpenspecFiles(openspecFiles(paths)));
+
+  test("只挑 openspec/specs/，change 底下的 delta spec 不算", () => {
+    expect(
+      rows([
+        "P/openspec/specs/auth/spec.md",
+        "P/openspec/changes/add-2fa/specs/auth/spec.md",
+        "P/openspec/changes/add-2fa/proposal.md",
+        "P/openspec/config.yaml",
+      ]),
+    ).toEqual([{ rel: "P/openspec/specs/auth/spec.md", label: "auth" }]);
+  });
+
+  test("一個 domain 多個檔時標籤補上檔名，兩列才分得開", () => {
+    expect(
+      rows(["P/openspec/specs/auth/spec.md", "P/openspec/specs/auth/design.md"]).map((r) => r.label),
+      // 群組內的排序沿用 ARTIFACT_ORDER（design 先於 spec），這裡只驗標籤分得開
+    ).toEqual(["auth/design.md", "auth"]);
+  });
+
+  test("沒有 specs/ 就是空清單，不是 throw", () => {
+    expect(rows(["P/openspec/changes/add-2fa/proposal.md"])).toEqual([]);
   });
 });

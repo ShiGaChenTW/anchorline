@@ -89,6 +89,32 @@ export function groupOpenspecFiles(files: readonly string[]): OsGroup[] {
   );
 }
 
+export type SpecRow = {
+  /** 原始相對路徑 */
+  rel: string;
+  /** 畫面上那一列的字 */
+  label: string;
+};
+
+/**
+ * `openspec/specs/` 底下的現況規格，攤平成一列一個檔。
+ *
+ * 跟 change 不同，spec 不需要以資料夾為單位選取 —— 一個 domain 幾乎永遠只有
+ * 一份 `spec.md`，用兩層清單去表達一層資料是白繳的點擊數。多檔的 domain
+ * 才在標籤補上檔名，否則同一個 domain 的兩列會長得一模一樣。
+ */
+export function specRows(groups: readonly OsGroup[]): SpecRow[] {
+  return groups
+    .filter((g) => g.kind === "spec")
+    .flatMap((g) => {
+      const domain = g.label.replace(/^specs\//, "");
+      return g.rows.map((r) => ({
+        rel: r.rel,
+        label: r.name.toLowerCase() === "spec.md" ? domain : `${domain}/${r.name}`,
+      }));
+    });
+}
+
 /**
  * 把 `allPaths` 的一筆換成真正的檔案位置。
  *

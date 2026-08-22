@@ -34,6 +34,7 @@ import {
   absolutePathFor,
   groupOpenspecFiles,
   openspecFiles,
+  specRows,
   type OsGroup,
 } from "../lib/openspec-tree";
 import { canEditFiles, readFile, shortPath, writeFile } from "../lib/file-editor";
@@ -73,6 +74,8 @@ import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loadin
 import { parsePlanMeta, planProgress, type PlanMeta } from "../lib/plan-parser";
 import { openspecRootsOf, requestTrackingScan } from "../lib/tracking-bridge";
 import {
+  changeStatus,
+  type ChangeStatus,
   nextArtifact,
   parseOpenspecList,
   parseOpenspecStatus,
@@ -238,15 +241,40 @@ async function selectChange(id: string) {
   }
 }
 
+/**
+ * 這個 change 收到哪裡了。**掃不到就回 null，不回 0/0** —— 兩者在畫面上
+ * 差很多：0/0 會被當成「沒有步驟＝已完成」而被藏起來，而掃不到只代表
+ * 不知道（瀏覽器版讀不到磁碟、專案沒綁資料夾、tasks.md 還沒寫）。
+ * 沒有證據就不能宣告完成，這是這一整段過濾的前提。
+ */
+function changeProgress(id: string): { closed: number; total: number } | null {
+  const meta = taskMetaByChange.get(id);
+  if (meta) {
+    const prog = planProgress(meta);
+    return { closed: prog.closed, total: prog.total };
+  }
+  // 封存的 change 不在 tracking 掃描範圍，但 CLI 數得出來
+  const listed = listedByChange.get(id);
+  if (listed && listed.totalTasks > 0) {
+    return { closed: listed.completedTasks, total: listed.totalTasks };
+  }
+  return null;
+}
+
+/** 判定本身在 `openspec-status.ts`（純函式、有測試），這裡只負責餵資料。 */
+function statusOf(e: ChangeEntry): ChangeStatus {
+  return changeStatus({ archived: e.archived, progress: changeProgress(e.id) });
+}
+
+/** 已完成那一段預設收起來。只放模組層 —— 重新整理回到收起是想要的預設。 */
+let showDoneChanges = false;
+
 function renderChanges() {
   const host = document.getElementById("osw-changes");
   if (!host) return;
   const p = activeProject();
   const entries = changeEntries(osGroups());
   const cur = currentChangeId();
-
-  const countEl = document.getElementById("osw-change-count");
-  if (countEl) countEl.textContent = entries.length ? `${entries.length}` : "—";
 
   if (!p) {
     host.innerHTML = `<p class="os-empty">還沒有選擇專案。</p>`;
@@ -261,28 +289,110 @@ function renderChanges() {
     return;
   }
 
-  const active = entries.filter((e) => !e.archived);
-  const archived = entries.filter((e) => e.archived);
+  // 目前開著的那一個**永遠留在清單上**，就算它已經收工。把使用者正在看的
+  // 東西從清單抽掉，畫面會變成「中欄有內容、左欄沒有一列是亮的」。
+  const done = entries.filter((e) => statusOf(e) === "done" && e.id !== cur);
+  const open = entries.filter((e) => !done.includes(e));
+  // 動過一步就算進行中。分兩堆是為了先看到「還沒開始」那一堆 —— 它才是
+  // 這一頁要回答的問題。
+  const wip = open.filter((e) => statusOf(e) === "wip");
+  const todo = open.filter((e) => !wip.includes(e));
 
-  const rowsFor = (list: ChangeEntry[]) =>
+  // 計數只數還沒收完的。標題旁邊那個數字跟清單長度不一致的話，
+  // 使用者第一個結論會是「清單漏了東西」。
+  const countEl = document.getElementById("osw-change-count");
+  if (countEl) countEl.textContent = open.length ? `${open.length}` : "0";
+
+  const rowsFor = (list: ChangeEntry[], useLabel = false) =>
     list
       .map(
         (e) => `<button type="button" class="osw-change${e.id === cur ? " on" : ""}"
             role="option" aria-selected="${e.id === cur}"
             data-osw-change="${escapeHtml(e.id)}" title="${escapeHtml(e.label)}">
-          <span class="osw-change-name">${escapeHtml(e.id)}</span>
+          <span class="osw-change-name">${escapeHtml(useLabel ? e.label : e.id)}</span>
           <span class="osw-change-n">${e.group.rows.length}</span>
         </button>`,
       )
       .join("");
 
+  const archivedCount = done.filter((e) => e.archived).length;
+  // 藏起來的東西一定要說出來還有幾個 —— 安靜地少列幾項，看起來會像掃描漏了。
+  const doneToggle = done.length
+    ? `<button type="button" class="os-group os-group--done" id="osw-done-toggle"
+          aria-expanded="${showDoneChanges}">
+        已完成 ${done.length}${archivedCount ? `（含封存 ${archivedCount}）` : ""}
+        <span>${showDoneChanges ? "隱藏" : "顯示"}</span>
+      </button>${showDoneChanges ? rowsFor(done, true) : ""}`
+    : "";
+
   host.innerHTML = `
-    ${active.length ? `<p class="os-group os-group--change">Active<span>${active.length}</span></p>${rowsFor(active)}` : ""}
-    ${archived.length ? `<p class="os-group">Archived<span>${archived.length}</span></p>${rowsFor(archived)}` : ""}
+    ${todo.length ? `<p class="os-group os-group--change">待實作<span>${todo.length}</span></p>${rowsFor(todo)}` : ""}
+    ${wip.length ? `<p class="os-group os-group--change">進行中<span>${wip.length}</span></p>${rowsFor(wip)}` : ""}
+    ${!open.length ? `<p class="os-empty">沒有還沒收完的 change。</p>` : ""}
+    ${doneToggle}
   `;
 
   host.querySelectorAll<HTMLButtonElement>("[data-osw-change]").forEach((btn) => {
     btn.onclick = () => void selectChange(btn.dataset.oswChange ?? "");
+  });
+  const toggle = document.getElementById("osw-done-toggle");
+  if (toggle) {
+    toggle.onclick = () => {
+      showDoneChanges = !showDoneChanges;
+      renderChanges();
+    };
+  }
+}
+
+// ── specs 清單 ────────────────────────────────────────────────────────
+//
+// `openspec/specs/<domain>/` 是 change 封存之後留下的**現況規格**。
+// Changes 那一區只列還沒收完的提案，所以在這一區出現之前，這一頁沒有任何
+// 入口讀得到已經生效的承諾 —— 而審 change 的時候最常要對照的就是它。
+//
+// 不進 `activeOpenSpecChange`：那個 id 是右欄（tasks 進度／`openspec status`）
+// 的取值鑰匙，spec 沒有 tasks.md 也不在 CLI 的 change 清單裡，塞進去只會讓
+// 右欄整欄變成「查無此 change」。這一區只做一件事：把檔案開到中欄。
+
+function renderSpecs() {
+  const host = document.getElementById("osw-specs");
+  if (!host) return;
+  const p = activeProject();
+  const rows = specRows(osGroups());
+
+  const countEl = document.getElementById("osw-spec-count");
+  if (countEl) countEl.textContent = rows.length ? `${rows.length}` : "—";
+
+  if (!p || !p.importSummary?.allPaths?.length) {
+    // 沒專案／沒綁資料夾時 Changes 那一區已經說過原因了，這裡再說一次是噪音
+    host.innerHTML = "";
+    return;
+  }
+  if (!rows.length) {
+    host.innerHTML = `<p class="os-empty">還沒有現況規格。change 跑完 <code>openspec archive</code> 才會在 <code>openspec/specs/</code> 留下 spec。</p>`;
+    return;
+  }
+
+  const root = p.importSummary?.rootPath ?? "";
+  const cur = store.get().activeOpenSpecFile;
+
+  host.innerHTML = rows
+    .map((r) => {
+      const abs = absolutePathFor(root, r.rel);
+      const on = Boolean(cur) && cur === abs;
+      return `<button type="button" class="osw-change${on ? " on" : ""}"
+            role="option" aria-selected="${on}"
+            data-osw-spec="${escapeHtml(r.rel)}" title="${escapeHtml(r.rel)}">
+          <span class="osw-change-name">${escapeHtml(r.label)}</span>
+        </button>`;
+    })
+    .join("");
+
+  host.querySelectorAll<HTMLButtonElement>("[data-osw-spec]").forEach((btn) => {
+    btn.onclick = () => {
+      const rel = btn.dataset.oswSpec ?? "";
+      if (rel) void openFileInEditor(absolutePathFor(root, rel));
+    };
   });
 }
 
@@ -1234,6 +1344,8 @@ async function refreshSideData(force = false) {
     healthByChange = new Map();
     listedByChange = new Map();
     healthReason = "這個專案還沒有綁定資料夾。";
+    // 左欄的「已完成」分類靠的就是這兩份資料，所以它也要跟著重畫
+    renderChanges();
     renderSide();
     return;
   }
@@ -1290,6 +1402,10 @@ async function refreshSideData(force = false) {
   // 舊的這一輪寫回去等於讓右欄倒退回上一個專案，寧可安靜丟掉。
   if (lastSideKey !== key) return;
   sideLoading = false;
+  // 進度是非同步來的：拿到之前每個 change 都「不知道完成沒」而全部列在待實作，
+  // 拿到之後才分得出來。只重畫這兩區，不走整頁 `render()` —— 中欄的
+  // textarea 會被重建，掃描期間打的字就沒了。
+  renderChanges();
   renderSide();
 }
 
@@ -1503,6 +1619,7 @@ async function restoreOpenFile() {
 function render() {
   syncProjectChrome();
   renderChanges();
+  renderSpecs();
   renderFileView();
   renderSide();
   syncUser();

@@ -52,6 +52,22 @@
     color: var(--muted);
   }
 
+  /* 「已完成 N 個」那一列是可以按的 —— 沿用 .os-group 的排版，
+     只把 button 自帶的外觀清掉，這樣它跟上面兩個分類標題對齊。 */
+  button.os-group--done {
+    width: 100%;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--muted);
+    text-align: left;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+  button.os-group--done:hover { background: var(--inset); }
+  button.os-group--done:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
   /* ── 右欄：進度 / 健康狀態 ── */
   .osw-side-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px 12px; }
   .osw-card {
@@ -201,6 +217,15 @@
               <span class="mono" id="osw-change-count">—</span>
             </div>
             <div class="osw-changes" id="osw-changes" role="listbox" aria-label="OpenSpec changes"></div>
+
+            <!-- Specs 是 change 走完 `openspec archive` 之後留下的現況規格。
+                 Changes 只回答「還沒收完的提案有哪些」，看不到已經生效的承諾；
+                 少了這一區，這一頁就沒有任何入口讀得到 openspec/specs/。 -->
+            <div class="wb-head">
+              <h2>Specs</h2>
+              <span class="mono" id="osw-spec-count">—</span>
+            </div>
+            <div class="osw-changes" id="osw-specs" role="listbox" aria-label="OpenSpec specs"></div>
           </div>
 
           <!-- 中欄：原始檔案檢視／編輯 -->

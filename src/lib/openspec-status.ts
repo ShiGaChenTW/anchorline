@@ -134,3 +134,24 @@ export function openspecHeadline(result: OpenspecResult): string {
   const next = nextArtifact(open[0]!);
   return next ? `下一步：寫 ${next.outputPath}（${open[0]!.name}）` : `${open[0]!.name} 沒有可寫的下一步`;
 }
+
+/**
+ * 一個 change 在左欄清單裡歸到哪一堆。
+ *
+ * `progress` 為 null 代表**不知道**，不是 0/0：掃不到 `tasks.md`（瀏覽器版
+ * 讀不到磁碟、專案沒綁資料夾、還沒寫）時只能歸到「待實作」。沒有證據就不能
+ * 宣告完成 —— 反過來做的話，一個還沒開工的 change 會因為讀不到檔就被藏起來。
+ */
+export type ChangeStatus = "todo" | "wip" | "done";
+
+export function changeStatus(input: {
+  archived: boolean;
+  progress: { closed: number; total: number } | null;
+}): ChangeStatus {
+  // 封存本身就是收工的宣告，不必再查 tasks.md
+  if (input.archived) return "done";
+  const p = input.progress;
+  if (!p || p.total <= 0) return "todo";
+  if (p.closed >= p.total) return "done";
+  return p.closed > 0 ? "wip" : "todo";
+}
