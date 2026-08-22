@@ -67,6 +67,7 @@ pub fn run() {
             commands::read_file,
             commands::write_file,
             commands::write_domain_pack,
+            commands::write_change_bundle,
             commands::save_uat_evidence,
             commands::pick_uat_images,
             commands::read_uat_evidence,

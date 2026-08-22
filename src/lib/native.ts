@@ -305,6 +305,16 @@ export const native = {
    */
   writeWishlist: (folderPath: string, text: string) =>
     callMaybe<{ path: string }>("write_wishlist", { folderPath, text }),
+  /**
+   * change／plan 產出直接落進專案資料夾。**建得了新目錄**——這是它與
+   * `writeFile`（改既有檔）和 `writeDomainPack`（只收檔名）的差別。
+   *
+   * 路徑白名單、撞名不覆寫、全有全無都在 Rust 端（`write_change_bundle`）。
+   * 前端這一層不重複那些判定：重複一份會分岔，而分岔的那一份不是守門，
+   * 是一個看起來像守門的東西。
+   */
+  writeChangeBundle: (root: string, files: { rel: string; content: string }[]) =>
+    callMaybe<{ paths: string[] }>("write_change_bundle", { root, files }),
   ghStatus: () => callMaybe<{ raw: string; fetchedAt: string }>("gh_status"),
   onefetch: (folderPath: string) => callMaybe<{ raw: string }>("onefetch", { folderPath }),
   fastfetch: () => callMaybe<{ raw: string }>("fastfetch"),

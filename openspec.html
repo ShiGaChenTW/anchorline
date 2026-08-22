@@ -164,18 +164,19 @@
             <div class="os-step-head">
               <span class="os-step-n">3</span>
               <h2>把文件拿走</h2>
-              <span class="os-step-hint">只產生文件，不直接寫入專案</span>
+              <span class="os-step-hint">寫進專案，或下載自己放</span>
             </div>
             <label class="os-field os-field-wide">要收進哪一版？
               <select id="os-release"><option value="">加入該專案</option></select>
             </label>
             <p class="os-release-note" id="os-release-note"></p>
             <div class="os-actions">
-              <button type="button" class="btn btn-primary" id="os-download">建立並下載</button>
+              <button type="button" class="btn btn-primary" id="os-write">寫入專案</button>
+              <button type="button" class="btn" id="os-download">建立並下載</button>
               <button type="button" class="btn btn-ghost" id="os-copy">複製文件</button>
               <span id="os-feedback" class="os-feedback" role="status" aria-live="polite"></span>
             </div>
-            <p class="os-help">下載後放回上面列出的路徑，再到 Task Tracking 勾選步驟。</p>
+            <p class="os-help" id="os-write-help">「寫入專案」直接放進上面列出的路徑。撞名不覆寫——同名的 change id 會整批中止。</p>
           </li>
         </ol>
 
@@ -259,8 +260,10 @@
           維護的名義底下偷偷改掉承諾，是最難追的那一種。</p>
       </section>
 
-      <p class="osh-foot">三條路線共通：這一頁只產生文件，放回專案資料夾由你自己做。
-        讓 App 直接寫檔，等於把它變成可以在你所有專案裡任意建檔的東西。那條界線是刻意留的。</p>
+      <p class="osh-foot">三條路線共通：「寫入專案」會把文件放進上面列出的路徑，
+        「建立並下載」則是產出檔案由你自己放。寫入的邊界在 Rust 端：只有你親手選過的
+        專案根、只有 <code>openspec/changes/&lt;id&gt;/</code> 與 <code>plans/</code> 這幾種形狀、
+        撞名一律整批中止不覆寫。這條界線比「不寫檔」窄，但它是可以驗證的。</p>
     </div>
     <footer>
       <div style="flex:1"></div>

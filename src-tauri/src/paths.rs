@@ -363,6 +363,68 @@ pub fn append_allowed(p: &Path, roots: &RegisteredRoots) -> bool {
     })
 }
 
+/// 這個路徑「就是」某個已註冊的專案根目錄嗎。回它的正規化形式。
+///
+/// 刻意用**完全相等**而不是 `contains_ancestor_of`：後者會讓
+/// `<root>/node_modules/whatever` 也被當成一個合法的專案根。呼叫端接著會拿它
+/// 去接相對路徑，於是白名單裡的相對形狀可以被種在專案內的任何一層。
+pub fn registered_root(project_root: &Path, roots: &RegisteredRoots) -> Option<PathBuf> {
+    let root = canonical(project_root);
+    let set = roots.set.lock().ok()?;
+    set.iter().any(|r| r == &root).then_some(root)
+}
+
+fn slug_ok(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 64
+        && !s.starts_with('-')
+        && !s.ends_with('-')
+        && s.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+fn plan_name_ok(name: &str) -> bool {
+    let Some(stem) = name.strip_suffix(".md") else {
+        return false;
+    };
+    !stem.is_empty()
+        && stem.len() <= 96
+        && stem
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+}
+
+/// change 產出可以落在哪裡。**比 [`domain_pack_writable`] 緊，因為它會建目錄。**
+///
+/// 前端送的是相對路徑而不是檔名，因為 openspec 的產出本來就是有結構的
+/// （`changes/<id>/specs/<domain>/spec.md` 有四層）。用檔名 + 固定目錄表達不了。
+/// 代價是這裡必須把**整個形狀**列舉出來——只擋 `..` 是不夠的：`.git/hooks/`、
+/// `node_modules/`、`src/` 都是合法的相對路徑，而它們一個都不該被這條路徑寫到。
+///
+/// 白名單只有三種形狀，對應 `change-templates.ts` 產出的五種檔案。前端的模板
+/// 換路徑時這裡要跟著改——那是刻意的：兩邊都要動，才不會有人單方面把產出
+/// 搬到別的地方而沒人發現。
+pub fn change_bundle_rel_ok(rel: &str) -> bool {
+    let parts: Vec<&str> = rel.split('/').collect();
+    // 空段擋掉 `a//b` 與開頭的 `/`；`.`／`..` 擋掉往上跳
+    if parts
+        .iter()
+        .any(|p| p.is_empty() || *p == "." || *p == ".." || p.contains('\\'))
+    {
+        return false;
+    }
+    match parts.as_slice() {
+        ["plans", name] => plan_name_ok(name),
+        ["openspec", "changes", slug, file] => {
+            slug_ok(slug) && matches!(*file, "proposal.md" | "design.md" | "tasks.md")
+        }
+        ["openspec", "changes", slug, "specs", domain, "spec.md"] => {
+            slug_ok(slug) && slug_ok(domain)
+        }
+        _ => false,
+    }
+}
+
 /// 稽核軌跡讀取的界線。**唯讀，而且只認一個目錄。**
 ///
 /// 刻意不共用 [`editable`]：那條的白名單沒有 `jsonl`，而把 `jsonl` 加進去會
@@ -548,5 +610,49 @@ mod why_not_editable_tests {
         let msg = why_not_editable(&home.join("definitely-not-here-9f3a2b1c.md"));
         assert!(msg.contains("找不到"), "got: {msg}");
         assert!(!msg.contains("隱私權"), "不該誤報成權限問題, got: {msg}");
+    }
+
+    #[test]
+    fn change_bundle_accepts_exactly_the_five_template_shapes() {
+        // 這五條對應 change-templates.ts 產出的檔案。模板改路徑時這裡要一起改。
+        for ok in [
+            "openspec/changes/audit-export/proposal.md",
+            "openspec/changes/audit-export/design.md",
+            "openspec/changes/audit-export/tasks.md",
+            "openspec/changes/audit-export/specs/audit-export/spec.md",
+            "plans/2026-08-22-bug-login-loop.md",
+        ] {
+            assert!(change_bundle_rel_ok(ok), "應該放行: {ok}");
+        }
+    }
+
+    #[test]
+    fn change_bundle_rejects_escapes_and_other_project_paths() {
+        for bad in [
+            // 往上跳
+            "openspec/changes/../../../../etc/passwd",
+            "plans/../.git/hooks/pre-commit",
+            "../plans/x.md",
+            // 絕對路徑與空段
+            "/etc/passwd",
+            "openspec//changes/x/proposal.md",
+            // 形狀對但檔名不在白名單
+            "openspec/changes/x/README.md",
+            "openspec/changes/x/specs/y/design.md",
+            // 專案裡其他合法但不該被這條路徑碰的地方
+            ".git/hooks/pre-commit",
+            "src/main.ts",
+            "node_modules/x/index.js",
+            ".anchorline/log/a.jsonl",
+            // slug 形狀
+            "openspec/changes/-lead/proposal.md",
+            "openspec/changes/Upper/proposal.md",
+            "openspec/changes/has space/proposal.md",
+            // plans 只收 .md
+            "plans/x.sh",
+            "plans/.md",
+        ] {
+            assert!(!change_bundle_rel_ok(bad), "應該擋下: {bad}");
+        }
     }
 }

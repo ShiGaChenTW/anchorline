@@ -392,6 +392,61 @@ if (requireAuth()) {
     renderSteps();
   });
 
+  /**
+   * 直接寫進專案資料夾。
+   *
+   * 這一頁原本刻意只產生文件——理由寫在說明彈窗裡：「讓 App 直接寫檔，等於把它
+   * 變成可以在你所有專案裡任意建檔的東西」。那個顧慮是對的，但它的解法不是
+   * 不寫檔，而是**把可寫的範圍縮成可驗證的白名單**：只有使用者親手選過的專案根、
+   * 只有 openspec/changes/<id>/ 與 plans/ 那幾種形狀、撞名整批中止。守門全在
+   * Rust 端（`write_change_bundle`），前端這一層只負責問清楚再送出。
+   *
+   * 順帶一提，這條界線其實早就被別的功能跨過了：工作台-OpenSpec 的編輯欄會寫
+   * 使用者專案裡的檔，願望清單會寫 `.anchorline/function-wishlist.md`。維持這一頁
+   * 唯讀只讓行為不一致，沒有換到任何安全性。
+   */
+  el("os-write")?.addEventListener("click", async () => {
+    const files = filesFromForm();
+    if (!files || !kind) return;
+    if (!isNative()) {
+      feedback("瀏覽器版沒有檔案系統，請用「建立並下載」。", "error");
+      return;
+    }
+    const root = currentProject()?.importSummary?.rootPath;
+    if (!root) {
+      feedback("這個專案還沒有綁定資料夾，寫不進去。用「建立並下載」或先去專案匯入。", "error");
+      return;
+    }
+    // 寫進使用者的專案是不可逆的（撞名會被擋，但寫進去的檔案要自己刪），
+    // 所以把完整路徑攤出來讓人看過再按。
+    const ok = await askConfirm({
+      title: `要把 ${files.length} 份文件寫進這個專案嗎？`,
+      body: files.map((f) => `${root.replace(/\/+$/, "")}/${f.path}`).join("\n"),
+    });
+    if (!ok) return;
+
+    const btn = el("os-write") as HTMLButtonElement | null;
+    if (btn) btn.disabled = true;
+    try {
+      const r = await native.writeChangeBundle(
+        root,
+        files.map((f) => ({ rel: f.path, content: f.content })),
+      );
+      if (!r || isUnavailable(r)) {
+        feedback(r && isUnavailable(r) ? r.message : "寫入失敗。", "error");
+        return;
+      }
+      const extra = attachToRelease();
+      feedback(`已寫入 ${r.paths.length} 份${CHANGE_KIND_LABEL[kind]}文件。${extra}`, "ok");
+      toast("文件已寫進專案，接著到 Task Tracking 勾選步驟");
+    } catch (e) {
+      // Rust 的錯誤訊息本身就是給人看的（撞名時會列出是哪幾個檔），直接顯示
+      feedback(e instanceof Error ? e.message : "寫入失敗。", "error");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  });
+
   el("os-download")?.addEventListener("click", () => {
     const files = filesFromForm();
     if (!files || !kind) return;

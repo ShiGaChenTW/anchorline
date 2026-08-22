@@ -9,7 +9,7 @@
 
 use crate::exec::{self, CliOverrides, CliResult};
 use crate::paths::{self, RegisteredRoots};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -1001,6 +1001,103 @@ pub fn write_domain_pack(
     fs::write(&target, text).map_err(|e| format!("寫不進去：{e}"))?;
     Ok(FilePath {
         path: target.to_string_lossy().to_string(),
+    })
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeFileIn {
+    rel: String,
+    content: String,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeBundleWritten {
+    paths: Vec<String>,
+}
+
+/// OpenSpec change／plan 產出直接落進專案資料夾。
+///
+/// 為什麼要有這支：`write_file` 建不了新檔（`editable` 要求 `is_file()`），
+/// `write_domain_pack` 只收檔名、建不了目錄，而 change 的產出天生是四層結構
+/// （`openspec/changes/<id>/specs/<domain>/spec.md`）。
+///
+/// **三道守門，缺一不可：**
+///
+/// 1. `root` 必須**就是**使用者親手選過的專案根（`registered_root`，完全相等），
+///    不是「在某個根底下」——後者會讓 `<root>/node_modules` 也變成合法起點。
+/// 2. 每個相對路徑只能是 `change_bundle_rel_ok` 白名單裡的三種形狀。
+/// 3. **任何一個目標已存在就整批中止**，不覆寫。這條是全有全無的：先驗完
+///    全部、再檢查全部存在性、最後才開始寫。寫到一半才發現撞名的話，專案裡
+///    會留下半套文件，而使用者看到的是一則錯誤訊息——他不會知道有幾份已經
+///    寫進去了。
+///
+/// 刻意不做「覆寫」選項。這是使用者專案裡的真實檔案，蓋掉一份寫到一半的
+/// proposal 沒有復原路徑。撞名時的正確動作是換一個 change id。
+#[tauri::command]
+pub fn write_change_bundle(
+    root: String,
+    files: Vec<ChangeFileIn>,
+    roots: State<'_, RegisteredRoots>,
+) -> R<ChangeBundleWritten> {
+    write_change_bundle_inner(&root, &files, &roots)
+}
+
+/// 命令本體。抽出來是為了能測——`State<'_, _>` 在單元測試裡建不出來，
+/// 而這支的價值全在那幾條守門，不測等於沒有。
+fn write_change_bundle_inner(
+    root: &str,
+    files: &[ChangeFileIn],
+    roots: &RegisteredRoots,
+) -> R<ChangeBundleWritten> {
+    let Some(base) = paths::registered_root(&PathBuf::from(root), roots) else {
+        return Err(
+            "這個專案資料夾沒有被授權過。到「專案匯入」重新選一次資料夾就會取得授權。".into(),
+        );
+    };
+    if files.is_empty() {
+        return Err("沒有要寫入的檔案。".into());
+    }
+    if files.len() > 8 {
+        return Err("一次最多寫入 8 份文件。".into());
+    }
+
+    let mut targets = Vec::with_capacity(files.len());
+    for f in files {
+        if !paths::change_bundle_rel_ok(&f.rel) {
+            return Err(format!(
+                "不能寫入「{}」：只接受 openspec/changes/<id>/ 底下的 proposal、design、tasks、spec，或 plans/ 底下的 .md",
+                f.rel
+            ));
+        }
+        targets.push(base.join(&f.rel));
+    }
+
+    let existing: Vec<String> = targets
+        .iter()
+        .filter(|p| p.exists())
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+    if !existing.is_empty() {
+        return Err(format!(
+            "已經存在，沒有覆寫任何東西：{}。換一個 change id 再試一次。",
+            existing.join("、")
+        ));
+    }
+
+    for (t, f) in targets.iter().zip(files.iter()) {
+        if let Some(d) = t.parent() {
+            fs::create_dir_all(d).map_err(|e| format!("建不了資料夾「{}」：{e}", d.display()))?;
+        }
+        fs::write(t, &f.content).map_err(|e| format!("寫不進「{}」：{e}", t.display()))?;
+    }
+
+    Ok(ChangeBundleWritten {
+        paths: targets
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect(),
     })
 }
 
@@ -2086,10 +2183,122 @@ pub fn ping() -> R<Pong> {
             "deleteUatEvidence",
             "openUatEvidence",
             "writeWishlist",
+            "writeChangeBundle",
         ]
         .iter()
         .map(|s| s.to_string())
         .chain(extra)
         .collect(),
     })
+}
+
+#[cfg(test)]
+mod write_change_bundle_tests {
+    use super::*;
+
+    fn f(rel: &str, content: &str) -> ChangeFileIn {
+        ChangeFileIn {
+            rel: rel.into(),
+            content: content.into(),
+        }
+    }
+
+    fn fresh(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(name);
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn writes_the_whole_bundle_and_creates_missing_dirs() {
+        let dir = fresh("anc-bundle-write");
+        let roots = RegisteredRoots::default();
+        roots.register(&dir);
+
+        let files = vec![
+            f("openspec/changes/audit-export/proposal.md", "# Proposal"),
+            f(
+                "openspec/changes/audit-export/specs/audit-export/spec.md",
+                "## ADDED Requirements",
+            ),
+        ];
+        let out = write_change_bundle_inner(dir.to_str().unwrap(), &files, &roots).unwrap();
+
+        assert_eq!(out.paths.len(), 2);
+        // 四層目錄一個都不存在，命令要自己建出來——這正是 write_file 做不到的事
+        let spec = dir
+            .join("openspec/changes/audit-export/specs/audit-export/spec.md");
+        assert_eq!(
+            std::fs::read_to_string(&spec).unwrap(),
+            "## ADDED Requirements"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn refuses_the_whole_batch_when_any_target_exists() {
+        let dir = fresh("anc-bundle-collide");
+        let roots = RegisteredRoots::default();
+        roots.register(&dir);
+        std::fs::create_dir_all(dir.join("openspec/changes/dup")).unwrap();
+        std::fs::write(dir.join("openspec/changes/dup/proposal.md"), "舊的").unwrap();
+
+        let files = vec![
+            f("openspec/changes/dup/proposal.md", "新的"),
+            f("openspec/changes/dup/tasks.md", "# Tasks"),
+        ];
+        let err = write_change_bundle_inner(dir.to_str().unwrap(), &files, &roots).unwrap_err();
+        assert!(err.contains("已經存在"), "got: {err}");
+
+        // 全有全無：撞名的沒被蓋掉，而且沒撞名的那一份**也不能**被寫進去。
+        // 半套寫入是這支命令最糟的失敗——使用者只看到一則錯誤，不會知道
+        // 專案裡已經多了幾個檔。
+        assert_eq!(
+            std::fs::read_to_string(dir.join("openspec/changes/dup/proposal.md")).unwrap(),
+            "舊的"
+        );
+        assert!(!dir.join("openspec/changes/dup/tasks.md").exists());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn refuses_an_unregistered_root() {
+        let dir = fresh("anc-bundle-unregistered");
+        let roots = RegisteredRoots::default(); // 沒 register
+
+        let err = write_change_bundle_inner(
+            dir.to_str().unwrap(),
+            &[f("plans/2026-08-22-bug-x.md", "x")],
+            &roots,
+        )
+        .unwrap_err();
+        assert!(err.contains("授權"), "got: {err}");
+        assert!(!dir.join("plans").exists(), "不該建任何東西");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn refuses_paths_outside_the_whitelist_before_writing_anything() {
+        let dir = fresh("anc-bundle-escape");
+        let roots = RegisteredRoots::default();
+        roots.register(&dir);
+
+        for bad in [".git/hooks/pre-commit", "src/main.ts", "plans/../x.md"] {
+            let err = write_change_bundle_inner(
+                dir.to_str().unwrap(),
+                &[f("plans/2026-08-22-bug-ok.md", "ok"), f(bad, "evil")],
+                &roots,
+            )
+            .unwrap_err();
+            assert!(err.contains("不能寫入"), "{bad} → {err}");
+        }
+        // 驗證在寫入之前跑完，所以那份合法的也不該落地
+        assert!(!dir.join("plans").exists());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
