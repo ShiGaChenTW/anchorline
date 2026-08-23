@@ -21,6 +21,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
+    <!-- ponytail: GSAP + ScrollTrigger 走 CDN，跟 Tailwind/Phosphor 同一個理由（這份是比較稿）。
+         刻意用阻塞式 script 標籤而不是 defer：下面那行 gsap-on 必須在首次 paint 前決定，
+         否則 hero 會先閃一格「鏈條全亮的完成態」再倒回第一幕。
+         上線版本應改成自架 + defer，並把 gsap-on 改成由 load 事件補上。 -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
+    <script>
+        // 兩支都真的載到才切換預設狀態。CDN 掛掉時不加這個 class，
+        // 頁面就停在「第四幕 + 鏈條全亮」的靜態版，而不是一片空白。
+        if (window.gsap && window.ScrollTrigger) document.documentElement.classList.add("gsap-on");
+    </script>
+
     <script>
         tailwind.config = {
             theme: {
@@ -121,37 +133,31 @@
             transition: transform 0.3s ease;
         }
 
-        /* ponytail: Hero 主視覺是「一扇固定尺寸的 App 視窗被推到畫面右緣切掉一角」，
-           不是一張跟著視窗橫向長大的彈性卡片。三件事靠同一個機制一起成立：
+        /* ponytail: Hero 主視覺是「一扇固定尺寸的 App 視窗」。內層 canvas 依舊寫死 642×442
+           再用 transform: scale() 調整觀感尺寸 —— 版面永遠在 642px 下算完，
+           所以長寬比（1.4525，貼近真實 App 視窗 1280×880 的 1.4545）與內容密度
+           都不隨視窗寬改變。642 是量出來的：這份骨架在 600px 以上自然高度就固定，
+           442 留 0.37px 餘裕讓底部鏈條貼底而不被 overflow-hidden 切掉。
 
-           內層 canvas 尺寸寫死 642×442。642 是量出來的，不是猜的：這份骨架在 600px
-           以上自然高度就固定在 441.63（不再有任何東西換行），642/441.63 = 1.454，
-           正好貼近真實 App 視窗 1280×880 的 1.4545。取 442 是留 0.37px 餘裕，
-           讓主窗格的 mt-auto 狀態列貼底而不是被 overflow-hidden 切掉。
+           ⚠️ 2026-08-24 改版：放棄「出血到視窗右緣被裁掉」。
+           舊版 scale 開到 1.25–2.05，1950px 下窗寬 1316px、佔視窗 69%，
+           喧賓奪主而且右側稽核軌跡永遠被裁掉 37–65% 讀不到。
+           新的 scale 砍半到 0.85–1.02，1950px 下 591px、佔視窗 31%，
+           整扇窗完整落在版面內 —— 所以四個角都收圓、右邊框補回來。
 
-           整塊用 transform: scale() 等比放大。scale 只改變觀感尺寸，不改變版面計算
-           —— 版面永遠在 642px 下算完，所以長寬比與內容密度都不隨視窗寬改變。
-           外框寬度 = 642 × scale，是固定像素，會穩定溢出 grid track 被裁掉。
-
-           ⚠️ 依舊完全不用 100vw（理由見 Hero section 上方那條註解）。
-           舊寫法 lg:w-[62vw] 正是三個症狀的共同根源：外框跟著視窗變寬，
-           於是比例被拉扁（1950px 下實測 2.74:1）、統計格與進度條被拉長稀釋，
-           而且內容會自己攤平填滿寬度，右緣就算真的被裁到也看不出來是裁的
-           —— 這就是「明明量到裁了 214px，看起來卻像一張完整寬卡片」的原因。
-
-           mockup 內部沒有任何 xl: 斷點，md 以上內容佈局完全相同，
-           所以一份 canvas 尺寸通吃桌機，斷點只需要調 scale。
-           各級 scale 都挑到「外框寬 > 該區間最寬視窗的可用寬」，保證被裁：
-             lg  1024–1279 → track 起點固定 536，最寬可用 743，W=802.5 ✓
-             xl  1280–1535 → track 起點 VW/2−24，最寬可用 791.5，W=898.8 ✓
-             2xl 1536–1799 → 最寬可用 923.5，W=1027.2 ✓
-             1800–2099     → 最寬可用 1073.5，W=1155.6 ✓（Scott 的 1950 在這一級）
-             2100+         → W=1316.1，可裁到視窗寬 2584
-           2584px 以上就不再被裁，是這個做法誠實的上限，不是「不論多寬」。 */
-        @media (min-width: 1024px) {
+           0.85 是底線不是算出來的：canvas 內最小字級 7px，再往下縮就低於 6px 讀不動。
+           所以 lg/xl/2xl 三級一律吃這個下限，不再各自往下推。
+             lg  1024–1279 → W=545.7（佔 1024 的 53%，該區間版面本來就窄）
+             xl  1280–1535 → W=545.7（43%）
+             2xl 1536–1799 → W=545.7（36%）
+             1800–2099     → W=590.6（30%，Scott 的 1950 在這一級）
+             2100+         → W=654.8（31% @2100）
+           右欄不再需要 lg:pr-0，.al-shot-wrap 用 margin-left:auto 靠齊容器右緣。 */
+@media (min-width: 1024px) {
             .al-shot-wrap {
-                --al-shot-scale: 1.25;
+                --al-shot-scale: 0.85;
                 width: calc(642px * var(--al-shot-scale));
+                margin-left: auto;   /* 沒有出血了，靠齊容器右緣而不是溢出視窗 */
             }
             .al-shot { height: calc(442px * var(--al-shot-scale)); }
             .al-shot-canvas {
@@ -163,10 +169,73 @@
             /* 卡片填滿 canvas，讓側欄使用者列與主窗格狀態列各自貼底 */
             .al-shot-canvas > div { height: 100%; }
         }
-        @media (min-width: 1280px) { .al-shot-wrap { --al-shot-scale: 1.40; } }
-        @media (min-width: 1536px) { .al-shot-wrap { --al-shot-scale: 1.60; } }
-        @media (min-width: 1800px) { .al-shot-wrap { --al-shot-scale: 1.80; } }
-        @media (min-width: 2100px) { .al-shot-wrap { --al-shot-scale: 2.05; } }
+        @media (min-width: 1280px) { .al-shot-wrap { --al-shot-scale: 0.85; } }
+        @media (min-width: 1536px) { .al-shot-wrap { --al-shot-scale: 0.85; } }
+        @media (min-width: 1800px) { .al-shot-wrap { --al-shot-scale: 0.92; } }
+        @media (min-width: 2100px) { .al-shot-wrap { --al-shot-scale: 1.02; } }
+        /* ─────────── Hero 演示動畫 ───────────
+           ponytail: 兩段式預設狀態，決定「GSAP 沒載到時看到什麼」。
+
+           沒有 .gsap-on（CDN 掛了、JS 關了、或還沒跑到）→ 停在第四幕，
+           鏈條全亮、稽核軌跡七行全在。挑第四幕當靜態退化值不是隨便選的：
+           它是資訊最完整的一幕（四份資料 + join key + 那句結論），
+           單獨看也讀得懂，不需要前三幕鋪陳。
+           前三幕在這個狀態下是 visibility:hidden，不佔互動也不被讀螢幕器讀到。
+
+           有 .gsap-on → 反過來把第四幕與鏈條進度也清成 0，交給 timeline 從第一幕演。
+           這個 class 是在 head 裡確認 window.gsap 真的存在之後才加的，
+           所以「先閃一下完成態再倒回去」不會發生。 */
+        #hero-demo [data-hf-scene] { opacity: 0; visibility: hidden; }
+        #hero-demo [data-hf-scene="3"] { opacity: 1; visibility: visible; }
+        #hero-demo [data-hf-dot] {
+            border-color: rgba(245, 158, 11, 0.85);
+            background-color: rgba(245, 158, 11, 0.9);
+            box-shadow: 0 0 8px rgba(245, 158, 11, 0.55);
+        }
+        #hero-demo [data-hf-label] { color: rgba(250, 249, 246, 0.85); }
+
+        .gsap-on #hero-demo [data-hf-scene="3"] { opacity: 0; visibility: hidden; }
+        .gsap-on #hero-demo [data-hf-rail] { transform: scaleX(0); }
+        .gsap-on #hero-demo [data-hf-dot] {
+            border-color: rgba(255, 255, 255, 0.25);
+            background-color: #0b111a;
+            box-shadow: none;
+        }
+        .gsap-on #hero-demo [data-hf-label] { color: rgba(156, 163, 175, 0.6); }
+        .gsap-on #hero-demo [data-hf-log] { opacity: 0; }
+
+        /* will-change 只給真的每幀在動的那幾個，不要全頁灑 */
+        #hero-demo [data-hf-scene],
+        #hero-demo [data-hf-rail] { will-change: transform, opacity; }
+
+        .hf-live { box-shadow: 0 0 6px rgba(95, 191, 127, 0.7); }
+        #hero-demo .hf-caret { opacity: 0; }
+
+        /* lg 以下 .al-shot-canvas 沒有寫死高度，flex-1 就沒有可分配的空間，
+           絕對定位的四幕會塌成 0 高。min-height 是那個區間的地板，
+           lg 以上 flex 分到的 359px 比它大，所以不影響桌機版面。 */
+        #hero-demo { min-height: 355px; }
+
+        @media (prefers-reduced-motion: reduce) {
+            /* 停在第四幕的靜態版：不是「動畫變快」，是根本不播。
+               這裡要把 .gsap-on 的清零規則再蓋回來，因為 JS 端也不會去動它。 */
+            .gsap-on #hero-demo [data-hf-scene="3"] { opacity: 1; visibility: visible; }
+            .gsap-on #hero-demo [data-hf-rail] { transform: scaleX(1); }
+            .gsap-on #hero-demo [data-hf-dot] {
+                border-color: rgba(245, 158, 11, 0.85);
+                background-color: rgba(245, 158, 11, 0.9);
+                box-shadow: 0 0 8px rgba(245, 158, 11, 0.55);
+            }
+            .gsap-on #hero-demo [data-hf-label] { color: rgba(250, 249, 246, 0.85); }
+            .gsap-on #hero-demo [data-hf-log] { opacity: 1; }
+            #hero-demo [data-hf-scene]:not([data-hf-scene="3"]) { opacity: 0; visibility: hidden; }
+        }
+
+        /* ponytail: GSAP 接手時把 .reveal 的 CSS transition 關掉。
+           兩套動畫同時管 opacity/transform 會互相打架——
+           GSAP 每幀寫 inline style，CSS transition 再對每一次寫入補間，
+           結果是拖影。這條讓 GSAP 獨佔，IntersectionObserver 那條路徑則維持原樣。 */
+        .gsap-on .reveal { transition: none; }
     </style>
 
     <!-- ponytail: .reveal 預設 opacity:0，靠 IntersectionObserver 加 .active 才浮出來。
@@ -232,8 +301,8 @@
              所以 documentElement.scrollWidth 不會長。
              ⚠️ 不要改用 margin-left:calc((100vw-80rem)/2) 這類寫法：100vw 含捲軸寬，
              會比實際可用寬多 ~8px，那正是水平捲動的來源。clip + 溢出才是安全解。 -->
-        <section class="relative w-full pt-10 md:pt-14 pb-24 overflow-x-clip reveal">
-            <div class="max-w-7xl mx-auto px-6 lg:pr-0 grid grid-cols-1 lg:grid-cols-[minmax(0,29rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,34rem)_minmax(0,1fr)] gap-y-12 lg:gap-x-12 lg:items-center">
+        <section id="hero-section" class="relative w-full pt-10 md:pt-14 pb-24 overflow-x-clip">
+            <div class="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-[minmax(0,29rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,34rem)_minmax(0,1fr)] gap-y-12 lg:gap-x-12 lg:items-center">
 
                 <!-- 左欄：品牌識別 → 標題 → 副標 → 裝它 -->
                 <div class="text-center md:text-left">
@@ -242,7 +311,7 @@
                          但這裡是識別不是導覽，所以放大到 56px 並配 4xl 字重。
                          ⚠️ 漸層 id 必須全頁唯一：nav 用 al-nav、footer 用 al-foot，這顆用 al-hero。
                          撞了不會報錯，只會靜默共用到同一條漸層。 -->
-                    <div class="flex items-center justify-center md:justify-start gap-3.5 mb-7">
+                    <div id="hero-brand" class="flex items-center justify-center md:justify-start gap-3.5 mb-7">
                         <svg class="w-12 h-12 md:w-14 md:h-14 shrink-0" viewBox="0 0 512 512" role="img" aria-label="Anchorline 應用程式圖示">
                             <defs><linearGradient id="al-hero" x1="0.15" y1="0" x2="0.85" y2="1"><stop offset="0%" stop-color="#142a48"/><stop offset="100%" stop-color="#1b365d"/></linearGradient></defs>
                             <rect width="512" height="512" rx="96" fill="url(#al-hero)"/>
@@ -263,20 +332,20 @@
                          amber ＋ mono 的重音從舊標的「join key」移到第一行整句：
                          PRD & OpenSpec 是兩個專有名詞，mono 讀起來就是「技術物件」，
                          跟第二行的敘述句拉開層次，第一屏的色彩錨點也還在。 -->
-                    <h1 class="text-3xl md:text-4xl xl:text-[2.75rem] font-bold leading-tight tracking-tight mb-4">
+                    <h1 id="hero-title" class="text-3xl md:text-4xl xl:text-[2.75rem] font-bold leading-tight tracking-tight mb-4">
                         <span class="block text-brand-amber glow-text-amber font-mono font-normal">PRD &amp; OpenSpec</span>
                         <!-- text-wrap:balance：390px 下這行會斷成「…的工 / 作台」，
                              把「作台」孤字丟到第二行。balance 讓兩行長度平均，斷點就跑回詞界。 -->
                         <span class="block mt-4 [text-wrap:balance]">具備 AI 撰寫與簽核的工作台</span>
                     </h1>
-                    <p class="text-base md:text-lg text-brand-muted mb-9">
+                    <p id="hero-sub" class="text-base md:text-lg text-brand-muted mb-9">
                         Anchorline 是一條治理鏈，一份落在磁碟上的稽核軌跡。
                     </p>
 
                     <!-- CTAs -->
                     <!-- ponytail: sm 以上 flex-wrap 是防溢出的保險——左欄在 lg 只有 29rem，
                          brew 那顆放不下時 GitHub Releases 會換行，而不是把欄寬撐爆。 -->
-                    <div class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-center md:justify-start gap-4 reveal reveal-delay-2">
+                    <div id="hero-cta" class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-center md:justify-start gap-4">
                         <button type="button" data-copy="brew install --cask shigachentw/tap/anchorline" class="group relative flex min-w-0 items-center bg-brand-bg border border-brand-border rounded hover:border-brand-amber/50 transition-colors cursor-pointer text-left">
                             <span class="text-brand-amber px-3 font-mono text-sm border-r border-brand-border shrink-0">$</span>
                             <code class="min-w-0 px-4 py-3 font-mono text-xs xl:text-sm text-white/90">brew install --cask shigachentw/tap/anchorline</code>
@@ -288,247 +357,301 @@
                             GitHub Releases <i class="ph ph-arrow-right"></i>
                         </a>
                     </div>
-                    <div class="mt-4 flex items-start justify-center md:justify-start gap-2 text-xs text-brand-muted/70 reveal reveal-delay-3">
+                    <div id="hero-note" class="mt-4 flex items-start justify-center md:justify-start gap-2 text-xs text-brand-muted/70">
                         <i class="ph ph-info mt-0.5 shrink-0"></i>
                         <span>早期階段：產物未簽章，macOS 會被 Gatekeeper 擋、Windows 會被 SmartScreen 擋</span>
                     </div>
                 </div>
 
                 <!-- 右欄：主視覺，出血到視窗右緣 -->
-                <!-- ponytail: 主視覺 100% HTML/CSS 手繪，零圖檔。畫的是「專案總覽」的骨架 ——
-                     左側工作區側欄（含專案清單）、上排五格狀態統計、焦點卡（含進度條）、其餘專案列。
-                     真截圖仍留在 Section 5 的五張切換，那裡才是它該在的位置。
-                     role="img" + aria-label：整塊對輔助技術是單一裝飾圖，內部文字不逐字讀。
-                     右緣不封邊（border-r-0 / rounded-r-none）：既然一定被裁掉，
-                     留一條右框反而會讓它看起來像「沒對齊的卡片」而不是「被裁掉的窗」。
-                     sm 以下把側欄與後兩格統計收起來，主窗格才不會在 390px 被壓爛。 -->
-                <div class="al-shot-wrap relative -mr-6 lg:mr-0 reveal reveal-delay-1">
+                <!-- ponytail: 從「一張靜態專案總覽骨架」換成「治理鏈跑一遍」的循環演示。
+                     外殼完全沿用原本那套：al-shot-wrap 固定像素寬 → 溢出 grid track →
+                     被 section 的 overflow-x-clip 裁掉。canvas 依舊寫死 642×442 再 scale()，
+                     所以出血數學、長寬比、各斷點 scale 一個字都沒動（見上方 CSS 那條長註解）。
+                     動的只有 canvas 內部：視窗列 + 左舞台(四幕) + 右 jsonl + 底部七關卡鏈條。
+
+                     為什麼是這四幕：Section 3 講「七個關卡，每一個都在磁碟上留下一行」，
+                     但那是靜態圖，讀者得自己腦補「留下一行」長什麼樣。這裡直接演給他看——
+                     左邊發生事情、右邊 jsonl 就長一行、底下鏈條就亮一格，三者同時動。
+                     第三幕特意演 authorAgentFamily 擋人（Section 4 的主張），
+                     因為那是這產品唯一「市面上沒有」的機制，值得在第一屏就出現。
+
+                     ⚠️ role="img" + aria-label：整塊對輔助技術是單一裝飾圖。
+                     動畫本身不承載任何「只有動起來才讀得到」的資訊——四幕講的事
+                     Section 2/3/4 都有靜態文字版，所以 reduced-motion 直接停在第四幕
+                     （資訊最完整的那幕）是誠實的降級，不是資訊遺失。 -->
+                <div class="al-shot-wrap relative">
                   <div class="al-shot">
                    <div class="al-shot-canvas">
-                    <div role="img"
-                         aria-label="Anchorline 專案總覽畫面：左側工作區側欄列出十一個專案，上排五格狀態統計顯示三個等你核准，焦點卡指向 SaaS 雙重驗證（2FA），進度 82%。"
-                         class="select-none rounded-l-lg rounded-r-none border border-r-0 border-brand-border/80 bg-[#0d131c] overflow-hidden shadow-[0_28px_70px_-24px_rgba(0,0,0,0.9)]">
+                    <div id="hero-demo"
+                         role="img"
+                         aria-label="Anchorline 治理鏈演示：PRD 撰寫寫入錨點 anc:t=058W9SNK、結構 gate 四項檢查通過、簽核時同族系 agent 被擋下改由不同族系核准、change 與 commit 與 PR 與 release 靠同一把錨點串成一條線，右側 append-only 稽核軌跡同步長出七行事件。"
+                         class="al-win select-none flex flex-col rounded-lg border border-brand-border/80 bg-[#0d131c] overflow-hidden shadow-[0_28px_70px_-24px_rgba(0,0,0,0.9)]">
 
                     <!-- 視窗列 -->
-                    <div class="flex items-center gap-1.5 px-3 py-2 border-b border-white/[0.07] bg-[#141b26]">
+                    <div class="flex shrink-0 items-center gap-1.5 px-3 py-2 border-b border-white/[0.07] bg-[#141b26]">
                         <span class="w-2.5 h-2.5 rounded-full bg-white/15"></span>
                         <span class="w-2.5 h-2.5 rounded-full bg-white/15"></span>
                         <span class="w-2.5 h-2.5 rounded-full bg-white/15"></span>
-                        <span class="ml-3 text-[10px] font-mono text-brand-muted">Anchorline — 開發專案工作台</span>
+                        <span class="ml-3 text-[11.5px] font-mono text-brand-muted">Anchorline — 開發專案工作台</span>
+                        <span class="ml-auto flex items-center gap-1.5">
+                            <span class="hf-live w-1.5 h-1.5 rounded-full bg-[#5fbf7f]"></span>
+                            <span class="font-mono text-[10.5px] text-brand-muted/70">SaaS 雙重驗證（2FA）</span>
+                        </span>
                     </div>
 
-                    <div class="flex text-left">
+                    <!-- 主體：左舞台 + 右稽核軌跡 -->
+                    <div class="flex min-h-0 flex-1 text-left">
 
-                        <!-- 側欄 -->
-                        <aside class="hidden sm:flex w-[152px] md:w-[180px] shrink-0 flex-col border-r border-white/[0.07] bg-[#0b111a] px-2.5 py-3">
-                            <div class="flex items-center gap-2 mb-3">
-                                <span class="w-5 h-5 shrink-0 rounded bg-gradient-to-br from-[#142a48] to-[#2d5a8a] flex items-center justify-center">
-                                    <span class="block w-2.5 h-[3px] rounded-sm bg-white/85"></span>
-                                </span>
-                                <span class="min-w-0">
-                                    <span class="block text-[10px] font-semibold text-white/90 leading-none">Anchorline</span>
-                                    <span class="block font-mono text-[8px] text-brand-muted leading-none mt-1 truncate">anchorline.local</span>
-                                </span>
-                            </div>
+                        <!-- 左：四幕舞台 -->
+                        <!-- ponytail: 四幕絕對定位互相疊著，靠 autoAlpha 交叉淡入。
+                             用絕對定位而不是 display 切換，是因為切換時兩幕要同時可見 0.4 秒，
+                             display:none 的那一幀會讓後一幕從空版面跳進來。 -->
+                        <div class="flex min-w-0 flex-1 flex-col">
+                            <!-- ponytail: 鏈條放在這一欄裡面而不是橫跨整個視窗。
+                                 量過：視窗固定 642 寬、右緣一定被裁掉 148–207px，
+                                 橫跨的話 1600px 下 PR 與 release 兩格直接消失——
+                                 那是進度指示器，少兩格不是「被裁的窗」是「讀不到進度」。
+                                 舞台欄本身永遠 100% 可見（實測 1440/1600/1920/2296 皆是），
+                                 所以鏈條擺這裡就永遠完整。 -->
+                            <div class="relative min-h-[272px] min-w-0 flex-1 overflow-hidden">
 
-                            <div class="flex rounded border border-white/[0.08] p-px mb-3.5">
-                                <span class="flex-1 text-center text-[7px] font-mono tracking-wide text-brand-muted py-1">LIGHT</span>
-                                <span class="flex-1 text-center text-[7px] font-mono tracking-wide text-white/90 bg-white/[0.09] rounded-sm py-1">DARK</span>
-                                <span class="flex-1 text-center text-[7px] font-mono tracking-wide text-brand-muted py-1">TERM</span>
-                            </div>
-
-                            <div class="text-[8px] text-brand-muted/70 mb-1.5 px-1">工作區</div>
-                            <div class="space-y-px mb-3.5">
-                                <div class="flex items-center gap-1.5 rounded bg-[#1c2c44] px-1.5 py-[5px]">
-                                    <span class="w-2 h-2 shrink-0 rounded-[2px] bg-[#6fa0f0]"></span>
-                                    <span class="text-[9px] text-[#8ab4f0] leading-none">專案總覽</span>
+                            <!-- 幕一：PRD 撰寫 -->
+                            <div data-hf-scene="0" class="absolute inset-0 flex flex-col px-5 py-4">
+                                <div class="mb-3 flex items-center gap-2">
+                                    <span class="font-mono text-[10.5px] text-brand-amber">01</span>
+                                    <span class="text-[12.5px] font-medium text-white/90">PRD 撰寫</span>
+                                    <span class="text-[10.5px] text-brand-muted/70">AI 起草，錨點寫進文件</span>
                                 </div>
-                                <div class="flex items-center gap-1.5 px-1.5 py-[5px]">
-                                    <span class="w-2 h-2 shrink-0 rounded-[2px] border border-white/25"></span>
-                                    <span class="text-[9px] text-white/60 leading-none">專案清單</span>
-                                </div>
-                                <div class="flex items-center gap-1.5 px-1.5 py-[5px]">
-                                    <span class="w-2 h-2 shrink-0 rounded-full border border-white/25"></span>
-                                    <span class="text-[9px] text-white/60 leading-none flex-1">審閱佇列</span>
-                                    <span class="rounded-sm bg-brand-amber/20 px-1 font-mono text-[7px] text-brand-amber leading-[13px]">3</span>
-                                </div>
-                                <div class="flex items-center gap-1.5 px-1.5 py-[5px]">
-                                    <span class="w-2 h-2 shrink-0 rounded-[2px] border border-white/25"></span>
-                                    <span class="text-[9px] text-white/60 leading-none">PRD 範本</span>
-                                </div>
-                                <div class="flex items-center gap-1.5 px-1.5 py-[5px]">
-                                    <span class="w-2 h-2 shrink-0 rounded-[2px] border border-white/25"></span>
-                                    <span class="text-[9px] text-white/60 leading-none">OpenSpec 入口</span>
-                                </div>
-                            </div>
-
-                            <div class="flex items-center justify-between mb-1.5 px-1">
-                                <span class="text-[8px] text-brand-muted/70">專案 <span class="font-mono">11</span></span>
-                                <span class="text-[9px] text-brand-muted/50 leading-none">＋</span>
-                            </div>
-                            <div class="space-y-[3px] mb-3">
-                                <div class="flex items-center gap-1.5 px-1">
-                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-brand-amber"></span>
-                                    <span class="text-[9px] text-white/85 leading-tight truncate">SaaS 雙重驗證（2FA）</span>
-                                </div>
-                                <div class="flex items-center gap-1.5 px-1">
-                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-white/25"></span>
-                                    <span class="text-[9px] text-white/55 leading-tight truncate">工作區角色權限重構</span>
-                                </div>
-                                <div class="flex items-center gap-1.5 px-1">
-                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-[#5fbf7f]"></span>
-                                    <span class="text-[9px] text-white/55 leading-tight truncate">稽核日誌匯出 API</span>
-                                </div>
-                                <div class="flex items-center gap-1.5 px-1">
-                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-white/25"></span>
-                                    <span class="text-[9px] text-white/55 leading-tight truncate">自助帳單與發票</span>
-                                </div>
-                                <div class="flex items-center gap-1.5 px-1">
-                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-brand-amber/70"></span>
-                                    <span class="text-[9px] text-white/55 leading-tight truncate">行動端離線草稿同步</span>
-                                </div>
-                                <div class="hidden md:flex items-center gap-1.5 px-1">
-                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-[#5fbf7f]"></span>
-                                    <span class="text-[9px] text-white/55 leading-tight truncate">SOC 2 證據自動化收集</span>
-                                </div>
-                            </div>
-
-                            <div class="mt-auto flex items-center gap-2 border-t border-white/[0.07] pt-2.5">
-                                <span class="w-5 h-5 shrink-0 rounded-full bg-[#2d5a8a] text-white text-[9px] font-semibold flex items-center justify-center">S</span>
-                                <span class="min-w-0">
-                                    <span class="block text-[9px] text-white/85 leading-none">Scott</span>
-                                    <span class="block text-[7px] text-brand-muted leading-none mt-1 truncate">Workspace 管理員</span>
-                                </span>
-                            </div>
-                        </aside>
-
-                        <!-- 主窗格 -->
-                        <div class="flex-1 min-w-0 flex flex-col">
-                            <!-- ponytail: 這條藍色分隔線用 mx-* 內縮，不要用 px-*。
-                                 padding 版的 border-b-2 會一路畫到卡片外框上——藍色比外框亮得多，
-                                 貼著框邊收尾看起來就像溢出框外。margin 版讓線在內容縮排處結束。 -->
-                            <div class="mx-3 md:mx-4 pt-3 pb-2.5 border-b-2 border-[#2d5a8a]/60">
-                                <div class="flex items-start justify-between gap-3">
-                                    <div class="min-w-0">
-                                        <div class="font-mono text-[8px] tracking-[0.12em] mb-1.5">
-                                            <span class="text-brand-muted/60">01 /</span>
-                                            <span class="text-[#6fa0f0]">DASHBOARD</span>
-                                            <span class="text-brand-muted/60">ACTIVE WORK</span>
+                                <div class="flex flex-1 flex-col justify-center rounded border border-white/[0.08] bg-[#0b111a] p-4">
+                                    <div class="mb-2.5 flex items-center gap-1.5">
+                                        <i class="ph ph-file-text text-[11.5px] text-[#8ab4f0]"></i>
+                                        <span class="font-mono text-[10.5px] text-white/70">prd.md</span>
+                                        <span class="hf-caret ml-auto block h-3 w-[1.5px] bg-brand-amber"></span>
+                                    </div>
+                                    <div class="space-y-3.5">
+                                        <div data-hf-line class="flex items-center gap-2">
+                                            <span class="font-mono text-[10.5px] text-[#8ab4f0] shrink-0">##</span>
+                                            <span class="text-[10.5px] text-white/80 shrink-0">問題陳述</span>
+                                            <span data-hf-bar class="h-[3px] flex-1 rounded-full bg-white/[0.13]"></span>
                                         </div>
-                                        <div class="text-sm md:text-base font-semibold text-white leading-none">全部專案總覽</div>
-                                        <div class="text-[8px] text-brand-muted mt-1.5 leading-none">11 個專案在追蹤中</div>
+                                        <div data-hf-line class="flex items-center gap-2">
+                                            <span class="font-mono text-[10.5px] text-[#8ab4f0] shrink-0">##</span>
+                                            <span class="text-[10.5px] text-white/80 shrink-0">目標與非目標</span>
+                                            <span data-hf-bar class="h-[3px] flex-1 rounded-full bg-white/[0.13]"></span>
+                                        </div>
+                                        <div data-hf-line class="flex items-center gap-2">
+                                            <span class="font-mono text-[10.5px] text-[#8ab4f0] shrink-0">##</span>
+                                            <span class="text-[10.5px] text-white/80 shrink-0">成功指標</span>
+                                            <span data-hf-bar class="h-[3px] flex-1 rounded-full bg-white/[0.13]"></span>
+                                        </div>
+                                        <div data-hf-line class="flex items-center gap-2">
+                                            <span class="font-mono text-[10.5px] text-[#8ab4f0] shrink-0">##</span>
+                                            <span class="text-[10.5px] text-white/80 shrink-0">風險與取捨</span>
+                                            <span data-hf-bar class="h-[3px] flex-1 rounded-full bg-white/[0.13]"></span>
+                                        </div>
                                     </div>
-                                    <span class="shrink-0 rounded border border-white/[0.12] px-2 py-1 text-[8px] text-white/70 leading-none">更多 ▾</span>
+                                    <!-- 錨點蓋章：這是全頁最重要的一個物件，所以給它獨立的進場 -->
+                                    <div class="mt-6 border-t border-dashed border-white/[0.10] pt-3">
+                                        <div data-hf-anchor class="inline-flex items-center gap-2 rounded border border-brand-amber/40 bg-brand-amber/[0.07] px-2.5 py-1.5">
+                                            <i class="ph ph-anchor-simple text-[11.5px] text-brand-amber"></i>
+                                            <span class="font-mono text-[11.5px] tracking-wider text-brand-amber glow-text-amber">&lt;!-- anc:t=058W9SNK --&gt;</span>
+                                        </div>
+                                        <div data-hf-anchor-note class="mt-1.5 text-[9.5px] text-brand-muted/70">一個工作單元一個，寫下去就不再改動</div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div class="px-3 md:px-4 py-2.5 space-y-2">
-
-                                <!-- 五格狀態統計 -->
-                                <div class="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
-                                    <div class="rounded border border-[#8c4340]/70 bg-[#1a1214] px-2 py-1.5">
-                                        <div class="text-[7px] text-brand-muted leading-none mb-1">等你核准</div>
-                                        <div class="font-mono text-base text-[#e2706e] leading-none">3</div>
-                                        <div class="text-[7px] text-brand-muted/60 leading-none mt-1">別人在等</div>
-                                    </div>
-                                    <div class="rounded border border-white/[0.08] bg-[#131b26] px-2 py-1.5">
-                                        <div class="text-[7px] text-brand-muted leading-none mb-1">阻擋</div>
-                                        <div class="font-mono text-base text-white/90 leading-none">1</div>
-                                        <div class="text-[7px] text-brand-muted/60 leading-none mt-1">寫了但沒過</div>
-                                    </div>
-                                    <div class="rounded border border-white/[0.08] bg-[#131b26] px-2 py-1.5">
-                                        <div class="text-[7px] text-brand-muted leading-none mb-1">還沒開始</div>
-                                        <div class="font-mono text-base text-white/90 leading-none">9</div>
-                                        <div class="text-[7px] text-brand-muted/60 leading-none mt-1">個專案沒 PRD</div>
-                                    </div>
-                                    <div class="hidden sm:block rounded border border-white/[0.08] bg-[#131b26] px-2 py-1.5">
-                                        <div class="text-[7px] text-brand-muted leading-none mb-1">未提交</div>
-                                        <div class="font-mono text-base text-white/40 leading-none">0</div>
-                                        <div class="text-[7px] text-brand-muted/60 leading-none mt-1">都乾淨</div>
-                                    </div>
-                                    <div class="hidden sm:block rounded border border-white/[0.08] bg-[#131b26] px-2 py-1.5">
-                                        <div class="text-[7px] text-brand-muted leading-none mb-1">PR 開著</div>
-                                        <div class="font-mono text-base text-white/90 leading-none">1</div>
-                                        <div class="text-[7px] text-brand-muted/60 leading-none mt-1">待處理</div>
-                                    </div>
+                            <!-- 幕二：結構 gate -->
+                            <div data-hf-scene="1" class="absolute inset-0 flex flex-col px-5 py-4">
+                                <div class="mb-3 flex items-center gap-2">
+                                    <span class="font-mono text-[10.5px] text-brand-amber">02</span>
+                                    <span class="text-[12.5px] font-medium text-white/90">結構 gate</span>
+                                    <span class="text-[10.5px] text-brand-muted/70">缺章節就過不了，不看文采</span>
                                 </div>
-
-                                <!-- 焦點卡 -->
-                                <div class="rounded border border-white/[0.08] bg-[#131b26] px-3 py-2.5">
-                                    <div class="text-[8px] text-brand-muted leading-none mb-1.5">現在做這一個</div>
-                                    <div class="text-sm md:text-lg font-semibold text-[#6fa0f0] leading-tight mb-2.5">SaaS 雙重驗證（2FA）</div>
-
-                                    <div class="flex items-center gap-2.5 mb-2.5">
-                                        <span class="flex-1 h-[5px] rounded-full bg-white/[0.08] overflow-hidden">
-                                            <span class="block h-full w-[82%] rounded-full bg-[#4f7fe0]"></span>
-                                        </span>
-                                        <span class="font-mono text-xs text-white leading-none">82<span class="text-[8px] text-brand-muted">%</span></span>
-                                    </div>
-
-                                    <p class="text-[9px] text-white/70 leading-relaxed mb-2.5">在審閱佇列裡，而且結構檢查已經全過 —— 可以直接核准。</p>
-
-                                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                                        <span class="rounded border border-white/[0.18] px-2 py-1 text-[9px] text-white/85 leading-none">打開這個專案 →</span>
-                                        <span class="hidden sm:flex items-end gap-4">
-                                            <span class="block">
-                                                <span class="block text-[7px] text-brand-muted leading-none mb-1">下一步</span>
-                                                <span class="block text-[9px] text-white/80 leading-none">送出審閱</span>
-                                            </span>
-                                            <span class="block">
-                                                <span class="block text-[7px] text-brand-muted leading-none mb-1">上次動</span>
-                                                <span class="block text-[9px] text-white/80 leading-none">從未</span>
-                                            </span>
-                                            <span class="hidden md:block">
-                                                <span class="block text-[7px] text-brand-muted leading-none mb-1">待推</span>
-                                                <span class="block text-[9px] text-white/80 leading-none">沒接遠端</span>
-                                            </span>
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <!-- 其餘專案 -->
-                                <div class="rounded border border-white/[0.08] bg-[#131b26] px-3 py-2">
-                                    <div class="text-[8px] text-brand-muted leading-none mb-2">其他 10 個專案</div>
-                                    <div class="space-y-1.5">
-                                        <div class="flex items-center gap-2">
-                                            <span class="flex-1 min-w-0 truncate text-[9px] text-white/80 leading-none">稽核日誌匯出 API</span>
-                                            <span class="shrink-0 text-[8px] text-[#5fbf7f] leading-none">已核准</span>
-                                            <span class="hidden sm:block shrink-0 w-14 h-[3px] rounded-full bg-white/[0.08] overflow-hidden"><span class="block h-full w-full rounded-full bg-[#4f7fe0]"></span></span>
-                                            <span class="shrink-0 font-mono text-[8px] text-white/70 leading-none w-8 text-right">100%</span>
+                                <div class="flex flex-1 flex-col justify-center rounded border border-white/[0.08] bg-[#0b111a] p-4">
+                                    <div class="space-y-3">
+                                        <div data-hf-check class="flex items-center gap-2 rounded bg-white/[0.02] px-2.5 py-2">
+                                            <span data-hf-tick class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-white/20 text-[9.5px] text-transparent">✓</span>
+                                            <span class="text-[10.5px] text-white/80">問題陳述</span>
+                                            <span data-hf-verdict class="ml-auto font-mono text-[9.5px] text-brand-muted/50">…</span>
                                         </div>
-                                        <div class="flex items-center gap-2">
-                                            <span class="flex-1 min-w-0 truncate text-[9px] text-white/80 leading-none">SOC 2 證據自動化收集</span>
-                                            <span class="shrink-0 text-[8px] text-[#e2706e] leading-none">等你核准</span>
-                                            <span class="hidden sm:block shrink-0 w-14 h-[3px] rounded-full bg-white/[0.08] overflow-hidden"><span class="block h-full w-[74%] rounded-full bg-[#4f7fe0]"></span></span>
-                                            <span class="shrink-0 font-mono text-[8px] text-white/70 leading-none w-8 text-right">74%</span>
+                                        <div data-hf-check class="flex items-center gap-2 rounded bg-white/[0.02] px-2.5 py-2">
+                                            <span data-hf-tick class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-white/20 text-[9.5px] text-transparent">✓</span>
+                                            <span class="text-[10.5px] text-white/80">目標與非目標</span>
+                                            <span data-hf-verdict class="ml-auto font-mono text-[9.5px] text-brand-muted/50">…</span>
                                         </div>
-                                        <div class="flex items-center gap-2">
-                                            <span class="flex-1 min-w-0 truncate text-[9px] text-white/80 leading-none">測試案例 B・手動新建（沒有資料夾）</span>
-                                            <span class="shrink-0 text-[8px] text-brand-amber leading-none">1 項要改</span>
-                                            <span class="hidden sm:block shrink-0 w-14 h-[3px] rounded-full bg-white/[0.08] overflow-hidden"><span class="block h-full w-[34%] rounded-full bg-[#4f7fe0]"></span></span>
-                                            <span class="shrink-0 font-mono text-[8px] text-white/70 leading-none w-8 text-right">34%</span>
+                                        <div data-hf-check class="flex items-center gap-2 rounded bg-white/[0.02] px-2.5 py-2">
+                                            <span data-hf-tick class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-white/20 text-[9.5px] text-transparent">✓</span>
+                                            <span class="text-[10.5px] text-white/80">成功指標</span>
+                                            <span data-hf-verdict class="ml-auto font-mono text-[9.5px] text-brand-muted/50">…</span>
+                                        </div>
+                                        <div data-hf-check class="flex items-center gap-2 rounded bg-white/[0.02] px-2.5 py-2">
+                                            <span data-hf-tick class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-white/20 text-[9.5px] text-transparent">✓</span>
+                                            <span class="text-[10.5px] text-white/80">風險與取捨</span>
+                                            <span data-hf-verdict class="ml-auto font-mono text-[9.5px] text-brand-muted/50">…</span>
+                                        </div>
+                                    </div>
+                                    <div class="mt-5">
+                                        <div class="mb-1.5 flex items-center justify-between">
+                                            <span class="font-mono text-[9.5px] text-brand-muted/70">structure score</span>
+                                            <span data-hf-score class="font-mono text-[10.5px] text-[#5fbf7f]">0%</span>
+                                        </div>
+                                        <div class="h-1 w-full overflow-hidden rounded-full bg-white/[0.09]">
+                                            <div data-hf-score-bar class="h-full w-full origin-left rounded-full bg-gradient-to-r from-[#3d6f9e] to-[#5fbf7f]"></div>
+                                        </div>
+                                        <div data-hf-gate-pass class="mt-2.5 inline-flex items-center gap-1.5 rounded border border-[#5fbf7f]/40 bg-[#5fbf7f]/[0.08] px-2 py-1">
+                                            <i class="ph ph-shield-check text-[11.5px] text-[#5fbf7f]"></i>
+                                            <span class="font-mono text-[10.5px] text-[#5fbf7f]">結構可送簽</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- 狀態列 -->
-                            <div class="mt-auto flex items-center justify-between gap-2 border-t border-white/[0.07] bg-[#0b111a] px-3 py-1.5">
-                                <span class="flex items-center gap-1.5 min-w-0">
-                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-brand-amber"></span>
-                                    <span class="truncate text-[8px] text-white/70 leading-none">SaaS 雙重驗證（2FA）</span>
-                                    <span class="hidden sm:inline text-[8px] text-brand-muted/60 leading-none">· 全部專案總覽</span>
-                                    <span class="shrink-0 rounded-sm bg-[#1c2c44] px-1 py-px text-[7px] text-[#8ab4f0] leading-[11px]">審閱中</span>
-                                </span>
-                                <span class="hidden sm:inline shrink-0 font-mono text-[8px] text-[#5fbf7f] leading-none">結構可送簽</span>
-                                <span class="hidden md:inline shrink-0 font-mono text-[8px] text-brand-muted/60 leading-none">0.1.0 · 67589b7+ · 08-23 13:34</span>
+                            <!-- 幕三：簽核（authorAgentFamily） -->
+                            <div data-hf-scene="2" class="absolute inset-0 flex flex-col px-5 py-4">
+                                <div class="mb-3 flex items-center gap-2">
+                                    <span class="font-mono text-[10.5px] text-brand-amber">03</span>
+                                    <span class="text-[12.5px] font-medium text-white/90">簽核</span>
+                                    <span class="text-[10.5px] text-brand-muted/70">同族系不能核准自己寫的東西</span>
+                                </div>
+                                <div class="flex flex-1 flex-col justify-center rounded border border-white/[0.08] bg-[#0b111a] p-4">
+                                    <div class="mb-3 flex items-center gap-2 rounded bg-white/[0.03] px-2.5 py-1.5">
+                                        <i class="ph ph-file-text text-[11.5px] text-[#8ab4f0]"></i>
+                                        <span class="font-mono text-[10.5px] text-white/70">prd.md</span>
+                                        <span class="ml-auto text-[9.5px] text-brand-muted/70">撰寫者</span>
+                                        <span class="rounded-sm bg-[#1c2c44] px-1.5 py-px font-mono text-[9.5px] text-[#8ab4f0]">claude · anthropic</span>
+                                    </div>
+
+                                    <div data-hf-approver="deny" class="mb-2 flex items-center gap-2 rounded border border-[#e05252]/35 bg-[#e05252]/[0.06] px-2.5 py-2">
+                                        <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#e05252]/60 text-[10.5px] text-[#e05252]">✕</span>
+                                        <span class="font-mono text-[10.5px] text-white/75">claude-sonnet</span>
+                                        <span class="rounded-sm bg-white/[0.06] px-1 py-px font-mono text-[9.5px] text-brand-muted">anthropic</span>
+                                        <span data-hf-deny-msg class="ml-auto text-[9.5px] text-[#e05252]">同族系，擋下</span>
+                                    </div>
+
+                                    <div data-hf-approver="allow" class="flex items-center gap-2 rounded border border-brand-amber/40 bg-brand-amber/[0.07] px-2.5 py-2">
+                                        <span data-hf-allow-tick class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-brand-amber/60 text-[10.5px] text-brand-amber">✓</span>
+                                        <span class="font-mono text-[10.5px] text-white/90">gpt-5</span>
+                                        <span class="rounded-sm bg-white/[0.06] px-1 py-px font-mono text-[9.5px] text-brand-muted">openai</span>
+                                        <span class="ml-auto text-[9.5px] text-brand-amber">不同族系，可核准</span>
+                                    </div>
+
+                                    <div data-hf-stamp class="mt-5 flex items-center gap-2">
+                                        <span class="font-mono text-[11.5px] text-brand-amber glow-text-amber">approval.granted</span>
+                                        <span class="h-px flex-1 timeline-line"></span>
+                                        <span class="font-mono text-[9.5px] text-brand-muted/60">08-23 13:34</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 幕四：串成一條線 -->
+                            <div data-hf-scene="3" class="absolute inset-0 flex flex-col px-5 py-4">
+                                <div class="mb-3 flex items-center gap-2">
+                                    <span class="font-mono text-[10.5px] text-brand-amber">04—07</span>
+                                    <span class="text-[12.5px] font-medium text-white/90">串成一條線</span>
+                                    <span class="text-[10.5px] text-brand-muted/70">四份資料，同一把 join key</span>
+                                </div>
+                                <div class="flex flex-1 flex-col justify-center rounded border border-white/[0.08] bg-[#0b111a] p-4">
+                                    <div class="space-y-3">
+                                        <div data-hf-join class="flex items-center gap-2 rounded bg-white/[0.02] px-2.5 py-2.5">
+                                            <i class="ph ph-git-branch text-[11.5px] text-[#8ab4f0] shrink-0"></i>
+                                            <span class="font-mono text-[10.5px] text-white/80 truncate">openspec/changes/add-2fa</span>
+                                            <span class="ml-auto shrink-0 font-mono text-[9.5px] text-brand-amber/80">058W9SNK</span>
+                                        </div>
+                                        <div data-hf-join class="flex items-center gap-2 rounded bg-white/[0.02] px-2.5 py-2.5">
+                                            <i class="ph ph-git-commit text-[11.5px] text-[#8ab4f0] shrink-0"></i>
+                                            <span class="font-mono text-[10.5px] text-white/80 truncate">67589b7 feat: 2FA enrolment</span>
+                                            <span class="ml-auto shrink-0 font-mono text-[9.5px] text-brand-amber/80">058W9SNK</span>
+                                        </div>
+                                        <div data-hf-join class="flex items-center gap-2 rounded bg-white/[0.02] px-2.5 py-2.5">
+                                            <i class="ph ph-git-pull-request text-[11.5px] text-[#8ab4f0] shrink-0"></i>
+                                            <span class="font-mono text-[10.5px] text-white/80 truncate">PR #128 · 待審</span>
+                                            <span class="ml-auto shrink-0 font-mono text-[9.5px] text-brand-amber/80">058W9SNK</span>
+                                        </div>
+                                        <div data-hf-join class="flex items-center gap-2 rounded bg-white/[0.02] px-2.5 py-2.5">
+                                            <i class="ph ph-tag text-[11.5px] text-[#8ab4f0] shrink-0"></i>
+                                            <span class="font-mono text-[10.5px] text-white/80 truncate">v0.1.0 released</span>
+                                            <span class="ml-auto shrink-0 font-mono text-[9.5px] text-brand-amber/80">058W9SNK</span>
+                                        </div>
+                                    </div>
+                                    <div data-hf-join-note class="mt-6 flex items-center gap-2 border-t border-dashed border-white/[0.10] pt-3">
+                                        <i class="ph ph-link-simple text-[11.5px] text-brand-amber"></i>
+                                        <span class="text-[9.5px] leading-relaxed text-brand-muted">沒有這把錨點，四份資料只能各自顯示，串不成一條線。</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            </div>
+
+                            <!-- 七個關卡 -->
+                            <!-- ponytail: 這條鏈跟 Section 3 的鏈圖是同一組事件，刻意重複。
+                                 第一屏給的是「跑起來的樣子」，Section 3 給的是「停下來可以細讀的樣子」。 -->
+                            <div class="relative shrink-0 border-t border-white/[0.07] bg-[#0b111a] px-3.5 pb-2.5 pt-3">
+                                <div class="relative flex items-start justify-between">
+                                    <div class="absolute left-[6px] right-[6px] top-[5px] h-px bg-white/[0.10]"></div>
+                                    <div data-hf-rail class="absolute left-[6px] right-[6px] top-[5px] h-px origin-left bg-gradient-to-r from-brand-amber/70 to-brand-amber shadow-[0_0_6px_rgba(245,158,11,0.6)]"></div>
+                                    <div data-hf-node class="relative z-10 flex flex-col items-center gap-1.5" style="flex:1">
+                                        <span data-hf-dot class="h-[11px] w-[11px] rounded-sm border border-white/25 bg-[#0b111a]"></span>
+                                        <span data-hf-label class="whitespace-nowrap text-[9.5px] text-brand-muted/60">PRD 撰寫</span>
+                                    </div>
+                                    <div data-hf-node class="relative z-10 flex flex-col items-center gap-1.5" style="flex:1">
+                                        <span data-hf-dot class="h-[11px] w-[11px] rounded-sm border border-white/25 bg-[#0b111a]"></span>
+                                        <span data-hf-label class="whitespace-nowrap text-[9.5px] text-brand-muted/60">結構 gate</span>
+                                    </div>
+                                    <div data-hf-node class="relative z-10 flex flex-col items-center gap-1.5" style="flex:1">
+                                        <span data-hf-dot class="h-[11px] w-[11px] rounded-sm border border-white/25 bg-[#0b111a]"></span>
+                                        <span data-hf-label class="whitespace-nowrap text-[9.5px] text-brand-muted/60">簽核</span>
+                                    </div>
+                                    <div data-hf-node class="relative z-10 flex flex-col items-center gap-1.5" style="flex:1">
+                                        <span data-hf-dot class="h-[11px] w-[11px] rounded-sm border border-white/25 bg-[#0b111a]"></span>
+                                        <span data-hf-label class="whitespace-nowrap text-[9.5px] text-brand-muted/60">change</span>
+                                    </div>
+                                    <div data-hf-node class="relative z-10 flex flex-col items-center gap-1.5" style="flex:1">
+                                        <span data-hf-dot class="h-[11px] w-[11px] rounded-sm border border-white/25 bg-[#0b111a]"></span>
+                                        <span data-hf-label class="whitespace-nowrap text-[9.5px] text-brand-muted/60">commits</span>
+                                    </div>
+                                    <div data-hf-node class="relative z-10 flex flex-col items-center gap-1.5" style="flex:1">
+                                        <span data-hf-dot class="h-[11px] w-[11px] rounded-sm border border-white/25 bg-[#0b111a]"></span>
+                                        <span data-hf-label class="whitespace-nowrap text-[9.5px] text-brand-muted/60">PR</span>
+                                    </div>
+                                    <div data-hf-node class="relative z-10 flex flex-col items-center gap-1.5" style="flex:1">
+                                        <span data-hf-dot class="h-[11px] w-[11px] rounded-sm border border-white/25 bg-[#0b111a]"></span>
+                                        <span data-hf-label class="whitespace-nowrap text-[9.5px] text-brand-muted/60">release</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
+
+                        <!-- 右：append-only 稽核軌跡 -->
+                        <!-- ponytail: sm 以下整條收起來，跟原本側欄同樣的理由——
+                             390px 下 jsonl 那一行怎麼縮都會爛，收掉比截斷誠實。 -->
+                        <aside class="hidden w-[228px] shrink-0 flex-col border-l border-white/[0.07] bg-[#080d14] sm:flex">
+                            <div class="flex items-center gap-1.5 border-b border-white/[0.07] px-2.5 py-2">
+                                <i class="ph ph-list-checks text-[11.5px] text-brand-amber"></i>
+                                <span class="font-mono text-[9.5px] text-brand-muted truncate">log/2026-08.jsonl</span>
+                                <span class="ml-auto shrink-0 rounded-sm bg-white/[0.06] px-1 py-px font-mono text-[8.5px] text-brand-muted/80">append-only</span>
+                            </div>
+                            <div class="min-h-0 flex-1 space-y-[4px] overflow-hidden px-2 py-2">
+                                <div data-hf-log class="rounded bg-white/[0.02] px-1.5 py-[3px] font-mono text-[8.5px] leading-[1.45] text-brand-muted/85"><span class="block text-[#5fbf7f]">prd.created</span><span class="block text-brand-muted/45">t=<span class="text-brand-amber/85">058W9SNK</span></span></div>
+                                <div data-hf-log class="rounded bg-white/[0.02] px-1.5 py-[3px] font-mono text-[8.5px] leading-[1.45] text-brand-muted/85"><span class="block text-[#5fbf7f]">gate.evaluated</span><span class="block text-brand-muted/45">ok=<span class="text-white/70">true</span></span></div>
+                                <div data-hf-log class="rounded bg-white/[0.02] px-1.5 py-[3px] font-mono text-[8.5px] leading-[1.45] text-brand-muted/85"><span class="block text-[#5fbf7f]">approval.granted</span><span class="block text-brand-muted/45">by=<span class="text-white/70">gpt-5</span></span></div>
+                                <div data-hf-log class="rounded bg-white/[0.02] px-1.5 py-[3px] font-mono text-[8.5px] leading-[1.45] text-brand-muted/85"><span class="block text-[#5fbf7f]">change.linked</span><span class="block text-brand-muted/45">id=<span class="text-white/70">add-2fa</span></span></div>
+                                <div data-hf-log class="rounded bg-white/[0.02] px-1.5 py-[3px] font-mono text-[8.5px] leading-[1.45] text-brand-muted/85"><span class="block text-[#5fbf7f]">commit.observed</span><span class="block text-brand-muted/45">sha=<span class="text-white/70">67589b7</span></span></div>
+                                <div data-hf-log class="rounded bg-white/[0.02] px-1.5 py-[3px] font-mono text-[8.5px] leading-[1.45] text-brand-muted/85"><span class="block text-[#5fbf7f]">pr.opened</span><span class="block text-brand-muted/45">n=<span class="text-white/70">128</span></span></div>
+                                <div data-hf-log class="rounded bg-white/[0.02] px-1.5 py-[3px] font-mono text-[8.5px] leading-[1.45] text-brand-muted/85"><span class="block text-[#5fbf7f]">release.tagged</span><span class="block text-brand-muted/45">v=<span class="text-white/70">0.1.0</span></span></div>
+                            </div>
+                            <div class="flex items-center justify-between border-t border-white/[0.07] px-2.5 py-1.5">
+                                <span class="font-mono text-[8.5px] text-brand-muted/60">進 git · 按月分片</span>
+                                <span class="font-mono text-[9.5px] text-white/70"><span data-hf-count>0</span>/7</span>
+                            </div>
+                        </aside>
                     </div>
-                </div>
+
+                    </div>
                    </div>
                   </div>
-            </div>
+                </div>
         </div>
         </section>
 
@@ -1087,13 +1210,270 @@
 
     <script>
         document.addEventListener("DOMContentLoaded", () => {
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) entry.target.classList.add('active');
-                });
-            }, { root: null, rootMargin: '0px', threshold: 0.15 });
 
-            document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+            const HAS_GSAP = typeof window.gsap !== 'undefined' && typeof window.ScrollTrigger !== 'undefined';
+            const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            /* ─────────── 進場：GSAP 版，失敗就退回 IntersectionObserver ───────────
+               ponytail: 兩條路徑都留著，不是保守，是因為整頁 29 個 .reveal 預設 opacity:0。
+               CDN 掛掉時「沒有動畫」跟「一片空白」差很多，而這條 CDN 不在我們手上。 */
+            function revealWithObserver() {
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) entry.target.classList.add('active');
+                    });
+                }, { root: null, rootMargin: '0px', threshold: 0.15 });
+                document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+            }
+
+            if (!HAS_GSAP) {
+                revealWithObserver();
+            } else {
+                gsap.registerPlugin(ScrollTrigger);
+                gsap.defaults({ duration: 0.6, ease: 'power2.out' });
+
+                const mm = gsap.matchMedia();
+
+                mm.add({
+                    motion: '(prefers-reduced-motion: no-preference)',
+                    reduce: '(prefers-reduced-motion: reduce)'
+                }, (ctx) => {
+                    if (ctx.conditions.reduce) {
+                        // 不播就是不播：把所有 .reveal 直接放到終點，不做任何補間。
+                        gsap.set('.reveal', { autoAlpha: 1, y: 0 });
+                        return;
+                    }
+
+                    /* ── 全頁捲動進場 ──
+                       用 ScrollTrigger.batch 而不是每個元素一個 trigger：
+                       同時進場的一批共用一次 callback，可以一起 stagger，
+                       這正是原本 IntersectionObserver + CSS transition-delay 想做
+                       但做不到的事（delay 是寫死的，跟「這批有幾個」無關）。 */
+                    gsap.set('.reveal', { autoAlpha: 0, y: 24 });
+
+                    ScrollTrigger.batch('.reveal', {
+                        start: 'top 88%',
+                        once: true,
+                        interval: 0.12,
+                        batchMax: 6,
+                        onEnter: (batch) => gsap.to(batch, {
+                            autoAlpha: 1,
+                            y: 0,
+                            duration: 0.85,
+                            ease: 'power3.out',
+                            stagger: { each: 0.09, from: 'start' },
+                            overwrite: true
+                        })
+                    });
+
+                    /* ── Hero 首屏：不等捲動，載入就演 ──
+                       第一屏用 batch 會有半拍延遲（要等 ScrollTrigger 算完 refresh），
+                       所以左欄自己一條 timeline 直接播。 */
+                    const heroIn = gsap.timeline({ defaults: { ease: 'power3.out' } });
+                    heroIn.from('#hero-brand', { autoAlpha: 0, y: 18, duration: 0.7 })
+                          .from('#hero-title > span', { autoAlpha: 0, y: 22, duration: 0.8, stagger: 0.12 }, '-=0.4')
+                          .from('#hero-sub', { autoAlpha: 0, y: 14, duration: 0.6 }, '-=0.5')
+                          .from('#hero-cta > *', { autoAlpha: 0, y: 14, duration: 0.6, stagger: 0.1 }, '-=0.35')
+                          .from('#hero-note', { autoAlpha: 0, duration: 0.5 }, '-=0.3');
+
+                    /* App 視窗從右緣滑進來，配合它「一扇開在頁面右側的窗」的設定 */
+                    gsap.from('.al-shot-wrap', {
+                        autoAlpha: 0, x: 64, duration: 1.1, ease: 'power3.out', delay: 0.25
+                    });
+
+                    /* ── Hero 視窗視差 ──
+                       捲動時窗子比頁面慢一點，做出景深。只動 y，走 compositor。 */
+                    gsap.to('.al-shot-wrap', {
+                        y: -60,
+                        ease: 'none',
+                        scrollTrigger: { trigger: '#hero-section', start: 'top top', end: 'bottom top', scrub: 0.6 }
+                    });
+
+                    /* ── Nav：離開首屏後收緊 ── */
+                    const nav = document.querySelector('nav');
+                    if (nav) {
+                        gsap.to(nav, {
+                            backgroundColor: 'rgba(22, 20, 18, 0.94)',
+                            borderBottomColor: 'rgba(245, 158, 11, 0.18)',
+                            duration: 0.4,
+                            ease: 'power1.out',
+                            scrollTrigger: { trigger: 'main', start: 'top+=120 top', toggleActions: 'play none none reverse' }
+                        });
+                    }
+
+                    /* ── Section 3 治理鏈：虛線先畫，節點再依序跳出 ──
+                       原本七個節點跟著整塊一起淡入，看起來是「一張圖」；
+                       依序點亮才讀得出這是有方向的一條鏈。 */
+                    const chain = document.querySelector('#chain');
+                    if (chain) {
+                        const chainTl = gsap.timeline({
+                            scrollTrigger: { trigger: chain, start: 'top 68%', once: true }
+                        });
+                        chainTl.from(chain.querySelector('.dashed-connector'), {
+                                    scaleX: 0, transformOrigin: 'left center', duration: 1.1, ease: 'power2.inOut'
+                                })
+                               .from(chain.querySelectorAll('.min-w-\\[820px\\] > div'), {
+                                    autoAlpha: 0, y: 16, duration: 0.5, stagger: 0.11, ease: 'back.out(1.6)'
+                                }, '-=0.75');
+                    }
+
+                    /* ── 卡片微互動：hover 抬起 ──
+                       CSS transition 也做得到，但這裡要的是「壓下去會回彈」，
+                       back.out 那條曲線 CSS 得手刻 cubic-bezier，交給 GSAP 省事。 */
+                    document.querySelectorAll('#features .bg-brand-surface').forEach((card) => {
+                        const lift = gsap.to(card, {
+                            y: -6, duration: 0.35, ease: 'back.out(2)', paused: true
+                        });
+                        card.addEventListener('mouseenter', () => lift.play());
+                        card.addEventListener('mouseleave', () => lift.reverse());
+                    });
+
+                    buildHeroDemo();
+                });
+            }
+
+            /* ─────────── Hero 演示：治理鏈跑一遍 ───────────
+               ponytail: 一條 repeat:-1 的 timeline 管全部，不是四個各自 setTimeout 的動畫。
+               理由很實際——四幕、七個節點、七行 log 三者必須對齊，
+               用 timeline 的 position 參數對齊是一行字，用 setTimeout 對齊是一堆魔術數字，
+               而且改任何一幕的長度，後面全部要重算。 */
+            function buildHeroDemo() {
+                const root = document.getElementById('hero-demo');
+                if (!root) return;
+
+                const q = gsap.utils.selector(root);
+                const scenes = q('[data-hf-scene]');
+                const dots = q('[data-hf-dot]');
+                const labels = q('[data-hf-label]');
+                const logs = q('[data-hf-log]');
+                const rail = q('[data-hf-rail]')[0];
+                const countEl = q('[data-hf-count]')[0];
+                if (!scenes.length) return;
+
+                const LIT = {
+                    borderColor: 'rgba(245,158,11,0.85)',
+                    backgroundColor: 'rgba(245,158,11,0.9)',
+                    boxShadow: '0 0 8px rgba(245,158,11,0.55)'
+                };
+                const DIM = {
+                    borderColor: 'rgba(255,255,255,0.25)',
+                    backgroundColor: '#0b111a',
+                    boxShadow: '0 0 0px rgba(245,158,11,0)'
+                };
+
+                const tl = gsap.timeline({ repeat: -1, repeatDelay: 1.1, defaults: { ease: 'power2.out' } });
+
+                // 每個關卡點亮 = 節點跳一下 + 標籤轉白 + 鏈條長度推進 + log 長一行 + 計數 +1
+                // 七個節點在 flex:1 的格子裡，第 i 個的中心在 (i+0.5)/7，鏈條就推到那裡。
+                const light = (i, at) => {
+                    tl.to(dots[i], { ...LIT, scale: 1.35, duration: 0.22, ease: 'back.out(3)' }, at)
+                      .to(dots[i], { scale: 1, duration: 0.28 }, at + 0.22)
+                      .to(labels[i], { color: 'rgba(250,249,246,0.85)', duration: 0.3 }, at)
+                      .to(rail, { scaleX: (i + 0.5) / 7, duration: 0.45, ease: 'power2.inOut' }, at)
+                      .fromTo(logs[i], { autoAlpha: 0, x: -10 }, { autoAlpha: 1, x: 0, duration: 0.4 }, at + 0.1)
+                      .call(() => { if (countEl) countEl.textContent = String(i + 1); }, null, at + 0.1);
+                };
+
+                // 一幕換一幕：舊的淡出、新的從下方 14px 浮上來，交疊 0.2 秒
+                const enter = (i, at) => {
+                    if (i > 0) tl.to(scenes[i - 1], { autoAlpha: 0, y: -10, duration: 0.35, ease: 'power1.in' }, at);
+                    tl.fromTo(scenes[i], { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.5 }, at + 0.2);
+                };
+
+                // ── reset：每次 repeat 都會重跑一次 ──
+                tl.set(scenes, { autoAlpha: 0, y: 14 })
+                  .set(dots, { ...DIM, scale: 1 })
+                  .set(labels, { color: 'rgba(156,163,175,0.6)' })
+                  .set(logs, { autoAlpha: 0, x: -10 })
+                  .set(rail, { scaleX: 0 })
+                  .set(q('[data-hf-bar]'), { scaleX: 0, transformOrigin: 'left center' })
+                  .set(q('[data-hf-anchor]'), { autoAlpha: 0, scale: 0.94 })
+                  .set(q('[data-hf-anchor-note]'), { autoAlpha: 0 })
+                  .set(q('[data-hf-tick]'), { color: 'transparent', borderColor: 'rgba(255,255,255,0.2)' })
+                  .set(q('[data-hf-verdict]'), { autoAlpha: 0 })
+                  .set(q('[data-hf-score-bar]'), { scaleX: 0, transformOrigin: 'left center' })
+                  .set(q('[data-hf-gate-pass]'), { autoAlpha: 0, y: 6 })
+                  .set(q('[data-hf-approver]'), { autoAlpha: 0, x: -12 })
+                  .set(q('[data-hf-stamp]'), { autoAlpha: 0 })
+                  .set(q('[data-hf-join]'), { autoAlpha: 0, x: -14 })
+                  .set(q('[data-hf-join-note]'), { autoAlpha: 0 })
+                  .call(() => { if (countEl) countEl.textContent = '0'; });
+
+                // ── 幕一 0.2–4.0：PRD 撰寫 ──
+                enter(0, 0.2);
+                // 游標閃爍：只在這一幕出現，收工時關掉，不要留一個永遠在閃的東西
+                tl.to(q('.hf-caret'), { autoAlpha: 1, duration: 0.12, repeat: 11, yoyo: true, ease: 'none' }, 0.7);
+                tl.to(q('[data-hf-bar]'), {
+                    scaleX: (i) => [0.92, 0.78, 0.85, 0.7][i],
+                    duration: 0.5, stagger: 0.22, ease: 'power2.out'
+                }, 0.9);
+                tl.to(q('[data-hf-anchor]'), { autoAlpha: 1, scale: 1, duration: 0.5, ease: 'back.out(2.2)' }, 2.35)
+                  .to(q('[data-hf-anchor-note]'), { autoAlpha: 1, duration: 0.4 }, 2.7);
+                tl.set(q('.hf-caret'), { autoAlpha: 0 }, 2.3);
+                light(0, 2.9);
+
+                // ── 幕二 4.2–8.0：結構 gate ──
+                enter(1, 4.2);
+                tl.to(q('[data-hf-tick]'), {
+                    color: '#5fbf7f', borderColor: 'rgba(95,191,127,0.7)',
+                    duration: 0.25, stagger: 0.26, ease: 'back.out(3)'
+                }, 4.9);
+                // ponytail: onStart 要掛在 stagger 物件裡，不是掛在 vars 上。
+                // 掛在 vars 上整條 stagger 只會觸發一次——實測結果是第一列翻成 ok、
+                // 後三列永遠停在「…」。放進 stagger 物件才會每個子 tween 各跑一次。
+                tl.to(q('[data-hf-verdict]'), {
+                    autoAlpha: 1, duration: 0.25,
+                    stagger: { each: 0.26, onStart() { this.targets()[0].textContent = 'ok'; } }
+                }, 4.95);
+                tl.to(q('[data-hf-score-bar]'), { scaleX: 1, duration: 1.0, ease: 'power2.inOut' }, 4.9);
+                // 數字跟著長條走：onUpdate 讀 tween 自己的 progress，不另外開一條計時
+                tl.to({ v: 0 }, {
+                    v: 100, duration: 1.0, ease: 'power2.inOut',
+                    onUpdate: function () {
+                        const el = q('[data-hf-score]')[0];
+                        if (el) el.textContent = Math.round(this.targets()[0].v) + '%';
+                    }
+                }, 4.9);
+                tl.to(q('[data-hf-gate-pass]'), { autoAlpha: 1, y: 0, duration: 0.4, ease: 'back.out(2)' }, 6.1);
+                light(1, 6.5);
+
+                // ── 幕三 8.2–12.4：簽核（authorAgentFamily） ──
+                enter(2, 8.2);
+                tl.to(q('[data-hf-approver="deny"]'), { autoAlpha: 1, x: 0, duration: 0.45 }, 8.9);
+                // 擋下來要「感覺得到」：橫向抖兩下，比單純變紅有說服力
+                tl.to(q('[data-hf-approver="deny"]'), {
+                    x: 5, duration: 0.07, repeat: 5, yoyo: true, ease: 'none'
+                }, 9.45);
+                tl.to(q('[data-hf-deny-msg]'), { scale: 1.12, duration: 0.18, yoyo: true, repeat: 1 }, 9.5);
+                tl.to(q('[data-hf-approver="allow"]'), { autoAlpha: 1, x: 0, duration: 0.45 }, 10.15);
+                tl.fromTo(q('[data-hf-allow-tick]'),
+                    { scale: 0.4, rotation: -30 },
+                    { scale: 1, rotation: 0, duration: 0.5, ease: 'back.out(3)' }, 10.4);
+                tl.to(q('[data-hf-stamp]'), { autoAlpha: 1, duration: 0.45 }, 10.85);
+                light(2, 11.1);
+
+                // ── 幕四 12.6–18.4：串成一條線 ──
+                enter(3, 12.6);
+                tl.to(q('[data-hf-join]'), {
+                    autoAlpha: 1, x: 0, duration: 0.45, stagger: 0.62, ease: 'power2.out'
+                }, 13.3);
+                light(3, 13.4);
+                light(4, 14.0);
+                light(5, 14.6);
+                light(6, 15.2);
+                tl.to(q('[data-hf-join-note]'), { autoAlpha: 1, duration: 0.5 }, 15.9);
+                // 收尾：整條鏈補滿到底，代表「七行都在磁碟上了」
+                tl.to(rail, { scaleX: 1, duration: 0.6, ease: 'power2.inOut' }, 16.2);
+                tl.to({}, { duration: 1.4 }, 16.8);
+
+                // 捲出視野就暫停：看不到的動畫不值得每幀重繪
+                ScrollTrigger.create({
+                    trigger: root,
+                    start: 'top bottom',
+                    end: 'bottom top',
+                    onToggle: (self) => self.isActive ? tl.play() : tl.pause()
+                });
+            }
 
             // ponytail: Section 5 大圖＋縮圖切換。純 vanilla，沒有相依。
             // 這段只負責「換」——第一張的可見狀態是 HTML 直接寫死的，
@@ -1121,6 +1501,10 @@
                     });
                     panels.forEach((p, i) => { p.hidden = i !== idx; });
                     caps.forEach((c, i) => { c.hidden = i !== idx; });
+                    // 換圖時給一下淡入，否則在大圖尺寸下是硬切
+                    if (HAS_GSAP && !REDUCE && panels[idx]) {
+                        gsap.fromTo(panels[idx], { autoAlpha: 0.35, scale: 0.99 }, { autoAlpha: 1, scale: 1, duration: 0.4, ease: 'power2.out' });
+                    }
                 };
 
                 tabs.forEach((tab, i) => {
@@ -1146,6 +1530,7 @@
                     const icon = el.querySelector('.ph-copy');
                     if (!icon) return;
                     icon.classList.replace('ph-copy', 'ph-check');
+                    if (HAS_GSAP && !REDUCE) gsap.fromTo(el, { scale: 0.985 }, { scale: 1, duration: 0.35, ease: 'back.out(3)' });
                     setTimeout(() => icon.classList.replace('ph-check', 'ph-copy'), 1200);
                 } catch { /* clipboard 被擋就算了，指令還看得到 */ }
             });
