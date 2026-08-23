@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anchorline — 本機優先的開發專案工作台</title>
+    <meta name="description" content="一條治理鏈，加一份落在磁碟上的稽核軌跡。缺的從來不是一個資料庫，是一把 join key。">
+    <meta name="color-scheme" content="dark">
+    <meta property="og:title" content="Anchorline — 本機優先的開發專案工作台">
+    <meta property="og:description" content="PRD 撰寫 → 結構 gate → 簽核 → openspec change → commits → PR → release。一條治理鏈，一份稽核軌跡。">
+    <meta property="og:type" content="website">
+    <link rel="icon" href="logos/export/favicon.svg" type="image/svg+xml">
+
+    <!-- ponytail: Tailwind + Phosphor 走 CDN，是 aidesigner 生成時的原樣。
+         這份是「拿來跟 landing.html 並排比較」的候選稿，CDN 版渲染結果一致就夠。
+         真的選這版要上線，得換成建置期產出的 CSS（cdn.tailwindcss.com 會帶
+         ~400KB JIT compiler 進來並造成 FOUC），圖示改內嵌 SVG。 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans TC', 'PingFang TC', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            bg: '#161412',
+                            surface: '#201e1b',
+                            amber: '#f59e0b',
+                            amberGlow: 'rgba(245, 158, 11, 0.15)',
+                            text: '#faf9f6',
+                            muted: '#9ca3af',
+                            border: 'rgba(226, 226, 226, 0.13)',
+                            blueDark: '#2d5a8a',
+                            blueLight: '#3d6f9e'
+                        }
+                    },
+                    backgroundImage: {
+                        'amber-stripes': 'repeating-linear-gradient(-45deg, transparent, transparent 10px, rgba(245, 158, 11, 0.15) 10px, rgba(245, 158, 11, 0.15) 20px)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #161412;
+            color: #faf9f6;
+            line-height: 1.7;
+            position: relative;
+        }
+
+        /* Subtle noise texture */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 9999;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+        }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #161412; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        h1, h2, h3, h4 { font-feature-settings: "cv02", "cv03", "cv04", "cv11"; }
+
+        .reveal {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .reveal.active { opacity: 1; transform: translateY(0); }
+        .reveal-delay-1 { transition-delay: 100ms; }
+        .reveal-delay-2 { transition-delay: 200ms; }
+        .reveal-delay-3 { transition-delay: 300ms; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .reveal { opacity: 1; transform: none; transition: none; }
+        }
+
+        .glow-text-amber { text-shadow: 0 0 15px rgba(245, 158, 11, 0.4); }
+        .timeline-line {
+            background: linear-gradient(90deg, transparent, rgba(245, 158, 11, 0.8) 50%, transparent);
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+        }
+        .dashed-connector {
+            background-image: linear-gradient(to right, rgba(226, 226, 226, 0.2) 50%, transparent 50%);
+            background-size: 8px 1px;
+            background-repeat: repeat-x;
+        }
+
+        .iso-logo {
+            transform: rotateX(60deg) rotateZ(-45deg);
+            transform-style: preserve-3d;
+        }
+        .iso-layer {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: transform 0.3s ease;
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-brand-amber/30 selection:text-white">
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full z-50 bg-brand-bg/80 backdrop-blur-md border-b border-brand-border">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="relative w-6 h-6 iso-logo">
+                    <div class="iso-layer bg-brand-blueDark" style="transform: translateZ(-8px)"></div>
+                    <div class="iso-layer bg-brand-blueLight" style="transform: translateZ(0px)"></div>
+                    <div class="iso-layer bg-[#faf9f5]" style="transform: translateZ(8px)"></div>
+                </div>
+                <span class="font-bold text-lg tracking-wide">Anchorline</span>
+            </div>
+
+            <div class="hidden md:flex items-center gap-8 text-sm text-brand-muted">
+                <a href="#features" class="hover:text-white transition-colors">四個問題</a>
+                <a href="#chain" class="hover:text-white transition-colors">治理鏈</a>
+                <a href="#screens" class="hover:text-white transition-colors">主要畫面</a>
+                <a href="#philosophy" class="hover:text-white transition-colors">設計哲學</a>
+                <a href="#install" class="hover:text-white transition-colors">安裝</a>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <a href="https://github.com/ShiGaChenTW/anchorline" target="_blank" rel="noopener" class="text-sm text-brand-muted hover:text-white flex items-center gap-2 transition-colors">
+                    GitHub <i class="ph ph-arrow-up-right"></i>
+                </a>
+                <a href="#install" class="px-4 py-1.5 bg-brand-amber/10 border border-brand-amber/30 text-brand-amber text-sm font-medium rounded hover:bg-brand-amber/20 transition-colors">
+                    快速安裝
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="pt-24 pb-32">
+        <!-- Section 1: Hero -->
+        <section class="max-w-7xl mx-auto px-6 pt-20 pb-24 text-center md:text-left reveal">
+            <div class="max-w-3xl">
+                <h1 class="text-4xl md:text-5xl font-bold leading-tight tracking-tight mb-4">
+                    缺的從來不是一個資料庫，<br class="hidden md:block">
+                    是一把 <span class="text-brand-amber glow-text-amber font-mono font-normal">join key</span>。
+                </h1>
+                <p class="text-lg text-brand-muted mb-16">
+                    Anchorline 是一條治理鏈，一份落在磁碟上的稽核軌跡。
+                </p>
+            </div>
+
+            <!-- Anchor Visual Motif -->
+            <div class="w-full max-w-5xl mx-auto md:mx-0 bg-brand-surface border border-brand-border rounded-lg p-6 md:p-8 mb-12 reveal reveal-delay-1 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-64 h-64 bg-brand-amber/5 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div class="text-center mb-4">
+                    <div class="font-mono text-2xl md:text-4xl text-brand-amber glow-text-amber tracking-wider">
+                        &lt;!-- anc:t=058W9SNK --&gt;
+                    </div>
+                </div>
+                <p class="text-center text-xs text-brand-muted mb-8 max-w-lg mx-auto">
+                    一個穩定錨點，讓 <span class="font-mono text-white/70">plans/*.md</span> 的 checkbox、git commit、簽核與 openspec change 這四份各有身分的資料，串成同一條線。
+                </p>
+
+                <figure class="relative rounded-md border border-brand-border/80 bg-brand-bg overflow-hidden shadow-[0_24px_60px_-20px_rgba(0,0,0,0.8)]">
+                    <!-- ponytail: 真實 App 截圖，1280x880 webp 58KB。之後換成迴圈影片時，
+                         這個 <figure> 原地換成 <video autoplay muted loop playsinline poster="...">，
+                         版面不用動。 -->
+                    <div class="flex items-center gap-1.5 px-3 py-2 border-b border-brand-border/60 bg-brand-surface">
+                        <span class="w-2.5 h-2.5 rounded-full bg-white/15"></span>
+                        <span class="w-2.5 h-2.5 rounded-full bg-white/15"></span>
+                        <span class="w-2.5 h-2.5 rounded-full bg-white/15"></span>
+                        <span class="ml-3 text-[10px] font-mono text-brand-muted">Anchorline — 開發專案工作台</span>
+                    </div>
+                    <img src="landing-assets/screen-overview.webp" width="1280" height="848"
+                         alt="Anchorline 專案總覽：焦點卡指向 SaaS 雙重驗證（2FA），五格狀態統計與跨專案治理覆蓋率"
+                         class="block w-full h-auto" loading="eager" decoding="async">
+                </figure>
+                <figcaption class="mt-3 text-[11px] text-brand-muted text-center">
+                    專案總覽 —— 焦點卡告訴你現在該做哪一個，五格統計說明其餘九個卡在哪裡。
+                </figcaption>
+            </div>
+
+            <!-- CTAs -->
+            <div class="flex flex-col md:flex-row items-start md:items-center gap-6 reveal reveal-delay-2">
+                <button type="button" data-copy="brew install --cask shigachentw/tap/anchorline" class="group relative flex items-center bg-brand-bg border border-brand-border rounded hover:border-brand-amber/50 transition-colors cursor-pointer text-left">
+                    <span class="text-brand-amber px-3 font-mono text-sm border-r border-brand-border">$</span>
+                    <code class="px-4 py-3 font-mono text-sm text-white/90">brew install --cask shigachentw/tap/anchorline</code>
+                    <span class="px-4 border-l border-brand-border text-brand-muted group-hover:text-white transition-colors">
+                        <i class="ph ph-copy text-lg"></i>
+                    </span>
+                </button>
+                <a href="https://github.com/ShiGaChenTW/anchorline/releases" target="_blank" rel="noopener" class="px-6 py-3 border border-brand-border rounded text-sm hover:bg-brand-surface transition-colors flex items-center gap-2">
+                    GitHub Releases <i class="ph ph-arrow-right"></i>
+                </a>
+            </div>
+            <div class="mt-4 flex items-center gap-2 text-xs text-brand-muted/70 reveal reveal-delay-3">
+                <i class="ph ph-info"></i> 早期階段：產物未簽章，macOS 會被 Gatekeeper 擋、Windows 會被 SmartScreen 擋
+            </div>
+        </section>
+
+        <div class="w-full h-px bg-brand-border"></div>
+
+        <!-- Section 1.5: The differentiator -->
+        <section class="max-w-7xl mx-auto px-6 py-24">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-px bg-brand-border border border-brand-border rounded-lg overflow-hidden reveal">
+                <div class="bg-brand-bg p-8 md:p-10">
+                    <div class="text-xs font-mono text-brand-muted mb-4">市面上的 AI 開發工作台</div>
+                    <div class="text-xl md:text-2xl text-white/40 leading-snug">
+                        都在解「怎麼讓 agent<br>跑得更多」。
+                    </div>
+                </div>
+                <div class="bg-brand-surface p-8 md:p-10 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-48 h-48 bg-brand-amber/5 rounded-full blur-3xl pointer-events-none"></div>
+                    <div class="text-xs font-mono text-brand-amber mb-4 relative z-10">Anchorline 解另一件事</div>
+                    <div class="text-xl md:text-2xl text-white leading-snug relative z-10">
+                        怎麼<span class="text-brand-amber glow-text-amber">證明</span>這些 agent<br>做的事是被治理過的。
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="w-full h-px bg-brand-border"></div>
+
+        <!-- Section 2: 4 Questions -->
+        <section id="features" class="max-w-7xl mx-auto px-6 py-24">
+            <h2 class="text-xl font-medium mb-3 text-white/90 reveal">四個問題</h2>
+            <p class="text-sm text-brand-muted mb-10 reveal">一個開發專案工作台要回答四個問題。多數工具答得出前兩個。</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+                <div class="bg-brand-surface border border-brand-border p-6 rounded hover:border-white/30 transition-colors reveal reveal-delay-1">
+                    <div class="text-sm text-brand-muted mb-4 font-mono">Q1 下一步做什麼？</div>
+                    <div class="text-sm">
+                        焦點卡・openspec 的<br>第一個 ready artifact
+                    </div>
+                </div>
+                <div class="bg-brand-surface border border-brand-border p-6 rounded hover:border-white/30 transition-colors reveal reveal-delay-1">
+                    <div class="text-sm text-brand-muted mb-4 font-mono">Q2 現在到哪了？</div>
+                    <div class="text-sm">
+                        plan checkbox ×<br>openspec artifact 的<br>加權 rollup
+                    </div>
+                </div>
+                <div class="bg-brand-surface border border-brand-amber/40 p-6 rounded relative overflow-hidden group reveal reveal-delay-2">
+                    <div class="absolute inset-0 bg-brand-amber/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div class="text-sm text-brand-amber mb-4 font-mono relative z-10">Q3 為什麼變成這樣？</div>
+                    <div class="text-sm text-white/90 relative z-10">
+                        決策紀錄<br>
+                        <span class="text-brand-muted text-xs mt-1 block">(讀 ISA 的 Decisions / Changelog)</span>
+                    </div>
+                </div>
+                <div class="bg-brand-surface border border-brand-amber/40 p-6 rounded relative overflow-hidden group reveal reveal-delay-2">
+                    <div class="absolute inset-0 bg-brand-amber/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div class="text-sm text-brand-amber mb-4 font-mono relative z-10">Q4 實際發生了什麼？</div>
+                    <div class="text-sm text-white/90 relative z-10">
+                        append-only<br>稽核軌跡
+                    </div>
+                </div>
+            </div>
+
+            <p class="text-sm text-brand-muted max-w-2xl leading-relaxed reveal reveal-delay-3">
+                Q3 與 Q4 是差異化所在。2026 年 ADR 復甦的理由很直白——<br>
+                <strong class="text-white font-normal">AI agent 現在寫掉大部分程式碼，而看不到「為什麼」的 agent 會很開心地把理由重構掉。</strong>
+            </p>
+        </section>
+
+        <div class="w-full h-px bg-brand-border"></div>
+
+        <!-- Section 3: Governance Chain -->
+        <section id="chain" class="max-w-7xl mx-auto px-6 py-24 overflow-hidden">
+            <h2 class="text-xl font-medium mb-3 text-white/90 reveal">治理鏈：七個關卡，每一個都在磁碟上留下一行</h2>
+            <p class="text-sm text-brand-muted mb-16 reveal">同一份 append-only 的 <span class="font-mono text-white/70">.anchorline/log/2026-08.jsonl</span>，按月分片，進 git。</p>
+
+            <div class="relative w-full overflow-x-auto pb-8 reveal reveal-delay-1">
+                <div class="min-w-[820px] flex items-start justify-between relative px-4">
+                    <div class="absolute top-[4.25rem] left-8 right-8 h-[1px] dashed-connector z-0"></div>
+
+                    <div class="flex flex-col items-center flex-1 relative">
+                        <div class="text-[10px] font-mono mb-3 text-brand-muted">01</div>
+                        <div class="text-xs text-center h-8 mb-4 text-white/80">PRD 撰寫</div>
+                        <div class="w-3 h-3 bg-brand-bg border border-brand-border text-brand-muted rounded-sm mb-6 z-10 relative"></div>
+                        <div class="text-[10px] font-mono text-brand-muted/50 text-center leading-relaxed">prd.created</div>
+                    </div>
+                    <div class="flex flex-col items-center flex-1 relative">
+                        <div class="text-[10px] font-mono mb-3 text-brand-muted">02</div>
+                        <div class="text-xs text-center h-8 mb-4 text-white/80">結構 gate</div>
+                        <div class="w-3 h-3 bg-brand-bg border border-brand-border text-brand-muted rounded-sm mb-6 z-10 relative"></div>
+                        <div class="text-[10px] font-mono text-brand-muted/50 text-center leading-relaxed">gate.evaluated</div>
+                    </div>
+                    <div class="flex flex-col items-center flex-1 relative">
+                        <div class="text-[10px] font-mono mb-3 text-brand-amber">03</div>
+                        <div class="text-xs text-center h-8 mb-4 text-brand-amber">簽核</div>
+                        <div class="w-3 h-3 bg-brand-bg border border-brand-amber rounded-sm mb-6 z-10 relative shadow-[0_0_8px_rgba(245,158,11,0.5)]"></div>
+                        <div class="text-[10px] font-mono text-brand-amber/70 text-center leading-relaxed">approval.granted</div>
+                    </div>
+                    <div class="flex flex-col items-center flex-1 relative">
+                        <div class="text-[10px] font-mono mb-3 text-brand-muted">04</div>
+                        <div class="text-xs text-center h-8 mb-4 text-white/80">openspec<br>change</div>
+                        <div class="w-3 h-3 bg-brand-bg border border-brand-border rounded-sm mb-6 z-10 relative"></div>
+                        <div class="text-[10px] font-mono text-brand-muted/50 text-center leading-relaxed">change.linked</div>
+                    </div>
+                    <div class="flex flex-col items-center flex-1 relative">
+                        <div class="text-[10px] font-mono mb-3 text-brand-muted">05</div>
+                        <div class="text-xs text-center h-8 mb-4 text-white/80">commits</div>
+                        <div class="w-3 h-3 bg-brand-bg border border-brand-border rounded-sm mb-6 z-10 relative"></div>
+                        <div class="text-[10px] font-mono text-brand-muted/50 text-center leading-relaxed">commit.observed</div>
+                    </div>
+                    <div class="flex flex-col items-center flex-1 relative">
+                        <div class="text-[10px] font-mono mb-3 text-brand-muted">06</div>
+                        <div class="text-xs text-center h-8 mb-4 text-white/80">PR</div>
+                        <div class="w-3 h-3 bg-brand-bg border border-brand-border rounded-sm mb-6 z-10 relative"></div>
+                        <div class="text-[10px] font-mono text-brand-muted/50 text-center leading-relaxed">pr.opened</div>
+                    </div>
+                    <div class="flex flex-col items-center flex-1 relative">
+                        <div class="text-[10px] font-mono mb-3 text-brand-muted">07</div>
+                        <div class="text-xs text-center h-8 mb-4 text-white/80">release</div>
+                        <div class="w-3 h-3 bg-brand-bg border border-brand-border rounded-sm mb-6 z-10 relative"></div>
+                        <div class="text-[10px] font-mono text-brand-muted/50 text-center leading-relaxed">release.tagged</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="w-full h-px bg-brand-border"></div>
+
+        <!-- Section 4: authorAgentFamily -->
+        <section class="max-w-7xl mx-auto px-6 py-24">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+                <div class="reveal">
+                    <div class="text-xs font-mono text-brand-amber mb-4">一個市面上沒有的機制</div>
+                    <h2 class="text-2xl font-medium mb-4 text-white/90 leading-snug">
+                        同一個 agent 族系撰寫的文件，<br>不能由同族系核准。
+                    </h2>
+                    <p class="text-sm text-brand-muted leading-relaxed mb-6">
+                        GitHub 的 CODEOWNERS 與 branch protection 只認人，不認 AI 族系，抓不到這一類。<br>
+                        治理鏈 replay 會把違規標出來——<span class="text-white/80">一條沒有標示違規的治理鏈沒有說服力。</span>
+                    </p>
+                </div>
+
+                <div class="bg-brand-surface border border-brand-border rounded p-6 font-mono text-xs reveal reveal-delay-1 relative overflow-hidden">
+                    <div class="flex justify-between text-[10px] text-brand-muted mb-6 pb-4 border-b border-white/5">
+                        <div class="w-1/3">
+                            <div class="mb-1 text-white/70">PRD 文件</div>
+                            <div>anc:t=058W9SNK</div>
+                            <div class="text-brand-amber mt-1">authorAgentFamily:<br>claude</div>
+                            <div>author: @scott</div>
+                        </div>
+                        <div class="w-2/3 pl-4 border-l border-white/5 relative">
+                            <div class="mb-2 text-white/70 text-center">治理鏈 replay（稽核重放）</div>
+
+                            <div class="flex items-center justify-between mt-6 relative px-2">
+                                <div class="absolute left-2 right-2 h-[1px] bg-white/10 top-1.5 z-0"></div>
+                                <div class="relative z-10 text-center"><div class="w-3 h-3 border border-white/30 bg-brand-surface mx-auto mb-1 rounded-sm"></div><span class="text-[8px]">PRD</span></div>
+                                <div class="relative z-10 text-center"><div class="w-3 h-3 border border-white/30 bg-brand-surface mx-auto mb-1 rounded-sm"></div><span class="text-[8px]">gate</span></div>
+                                <div class="relative z-10 text-center"><div class="w-3 h-3 border border-brand-amber bg-brand-surface mx-auto mb-1 rounded-sm shadow-[0_0_5px_rgba(245,158,11,0.5)]"></div><span class="text-[8px] text-brand-amber">approval</span></div>
+                                <div class="relative z-10 text-center"><div class="w-3 h-3 border border-white/10 bg-brand-surface mx-auto mb-1 rounded-sm"></div><span class="text-[8px] text-white/30">change</span></div>
+                                <div class="relative z-10 text-center"><div class="w-3 h-3 border border-white/10 bg-brand-surface mx-auto mb-1 rounded-sm"></div><span class="text-[8px] text-white/30">commit</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 border border-brand-amber/30 bg-brand-amber/5 rounded p-4 relative">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <div class="text-[10px] text-brand-muted mb-1">approval attempt</div>
+                                <div class="text-brand-amber mb-2">approverAgentFamily:<br>claude</div>
+                                <div class="text-white/60">result: rejected</div>
+                                <div class="text-white/60">code: E_AGENT_FAMILY_CONFLICT</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-white/40 text-[10px]">2026-08-23T02:31:44Z</div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 h-8 bg-amber-stripes border-y border-brand-amber/50 flex items-center justify-center">
+                            <span class="bg-brand-surface px-3 font-bold text-brand-amber text-sm tracking-widest">BLOCKED</span>
+                        </div>
+
+                        <div class="mt-3 text-center text-[10px] text-brand-muted">
+                            違規原因：approverAgentFamily 與 authorAgentFamily 相同（claude）
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="w-full h-px bg-brand-border"></div>
+
+        <!-- Section 5: Main Screens -->
+        <section id="screens" class="max-w-7xl mx-auto px-6 py-24">
+            <h2 class="text-xl font-medium mb-10 text-white/90 reveal">主要畫面 <span class="text-brand-muted text-base font-normal">（五個核心視圖）</span></h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div class="reveal reveal-delay-1 flex flex-col">
+                    <div class="bg-brand-surface border border-brand-border rounded p-3 h-32 relative overflow-hidden mb-3 group hover:border-white/30 transition-colors">
+                        <div class="absolute top-2 left-2 text-[8px] font-mono text-white/30">OVERVIEW</div>
+                        <div class="mt-4 flex gap-2">
+                            <div class="w-1/2 h-8 bg-white/5 rounded border border-white/5"></div>
+                            <div class="w-1/2 h-8 bg-white/5 rounded border border-white/5"></div>
+                        </div>
+                        <div class="mt-2 w-full h-12 bg-white/5 rounded border border-white/5 relative overflow-hidden">
+                            <div class="absolute right-2 top-2 w-8 h-8 rounded-full border border-white/10 flex items-center justify-center">
+                                <div class="w-1 h-1 bg-brand-amber rounded-full"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-sm font-mono mb-1"><span class="text-brand-muted">1</span> 專案總覽</div>
+                    <div class="text-xs text-brand-muted">焦點卡 + 跨 repo PR 雷達</div>
+                </div>
+
+                <div class="reveal reveal-delay-2 flex flex-col">
+                    <div class="bg-brand-surface border border-brand-border rounded p-3 h-32 relative overflow-hidden mb-3 group hover:border-white/30 transition-colors">
+                        <div class="flex h-full gap-2 mt-2">
+                            <div class="w-1/2 flex flex-col gap-1">
+                                <div class="h-2 w-3/4 bg-white/10 rounded"></div>
+                                <div class="h-2 w-full bg-white/5 rounded"></div>
+                                <div class="h-2 w-5/6 bg-white/5 rounded"></div>
+                                <div class="h-2 w-full bg-white/5 rounded"></div>
+                            </div>
+                            <div class="w-1/2 bg-[#1a1a1a] border border-white/5 rounded p-2">
+                                <div class="text-[6px] text-white/30 mb-1">PREVIEW</div>
+                                <div class="h-1 w-1/2 bg-white/20 mb-1"></div>
+                                <div class="h-1 w-full bg-white/10"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-sm font-mono mb-1"><span class="text-brand-muted">2</span> 編輯台</div>
+                    <div class="text-xs text-brand-muted">PRD 引導撰寫、結構 gate<br>Markdown 即時預覽</div>
+                </div>
+
+                <div class="reveal reveal-delay-3 flex flex-col">
+                    <div class="bg-brand-surface border border-brand-border rounded p-3 h-32 relative overflow-hidden mb-3 group hover:border-white/30 transition-colors flex items-center justify-center">
+                        <div class="w-3/4 bg-brand-bg border border-brand-amber/30 rounded p-2 text-center">
+                            <div class="w-4 h-4 rounded-full border border-brand-amber mx-auto mb-1 flex items-center justify-center">
+                                <div class="w-2 h-2 bg-brand-amber rounded-full"></div>
+                            </div>
+                            <div class="h-1 w-1/2 bg-white/20 mx-auto mb-1"></div>
+                            <div class="h-1 w-3/4 bg-white/10 mx-auto"></div>
+                        </div>
+                    </div>
+                    <div class="text-sm font-mono mb-1"><span class="text-brand-muted">3</span> 審閱</div>
+                    <div class="text-xs text-brand-muted">簽核關卡，gate 未過擋核准</div>
+                </div>
+
+                <div class="reveal reveal-delay-1 flex flex-col">
+                    <div class="bg-brand-surface border border-brand-border rounded p-3 h-32 relative overflow-hidden mb-3 group hover:border-white/30 transition-colors flex gap-2">
+                        <div class="w-2/3 mt-2 flex flex-col gap-2">
+                            <div class="flex items-center gap-1"><div class="w-2 h-2 border border-brand-amber rounded-sm"></div><div class="h-1 w-full bg-white/10 rounded"></div></div>
+                            <div class="flex items-center gap-1"><div class="w-2 h-2 bg-white/20 rounded-sm"></div><div class="h-1 w-3/4 bg-white/10 rounded"></div></div>
+                            <div class="flex items-center gap-1"><div class="w-2 h-2 bg-white/20 rounded-sm"></div><div class="h-1 w-5/6 bg-white/10 rounded"></div></div>
+                        </div>
+                        <div class="w-1/3 border-l border-white/5 pl-2 mt-2 flex flex-col gap-1">
+                            <div class="h-1 w-full bg-white/5"></div>
+                            <div class="h-1 w-3/4 bg-white/5"></div>
+                        </div>
+                    </div>
+                    <div class="text-sm font-mono mb-1"><span class="text-brand-muted">4</span> Task Tracking</div>
+                    <div class="text-xs text-brand-muted">plans/*.md 進度可勾選<br>右欄稽核軌跡三層</div>
+                </div>
+
+                <div class="reveal reveal-delay-2 flex flex-col">
+                    <div class="bg-brand-surface border border-brand-border rounded p-3 h-32 relative overflow-hidden mb-3 group hover:border-white/30 transition-colors">
+                        <div class="mt-2 flex flex-col gap-2">
+                            <div class="flex items-center gap-2 bg-white/5 p-1 rounded">
+                                <div class="w-4 h-4 rounded-full bg-blue-500/20 border border-blue-500/50"></div>
+                                <div class="h-1.5 w-1/2 bg-white/20 rounded"></div>
+                            </div>
+                            <div class="flex items-center gap-2 bg-white/5 p-1 rounded">
+                                <div class="w-4 h-4 rounded-full bg-green-500/20 border border-green-500/50"></div>
+                                <div class="h-1.5 w-1/3 bg-white/20 rounded"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-sm font-mono mb-1"><span class="text-brand-muted">5</span> Agents</div>
+                    <div class="text-xs text-brand-muted">Agent 角色、prompt、進場作業</div>
+                </div>
+            </div>
+        </section>
+
+        <div class="w-full h-px bg-brand-border"></div>
+
+        <!-- Section 6 + 7 -->
+        <div class="max-w-7xl mx-auto px-6 py-24 grid grid-cols-1 lg:grid-cols-2 gap-16">
+
+            <section id="philosophy">
+                <h2 class="text-xl font-medium mb-8 text-brand-amber reveal">設計哲學：一次只指一個。</h2>
+
+                <div class="space-y-6 reveal reveal-delay-1">
+                    <div class="bg-brand-surface border border-brand-border rounded-lg overflow-hidden">
+                        <div class="px-4 py-2 border-b border-white/5 text-xs text-white/50 flex justify-between items-center bg-[#1a1815]">
+                            <span>焦點卡欄位硬性封頂 4 個</span>
+                            <i class="ph ph-dots-three"></i>
+                        </div>
+                        <div class="p-4">
+                            <div class="text-sm mb-3 text-white/80">焦點卡</div>
+                            <div class="grid grid-cols-4 gap-2 mb-4">
+                                <div class="border border-white/5 p-2 rounded bg-brand-bg text-center">
+                                    <div class="text-[10px] text-brand-muted mb-1">下一步</div>
+                                    <div class="text-xs font-mono">PRD-0002<br><span class="text-white/40">結構 gate<br>未就緒</span></div>
+                                </div>
+                                <div class="border border-white/5 p-2 rounded bg-brand-bg text-center">
+                                    <div class="text-[10px] text-brand-muted mb-1">進度</div>
+                                    <div class="text-lg text-brand-amber font-mono">62%</div>
+                                    <div class="text-[10px] text-white/40 mt-1">23 / 37<br>完成項目</div>
+                                </div>
+                                <div class="border border-white/5 p-2 rounded bg-brand-bg text-center">
+                                    <div class="text-[10px] text-brand-muted mb-1">上次動</div>
+                                    <div class="text-sm text-white/80 font-mono">2h <span class="text-xs text-white/40">前</span></div>
+                                    <div class="text-[10px] text-white/40 mt-1">@claude<br>commit 9c1d2a7</div>
+                                </div>
+                                <div class="border border-white/5 p-2 rounded bg-brand-bg text-center">
+                                    <div class="text-[10px] text-brand-muted mb-1">待推</div>
+                                    <div class="text-lg text-brand-amber font-mono">3</div>
+                                    <div class="text-[10px] text-white/40 mt-1">PR 開放中</div>
+                                </div>
+                            </div>
+
+                            <div class="text-xs text-brand-muted mb-2">其餘專案摺疊（預設）</div>
+                            <div class="space-y-1">
+                                <div class="flex justify-between items-center text-xs border border-white/5 px-3 py-1.5 rounded bg-brand-bg text-white/50">
+                                    <span>txtnimal</span><i class="ph ph-caret-right"></i>
+                                </div>
+                                <div class="flex justify-between items-center text-xs border border-white/5 px-3 py-1.5 rounded bg-brand-bg text-white/50">
+                                    <span>sysapp-tui</span><i class="ph ph-caret-right"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-brand-surface border border-brand-border rounded-lg overflow-hidden">
+                        <div class="px-4 py-2 border-b border-white/5 text-xs text-white/50 flex justify-between items-center bg-[#1a1815]">
+                            <span>稽核軌跡預設停在「回到工作」三行</span>
+                            <i class="ph ph-list"></i>
+                        </div>
+                        <div class="p-4">
+                            <div class="text-sm mb-3 text-white/80">稽核軌跡（預設三行）</div>
+                            <div class="font-mono text-[10px] space-y-2 border border-white/5 p-3 rounded bg-brand-bg mb-3 text-white/60">
+                                <div class="flex gap-4"><span class="text-white/40">08-23 01:12</span><span class="w-16 text-brand-amber/80">approval</span><span>gate passed by @scott</span></div>
+                                <div class="flex gap-4"><span class="text-white/40">08-23 01:18</span><span class="w-16 text-blue-400/80">change</span><span>openspec change c3f1a2</span></div>
+                                <div class="flex gap-4"><span class="text-white/40">08-23 01:26</span><span class="w-16 text-white/80">commit</span><span>9c1d2a7 fix: update plan</span></div>
+                                <div class="text-center mt-2 pt-2 border-t border-white/5 text-white/30">回到工作</div>
+                            </div>
+
+                            <div class="text-xs text-brand-muted mb-2">完整時間軸要點兩下才到</div>
+                            <div class="text-xs border border-white/10 px-4 py-1.5 rounded bg-brand-bg text-brand-amber/80 inline-block">
+                                點兩下展開完整時間軸
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="text-sm text-brand-muted mt-4">這是刻意的取捨，不是功能不足。理由寫在 <span class="font-mono text-white/60">src/lib/focus-card.ts</span> 與 <span class="font-mono text-white/60">src/lib/log-views.ts</span> 的檔頭。</p>
+                </div>
+            </section>
+
+            <section>
+                <h2 class="text-xl font-medium mb-8 text-white/90 reveal">工程證據 <span class="text-brand-muted text-base font-normal">（硬數字，不是口號）</span></h2>
+
+                <div class="space-y-4 reveal reveal-delay-2">
+                    <div class="flex items-center gap-6 border-b border-brand-border pb-6">
+                        <div class="text-5xl font-mono font-bold text-white tracking-tighter w-24 text-right">47</div>
+                        <div class="text-sm text-brand-muted">
+                            個 lib 模組，<br>其中 <span class="text-brand-amber">40 個是純函式</span>（I/O 全推到呼叫端）
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-6 border-b border-brand-border py-6">
+                        <div class="text-5xl font-mono font-bold text-white tracking-tighter w-32 text-right">39<span class="text-2xl text-white/30">/47</span></div>
+                        <div class="text-sm text-brand-muted">
+                            個檔案從 WKWebView 換到 Tauri 時<br>一行都不用改
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-6 py-6">
+                        <div class="text-5xl font-mono font-bold text-brand-amber tracking-tighter w-24 text-right">12</div>
+                        <div class="text-sm text-brand-muted">
+                            個 Rust <span class="font-mono text-xs text-white/60">action</span>，<br>全部有契約測試
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-brand-muted reveal reveal-delay-3">
+                    <div class="flex items-center gap-2">
+                        <i class="ph ph-check-circle text-brand-amber"></i> 判定邏輯一律純函式
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i class="ph ph-check-circle text-brand-amber"></i> nowMs 一律可注入
+                    </div>
+                    <div class="flex items-start gap-2 sm:col-span-2">
+                        <i class="ph ph-check-circle text-brand-amber mt-1"></i>
+                        <span>不解析 openspec 內文，只呼叫官方 CLI 的 <code class="font-mono text-xs text-white/70">--json</code>——這是一句對上游的相容承諾</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="w-full h-px bg-brand-border"></div>
+
+        <!-- Section 8: Installation -->
+        <section id="install" class="max-w-7xl mx-auto px-6 py-24">
+            <h2 class="text-xl font-medium mb-10 text-white/90 reveal">安裝 <span class="text-brand-muted text-base font-normal font-mono">v1.3.0</span></h2>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="bg-brand-surface border border-brand-border rounded p-6 reveal reveal-delay-1">
+                    <div class="flex items-center gap-2 text-sm text-white/80 mb-4">
+                        <span class="w-5 h-5 rounded bg-white/10 text-xs flex items-center justify-center font-mono">1</span>
+                        Homebrew（推薦）
+                    </div>
+                    <div class="bg-[#111] border border-white/5 rounded p-3 font-mono text-xs text-white/80 relative group mb-4 cursor-pointer" data-copy="brew install --cask shigachentw/tap/anchorline">
+                        <div class="text-brand-amber mb-1">$ brew install --cask</div>
+                        <div class="pl-3">shigachentw/tap/anchorline</div>
+                        <i class="ph ph-copy absolute top-3 right-3 text-brand-muted hover:text-white cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                    </div>
+                    <div class="text-xs text-brand-muted leading-relaxed">
+                        產物未簽章，Homebrew 會蓋 quarantine 屬性。裝完跑一次：
+                        <div class="mt-2 font-mono text-[10px] text-white/60 break-all">xattr -dr com.apple.quarantine "/Applications/Anchorline.app"</div>
+                    </div>
+                </div>
+
+                <div class="bg-brand-surface border border-brand-border rounded p-6 reveal reveal-delay-2">
+                    <div class="flex items-center gap-2 text-sm text-white/80 mb-4">
+                        <span class="w-5 h-5 rounded bg-white/10 text-xs flex items-center justify-center font-mono">2</span>
+                        直接下載
+                    </div>
+
+                    <div class="space-y-2 mb-4">
+                        <a href="https://github.com/ShiGaChenTW/anchorline/releases" target="_blank" rel="noopener" class="flex justify-between items-center bg-[#111] border border-white/5 rounded p-2 text-xs hover:border-white/20 transition-colors group">
+                            <div>
+                                <div class="text-white/60 mb-0.5">macOS（Apple Silicon / Intel）</div>
+                                <div class="font-mono text-[10px] text-brand-muted">universal .dmg</div>
+                            </div>
+                            <i class="ph ph-download-simple text-brand-muted group-hover:text-white"></i>
+                        </a>
+                        <a href="https://github.com/ShiGaChenTW/anchorline/releases" target="_blank" rel="noopener" class="flex justify-between items-center bg-[#111] border border-white/5 rounded p-2 text-xs hover:border-white/20 transition-colors group">
+                            <div>
+                                <div class="text-white/60 mb-0.5">Windows</div>
+                                <div class="font-mono text-[10px] text-brand-muted">.msi</div>
+                            </div>
+                            <i class="ph ph-download-simple text-brand-muted group-hover:text-white"></i>
+                        </a>
+                        <a href="https://github.com/ShiGaChenTW/anchorline/releases" target="_blank" rel="noopener" class="flex justify-between items-center bg-[#111] border border-white/5 rounded p-2 text-xs hover:border-white/20 transition-colors group">
+                            <div>
+                                <div class="text-white/60 mb-0.5">Linux</div>
+                                <div class="font-mono text-[10px] text-brand-muted">.AppImage</div>
+                            </div>
+                            <i class="ph ph-download-simple text-brand-muted group-hover:text-white"></i>
+                        </a>
+                    </div>
+
+                    <div class="text-xs text-brand-muted">
+                        Gatekeeper／SmartScreen 的處理同左。
+                    </div>
+                </div>
+
+                <div class="bg-brand-surface border border-brand-border rounded p-6 reveal reveal-delay-3">
+                    <div class="flex items-center gap-2 text-sm text-white/80 mb-4">
+                        <span class="w-5 h-5 rounded bg-white/10 text-xs flex items-center justify-center font-mono">3</span>
+                        自行建置
+                    </div>
+                    <div class="bg-[#111] border border-white/5 rounded p-3 font-mono text-xs text-white/80 relative group mb-4 space-y-1.5 cursor-pointer" data-copy="git clone https://github.com/ShiGaChenTW/anchorline.git && cd anchorline && bun install && bun run tauri build">
+                        <div><span class="text-white/40">$</span> git clone <span class="text-white/60">https://github.com/ShiGaChenTW/anchorline.git</span></div>
+                        <div><span class="text-white/40">$</span> cd anchorline</div>
+                        <div><span class="text-white/40">$</span> bun install</div>
+                        <div><span class="text-white/40">$</span> bun run tauri build</div>
+                        <i class="ph ph-copy absolute top-3 right-3 text-brand-muted hover:text-white cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                    </div>
+                    <div class="text-xs text-brand-muted leading-relaxed">
+                        產物在 <code class="font-mono text-[10px] bg-white/5 px-1 rounded">src-tauri/target/release/bundle/</code>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-brand-border bg-brand-bg/50 mt-12 pb-12 pt-16">
+        <div class="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-12">
+            <div class="col-span-1 md:col-span-2">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="relative w-5 h-5 iso-logo">
+                        <div class="iso-layer bg-brand-blueDark" style="transform: translateZ(-6px)"></div>
+                        <div class="iso-layer bg-brand-blueLight" style="transform: translateZ(0px)"></div>
+                        <div class="iso-layer bg-[#faf9f5]" style="transform: translateZ(6px)"></div>
+                    </div>
+                    <span class="font-bold text-base tracking-wide text-white/90">Anchorline</span>
+                </div>
+                <p class="text-sm text-brand-muted mb-6">
+                    一條治理鏈，一份落在磁碟上的稽核軌跡。<br>
+                    <span class="text-brand-muted/60 text-xs">前身為 SpecForge / PM-SPEC+SCVB。舊的 sf: 錨點仍可讀取。</span>
+                </p>
+                <div class="text-xs text-brand-muted/50 font-mono">
+                    MIT © 2026 ShiGaChenTW
+                </div>
+            </div>
+
+            <div>
+                <div class="text-sm text-white/80 mb-4 font-medium">連結</div>
+                <ul class="space-y-2 text-sm text-brand-muted">
+                    <li><a href="https://github.com/ShiGaChenTW/anchorline" target="_blank" rel="noopener" class="hover:text-white transition-colors flex items-center gap-1">GitHub <i class="ph ph-arrow-up-right text-xs"></i></a></li>
+                    <li><a href="https://github.com/ShiGaChenTW/anchorline/releases" target="_blank" rel="noopener" class="hover:text-white transition-colors">Releases</a></li>
+                    <li><a href="https://github.com/ShiGaChenTW/anchorline/issues" target="_blank" rel="noopener" class="hover:text-white transition-colors">Issues</a></li>
+                </ul>
+            </div>
+
+            <div id="docs">
+                <div class="text-sm text-white/80 mb-4 font-medium">文件</div>
+                <ul class="space-y-3 text-xs">
+                    <li>
+                        <a href="https://github.com/ShiGaChenTW/anchorline/blob/main/docs/BRIDGE.md" target="_blank" rel="noopener" class="group block">
+                            <span class="text-brand-amber group-hover:text-amber-400 font-mono">BRIDGE.md</span> <span class="text-white/80 ml-1">契約</span><br>
+                            <span class="text-brand-muted/70">12 個 action 的規格</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://github.com/ShiGaChenTW/anchorline/blob/main/docs/SECURITY.md" target="_blank" rel="noopener" class="group block">
+                            <span class="text-brand-amber group-hover:text-amber-400 font-mono">SECURITY.md</span> <span class="text-white/80 ml-1">安全模型</span><br>
+                            <span class="text-brand-muted/70">為什麼沒有 shell plugin</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://github.com/ShiGaChenTW/anchorline/blob/main/docs/DATA.md" target="_blank" rel="noopener" class="group block">
+                            <span class="text-brand-amber group-hover:text-amber-400 font-mono">DATA.md</span> <span class="text-white/80 ml-1">資料落點</span><br>
+                            <span class="text-brand-muted/70">資料落在哪、進不進 git</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://github.com/ShiGaChenTW/anchorline/blob/main/docs/SCOPE.md" target="_blank" rel="noopener" class="group block">
+                            <span class="text-brand-amber group-hover:text-amber-400 font-mono">SCOPE.md</span> <span class="text-white/80 ml-1">範圍</span><br>
+                            <span class="text-brand-muted/70">開發範圍與工作線</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) entry.target.classList.add('active');
+                });
+            }, { root: null, rootMargin: '0px', threshold: 0.15 });
+
+            document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+            // ponytail: 一個 delegated listener 蓋掉所有 data-copy，不必每塊掛一個
+            document.addEventListener('click', async (e) => {
+                const el = e.target.closest('[data-copy]');
+                if (!el) return;
+                try {
+                    await navigator.clipboard.writeText(el.dataset.copy);
+                    const icon = el.querySelector('.ph-copy');
+                    if (!icon) return;
+                    icon.classList.replace('ph-copy', 'ph-check');
+                    setTimeout(() => icon.classList.replace('ph-check', 'ph-copy'), 1200);
+                } catch { /* clipboard 被擋就算了，指令還看得到 */ }
+            });
+        });
+    </script>
+</body>
+</html>
