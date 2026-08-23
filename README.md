@@ -8,6 +8,8 @@
 
 > 前身為 SpecForge / PM-SPEC+SCVB。舊的 `sf:` 錨點仍可讀取。
 
+🔗 **專案介紹頁：** https://shigachentw.github.io/anchorline/landing-aid.html
+
 ```
 PRD 撰寫 → 結構 gate → 簽核 → openspec change → commits → PR → release
 ```
