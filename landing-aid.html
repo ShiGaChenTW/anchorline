@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Anchorline — 本機優先的開發專案工作台</title>
-    <meta name="description" content="一條治理鏈，加一份落在磁碟上的稽核軌跡。缺的從來不是一個資料庫，是一把 join key。">
+    <meta name="description" content="PRD &amp; OpenSpec：具備 AI 撰寫與簽核的工作台。一條治理鏈，一份落在磁碟上的稽核軌跡。">
     <meta name="color-scheme" content="dark">
     <meta property="og:title" content="Anchorline — 本機優先的開發專案工作台">
     <meta property="og:description" content="PRD 撰寫 → 結構 gate → 簽核 → openspec change → commits → PR → release。一條治理鏈，一份稽核軌跡。">
@@ -55,6 +55,13 @@
             color: #faf9f6;
             line-height: 1.7;
             position: relative;
+        }
+
+        /* ponytail: Tailwind preflight 把 img/video 設成 display:block，那是 author sheet，
+           會蓋掉瀏覽器 UA 的 [hidden]{display:none} —— 於是 <img hidden> 照樣顯示。
+           Section 5 的切換靠 [hidden]，所以這條要自己寫死，不能靠 UA 預設。 */
+        [hidden] {
+            display: none !important;
         }
 
         /* Subtle noise texture */
@@ -113,7 +120,64 @@
             border: 1px solid rgba(255,255,255,0.2);
             transition: transform 0.3s ease;
         }
+
+        /* ponytail: Hero 主視覺是「一扇固定尺寸的 App 視窗被推到畫面右緣切掉一角」，
+           不是一張跟著視窗橫向長大的彈性卡片。三件事靠同一個機制一起成立：
+
+           內層 canvas 尺寸寫死 642×442。642 是量出來的，不是猜的：這份骨架在 600px
+           以上自然高度就固定在 441.63（不再有任何東西換行），642/441.63 = 1.454，
+           正好貼近真實 App 視窗 1280×880 的 1.4545。取 442 是留 0.37px 餘裕，
+           讓主窗格的 mt-auto 狀態列貼底而不是被 overflow-hidden 切掉。
+
+           整塊用 transform: scale() 等比放大。scale 只改變觀感尺寸，不改變版面計算
+           —— 版面永遠在 642px 下算完，所以長寬比與內容密度都不隨視窗寬改變。
+           外框寬度 = 642 × scale，是固定像素，會穩定溢出 grid track 被裁掉。
+
+           ⚠️ 依舊完全不用 100vw（理由見 Hero section 上方那條註解）。
+           舊寫法 lg:w-[62vw] 正是三個症狀的共同根源：外框跟著視窗變寬，
+           於是比例被拉扁（1950px 下實測 2.74:1）、統計格與進度條被拉長稀釋，
+           而且內容會自己攤平填滿寬度，右緣就算真的被裁到也看不出來是裁的
+           —— 這就是「明明量到裁了 214px，看起來卻像一張完整寬卡片」的原因。
+
+           mockup 內部沒有任何 xl: 斷點，md 以上內容佈局完全相同，
+           所以一份 canvas 尺寸通吃桌機，斷點只需要調 scale。
+           各級 scale 都挑到「外框寬 > 該區間最寬視窗的可用寬」，保證被裁：
+             lg  1024–1279 → track 起點固定 536，最寬可用 743，W=802.5 ✓
+             xl  1280–1535 → track 起點 VW/2−24，最寬可用 791.5，W=898.8 ✓
+             2xl 1536–1799 → 最寬可用 923.5，W=1027.2 ✓
+             1800–2099     → 最寬可用 1073.5，W=1155.6 ✓（Scott 的 1950 在這一級）
+             2100+         → W=1316.1，可裁到視窗寬 2584
+           2584px 以上就不再被裁，是這個做法誠實的上限，不是「不論多寬」。 */
+        @media (min-width: 1024px) {
+            .al-shot-wrap {
+                --al-shot-scale: 1.25;
+                width: calc(642px * var(--al-shot-scale));
+            }
+            .al-shot { height: calc(442px * var(--al-shot-scale)); }
+            .al-shot-canvas {
+                width: 642px;
+                height: 442px;
+                transform: scale(var(--al-shot-scale));
+                transform-origin: top left;
+            }
+            /* 卡片填滿 canvas，讓側欄使用者列與主窗格狀態列各自貼底 */
+            .al-shot-canvas > div { height: 100%; }
+        }
+        @media (min-width: 1280px) { .al-shot-wrap { --al-shot-scale: 1.40; } }
+        @media (min-width: 1536px) { .al-shot-wrap { --al-shot-scale: 1.60; } }
+        @media (min-width: 1800px) { .al-shot-wrap { --al-shot-scale: 1.80; } }
+        @media (min-width: 2100px) { .al-shot-wrap { --al-shot-scale: 2.05; } }
     </style>
+
+    <!-- ponytail: .reveal 預設 opacity:0，靠 IntersectionObserver 加 .active 才浮出來。
+         沒有 JS 就沒有人加 .active —— 整頁 29 個 .reveal 會全部停在透明，
+         畫面是一片空白而不是「沒有動畫的靜態頁」。這條把它救回靜態可讀。
+         注意這是全頁性質，不只 Section 5。 -->
+    <noscript>
+        <style>
+            .reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+        </style>
+    </noscript>
 </head>
 <body class="antialiased selection:bg-brand-amber/30 selection:text-white">
 
@@ -121,11 +185,21 @@
     <nav class="fixed top-0 w-full z-50 bg-brand-bg/80 backdrop-blur-md border-b border-brand-border">
         <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <div class="relative w-6 h-6 iso-logo">
-                    <div class="iso-layer bg-brand-blueDark" style="transform: translateZ(-8px)"></div>
-                    <div class="iso-layer bg-brand-blueLight" style="transform: translateZ(0px)"></div>
-                    <div class="iso-layer bg-[#faf9f5]" style="transform: translateZ(8px)"></div>
-                </div>
+                <!-- ponytail: 正式 App icon（logos/export/logo.svg，與 src-tauri/icons/icon.png
+                     同一版 Layers · Kami navy）。內嵌而非 <img>，避免多一個請求且縮放不糊。
+                     漸層 id 加 -nav 後綴：同頁footer 還有一顆，id 撞了會共用到同一條漸層。 -->
+                <svg class="w-6 h-6 shrink-0" viewBox="0 0 512 512" role="img" aria-label="Anchorline">
+                    <defs><linearGradient id="al-nav" x1="0.15" y1="0" x2="0.85" y2="1"><stop offset="0%" stop-color="#142a48"/><stop offset="100%" stop-color="#1b365d"/></linearGradient></defs>
+                    <rect width="512" height="512" rx="96" fill="url(#al-nav)"/>
+                    <rect x="118" y="128" width="276" height="72" rx="20" fill="#2d5a8a" opacity="0.5"/>
+                    <rect x="118" y="196" width="276" height="72" rx="20" fill="#3d6f9e"/>
+                    <rect x="118" y="264" width="276" height="120" rx="24" fill="#faf9f5"/>
+                    <rect x="148" y="148" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.8"/>
+                    <rect x="148" y="216" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.9"/>
+                    <rect x="148" y="292" width="48" height="32" rx="10" fill="#1b365d"/>
+                    <rect x="216" y="300" width="140" height="16" rx="8" fill="#1b365d" opacity="0.88"/>
+                    <rect x="216" y="332" width="108" height="16" rx="8" fill="#1b365d" opacity="0.38"/>
+                </svg>
                 <span class="font-bold text-lg tracking-wide">Anchorline</span>
             </div>
 
@@ -150,65 +224,312 @@
 
     <main class="pt-24 pb-32">
         <!-- Section 1: Hero -->
-        <section class="max-w-7xl mx-auto px-6 pt-20 pb-24 text-center md:text-left reveal">
-            <div class="max-w-3xl">
-                <h1 class="text-4xl md:text-5xl font-bold leading-tight tracking-tight mb-4">
-                    缺的從來不是一個資料庫，<br class="hidden md:block">
-                    是一把 <span class="text-brand-amber glow-text-amber font-mono font-normal">join key</span>。
-                </h1>
-                <p class="text-lg text-brand-muted mb-16">
-                    Anchorline 是一條治理鏈，一份落在磁碟上的稽核軌跡。
-                </p>
-            </div>
+        <!-- ponytail: 雙欄。左欄是「這是什麼、怎麼裝」，右欄是「它長什麼樣」，
+             右欄刻意出血到視窗右緣被裁掉——像一扇開在頁面右側的窗，不是一張貼上去的圖。
+             出血怎麼做到而不產生水平捲動：section 是整頁寬 + overflow-x-clip，
+             右欄是 grid item 給明確寬度（.al-shot-wrap，固定像素）讓它溢出自己的 track。
+             grid item 溢出 track 不會撐大 grid 容器，再由 section 的 clip 切掉，
+             所以 documentElement.scrollWidth 不會長。
+             ⚠️ 不要改用 margin-left:calc((100vw-80rem)/2) 這類寫法：100vw 含捲軸寬，
+             會比實際可用寬多 ~8px，那正是水平捲動的來源。clip + 溢出才是安全解。 -->
+        <section class="relative w-full pt-10 md:pt-14 pb-24 overflow-x-clip reveal">
+            <div class="max-w-7xl mx-auto px-6 lg:pr-0 grid grid-cols-1 lg:grid-cols-[minmax(0,29rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,34rem)_minmax(0,1fr)] gap-y-12 lg:gap-x-12 lg:items-center">
 
-            <!-- Anchor Visual Motif -->
-            <div class="w-full max-w-5xl mx-auto md:mx-0 bg-brand-surface border border-brand-border rounded-lg p-6 md:p-8 mb-12 reveal reveal-delay-1 relative overflow-hidden">
-                <div class="absolute top-0 right-0 w-64 h-64 bg-brand-amber/5 rounded-full blur-3xl pointer-events-none"></div>
+                <!-- 左欄：品牌識別 → 標題 → 副標 → 裝它 -->
+                <div class="text-center md:text-left">
 
-                <div class="text-center mb-4">
-                    <div class="font-mono text-2xl md:text-4xl text-brand-amber glow-text-amber tracking-wider">
-                        &lt;!-- anc:t=058W9SNK --&gt;
+                    <!-- ponytail: Hero 品牌識別列。SVG 與 nav 那顆同一份（logos/export/logo.svg），
+                         但這裡是識別不是導覽，所以放大到 56px 並配 4xl 字重。
+                         ⚠️ 漸層 id 必須全頁唯一：nav 用 al-nav、footer 用 al-foot，這顆用 al-hero。
+                         撞了不會報錯，只會靜默共用到同一條漸層。 -->
+                    <div class="flex items-center justify-center md:justify-start gap-3.5 mb-7">
+                        <svg class="w-12 h-12 md:w-14 md:h-14 shrink-0" viewBox="0 0 512 512" role="img" aria-label="Anchorline 應用程式圖示">
+                            <defs><linearGradient id="al-hero" x1="0.15" y1="0" x2="0.85" y2="1"><stop offset="0%" stop-color="#142a48"/><stop offset="100%" stop-color="#1b365d"/></linearGradient></defs>
+                            <rect width="512" height="512" rx="96" fill="url(#al-hero)"/>
+                            <rect x="118" y="128" width="276" height="72" rx="20" fill="#2d5a8a" opacity="0.5"/>
+                            <rect x="118" y="196" width="276" height="72" rx="20" fill="#3d6f9e"/>
+                            <rect x="118" y="264" width="276" height="120" rx="24" fill="#faf9f5"/>
+                            <rect x="148" y="148" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.8"/>
+                            <rect x="148" y="216" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.9"/>
+                            <rect x="148" y="292" width="48" height="32" rx="10" fill="#1b365d"/>
+                            <rect x="216" y="300" width="140" height="16" rx="8" fill="#1b365d" opacity="0.88"/>
+                            <rect x="216" y="332" width="108" height="16" rx="8" fill="#1b365d" opacity="0.38"/>
+                        </svg>
+                        <span class="text-3xl md:text-4xl font-bold tracking-tight leading-none">Anchorline</span>
+                    </div>
+
+                    <!-- ponytail: 兩行都是主標份量，靠 block 斷行而不是 <br>——
+                         <br> 在這個級距下會被 leading-tight 壓得兩行黏在一起。
+                         amber ＋ mono 的重音從舊標的「join key」移到第一行整句：
+                         PRD & OpenSpec 是兩個專有名詞，mono 讀起來就是「技術物件」，
+                         跟第二行的敘述句拉開層次，第一屏的色彩錨點也還在。 -->
+                    <h1 class="text-3xl md:text-4xl xl:text-[2.75rem] font-bold leading-tight tracking-tight mb-4">
+                        <span class="block text-brand-amber glow-text-amber font-mono font-normal">PRD &amp; OpenSpec</span>
+                        <!-- text-wrap:balance：390px 下這行會斷成「…的工 / 作台」，
+                             把「作台」孤字丟到第二行。balance 讓兩行長度平均，斷點就跑回詞界。 -->
+                        <span class="block [text-wrap:balance]">具備 AI 撰寫與簽核的工作台</span>
+                    </h1>
+                    <p class="text-base md:text-lg text-brand-muted mb-9">
+                        Anchorline 是一條治理鏈，一份落在磁碟上的稽核軌跡。
+                    </p>
+
+                    <!-- CTAs -->
+                    <!-- ponytail: sm 以上 flex-wrap 是防溢出的保險——左欄在 lg 只有 29rem，
+                         brew 那顆放不下時 GitHub Releases 會換行，而不是把欄寬撐爆。 -->
+                    <div class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-center md:justify-start gap-4 reveal reveal-delay-2">
+                        <button type="button" data-copy="brew install --cask shigachentw/tap/anchorline" class="group relative flex min-w-0 items-center bg-brand-bg border border-brand-border rounded hover:border-brand-amber/50 transition-colors cursor-pointer text-left">
+                            <span class="text-brand-amber px-3 font-mono text-sm border-r border-brand-border shrink-0">$</span>
+                            <code class="min-w-0 px-4 py-3 font-mono text-xs xl:text-sm text-white/90">brew install --cask shigachentw/tap/anchorline</code>
+                            <span class="px-4 border-l border-brand-border text-brand-muted group-hover:text-white transition-colors shrink-0">
+                                <i class="ph ph-copy text-lg"></i>
+                            </span>
+                        </button>
+                        <a href="https://github.com/ShiGaChenTW/anchorline/releases" target="_blank" rel="noopener" class="px-6 py-3 border border-brand-border rounded text-sm hover:bg-brand-surface transition-colors flex items-center justify-center gap-2 shrink-0">
+                            GitHub Releases <i class="ph ph-arrow-right"></i>
+                        </a>
+                    </div>
+                    <div class="mt-4 flex items-start justify-center md:justify-start gap-2 text-xs text-brand-muted/70 reveal reveal-delay-3">
+                        <i class="ph ph-info mt-0.5 shrink-0"></i>
+                        <span>早期階段：產物未簽章，macOS 會被 Gatekeeper 擋、Windows 會被 SmartScreen 擋</span>
                     </div>
                 </div>
-                <p class="text-center text-xs text-brand-muted mb-8 max-w-lg mx-auto">
-                    一個穩定錨點，讓 <span class="font-mono text-white/70">plans/*.md</span> 的 checkbox、git commit、簽核與 openspec change 這四份各有身分的資料，串成同一條線。
-                </p>
 
-                <figure class="relative rounded-md border border-brand-border/80 bg-brand-bg overflow-hidden shadow-[0_24px_60px_-20px_rgba(0,0,0,0.8)]">
-                    <!-- ponytail: 真實 App 截圖，1280x880 webp 58KB。之後換成迴圈影片時，
-                         這個 <figure> 原地換成 <video autoplay muted loop playsinline poster="...">，
-                         版面不用動。 -->
-                    <div class="flex items-center gap-1.5 px-3 py-2 border-b border-brand-border/60 bg-brand-surface">
+                <!-- 右欄：主視覺，出血到視窗右緣 -->
+                <!-- ponytail: 主視覺 100% HTML/CSS 手繪，零圖檔。畫的是「專案總覽」的骨架 ——
+                     左側工作區側欄（含專案清單）、上排五格狀態統計、焦點卡（含進度條）、其餘專案列。
+                     真截圖仍留在 Section 5 的五張切換，那裡才是它該在的位置。
+                     role="img" + aria-label：整塊對輔助技術是單一裝飾圖，內部文字不逐字讀。
+                     右緣不封邊（border-r-0 / rounded-r-none）：既然一定被裁掉，
+                     留一條右框反而會讓它看起來像「沒對齊的卡片」而不是「被裁掉的窗」。
+                     sm 以下把側欄與後兩格統計收起來，主窗格才不會在 390px 被壓爛。 -->
+                <div class="al-shot-wrap relative -mr-6 lg:mr-0 reveal reveal-delay-1">
+                  <div class="al-shot">
+                   <div class="al-shot-canvas">
+                    <div role="img"
+                         aria-label="Anchorline 專案總覽畫面：左側工作區側欄列出十一個專案，上排五格狀態統計顯示三個等你核准，焦點卡指向 SaaS 雙重驗證（2FA），進度 82%。"
+                         class="select-none rounded-l-lg rounded-r-none border border-r-0 border-brand-border/80 bg-[#0d131c] overflow-hidden shadow-[0_28px_70px_-24px_rgba(0,0,0,0.9)]">
+
+                    <!-- 視窗列 -->
+                    <div class="flex items-center gap-1.5 px-3 py-2 border-b border-white/[0.07] bg-[#141b26]">
                         <span class="w-2.5 h-2.5 rounded-full bg-white/15"></span>
                         <span class="w-2.5 h-2.5 rounded-full bg-white/15"></span>
                         <span class="w-2.5 h-2.5 rounded-full bg-white/15"></span>
                         <span class="ml-3 text-[10px] font-mono text-brand-muted">Anchorline — 開發專案工作台</span>
                     </div>
-                    <img src="landing-assets/screen-overview.webp" width="1280" height="848"
-                         alt="Anchorline 專案總覽：焦點卡指向 SaaS 雙重驗證（2FA），五格狀態統計與跨專案治理覆蓋率"
-                         class="block w-full h-auto" loading="eager" decoding="async">
-                </figure>
-                <figcaption class="mt-3 text-[11px] text-brand-muted text-center">
-                    專案總覽 —— 焦點卡告訴你現在該做哪一個，五格統計說明其餘九個卡在哪裡。
-                </figcaption>
-            </div>
 
-            <!-- CTAs -->
-            <div class="flex flex-col md:flex-row items-start md:items-center gap-6 reveal reveal-delay-2">
-                <button type="button" data-copy="brew install --cask shigachentw/tap/anchorline" class="group relative flex items-center bg-brand-bg border border-brand-border rounded hover:border-brand-amber/50 transition-colors cursor-pointer text-left">
-                    <span class="text-brand-amber px-3 font-mono text-sm border-r border-brand-border">$</span>
-                    <code class="px-4 py-3 font-mono text-sm text-white/90">brew install --cask shigachentw/tap/anchorline</code>
-                    <span class="px-4 border-l border-brand-border text-brand-muted group-hover:text-white transition-colors">
-                        <i class="ph ph-copy text-lg"></i>
-                    </span>
-                </button>
-                <a href="https://github.com/ShiGaChenTW/anchorline/releases" target="_blank" rel="noopener" class="px-6 py-3 border border-brand-border rounded text-sm hover:bg-brand-surface transition-colors flex items-center gap-2">
-                    GitHub Releases <i class="ph ph-arrow-right"></i>
-                </a>
+                    <div class="flex text-left">
+
+                        <!-- 側欄 -->
+                        <aside class="hidden sm:flex w-[152px] md:w-[180px] shrink-0 flex-col border-r border-white/[0.07] bg-[#0b111a] px-2.5 py-3">
+                            <div class="flex items-center gap-2 mb-3">
+                                <span class="w-5 h-5 shrink-0 rounded bg-gradient-to-br from-[#142a48] to-[#2d5a8a] flex items-center justify-center">
+                                    <span class="block w-2.5 h-[3px] rounded-sm bg-white/85"></span>
+                                </span>
+                                <span class="min-w-0">
+                                    <span class="block text-[10px] font-semibold text-white/90 leading-none">Anchorline</span>
+                                    <span class="block font-mono text-[8px] text-brand-muted leading-none mt-1 truncate">anchorline.local</span>
+                                </span>
+                            </div>
+
+                            <div class="flex rounded border border-white/[0.08] p-px mb-3.5">
+                                <span class="flex-1 text-center text-[7px] font-mono tracking-wide text-brand-muted py-1">LIGHT</span>
+                                <span class="flex-1 text-center text-[7px] font-mono tracking-wide text-white/90 bg-white/[0.09] rounded-sm py-1">DARK</span>
+                                <span class="flex-1 text-center text-[7px] font-mono tracking-wide text-brand-muted py-1">TERM</span>
+                            </div>
+
+                            <div class="text-[8px] text-brand-muted/70 mb-1.5 px-1">工作區</div>
+                            <div class="space-y-px mb-3.5">
+                                <div class="flex items-center gap-1.5 rounded bg-[#1c2c44] px-1.5 py-[5px]">
+                                    <span class="w-2 h-2 shrink-0 rounded-[2px] bg-[#6fa0f0]"></span>
+                                    <span class="text-[9px] text-[#8ab4f0] leading-none">專案總覽</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 px-1.5 py-[5px]">
+                                    <span class="w-2 h-2 shrink-0 rounded-[2px] border border-white/25"></span>
+                                    <span class="text-[9px] text-white/60 leading-none">專案清單</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 px-1.5 py-[5px]">
+                                    <span class="w-2 h-2 shrink-0 rounded-full border border-white/25"></span>
+                                    <span class="text-[9px] text-white/60 leading-none flex-1">審閱佇列</span>
+                                    <span class="rounded-sm bg-brand-amber/20 px-1 font-mono text-[7px] text-brand-amber leading-[13px]">3</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 px-1.5 py-[5px]">
+                                    <span class="w-2 h-2 shrink-0 rounded-[2px] border border-white/25"></span>
+                                    <span class="text-[9px] text-white/60 leading-none">PRD 範本</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 px-1.5 py-[5px]">
+                                    <span class="w-2 h-2 shrink-0 rounded-[2px] border border-white/25"></span>
+                                    <span class="text-[9px] text-white/60 leading-none">OpenSpec 入口</span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between mb-1.5 px-1">
+                                <span class="text-[8px] text-brand-muted/70">專案 <span class="font-mono">11</span></span>
+                                <span class="text-[9px] text-brand-muted/50 leading-none">＋</span>
+                            </div>
+                            <div class="space-y-[3px] mb-3">
+                                <div class="flex items-center gap-1.5 px-1">
+                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-brand-amber"></span>
+                                    <span class="text-[9px] text-white/85 leading-tight truncate">SaaS 雙重驗證（2FA）</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 px-1">
+                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-white/25"></span>
+                                    <span class="text-[9px] text-white/55 leading-tight truncate">工作區角色權限重構</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 px-1">
+                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-[#5fbf7f]"></span>
+                                    <span class="text-[9px] text-white/55 leading-tight truncate">稽核日誌匯出 API</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 px-1">
+                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-white/25"></span>
+                                    <span class="text-[9px] text-white/55 leading-tight truncate">自助帳單與發票</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 px-1">
+                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-brand-amber/70"></span>
+                                    <span class="text-[9px] text-white/55 leading-tight truncate">行動端離線草稿同步</span>
+                                </div>
+                                <div class="hidden md:flex items-center gap-1.5 px-1">
+                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-[#5fbf7f]"></span>
+                                    <span class="text-[9px] text-white/55 leading-tight truncate">SOC 2 證據自動化收集</span>
+                                </div>
+                            </div>
+
+                            <div class="mt-auto flex items-center gap-2 border-t border-white/[0.07] pt-2.5">
+                                <span class="w-5 h-5 shrink-0 rounded-full bg-[#2d5a8a] text-white text-[9px] font-semibold flex items-center justify-center">S</span>
+                                <span class="min-w-0">
+                                    <span class="block text-[9px] text-white/85 leading-none">Scott</span>
+                                    <span class="block text-[7px] text-brand-muted leading-none mt-1 truncate">Workspace 管理員</span>
+                                </span>
+                            </div>
+                        </aside>
+
+                        <!-- 主窗格 -->
+                        <div class="flex-1 min-w-0 flex flex-col">
+                            <!-- ponytail: 這條藍色分隔線用 mx-* 內縮，不要用 px-*。
+                                 padding 版的 border-b-2 會一路畫到卡片外框上——藍色比外框亮得多，
+                                 貼著框邊收尾看起來就像溢出框外。margin 版讓線在內容縮排處結束。 -->
+                            <div class="mx-3 md:mx-4 pt-3 pb-2.5 border-b-2 border-[#2d5a8a]/60">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <div class="font-mono text-[8px] tracking-[0.12em] mb-1.5">
+                                            <span class="text-brand-muted/60">01 /</span>
+                                            <span class="text-[#6fa0f0]">DASHBOARD</span>
+                                            <span class="text-brand-muted/60">ACTIVE WORK</span>
+                                        </div>
+                                        <div class="text-sm md:text-base font-semibold text-white leading-none">全部專案總覽</div>
+                                        <div class="text-[8px] text-brand-muted mt-1.5 leading-none">11 個專案在追蹤中</div>
+                                    </div>
+                                    <span class="shrink-0 rounded border border-white/[0.12] px-2 py-1 text-[8px] text-white/70 leading-none">更多 ▾</span>
+                                </div>
+                            </div>
+
+                            <div class="px-3 md:px-4 py-2.5 space-y-2">
+
+                                <!-- 五格狀態統計 -->
+                                <div class="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                                    <div class="rounded border border-[#8c4340]/70 bg-[#1a1214] px-2 py-1.5">
+                                        <div class="text-[7px] text-brand-muted leading-none mb-1">等你核准</div>
+                                        <div class="font-mono text-base text-[#e2706e] leading-none">3</div>
+                                        <div class="text-[7px] text-brand-muted/60 leading-none mt-1">別人在等</div>
+                                    </div>
+                                    <div class="rounded border border-white/[0.08] bg-[#131b26] px-2 py-1.5">
+                                        <div class="text-[7px] text-brand-muted leading-none mb-1">阻擋</div>
+                                        <div class="font-mono text-base text-white/90 leading-none">1</div>
+                                        <div class="text-[7px] text-brand-muted/60 leading-none mt-1">寫了但沒過</div>
+                                    </div>
+                                    <div class="rounded border border-white/[0.08] bg-[#131b26] px-2 py-1.5">
+                                        <div class="text-[7px] text-brand-muted leading-none mb-1">還沒開始</div>
+                                        <div class="font-mono text-base text-white/90 leading-none">9</div>
+                                        <div class="text-[7px] text-brand-muted/60 leading-none mt-1">個專案沒 PRD</div>
+                                    </div>
+                                    <div class="hidden sm:block rounded border border-white/[0.08] bg-[#131b26] px-2 py-1.5">
+                                        <div class="text-[7px] text-brand-muted leading-none mb-1">未提交</div>
+                                        <div class="font-mono text-base text-white/40 leading-none">0</div>
+                                        <div class="text-[7px] text-brand-muted/60 leading-none mt-1">都乾淨</div>
+                                    </div>
+                                    <div class="hidden sm:block rounded border border-white/[0.08] bg-[#131b26] px-2 py-1.5">
+                                        <div class="text-[7px] text-brand-muted leading-none mb-1">PR 開著</div>
+                                        <div class="font-mono text-base text-white/90 leading-none">1</div>
+                                        <div class="text-[7px] text-brand-muted/60 leading-none mt-1">待處理</div>
+                                    </div>
+                                </div>
+
+                                <!-- 焦點卡 -->
+                                <div class="rounded border border-white/[0.08] bg-[#131b26] px-3 py-2.5">
+                                    <div class="text-[8px] text-brand-muted leading-none mb-1.5">現在做這一個</div>
+                                    <div class="text-sm md:text-lg font-semibold text-[#6fa0f0] leading-tight mb-2.5">SaaS 雙重驗證（2FA）</div>
+
+                                    <div class="flex items-center gap-2.5 mb-2.5">
+                                        <span class="flex-1 h-[5px] rounded-full bg-white/[0.08] overflow-hidden">
+                                            <span class="block h-full w-[82%] rounded-full bg-[#4f7fe0]"></span>
+                                        </span>
+                                        <span class="font-mono text-xs text-white leading-none">82<span class="text-[8px] text-brand-muted">%</span></span>
+                                    </div>
+
+                                    <p class="text-[9px] text-white/70 leading-relaxed mb-2.5">在審閱佇列裡，而且結構檢查已經全過 —— 可以直接核准。</p>
+
+                                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                                        <span class="rounded border border-white/[0.18] px-2 py-1 text-[9px] text-white/85 leading-none">打開這個專案 →</span>
+                                        <span class="hidden sm:flex items-end gap-4">
+                                            <span class="block">
+                                                <span class="block text-[7px] text-brand-muted leading-none mb-1">下一步</span>
+                                                <span class="block text-[9px] text-white/80 leading-none">送出審閱</span>
+                                            </span>
+                                            <span class="block">
+                                                <span class="block text-[7px] text-brand-muted leading-none mb-1">上次動</span>
+                                                <span class="block text-[9px] text-white/80 leading-none">從未</span>
+                                            </span>
+                                            <span class="hidden md:block">
+                                                <span class="block text-[7px] text-brand-muted leading-none mb-1">待推</span>
+                                                <span class="block text-[9px] text-white/80 leading-none">沒接遠端</span>
+                                            </span>
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- 其餘專案 -->
+                                <div class="rounded border border-white/[0.08] bg-[#131b26] px-3 py-2">
+                                    <div class="text-[8px] text-brand-muted leading-none mb-2">其他 10 個專案</div>
+                                    <div class="space-y-1.5">
+                                        <div class="flex items-center gap-2">
+                                            <span class="flex-1 min-w-0 truncate text-[9px] text-white/80 leading-none">稽核日誌匯出 API</span>
+                                            <span class="shrink-0 text-[8px] text-[#5fbf7f] leading-none">已核准</span>
+                                            <span class="hidden sm:block shrink-0 w-14 h-[3px] rounded-full bg-white/[0.08] overflow-hidden"><span class="block h-full w-full rounded-full bg-[#4f7fe0]"></span></span>
+                                            <span class="shrink-0 font-mono text-[8px] text-white/70 leading-none w-8 text-right">100%</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="flex-1 min-w-0 truncate text-[9px] text-white/80 leading-none">SOC 2 證據自動化收集</span>
+                                            <span class="shrink-0 text-[8px] text-[#e2706e] leading-none">等你核准</span>
+                                            <span class="hidden sm:block shrink-0 w-14 h-[3px] rounded-full bg-white/[0.08] overflow-hidden"><span class="block h-full w-[74%] rounded-full bg-[#4f7fe0]"></span></span>
+                                            <span class="shrink-0 font-mono text-[8px] text-white/70 leading-none w-8 text-right">74%</span>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="flex-1 min-w-0 truncate text-[9px] text-white/80 leading-none">測試案例 B・手動新建（沒有資料夾）</span>
+                                            <span class="shrink-0 text-[8px] text-brand-amber leading-none">1 項要改</span>
+                                            <span class="hidden sm:block shrink-0 w-14 h-[3px] rounded-full bg-white/[0.08] overflow-hidden"><span class="block h-full w-[34%] rounded-full bg-[#4f7fe0]"></span></span>
+                                            <span class="shrink-0 font-mono text-[8px] text-white/70 leading-none w-8 text-right">34%</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 狀態列 -->
+                            <div class="mt-auto flex items-center justify-between gap-2 border-t border-white/[0.07] bg-[#0b111a] px-3 py-1.5">
+                                <span class="flex items-center gap-1.5 min-w-0">
+                                    <span class="w-1.5 h-1.5 shrink-0 rounded-full bg-brand-amber"></span>
+                                    <span class="truncate text-[8px] text-white/70 leading-none">SaaS 雙重驗證（2FA）</span>
+                                    <span class="hidden sm:inline text-[8px] text-brand-muted/60 leading-none">· 全部專案總覽</span>
+                                    <span class="shrink-0 rounded-sm bg-[#1c2c44] px-1 py-px text-[7px] text-[#8ab4f0] leading-[11px]">審閱中</span>
+                                </span>
+                                <span class="hidden sm:inline shrink-0 font-mono text-[8px] text-[#5fbf7f] leading-none">結構可送簽</span>
+                                <span class="hidden md:inline shrink-0 font-mono text-[8px] text-brand-muted/60 leading-none">1.3.0 · 67589b7+ · 08-23 13:34</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                   </div>
+                  </div>
             </div>
-            <div class="mt-4 flex items-center gap-2 text-xs text-brand-muted/70 reveal reveal-delay-3">
-                <i class="ph ph-info"></i> 早期階段：產物未簽章，macOS 會被 Gatekeeper 擋、Windows 會被 SmartScreen 擋
-            </div>
+        </div>
         </section>
 
         <div class="w-full h-px bg-brand-border"></div>
@@ -330,6 +651,22 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ponytail: 錨點概念，自 Hero 移入。查過 Section 3 原本只講「七個關卡」與 jsonl，
+                 沒有回答「這七行怎麼認得彼此是同一件事」——所以不是搬過來重複一次，是補上缺口。
+                 位置在鏈圖之後、Section 4 之前：Section 4 的卡片直接用了 anc:t=058W9SNK
+                 卻沒定義它，定義落在這裡剛好趕在第一次用到之前。 -->
+            <div class="mt-10 bg-brand-surface border border-brand-border rounded-lg p-6 md:p-8 reveal reveal-delay-2 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-64 h-64 bg-brand-amber/5 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-5 md:gap-8 md:items-center relative z-10">
+                    <div class="font-mono text-base md:text-xl text-brand-amber glow-text-amber tracking-wider whitespace-nowrap">
+                        &lt;!-- anc:t=058W9SNK --&gt;
+                    </div>
+                    <p class="text-sm text-brand-muted leading-relaxed">
+                        七行事件認得彼此是同一件事，靠的是同一把 join key。<span class="font-mono text-white/70">plans/*.md</span> 的 checkbox、git commit、簽核與 openspec change 這四份各有身分的資料，各自帶上同一個穩定錨點——一個工作單元一個，寫下去就不再改動。<span class="text-white/80">沒有它，四份資料只能各自顯示，串不成一條線。</span>
+                    </p>
+                </div>
+            </div>
         </section>
 
         <div class="w-full h-px bg-brand-border"></div>
@@ -399,91 +736,87 @@
 
         <!-- Section 5: Main Screens -->
         <section id="screens" class="max-w-7xl mx-auto px-6 py-24">
-            <h2 class="text-xl font-medium mb-10 text-white/90 reveal">主要畫面 <span class="text-brand-muted text-base font-normal">（五個核心視圖）</span></h2>
+            <h2 class="text-xl font-medium mb-2 text-white/90 reveal">主要畫面 <span class="text-brand-muted text-base font-normal">（五個核心視圖）</span></h2>
+            <p class="text-sm text-brand-muted mb-10 reveal">點下面的縮圖切換。五張都是實際畫面，不是示意圖。</p>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                <div class="reveal reveal-delay-1 flex flex-col">
-                    <div class="bg-brand-surface border border-brand-border rounded p-3 h-32 relative overflow-hidden mb-3 group hover:border-white/30 transition-colors">
-                        <div class="absolute top-2 left-2 text-[8px] font-mono text-white/30">OVERVIEW</div>
-                        <div class="mt-4 flex gap-2">
-                            <div class="w-1/2 h-8 bg-white/5 rounded border border-white/5"></div>
-                            <div class="w-1/2 h-8 bg-white/5 rounded border border-white/5"></div>
-                        </div>
-                        <div class="mt-2 w-full h-12 bg-white/5 rounded border border-white/5 relative overflow-hidden">
-                            <div class="absolute right-2 top-2 w-8 h-8 rounded-full border border-white/10 flex items-center justify-center">
-                                <div class="w-1 h-1 bg-brand-amber rounded-full"></div>
-                            </div>
-                        </div>
+            <!-- ponytail: 大圖＋縮圖切換。HTML 直接把第一張渲染成可見、其餘四張帶 hidden，
+                 所以「沒有 JS」的退化結果是「只看得到第一張大圖」而不是空白。
+                 下面那段 script 只負責「換」，不負責「顯示」—— 這是刻意的分工。 -->
+            <div id="screens-gallery" class="reveal reveal-delay-1">
+                <figure class="relative rounded-md border border-brand-border/80 bg-brand-bg overflow-hidden shadow-[0_24px_60px_-20px_rgba(0,0,0,0.8)]">
+                    <div class="flex items-center gap-1.5 px-3 py-2 border-b border-brand-border/60 bg-brand-surface">
+                        <span class="w-2.5 h-2.5 rounded-full bg-white/15"></span>
+                        <span class="w-2.5 h-2.5 rounded-full bg-white/15"></span>
+                        <span class="w-2.5 h-2.5 rounded-full bg-white/15"></span>
+                        <span class="ml-3 text-[10px] font-mono text-brand-muted">Anchorline — 開發專案工作台</span>
                     </div>
-                    <div class="text-sm font-mono mb-1"><span class="text-brand-muted">1</span> 專案總覽</div>
-                    <div class="text-xs text-brand-muted">焦點卡 + 跨 repo PR 雷達</div>
+
+                    <div data-shot-panel id="shot-panel-0" role="tabpanel" aria-labelledby="shot-tab-0">
+                        <img src="landing-assets/screen-overview.webp" width="1280" height="848"
+                             alt="專案總覽：焦點卡指向 SaaS 雙重驗證（2FA），上方五格狀態統計，下方其餘十個專案的治理覆蓋率"
+                             class="block w-full h-auto" loading="eager" decoding="async">
+                    </div>
+                    <div data-shot-panel id="shot-panel-1" role="tabpanel" aria-labelledby="shot-tab-1" hidden>
+                        <img src="landing-assets/screen-editor.webp" width="1280" height="848"
+                             alt="編輯台：左欄 PRD 章節清單，中間逐章撰寫區，右欄結構檢查與 Markdown 即時預覽"
+                             class="block w-full h-auto" loading="eager" decoding="async">
+                    </div>
+                    <div data-shot-panel id="shot-panel-2" role="tabpanel" aria-labelledby="shot-tab-2" hidden>
+                        <img src="landing-assets/screen-review.webp" width="1280" height="848"
+                             alt="審閱佇列：待審項目集中列出，每一筆標示結構 gate 是否通過"
+                             class="block w-full h-auto" loading="eager" decoding="async">
+                    </div>
+                    <div data-shot-panel id="shot-panel-3" role="tabpanel" aria-labelledby="shot-tab-3" hidden>
+                        <img src="landing-assets/screen-plans.webp" width="1280" height="848"
+                             alt="計劃追蹤：左欄計劃列表與進度條，中間逐步驟 checkbox，右欄結構檢查與稽核軌跡"
+                             class="block w-full h-auto" loading="eager" decoding="async">
+                    </div>
+                    <div data-shot-panel id="shot-panel-4" role="tabpanel" aria-labelledby="shot-tab-4" hidden>
+                        <img src="landing-assets/screen-signoff.webp" width="1280" height="848"
+                             alt="簽核管理：工程、設計、資安、法務四道關卡，各自掛一個 agent 與獨立的簽核狀態"
+                             class="block w-full h-auto" loading="eager" decoding="async">
+                    </div>
+                </figure>
+
+                <div class="mt-3 text-[11px] text-brand-muted text-center">
+                    <p data-shot-cap>專案總覽 —— 焦點卡告訴你現在該做哪一個，五格統計說明其餘九個卡在哪裡。</p>
+                    <p data-shot-cap hidden>編輯台 —— PRD 逐章引導撰寫，結構檢查即時判定，右邊是 Markdown 即時預覽。</p>
+                    <p data-shot-cap hidden>審閱佇列 —— 待審的集中在一處；結構 gate 沒過的，擋在核准之前。</p>
+                    <p data-shot-cap hidden>計劃追蹤 —— plans/*.md 的 checkbox 就是進度，右欄三層稽核軌跡跟著一起動。</p>
+                    <p data-shot-cap hidden>簽核管理 —— 四道關卡各掛一個 agent，「現在卡在誰身上」寫在最上面。</p>
                 </div>
 
-                <div class="reveal reveal-delay-2 flex flex-col">
-                    <div class="bg-brand-surface border border-brand-border rounded p-3 h-32 relative overflow-hidden mb-3 group hover:border-white/30 transition-colors">
-                        <div class="flex h-full gap-2 mt-2">
-                            <div class="w-1/2 flex flex-col gap-1">
-                                <div class="h-2 w-3/4 bg-white/10 rounded"></div>
-                                <div class="h-2 w-full bg-white/5 rounded"></div>
-                                <div class="h-2 w-5/6 bg-white/5 rounded"></div>
-                                <div class="h-2 w-full bg-white/5 rounded"></div>
-                            </div>
-                            <div class="w-1/2 bg-[#1a1a1a] border border-white/5 rounded p-2">
-                                <div class="text-[6px] text-white/30 mb-1">PREVIEW</div>
-                                <div class="h-1 w-1/2 bg-white/20 mb-1"></div>
-                                <div class="h-1 w-full bg-white/10"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="text-sm font-mono mb-1"><span class="text-brand-muted">2</span> 編輯台</div>
-                    <div class="text-xs text-brand-muted">PRD 引導撰寫、結構 gate<br>Markdown 即時預覽</div>
-                </div>
-
-                <div class="reveal reveal-delay-3 flex flex-col">
-                    <div class="bg-brand-surface border border-brand-border rounded p-3 h-32 relative overflow-hidden mb-3 group hover:border-white/30 transition-colors flex items-center justify-center">
-                        <div class="w-3/4 bg-brand-bg border border-brand-amber/30 rounded p-2 text-center">
-                            <div class="w-4 h-4 rounded-full border border-brand-amber mx-auto mb-1 flex items-center justify-center">
-                                <div class="w-2 h-2 bg-brand-amber rounded-full"></div>
-                            </div>
-                            <div class="h-1 w-1/2 bg-white/20 mx-auto mb-1"></div>
-                            <div class="h-1 w-3/4 bg-white/10 mx-auto"></div>
-                        </div>
-                    </div>
-                    <div class="text-sm font-mono mb-1"><span class="text-brand-muted">3</span> 審閱</div>
-                    <div class="text-xs text-brand-muted">簽核關卡，gate 未過擋核准</div>
-                </div>
-
-                <div class="reveal reveal-delay-1 flex flex-col">
-                    <div class="bg-brand-surface border border-brand-border rounded p-3 h-32 relative overflow-hidden mb-3 group hover:border-white/30 transition-colors flex gap-2">
-                        <div class="w-2/3 mt-2 flex flex-col gap-2">
-                            <div class="flex items-center gap-1"><div class="w-2 h-2 border border-brand-amber rounded-sm"></div><div class="h-1 w-full bg-white/10 rounded"></div></div>
-                            <div class="flex items-center gap-1"><div class="w-2 h-2 bg-white/20 rounded-sm"></div><div class="h-1 w-3/4 bg-white/10 rounded"></div></div>
-                            <div class="flex items-center gap-1"><div class="w-2 h-2 bg-white/20 rounded-sm"></div><div class="h-1 w-5/6 bg-white/10 rounded"></div></div>
-                        </div>
-                        <div class="w-1/3 border-l border-white/5 pl-2 mt-2 flex flex-col gap-1">
-                            <div class="h-1 w-full bg-white/5"></div>
-                            <div class="h-1 w-3/4 bg-white/5"></div>
-                        </div>
-                    </div>
-                    <div class="text-sm font-mono mb-1"><span class="text-brand-muted">4</span> Task Tracking</div>
-                    <div class="text-xs text-brand-muted">plans/*.md 進度可勾選<br>右欄稽核軌跡三層</div>
-                </div>
-
-                <div class="reveal reveal-delay-2 flex flex-col">
-                    <div class="bg-brand-surface border border-brand-border rounded p-3 h-32 relative overflow-hidden mb-3 group hover:border-white/30 transition-colors">
-                        <div class="mt-2 flex flex-col gap-2">
-                            <div class="flex items-center gap-2 bg-white/5 p-1 rounded">
-                                <div class="w-4 h-4 rounded-full bg-blue-500/20 border border-blue-500/50"></div>
-                                <div class="h-1.5 w-1/2 bg-white/20 rounded"></div>
-                            </div>
-                            <div class="flex items-center gap-2 bg-white/5 p-1 rounded">
-                                <div class="w-4 h-4 rounded-full bg-green-500/20 border border-green-500/50"></div>
-                                <div class="h-1.5 w-1/3 bg-white/20 rounded"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="text-sm font-mono mb-1"><span class="text-brand-muted">5</span> Agents</div>
-                    <div class="text-xs text-brand-muted">Agent 角色、prompt、進場作業</div>
+                <div role="tablist" aria-label="主要畫面" class="mt-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                    <button type="button" role="tab" id="shot-tab-0" aria-controls="shot-panel-0" aria-selected="true" tabindex="0"
+                            data-shot-tab class="group text-left rounded border border-brand-amber bg-brand-surface p-2 transition-colors">
+                        <img src="landing-assets/screen-overview.webp" width="1280" height="848" alt=""
+                             class="block w-full h-auto rounded-sm opacity-100 transition-opacity" loading="eager" decoding="async">
+                        <span class="mt-2 block text-xs font-mono text-white/90"><span class="text-brand-muted">1</span> 專案總覽</span>
+                    </button>
+                    <button type="button" role="tab" id="shot-tab-1" aria-controls="shot-panel-1" aria-selected="false" tabindex="-1"
+                            data-shot-tab class="group text-left rounded border border-brand-border bg-brand-surface p-2 transition-colors hover:border-white/30">
+                        <img src="landing-assets/screen-editor.webp" width="1280" height="848" alt=""
+                             class="block w-full h-auto rounded-sm opacity-50 transition-opacity group-hover:opacity-80" loading="eager" decoding="async">
+                        <span class="mt-2 block text-xs font-mono text-white/90"><span class="text-brand-muted">2</span> 編輯台</span>
+                    </button>
+                    <button type="button" role="tab" id="shot-tab-2" aria-controls="shot-panel-2" aria-selected="false" tabindex="-1"
+                            data-shot-tab class="group text-left rounded border border-brand-border bg-brand-surface p-2 transition-colors hover:border-white/30">
+                        <img src="landing-assets/screen-review.webp" width="1280" height="848" alt=""
+                             class="block w-full h-auto rounded-sm opacity-50 transition-opacity group-hover:opacity-80" loading="eager" decoding="async">
+                        <span class="mt-2 block text-xs font-mono text-white/90"><span class="text-brand-muted">3</span> 審閱佇列</span>
+                    </button>
+                    <button type="button" role="tab" id="shot-tab-3" aria-controls="shot-panel-3" aria-selected="false" tabindex="-1"
+                            data-shot-tab class="group text-left rounded border border-brand-border bg-brand-surface p-2 transition-colors hover:border-white/30">
+                        <img src="landing-assets/screen-plans.webp" width="1280" height="848" alt=""
+                             class="block w-full h-auto rounded-sm opacity-50 transition-opacity group-hover:opacity-80" loading="eager" decoding="async">
+                        <span class="mt-2 block text-xs font-mono text-white/90"><span class="text-brand-muted">4</span> 計劃追蹤</span>
+                    </button>
+                    <button type="button" role="tab" id="shot-tab-4" aria-controls="shot-panel-4" aria-selected="false" tabindex="-1"
+                            data-shot-tab class="group text-left rounded border border-brand-border bg-brand-surface p-2 transition-colors hover:border-white/30">
+                        <img src="landing-assets/screen-signoff.webp" width="1280" height="848" alt=""
+                             class="block w-full h-auto rounded-sm opacity-50 transition-opacity group-hover:opacity-80" loading="eager" decoding="async">
+                        <span class="mt-2 block text-xs font-mono text-white/90"><span class="text-brand-muted">5</span> 簽核管理</span>
+                    </button>
                 </div>
             </div>
         </section>
@@ -666,7 +999,10 @@
                         自行建置
                     </div>
                     <div class="bg-[#111] border border-white/5 rounded p-3 font-mono text-xs text-white/80 relative group mb-4 space-y-1.5 cursor-pointer" data-copy="git clone https://github.com/ShiGaChenTW/anchorline.git && cd anchorline && bun install && bun run tauri build">
-                        <div><span class="text-white/40">$</span> git clone <span class="text-white/60">https://github.com/ShiGaChenTW/anchorline.git</span></div>
+                        <!-- ponytail: break-all 是必要的，不是美化。這條 URL 是一個不可斷的長 token，
+                             在 390px 下會把整份文件的 scrollWidth 撐出 4px 的水平捲動（實測 386 vs 382）。
+                             複製走的是外層 data-copy，視覺換行不影響複製到的內容。 -->
+                        <div><span class="text-white/40">$</span> git clone <span class="text-white/60 break-all">https://github.com/ShiGaChenTW/anchorline.git</span></div>
                         <div><span class="text-white/40">$</span> cd anchorline</div>
                         <div><span class="text-white/40">$</span> bun install</div>
                         <div><span class="text-white/40">$</span> bun run tauri build</div>
@@ -686,11 +1022,18 @@
         <div class="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-12">
             <div class="col-span-1 md:col-span-2">
                 <div class="flex items-center gap-3 mb-4">
-                    <div class="relative w-5 h-5 iso-logo">
-                        <div class="iso-layer bg-brand-blueDark" style="transform: translateZ(-6px)"></div>
-                        <div class="iso-layer bg-brand-blueLight" style="transform: translateZ(0px)"></div>
-                        <div class="iso-layer bg-[#faf9f5]" style="transform: translateZ(6px)"></div>
-                    </div>
+                    <svg class="w-5 h-5 shrink-0" viewBox="0 0 512 512" role="img" aria-label="Anchorline">
+                        <defs><linearGradient id="al-foot" x1="0.15" y1="0" x2="0.85" y2="1"><stop offset="0%" stop-color="#142a48"/><stop offset="100%" stop-color="#1b365d"/></linearGradient></defs>
+                        <rect width="512" height="512" rx="96" fill="url(#al-foot)"/>
+                        <rect x="118" y="128" width="276" height="72" rx="20" fill="#2d5a8a" opacity="0.5"/>
+                        <rect x="118" y="196" width="276" height="72" rx="20" fill="#3d6f9e"/>
+                        <rect x="118" y="264" width="276" height="120" rx="24" fill="#faf9f5"/>
+                        <rect x="148" y="148" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.8"/>
+                        <rect x="148" y="216" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.9"/>
+                        <rect x="148" y="292" width="48" height="32" rx="10" fill="#1b365d"/>
+                        <rect x="216" y="300" width="140" height="16" rx="8" fill="#1b365d" opacity="0.88"/>
+                        <rect x="216" y="332" width="108" height="16" rx="8" fill="#1b365d" opacity="0.38"/>
+                    </svg>
                     <span class="font-bold text-base tracking-wide text-white/90">Anchorline</span>
                 </div>
                 <p class="text-sm text-brand-muted mb-6">
@@ -752,6 +1095,48 @@
             }, { root: null, rootMargin: '0px', threshold: 0.15 });
 
             document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+            // ponytail: Section 5 大圖＋縮圖切換。純 vanilla，沒有相依。
+            // 這段只負責「換」——第一張的可見狀態是 HTML 直接寫死的，
+            // 所以 script 沒跑（或壞了）的退化結果是「停在第一張」而不是空白。
+            const gallery = document.getElementById('screens-gallery');
+            if (gallery) {
+                const tabs = Array.from(gallery.querySelectorAll('[data-shot-tab]'));
+                const panels = Array.from(gallery.querySelectorAll('[data-shot-panel]'));
+                const caps = Array.from(gallery.querySelectorAll('[data-shot-cap]'));
+
+                const select = (idx) => {
+                    tabs.forEach((tab, i) => {
+                        const on = i === idx;
+                        tab.setAttribute('aria-selected', on ? 'true' : 'false');
+                        tab.tabIndex = on ? 0 : -1;
+                        tab.classList.toggle('border-brand-amber', on);
+                        tab.classList.toggle('border-brand-border', !on);
+                        tab.classList.toggle('hover:border-white/30', !on);
+                        const thumb = tab.querySelector('img');
+                        if (thumb) {
+                            thumb.classList.toggle('opacity-100', on);
+                            thumb.classList.toggle('opacity-50', !on);
+                            thumb.classList.toggle('group-hover:opacity-80', !on);
+                        }
+                    });
+                    panels.forEach((p, i) => { p.hidden = i !== idx; });
+                    caps.forEach((c, i) => { c.hidden = i !== idx; });
+                };
+
+                tabs.forEach((tab, i) => {
+                    tab.addEventListener('click', () => select(i));
+                    // 左右鍵在 tablist 裡移動，是 tab 這個 role 的標準期待
+                    tab.addEventListener('keydown', (e) => {
+                        const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+                        if (!step) return;
+                        e.preventDefault();
+                        const next = (i + step + tabs.length) % tabs.length;
+                        select(next);
+                        tabs[next].focus();
+                    });
+                });
+            }
 
             // ponytail: 一個 delegated listener 蓋掉所有 data-copy，不必每塊掛一個
             document.addEventListener('click', async (e) => {
