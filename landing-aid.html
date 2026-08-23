@@ -1402,11 +1402,11 @@
                 // ── 幕一 0.2–4.0：PRD 撰寫 ──
                 enter(0, 0.2);
                 // 游標閃爍：只在這一幕出現，收工時關掉，不要留一個永遠在閃的東西
-                tl.to(q('.hf-caret'), { autoAlpha: 1, duration: 0.12, repeat: 11, yoyo: true, ease: 'none' }, 0.7);
+                tl.to(q('.hf-caret'), { autoAlpha: 1, duration: 0.12, repeat: 11, yoyo: true, ease: 'none' }, 0.55);
                 tl.to(q('[data-hf-bar]'), {
                     scaleX: (i) => [0.92, 0.78, 0.85, 0.7][i],
                     duration: 0.5, stagger: 0.22, ease: 'power2.out'
-                }, 0.9);
+                }, 0.65);
                 tl.to(q('[data-hf-anchor]'), { autoAlpha: 1, scale: 1, duration: 0.5, ease: 'back.out(2.2)' }, 2.35)
                   .to(q('[data-hf-anchor-note]'), { autoAlpha: 1, duration: 0.4 }, 2.7);
                 tl.set(q('.hf-caret'), { autoAlpha: 0 }, 2.3);
@@ -1417,15 +1417,15 @@
                 tl.to(q('[data-hf-tick]'), {
                     color: '#5fbf7f', borderColor: 'rgba(95,191,127,0.7)',
                     duration: 0.25, stagger: 0.26, ease: 'back.out(3)'
-                }, 4.9);
+                }, 4.65);
                 // ponytail: onStart 要掛在 stagger 物件裡，不是掛在 vars 上。
                 // 掛在 vars 上整條 stagger 只會觸發一次——實測結果是第一列翻成 ok、
                 // 後三列永遠停在「…」。放進 stagger 物件才會每個子 tween 各跑一次。
                 tl.to(q('[data-hf-verdict]'), {
                     autoAlpha: 1, duration: 0.25,
                     stagger: { each: 0.26, onStart() { this.targets()[0].textContent = 'ok'; } }
-                }, 4.95);
-                tl.to(q('[data-hf-score-bar]'), { scaleX: 1, duration: 1.0, ease: 'power2.inOut' }, 4.9);
+                }, 4.7);
+                tl.to(q('[data-hf-score-bar]'), { scaleX: 1, duration: 1.0, ease: 'power2.inOut' }, 4.65);
                 // 數字跟著長條走：onUpdate 讀 tween 自己的 progress，不另外開一條計時
                 tl.to({ v: 0 }, {
                     v: 100, duration: 1.0, ease: 'power2.inOut',
@@ -1433,13 +1433,13 @@
                         const el = q('[data-hf-score]')[0];
                         if (el) el.textContent = Math.round(this.targets()[0].v) + '%';
                     }
-                }, 4.9);
+                }, 4.65);
                 tl.to(q('[data-hf-gate-pass]'), { autoAlpha: 1, y: 0, duration: 0.4, ease: 'back.out(2)' }, 6.1);
                 light(1, 6.5);
 
                 // ── 幕三 8.2–12.4：簽核（authorAgentFamily） ──
                 enter(2, 8.2);
-                tl.to(q('[data-hf-approver="deny"]'), { autoAlpha: 1, x: 0, duration: 0.45 }, 8.9);
+                tl.to(q('[data-hf-approver="deny"]'), { autoAlpha: 1, x: 0, duration: 0.45 }, 8.65);
                 // 擋下來要「感覺得到」：橫向抖兩下，比單純變紅有說服力
                 tl.to(q('[data-hf-approver="deny"]'), {
                     x: 5, duration: 0.07, repeat: 5, yoyo: true, ease: 'none'
@@ -1456,7 +1456,7 @@
                 enter(3, 12.6);
                 tl.to(q('[data-hf-join]'), {
                     autoAlpha: 1, x: 0, duration: 0.45, stagger: 0.62, ease: 'power2.out'
-                }, 13.3);
+                }, 13.0);
                 light(3, 13.4);
                 light(4, 14.0);
                 light(5, 14.6);
