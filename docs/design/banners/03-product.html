@@ -1,0 +1,66 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<title>Anchorline banner — Product Split</title>
+<link rel="stylesheet" href="_shared.css">
+<style>
+/* 03 · Product Split
+   唯一放 App 畫面的一版。做法是出血＋左緣羽化，不是把整個視窗縮進框裡——
+   1280 寬塞得下整張截圖，但那個尺寸下 UI 全糊，讀者只看到「一團介面」。
+   出血一角反而讀得出這是真的產品，而不是示意圖。 */
+#stage {
+  background:
+    radial-gradient(720px 470px at 5% 12%, rgba(245,158,11,0.11), transparent 64%),
+    #161412;
+  display: grid; grid-template-columns: 620px 1fr;
+}
+.left { padding: 46px 0 46px 60px; display: flex; flex-direction: column; justify-content: space-between; z-index: 2; }
+.kicker { font-size: 44px; font-weight: 400; letter-spacing: 0.05em; color: #f59e0b; line-height: 1; }
+.head {
+  font-family: 'Noto Sans TC','PingFang TC',sans-serif;
+  font-size: 42px; font-weight: 900; margin-top: 12px; line-height: 1.18;
+}
+.cmd { transform: scale(0.9); transform-origin: left center; }
+
+.right { position: relative; overflow: hidden; }
+.shot {
+  position: absolute; top: 38px; left: 30px;
+  width: 820px; border-radius: 10px;
+  border: 1px solid rgba(226,226,226,0.14);
+  box-shadow: -30px 34px 80px -24px rgba(0,0,0,0.92);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 13%);
+          mask-image: linear-gradient(90deg, transparent 0, #000 13%);
+}
+/* 左側再壓一層同色漸層，接縫不會出現硬邊。真元素，不是 ::after。 */
+.seam {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, #161412 0%, rgba(22,20,18,0.62) 15%, transparent 38%);
+}
+</style></head><body><div id="stage">
+
+  <div class="left">
+    <div class="brand"><svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Anchorline">
+  <defs><linearGradient id="la-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+    <stop offset="0%" stop-color="#142a48"/><stop offset="100%" stop-color="#1b365d"/>
+  </linearGradient></defs>
+  <rect width="512" height="512" rx="96" fill="url(#la-bg)"/>
+  <rect x="118" y="128" width="276" height="72" rx="20" fill="#2d5a8a" opacity="0.5"/>
+  <rect x="118" y="196" width="276" height="72" rx="20" fill="#3d6f9e"/>
+  <rect x="118" y="264" width="276" height="120" rx="24" fill="#faf9f5"/>
+  <rect x="148" y="148" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.8"/>
+  <rect x="148" y="216" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.9"/>
+  <rect x="148" y="292" width="48" height="32" rx="10" fill="#1b365d"/>
+  <rect x="216" y="300" width="140" height="16" rx="8" fill="#1b365d" opacity="0.88"/>
+  <rect x="216" y="332" width="108" height="16" rx="8" fill="#1b365d" opacity="0.38"/>
+</svg><span class="name">Anchorline</span></div>
+    <div>
+      <div class="kicker mono glow-amber">PRD &amp; OpenSpec</div>
+      <div class="head">具備 AI 撰寫與簽核的工作台</div>
+    </div>
+    <div class="cmd"><span class="sigil mono">$</span><code>brew install --cask shigachentw/tap/anchorline</code></div>
+  </div>
+
+  <div class="right">
+    <img class="shot" src="/landing-assets/screen-overview.webp" alt="Anchorline 專案總覽">
+    <div class="seam"></div>
+  </div>
+
+</div></body></html>

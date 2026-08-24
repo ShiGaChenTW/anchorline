@@ -1,0 +1,70 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<title>Anchorline banner — Vertical Chain</title>
+<link rel="stylesheet" href="_shared.css">
+<style>
+/* 02c · 鏈條轉直立
+   另一種解法：不新增內容，把鏈條從底部橫排改成右側直排，空白自然消失。
+   代價是七節壓在 420 高裡字會變小；好處是版面只有兩塊，最乾淨。 */
+#stage {
+  background:
+    radial-gradient(760px 460px at 4% 10%, rgba(245,158,11,0.10), transparent 62%),
+    radial-gradient(620px 520px at 88% 60%, rgba(45,90,138,0.30), transparent 66%),
+    #161412;
+  display: grid; grid-template-columns: 1fr 420px;
+}
+.left { padding: 44px 0 44px 60px; display: flex; flex-direction: column; justify-content: space-between; }
+.kicker { font-size: 46px; font-weight: 400; letter-spacing: 0.05em; color: #f59e0b; line-height: 1; }
+.head { font-family: 'Noto Sans TC','PingFang TC',sans-serif; font-size: 42px; font-weight: 900; margin-top: 12px; line-height: 1.18; }
+.cmd { transform: scale(0.88); transform-origin: left center; }
+
+.right { position: relative; padding: 34px 56px 34px 0; }
+.vrail { position: absolute; left: 20px; top: 52px; bottom: 52px; width: 2px;
+  background: linear-gradient(180deg, rgba(61,111,158,0.32) 0%, rgba(61,111,158,0.55) 24%, rgba(245,158,11,0.95) 34%, rgba(245,158,11,0.95) 40%, rgba(61,111,158,0.55) 60%, rgba(61,111,158,0.26) 100%);
+  box-shadow: 0 0 16px rgba(245,158,11,0.26); }
+.vnodes { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: space-between; }
+.vnode { display: flex; align-items: center; gap: 16px; }
+.vpip { width: 42px; height: 42px; border-radius: 50%; border: 2px solid rgba(226,226,226,0.24); background: #161412;
+  display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+  color: rgba(250,249,246,0.6); font-family: 'JetBrains Mono', monospace; flex: 0 0 auto; }
+.vnode .label { font-size: 15px; color: rgba(250,249,246,0.70); font-weight: 500; }
+.vnode.gate .vpip { border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,0.14);
+  box-shadow: 0 0 0 6px rgba(245,158,11,0.10), 0 0 30px rgba(245,158,11,0.5); }
+.vnode.gate .label { color: #f59e0b; font-weight: 700; }
+</style></head><body><div id="stage">
+
+  <div class="left">
+    <div class="brand"><svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Anchorline">
+  <defs><linearGradient id="la-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+    <stop offset="0%" stop-color="#142a48"/><stop offset="100%" stop-color="#1b365d"/>
+  </linearGradient></defs>
+  <rect width="512" height="512" rx="96" fill="url(#la-bg)"/>
+  <rect x="118" y="128" width="276" height="72" rx="20" fill="#2d5a8a" opacity="0.5"/>
+  <rect x="118" y="196" width="276" height="72" rx="20" fill="#3d6f9e"/>
+  <rect x="118" y="264" width="276" height="120" rx="24" fill="#faf9f5"/>
+  <rect x="148" y="148" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.8"/>
+  <rect x="148" y="216" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.9"/>
+  <rect x="148" y="292" width="48" height="32" rx="10" fill="#1b365d"/>
+  <rect x="216" y="300" width="140" height="16" rx="8" fill="#1b365d" opacity="0.88"/>
+  <rect x="216" y="332" width="108" height="16" rx="8" fill="#1b365d" opacity="0.38"/>
+</svg><span class="name">Anchorline</span></div>
+    <div>
+      <div class="kicker mono glow-amber">PRD &amp; OpenSpec</div>
+      <div class="head">具備 AI 撰寫與簽核的工作台</div>
+    </div>
+    <div class="cmd"><span class="sigil mono">$</span><code>brew install --cask shigachentw/tap/anchorline</code></div>
+  </div>
+
+  <div class="right">
+    <div class="vrail"></div>
+    <div class="vnodes">
+      <div class="vnode"><div class="vpip">01</div><div class="label">PRD 撰寫</div></div>
+      <div class="vnode"><div class="vpip">02</div><div class="label">結構 gate</div></div>
+      <div class="vnode gate"><div class="vpip">03</div><div class="label">簽核</div></div>
+      <div class="vnode"><div class="vpip">04</div><div class="label">openspec change</div></div>
+      <div class="vnode"><div class="vpip">05</div><div class="label">commits</div></div>
+      <div class="vnode"><div class="vpip">06</div><div class="label">PR</div></div>
+      <div class="vnode"><div class="vpip">07</div><div class="label">release</div></div>
+    </div>
+  </div>
+
+</div></body></html>

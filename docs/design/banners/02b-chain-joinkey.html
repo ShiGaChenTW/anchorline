@@ -1,0 +1,112 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<title>Anchorline banner — Chain + Join Key</title>
+<link rel="stylesheet" href="_shared.css">
+<style>
+/* 02b · 右側＝四份資料 → 一把 join key
+   這是整個產品的論點本身：plan / commit / 簽核 / change 各有身分，
+   靠同一個錨點才串得成一條線。四條線收攏到一個徽章，圖就把話講完了。 */
+#stage {
+  background:
+    radial-gradient(820px 420px at 5% 0%, rgba(45,90,138,0.26), transparent 62%),
+    radial-gradient(560px 420px at 78% 46%, rgba(245,158,11,0.13), transparent 66%),
+    #161412;
+  padding: 34px 56px 30px;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.mid { display: flex; align-items: center; justify-content: space-between; gap: 40px; }
+.kicker { font-size: 44px; font-weight: 400; letter-spacing: 0.05em; color: #f59e0b; line-height: 1; margin-top: 14px; }
+.head { font-family: 'Noto Sans TC','PingFang TC',sans-serif; font-size: 40px; font-weight: 900; margin: 10px 0 16px; line-height: 1.18; }
+.cmd { transform: scale(0.86); transform-origin: left center; }
+
+/* join key 圖：左四張來源卡，中間匯流線，右邊錨點 */
+.join { position: relative; width: 470px; height: 188px; }
+.srcs { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; gap: 9px; }
+.src {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 12px; width: 208px;
+  border: 1px solid rgba(226,226,226,0.13); border-radius: 6px;
+  background: rgba(0,0,0,0.28); font-size: 12px; color: rgba(250,249,246,0.80);
+}
+.src .sq { width: 7px; height: 7px; border-radius: 2px; background: #3d6f9e; }
+.wires { position: absolute; left: 208px; top: 0; width: 118px; height: 188px; }
+.key {
+  position: absolute; right: 0; top: 62px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 14px 16px; border-radius: 8px;
+  border: 1px solid rgba(245,158,11,0.42); background: rgba(245,158,11,0.09);
+  box-shadow: 0 0 34px rgba(245,158,11,0.22);
+}
+.key .lbl { font-size: 10px; letter-spacing: 0.14em; color: rgba(245,158,11,0.72); }
+.key .val { font-size: 14px; color: #f59e0b; }
+
+.chain { position: relative; height: 84px; }
+.rail { position: absolute; left: 58px; right: 58px; top: 23px; height: 2px;
+  background: linear-gradient(90deg, rgba(61,111,158,0.35) 0%, rgba(61,111,158,0.55) 22%, rgba(245,158,11,0.95) 36%, rgba(245,158,11,0.95) 42%, rgba(61,111,158,0.55) 62%, rgba(61,111,158,0.28) 100%);
+  box-shadow: 0 0 16px rgba(245,158,11,0.28); }
+.nodes { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: space-between; }
+.node { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 120px; }
+.pip { width: 48px; height: 48px; border-radius: 50%; border: 2px solid rgba(226,226,226,0.24); background: #161412;
+  display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700;
+  color: rgba(250,249,246,0.6); font-family: 'JetBrains Mono', monospace; }
+.node .label { font-size: 13px; color: rgba(250,249,246,0.66); font-weight: 500; white-space: nowrap; }
+.node.gate .pip { border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,0.14);
+  box-shadow: 0 0 0 6px rgba(245,158,11,0.10), 0 0 30px rgba(245,158,11,0.5); }
+.node.gate .label { color: #f59e0b; font-weight: 700; }
+</style></head><body><div id="stage">
+
+  <div class="brand"><svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Anchorline">
+  <defs><linearGradient id="la-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+    <stop offset="0%" stop-color="#142a48"/><stop offset="100%" stop-color="#1b365d"/>
+  </linearGradient></defs>
+  <rect width="512" height="512" rx="96" fill="url(#la-bg)"/>
+  <rect x="118" y="128" width="276" height="72" rx="20" fill="#2d5a8a" opacity="0.5"/>
+  <rect x="118" y="196" width="276" height="72" rx="20" fill="#3d6f9e"/>
+  <rect x="118" y="264" width="276" height="120" rx="24" fill="#faf9f5"/>
+  <rect x="148" y="148" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.8"/>
+  <rect x="148" y="216" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.9"/>
+  <rect x="148" y="292" width="48" height="32" rx="10" fill="#1b365d"/>
+  <rect x="216" y="300" width="140" height="16" rx="8" fill="#1b365d" opacity="0.88"/>
+  <rect x="216" y="332" width="108" height="16" rx="8" fill="#1b365d" opacity="0.38"/>
+</svg><span class="name">Anchorline</span></div>
+
+  <div class="mid">
+    <div>
+      <div class="kicker mono glow-amber">PRD &amp; OpenSpec</div>
+      <div class="head">具備 AI 撰寫與簽核的工作台</div>
+      <div class="cmd"><span class="sigil mono">$</span><code>brew install --cask shigachentw/tap/anchorline</code></div>
+    </div>
+
+    <div class="join">
+      <div class="srcs mono">
+        <div class="src"><span class="sq"></span>plans/*.md checkbox</div>
+        <div class="src"><span class="sq"></span>git commit</div>
+        <div class="src"><span class="sq"></span>簽核紀錄</div>
+        <div class="src"><span class="sq"></span>openspec change</div>
+      </div>
+      <svg class="wires" viewBox="0 0 118 188" fill="none" preserveAspectRatio="none">
+        <path d="M0 16 C58 16 60 94 118 94" stroke="rgba(61,111,158,0.75)" stroke-width="1.6"/>
+        <path d="M0 62 C58 62 60 94 118 94" stroke="rgba(61,111,158,0.75)" stroke-width="1.6"/>
+        <path d="M0 108 C58 108 60 94 118 94" stroke="rgba(61,111,158,0.75)" stroke-width="1.6"/>
+        <path d="M0 154 C58 154 60 94 118 94" stroke="rgba(61,111,158,0.75)" stroke-width="1.6"/>
+      </svg>
+      <div class="key mono">
+        <span class="lbl">ONE JOIN KEY</span>
+        <span class="val">anc:t=058W9SNK</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="chain">
+    <div class="rail"></div>
+    <div class="nodes">
+      <div class="node"><div class="pip">01</div><div class="label">PRD</div></div>
+      <div class="node"><div class="pip">02</div><div class="label">結構 gate</div></div>
+      <div class="node gate"><div class="pip">03</div><div class="label">簽核</div></div>
+      <div class="node"><div class="pip">04</div><div class="label">change</div></div>
+      <div class="node"><div class="pip">05</div><div class="label">commits</div></div>
+      <div class="node"><div class="pip">06</div><div class="label">PR</div></div>
+      <div class="node"><div class="pip">07</div><div class="label">release</div></div>
+    </div>
+  </div>
+
+</div></body></html>

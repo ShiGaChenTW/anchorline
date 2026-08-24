@@ -1,0 +1,69 @@
+/* Anchorline README banner — shared shell.
+   Canvas is locked to 1280×420; every variant renders into the same #stage
+   so the exported PNGs are byte-comparable in size. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* 匯出解析度：README 在 GitHub 上以約 880 CSS px 顯示，2x 才不會在 retina 上糊。
+   做法是 body zoom，版面數值一個都不用改。 */
+:root { --canvas-w: 1280px; --canvas-h: 420px; --x: 2; }
+
+html {
+  width: calc(var(--canvas-w) * var(--x));
+  height: calc(var(--canvas-h) * var(--x));
+  overflow: hidden;
+  background: #161412;
+}
+
+body {
+  width: var(--canvas-w); height: var(--canvas-h);
+  zoom: var(--x);
+  overflow: hidden;
+  background: #161412;
+}
+
+body {
+  font-family: 'Inter', 'Noto Sans TC', 'PingFang TC', sans-serif;
+  color: #faf9f6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#stage {
+  position: relative;
+  width: 1280px; height: 420px;
+  overflow: hidden;
+}
+
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+/* 品牌列：logo + wordmark，三款共用同一尺寸，換稿時視覺錨點不動 */
+.brand { display: flex; align-items: center; gap: 14px; }
+.brand svg { width: 44px; height: 44px; border-radius: 11px; display: block; }
+.brand .name { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+
+/* 安裝指令盒：landing 上是可點擊的複製鈕，這裡只留靜態外觀 */
+.cmd {
+  display: inline-flex; align-items: stretch;
+  border: 1px solid rgba(226,226,226,0.13);
+  border-radius: 6px;
+  background: rgba(0,0,0,0.35);
+  overflow: hidden;
+}
+.cmd .sigil {
+  display: flex; align-items: center;
+  padding: 0 14px;
+  color: #f59e0b;
+  border-right: 1px solid rgba(226,226,226,0.13);
+  font-size: 14px;
+}
+.cmd code {
+  padding: 11px 18px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 14px;
+  color: rgba(250,249,246,0.92);
+  white-space: nowrap;
+}
+
+.glow-amber { text-shadow: 0 0 26px rgba(245,158,11,0.45); }

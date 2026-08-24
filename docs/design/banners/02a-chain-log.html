@@ -1,0 +1,91 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<title>Anchorline banner — Chain + Audit Log</title>
+<link rel="stylesheet" href="_shared.css">
+<style>
+/* 02a · 右側＝稽核軌跡
+   空白處填的是 Q4「實際發生了什麼」。三行事件刻意重複同一組 anc:t=，
+   讓讀者不用讀說明就看見那把 join key。 */
+#stage {
+  background:
+    radial-gradient(860px 440px at 6% 0%, rgba(45,90,138,0.28), transparent 62%),
+    radial-gradient(620px 420px at 62% 108%, rgba(245,158,11,0.10), transparent 64%),
+    #161412;
+  padding: 34px 56px 30px;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.mid { display: flex; align-items: center; justify-content: space-between; gap: 48px; }
+.col { display: flex; flex-direction: column; }
+.kicker { font-size: 44px; font-weight: 400; letter-spacing: 0.05em; color: #f59e0b; line-height: 1; margin-top: 30px; }
+.head { font-family: 'Noto Sans TC','PingFang TC',sans-serif; font-size: 40px; font-weight: 900; margin: 10px 0 16px; line-height: 1.18; }
+.cmd { transform: scale(0.86); transform-origin: left center; }
+
+/* 稽核卡的水平中線 = 鏈條 node 04 與 node 07 的中線。
+   鏈條 7 節平均分佈在內容寬 1168 上，04 中心 640、07 中心 1164，中點 902；
+   卡片寬 448，靠右排時中心落在 1000，所以往左推 98px。
+   數字綁的是節點幾何，改節點數或內距要重算——不是隨手調的視覺偏移。 */
+.log { margin-right: 98px; width: 448px; border: 1px solid rgba(226,226,226,0.13); border-radius: 8px; background: rgba(0,0,0,0.30); overflow: hidden; }
+.log .bar { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-bottom: 1px solid rgba(226,226,226,0.10); font-size: 11px; color: rgba(250,249,246,0.5); letter-spacing: 0.08em; }
+.log .bar .d { width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; }
+.ev { display: flex; align-items: center; gap: 12px; padding: 9px 14px; font-size: 12px; }
+.ev + .ev { border-top: 1px solid rgba(226,226,226,0.06); }
+.ev .t { color: rgba(250,249,246,0.42); width: 42px; }
+.ev .k { color: rgba(250,249,246,0.88); width: 96px; }
+.ev .a { color: #f59e0b; margin-left: auto; }
+
+.chain { position: relative; height: 88px; }
+.rail { position: absolute; left: 58px; right: 58px; top: 24px; height: 2px;
+  background: linear-gradient(90deg, rgba(61,111,158,0.35) 0%, rgba(61,111,158,0.55) 22%, rgba(245,158,11,0.95) 36%, rgba(245,158,11,0.95) 42%, rgba(61,111,158,0.55) 62%, rgba(61,111,158,0.28) 100%);
+  box-shadow: 0 0 16px rgba(245,158,11,0.28); }
+.nodes { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: space-between; }
+.node { display: flex; flex-direction: column; align-items: center; gap: 11px; width: 120px; }
+.pip { width: 50px; height: 50px; border-radius: 50%; border: 2px solid rgba(226,226,226,0.24); background: #161412;
+  display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700;
+  color: rgba(250,249,246,0.6); font-family: 'JetBrains Mono', monospace; }
+.node .label { font-size: 13px; color: rgba(250,249,246,0.66); font-weight: 500; white-space: nowrap; }
+.node.gate .pip { border-color: #f59e0b; color: #f59e0b; background: rgba(245,158,11,0.14);
+  box-shadow: 0 0 0 6px rgba(245,158,11,0.10), 0 0 30px rgba(245,158,11,0.5); }
+.node.gate .label { color: #f59e0b; font-weight: 700; }
+</style></head><body><div id="stage">
+
+  <div class="mid">
+    <div class="col">
+      <div class="brand"><svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Anchorline">
+  <defs><linearGradient id="la-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+    <stop offset="0%" stop-color="#142a48"/><stop offset="100%" stop-color="#1b365d"/>
+  </linearGradient></defs>
+  <rect width="512" height="512" rx="96" fill="url(#la-bg)"/>
+  <rect x="118" y="128" width="276" height="72" rx="20" fill="#2d5a8a" opacity="0.5"/>
+  <rect x="118" y="196" width="276" height="72" rx="20" fill="#3d6f9e"/>
+  <rect x="118" y="264" width="276" height="120" rx="24" fill="#faf9f5"/>
+  <rect x="148" y="148" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.8"/>
+  <rect x="148" y="216" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.9"/>
+  <rect x="148" y="292" width="48" height="32" rx="10" fill="#1b365d"/>
+  <rect x="216" y="300" width="140" height="16" rx="8" fill="#1b365d" opacity="0.88"/>
+  <rect x="216" y="332" width="108" height="16" rx="8" fill="#1b365d" opacity="0.38"/>
+</svg><span class="name">Anchorline</span></div>
+      <div class="kicker mono glow-amber">PRD &amp; OpenSpec</div>
+      <div class="head">具備 AI 撰寫與簽核的工作台</div>
+      <div class="cmd"><span class="sigil mono">$</span><code>brew install --cask shigachentw/tap/anchorline</code></div>
+    </div>
+    <div class="log mono">
+      <div class="bar"><span class="d"></span>AUDIT TRAIL · append-only</div>
+      <div class="ev"><span class="t">16:04</span><span class="k">簽核通過</span><span class="a">anc:t=058W9SNK</span></div>
+      <div class="ev"><span class="t">15:52</span><span class="k">commit</span><span class="a">anc:t=058W9SNK</span></div>
+      <div class="ev"><span class="t">15:31</span><span class="k">gate 全過</span><span class="a">anc:t=058W9SNK</span></div>
+    </div>
+  </div>
+
+  <div class="chain">
+    <div class="rail"></div>
+    <div class="nodes">
+      <div class="node"><div class="pip">01</div><div class="label">PRD</div></div>
+      <div class="node"><div class="pip">02</div><div class="label">結構 gate</div></div>
+      <div class="node gate"><div class="pip">03</div><div class="label">簽核</div></div>
+      <div class="node"><div class="pip">04</div><div class="label">change</div></div>
+      <div class="node"><div class="pip">05</div><div class="label">commits</div></div>
+      <div class="node"><div class="pip">06</div><div class="label">PR</div></div>
+      <div class="node"><div class="pip">07</div><div class="label">release</div></div>
+    </div>
+  </div>
+
+</div></body></html>

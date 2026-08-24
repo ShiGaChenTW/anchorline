@@ -1,0 +1,70 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<title>Anchorline banner — Terminal Dark</title>
+<link rel="stylesheet" href="_shared.css">
+<style>
+/* 01 · Terminal Dark
+   最接近 landing hero 的一版。賣的是「這是一個開發者工具」——
+   暗底、mono、amber，三個訊號同時到位，讀者不必讀完就知道分類。
+   注意：所有裝飾都是真的 DOM 元素，不用 ::before/::after ——
+   截圖走 DOM-render，偽元素的 generated content 會整個掉。 */
+#stage {
+  background:
+    radial-gradient(900px 460px at 14% 8%, rgba(245,158,11,0.11), transparent 62%),
+    radial-gradient(700px 520px at 92% 96%, rgba(45,90,138,0.24), transparent 66%),
+    #161412;
+}
+.stripes {
+  position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(-45deg, transparent 0 11px, rgba(245,158,11,0.06) 11px 22px);
+  -webkit-mask-image: radial-gradient(760px 460px at 100% 0%, #000 0%, transparent 70%);
+          mask-image: radial-gradient(760px 460px at 100% 0%, #000 0%, transparent 70%);
+}
+.inner {
+  position: absolute; inset: 0;
+  padding: 44px 60px;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.kicker { font-size: 54px; font-weight: 400; letter-spacing: 0.06em; color: #f59e0b; line-height: 1; }
+.head {
+  font-family: 'Noto Sans TC','PingFang TC',sans-serif;
+  font-size: 50px; font-weight: 900; letter-spacing: -0.01em;
+  margin-top: 14px; line-height: 1.18;
+}
+.row { display: flex; align-items: center; justify-content: space-between; gap: 40px; }
+
+/* 右下角的錨點徽章：整個產品的差異化就是這 8 碼，讓它在畫面上出現一次 */
+.anchor {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 9px 15px; border-radius: 6px;
+  border: 1px solid rgba(245,158,11,0.34);
+  background: rgba(245,158,11,0.08);
+  font-size: 13px; color: #f59e0b; white-space: nowrap;
+}
+.anchor .dot { width: 7px; height: 7px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 12px #f59e0b; }
+</style></head><body><div id="stage">
+  <div class="stripes"></div>
+  <div class="inner">
+    <div class="brand"><svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Anchorline">
+  <defs><linearGradient id="la-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+    <stop offset="0%" stop-color="#142a48"/><stop offset="100%" stop-color="#1b365d"/>
+  </linearGradient></defs>
+  <rect width="512" height="512" rx="96" fill="url(#la-bg)"/>
+  <rect x="118" y="128" width="276" height="72" rx="20" fill="#2d5a8a" opacity="0.5"/>
+  <rect x="118" y="196" width="276" height="72" rx="20" fill="#3d6f9e"/>
+  <rect x="118" y="264" width="276" height="120" rx="24" fill="#faf9f5"/>
+  <rect x="148" y="148" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.8"/>
+  <rect x="148" y="216" width="48" height="32" rx="10" fill="#faf9f5" opacity="0.9"/>
+  <rect x="148" y="292" width="48" height="32" rx="10" fill="#1b365d"/>
+  <rect x="216" y="300" width="140" height="16" rx="8" fill="#1b365d" opacity="0.88"/>
+  <rect x="216" y="332" width="108" height="16" rx="8" fill="#1b365d" opacity="0.38"/>
+</svg><span class="name">Anchorline</span></div>
+    <div>
+      <div class="kicker mono glow-amber">PRD &amp; OpenSpec</div>
+      <div class="head">具備 AI 撰寫與簽核的工作台</div>
+    </div>
+    <div class="row">
+      <div class="cmd"><span class="sigil mono">$</span><code>brew install --cask shigachentw/tap/anchorline</code></div>
+      <div class="anchor mono"><span class="dot"></span>&lt;!-- anc:t=058W9SNK --&gt;</div>
+    </div>
+  </div>
+</div></body></html>
