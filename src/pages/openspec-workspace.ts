@@ -23,7 +23,8 @@
  * 全部是既有的純函式，這裡只負責畫出來與接點擊。在這一頁自己數一次進度，
  * 是「兩個地方說反話」最經典的來源。
  */
-import { askConfirm } from "../lib/ask";
+import { askConfirm, askText } from "../lib/ask";
+import { buildHandoff } from "../lib/agent-handoff";
 import { store } from "../data/store";
 import type { Project } from "../data/types";
 import { projectDisplayName } from "../data/types";
@@ -90,6 +91,15 @@ import {
   type OpenspecChange,
   type OpenspecListEntry,
 } from "../lib/openspec-status";
+import {
+  archiveCommand,
+  changeStall,
+  resolveWorkbenchTab,
+  rewriteChangePaths,
+  validateChangeRename,
+  type ChangeStall,
+  type WorkbenchTab,
+} from "../lib/openspec-workbench";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
@@ -104,6 +114,39 @@ initTheme();
 initMobileNav("openspec-workspace");
 bindLogout();
 initHelpOverlay();
+
+const TAB_KEY = "anchorline:osw-tab";
+let currentTab: WorkbenchTab = "changes";
+
+function storedTab(): string | null {
+  try {
+    return localStorage.getItem(TAB_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function applyTab(tab: WorkbenchTab, persist = true) {
+  currentTab = tab;
+  const wb = document.querySelector<HTMLElement>(".wb");
+  if (wb) wb.dataset.oswStage = tab;
+  document.querySelectorAll<HTMLButtonElement>("[data-osw-tab]").forEach((btn) => {
+    const on = btn.dataset.oswTab === tab;
+    btn.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  if (persist) {
+    try {
+      localStorage.setItem(TAB_KEY, tab);
+    } catch {
+      /* private mode */
+    }
+  }
+  // 分頁切了但沒開檔時，中欄空狀態文案跟著換。有開檔就別動 textarea。
+  if (!openFile) renderFileEmpty();
+  syncCoachHead();
+  renderStall();
+  renderSide();
+}
 
 // ── 專案 ──────────────────────────────────────────────────────────────
 
@@ -231,6 +274,7 @@ function currentEntry(): ChangeEntry | null {
  * 就等於留了一條繞過去的路：左欄點一下就跳過提示。
  */
 async function selectChange(id: string) {
+  applyTab("changes");
   if (id === store.get().activeOpenSpecChange) return;
   // 選「不放棄」就整個不換 —— 半換（換了 change 卻留著舊檔）比不換更糟
   if (openFile && !(await closeFileView())) return;
@@ -277,6 +321,107 @@ function statusOf(e: ChangeEntry): ChangeStatus {
 /** 已完成那一段預設收起來。只放模組層 —— 重新整理回到收起是想要的預設。 */
 let showDoneChanges = false;
 
+function stallOf(e: ChangeEntry): ChangeStall {
+  const meta = taskMetaByChange.get(e.id);
+  return changeStall({
+    archived: e.archived,
+    progress: changeProgress(e.id),
+    health: healthByChange.get(e.id) ?? null,
+    listed: listedByChange.get(e.id) ?? null,
+    nextStep: meta?.next_step || null,
+  });
+}
+
+/** 16 個裡只亮一個建議：最久沒動的未完成 change。 */
+function suggestedChange(entries: ChangeEntry[]): ChangeEntry | null {
+  const open = entries.filter((e) => statusOf(e) !== "done");
+  if (!open.length) return null;
+  let best = open[0]!;
+  let bestDays = -1;
+  for (const e of open) {
+    const d = stallOf(e).staleDays ?? 0;
+    if (d > bestDays) {
+      bestDays = d;
+      best = e;
+    }
+  }
+  return best;
+}
+
+function artifactRow(e: ChangeEntry, artifactId: string) {
+  const names: Record<string, string> = {
+    proposal: "proposal.md",
+    design: "design.md",
+    tasks: "tasks.md",
+  };
+  const want = names[artifactId] ?? "";
+  return (
+    e.group.rows.find((r) => r.name === want) ??
+    e.group.rows.find((r) => r.name.toLowerCase() === "tasks.md") ??
+    e.group.rows[0] ??
+    null
+  );
+}
+
+async function openChangeFile(e: ChangeEntry, artifactId?: string) {
+  const root = activeProject()?.importSummary?.rootPath ?? "";
+  const row = artifactId ? artifactRow(e, artifactId) : e.group.rows[0];
+  if (!row || !root || !canEditFiles()) {
+    toast("在編輯欄開檔需要桌面版 App");
+    return;
+  }
+  await openFileInEditor(absolutePathFor(root, row.rel));
+}
+
+async function runChangeAction(e: ChangeEntry, kind: ChangeStall["actionKind"] | "handoff") {
+  const root = activeProject()?.importSummary?.rootPath ?? "";
+  const stall = stallOf(e);
+  if (kind === "archive") {
+    if (!root) {
+      toast("這個專案還沒有綁定資料夾");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(archiveCommand(root, e.id));
+      toast("已複製 archive 指令。App 不執行它。");
+    } catch {
+      toast("複製失敗，請手動複製右欄的指令");
+    }
+    return;
+  }
+  if (kind === "handoff") {
+    if (!root) {
+      toast("這個專案還沒有綁定資料夾");
+      return;
+    }
+    const next = healthByChange.get(e.id);
+    const art = next ? nextArtifact(next) : null;
+    const h = buildHandoff({
+      projectRoot: root,
+      task: stall.actionLabel || `繼續 ${e.id}`,
+      family: "other",
+      change: e.id,
+      nextArtifact: art?.outputPath,
+    });
+    try {
+      await navigator.clipboard.writeText(h.command);
+      toast("已複製交接內容。工具只產生指令，不會替你執行。");
+    } catch {
+      toast("複製失敗");
+    }
+    return;
+  }
+  if (kind === "open-artifact") {
+    const next = healthByChange.get(e.id);
+    const art = next ? nextArtifact(next) : null;
+    await openChangeFile(e, art?.id);
+    return;
+  }
+  if (kind === "open-tasks") {
+    await openChangeFile(e, "tasks");
+  }
+}
+
 function renderChanges() {
   const host = document.getElementById("osw-changes");
   if (!host) return;
@@ -297,51 +442,137 @@ function renderChanges() {
     return;
   }
 
-  // 目前開著的那一個**永遠留在清單上**，就算它已經收工。把使用者正在看的
-  // 東西從清單抽掉，畫面會變成「中欄有內容、左欄沒有一列是亮的」。
-  const done = entries.filter((e) => statusOf(e) === "done" && e.id !== cur);
-  const open = entries.filter((e) => !done.includes(e));
-  // 動過一步就算進行中。分兩堆是為了先看到「還沒開始」那一堆 —— 它才是
-  // 這一頁要回答的問題。
+  // 收工的歸「已完成」，就算它是目前選中的那一個。若把它留在待實作，
+  // 已封存的 change 會看起來像還沒開工。選中的已完成列仍會顯示（並展開檔案），
+  // 只是待實作／進行中不再被它佔一格。
+  const done = entries.filter((e) => statusOf(e) === "done");
+  const open = entries.filter((e) => statusOf(e) !== "done");
   const wip = open.filter((e) => statusOf(e) === "wip");
   const todo = open.filter((e) => !wip.includes(e));
+  const pinDone = Boolean(cur) && done.some((e) => e.id === cur);
 
   // 計數只數還沒收完的。標題旁邊那個數字跟清單長度不一致的話，
   // 使用者第一個結論會是「清單漏了東西」。
   const countEl = document.getElementById("osw-change-count");
   if (countEl) countEl.textContent = open.length ? `${open.length}` : "0";
+  document.getElementById("osw-tab-changes")?.classList.toggle("is-warn", open.length > 0);
 
-  const rowsFor = (list: ChangeEntry[], useLabel = false) =>
+  const suggest = suggestedChange(entries);
+
+  const fileRows = (e: ChangeEntry) => {
+    const next = healthByChange.get(e.id);
+    const ready = next ? nextArtifact(next) : null;
+    const readyName = ready?.outputPath.split("/").pop() ?? ready?.id ?? "";
+    return `<div class="osw-files">${e.group.rows
+      .map((r) => {
+        const isNext = Boolean(readyName) && (r.name === readyName || r.name.startsWith(readyName));
+        return `<button type="button" class="osw-file${isNext ? " next" : ""}" data-osw-file="${escapeHtml(r.rel)}">
+          <span class="osw-dot ${isNext ? "ready" : "done"}"></span>
+          <span class="osw-file-name">${escapeHtml(r.sub ? `${r.name} · ${r.sub}` : r.name)}</span>
+          <span class="osw-tag">${isNext ? "next" : ""}</span>
+        </button>`;
+      })
+      .join("")}</div>`;
+  };
+
+  const rowsFor = (list: ChangeEntry[], compact = false) =>
     list
-      .map(
-        (e) => `<button type="button" class="osw-change${e.id === cur ? " on" : ""}"
-            role="option" aria-selected="${e.id === cur}"
+      .map((e) => {
+        const stall = stallOf(e);
+        const on = e.id === cur;
+        const actions =
+          compact || stall.actionKind === "none"
+            ? ""
+            : `<div class="osw-q-act">
+                <button type="button" class="btn btn-sm${on ? " btn-primary" : ""}" data-osw-act="${stall.actionKind}">${escapeHtml(stall.actionLabel)}</button>
+                <button type="button" class="btn btn-sm btn-ghost" data-osw-act="handoff">複製交接</button>
+              </div>`;
+        return `<div class="osw-q${on ? " on" : ""}" role="option" aria-selected="${on}"
             data-osw-change="${escapeHtml(e.id)}" title="${escapeHtml(e.label)}">
-          <span class="osw-change-name">${escapeHtml(useLabel ? e.label : e.id)}</span>
-          <span class="osw-change-n">${e.group.rows.length}</span>
-        </button>`,
-      )
+          <span class="osw-q-name">${escapeHtml(compact ? e.label : e.id)}</span>
+          <span class="osw-q-n">${escapeHtml(stall.progressLabel)}</span>
+          <span class="osw-q-why">${escapeHtml(stall.why)}</span>
+          ${on ? fileRows(e) : ""}
+          ${actions}
+        </div>`;
+      })
       .join("");
 
   const archivedCount = done.filter((e) => e.archived).length;
-  // 藏起來的東西一定要說出來還有幾個 —— 安靜地少列幾項，看起來會像掃描漏了。
+  const doneShown = [
+    ...done.filter((e) => e.id === cur),
+    ...(showDoneChanges ? done.filter((e) => e.id !== cur) : []),
+  ];
   const doneToggle = done.length
     ? `<button type="button" class="os-group os-group--done" id="osw-done-toggle"
-          aria-expanded="${showDoneChanges}">
+          aria-expanded="${showDoneChanges || pinDone}">
         已完成 ${done.length}${archivedCount ? `（含封存 ${archivedCount}）` : ""}
         <span>${showDoneChanges ? "隱藏" : "顯示"}</span>
-      </button>${showDoneChanges ? rowsFor(done, true) : ""}`
+      </button>${doneShown.length ? rowsFor(doneShown, true) : ""}`
+    : "";
+
+  const nowCard = suggest
+    ? `<div class="osw-now">
+        <p class="osw-now-k">此刻該推</p>
+        <p class="osw-now-t">${escapeHtml(suggest.id)}</p>
+        <p class="osw-now-w">${escapeHtml(stallOf(suggest).why)}</p>
+        <div class="osw-now-act">
+          ${
+            stallOf(suggest).actionKind === "none"
+              ? ""
+              : `<button type="button" class="btn btn-sm btn-primary" data-osw-suggest-act="${stallOf(suggest).actionKind}" data-osw-suggest="${escapeHtml(suggest.id)}">${escapeHtml(stallOf(suggest).actionLabel)}</button>`
+          }
+          <button type="button" class="btn btn-sm btn-ghost" data-osw-suggest-act="handoff" data-osw-suggest="${escapeHtml(suggest.id)}">複製交接</button>
+        </div>
+      </div>`
     : "";
 
   host.innerHTML = `
+    ${nowCard}
     ${todo.length ? `<p class="os-group os-group--change">待實作<span>${todo.length}</span></p>${rowsFor(todo)}` : ""}
     ${wip.length ? `<p class="os-group os-group--change">進行中<span>${wip.length}</span></p>${rowsFor(wip)}` : ""}
     ${!open.length ? `<p class="os-empty">沒有還沒收完的 change。</p>` : ""}
     ${doneToggle}
   `;
 
-  host.querySelectorAll<HTMLButtonElement>("[data-osw-change]").forEach((btn) => {
-    btn.onclick = () => void selectChange(btn.dataset.oswChange ?? "");
+  const bindCard = (card: HTMLElement) => {
+    const id = card.dataset.oswChange ?? "";
+    const entry = entries.find((e) => e.id === id);
+    card.addEventListener("click", (ev) => {
+      if ((ev.target as HTMLElement).closest("button")) return;
+      if (id) void selectChange(id);
+    });
+    card.querySelectorAll<HTMLButtonElement>("[data-osw-act]").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        if (!entry) return;
+        void runChangeAction(entry, btn.dataset.oswAct as ChangeStall["actionKind"] | "handoff");
+      });
+    });
+    const root = p.importSummary?.rootPath ?? "";
+    card.querySelectorAll<HTMLButtonElement>("[data-osw-file]").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const rel = btn.dataset.oswFile ?? "";
+        if (rel) void openFileInEditor(absolutePathFor(root, rel));
+      });
+    });
+  };
+  host.querySelectorAll<HTMLElement>("[data-osw-change]").forEach(bindCard);
+  host.querySelectorAll<HTMLButtonElement>("[data-osw-suggest]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.oswSuggest ?? "";
+      const entry = entries.find((e) => e.id === id);
+      if (!entry) return;
+      void (async () => {
+        await selectChange(id);
+        if (store.get().activeOpenSpecChange !== id) return;
+        await runChangeAction(
+          entry,
+          btn.dataset.oswSuggestAct as ChangeStall["actionKind"] | "handoff",
+        );
+      })();
+    });
   });
   const toggle = document.getElementById("osw-done-toggle");
   if (toggle) {
@@ -349,6 +580,11 @@ function renderChanges() {
       showDoneChanges = !showDoneChanges;
       renderChanges();
     };
+  }
+  const renameBtn = document.getElementById("osw-rename") as HTMLButtonElement | null;
+  if (renameBtn) {
+    const curEntry = entries.find((e) => e.id === cur);
+    renameBtn.disabled = !curEntry || curEntry.archived || !canEditFiles();
   }
 }
 
@@ -377,30 +613,66 @@ function renderSpecs() {
     return;
   }
   if (!rows.length) {
-    host.innerHTML = `<p class="os-empty">還沒有現況規格。change 跑完 <code>openspec archive</code> 才會在 <code>openspec/specs/</code> 留下 spec。</p>`;
+    host.innerHTML = `<p class="os-empty">還沒有現況規格。change archive 完才會出現在這裡。</p>`;
     return;
   }
 
   const root = p.importSummary?.rootPath ?? "";
   const cur = store.get().activeOpenSpecFile;
+  const entries = changeEntries(osGroups());
 
-  host.innerHTML = rows
-    .map((r) => {
-      const abs = absolutePathFor(root, r.rel);
-      const on = Boolean(cur) && cur === abs;
-      return `<button type="button" class="osw-change${on ? " on" : ""}"
-            role="option" aria-selected="${on}"
+  const deltasFor = (label: string) => {
+    const domain = label.split("/")[0] ?? label;
+    return entries.filter((e) =>
+      e.group.rows.some((row) => row.sub === `specs/${domain}` || row.rel.includes(`/specs/${domain}/`)),
+    );
+  };
+
+  host.innerHTML =
+    `<p class="osw-spec-note">這是 archive 之後留下的現況規格，不是待辦。它不會完成。要改，從這裡開 change。</p>` +
+    rows
+      .map((r) => {
+        const abs = absolutePathFor(root, r.rel);
+        const on = Boolean(cur) && cur === abs;
+        const deltas = deltasFor(r.label);
+        const why = deltas.length
+          ? `已生效 · 進行中：${deltas.map((d) => d.id).join("、")}`
+          : "已生效 · 沒有進行中的 delta";
+        return `<div class="osw-q${on ? " on" : ""}" role="option" aria-selected="${on}"
             data-osw-spec="${escapeHtml(r.rel)}" title="${escapeHtml(r.rel)}">
-          <span class="osw-change-name">${escapeHtml(r.label)}</span>
-        </button>`;
-    })
-    .join("");
+          <span class="osw-q-name">${escapeHtml(r.label)}</span>
+          <span class="osw-q-why">${escapeHtml(why)}</span>
+          <div class="osw-q-act">
+            <button type="button" class="btn btn-sm" data-osw-open-spec>開這份</button>
+            ${
+              deltas.length
+                ? `<button type="button" class="btn btn-sm btn-ghost" data-osw-spec-delta="${escapeHtml(deltas[0]!.id)}">對照 ${escapeHtml(deltas[0]!.id)}</button>`
+                : `<a class="btn btn-sm" href="openspec.html">開 change 改這份</a>`
+            }
+          </div>
+        </div>`;
+      })
+      .join("");
 
-  host.querySelectorAll<HTMLButtonElement>("[data-osw-spec]").forEach((btn) => {
-    btn.onclick = () => {
-      const rel = btn.dataset.oswSpec ?? "";
+  host.querySelectorAll<HTMLElement>("[data-osw-spec]").forEach((card) => {
+    const rel = card.dataset.oswSpec ?? "";
+    const open = () => {
       if (rel) void openFileInEditor(absolutePathFor(root, rel));
     };
+    card.addEventListener("click", (ev) => {
+      if ((ev.target as HTMLElement).closest("button, a")) return;
+      open();
+    });
+    card.querySelector<HTMLButtonElement>("[data-osw-open-spec]")?.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      open();
+    });
+    card.querySelector<HTMLButtonElement>("[data-osw-spec-delta]")?.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const id = (ev.currentTarget as HTMLButtonElement).dataset.oswSpecDelta ?? "";
+      applyTab("changes");
+      if (id) void selectChange(id);
+    });
   });
 }
 
@@ -573,6 +845,8 @@ function renderWishlist() {
     <div id="os-wish-archive">${archiveBlock}</div>
   `;
 
+  const wishN = document.getElementById("osw-tab-wish-n");
+  if (wishN) wishN.textContent = String(active.length);
   bindWishlist();
   void fillWishImages(host);
   const ta = document.getElementById("os-wish-text") as HTMLTextAreaElement | null;
@@ -1246,9 +1520,13 @@ function renderFileEmpty() {
     ${
       !activeProject()
         ? "還沒有選擇專案。"
-        : !entry
-          ? "這個專案還沒有 openspec/ 內容。用右上角「開新 change」建一個，或先在左下的 Function wish list 累積想做的事。"
-          : `從左邊挑一個檔案打開。<code>${escapeHtml(entry.id)}</code> 底下有 ${entry.group.rows.length} 個檔。`
+        : currentTab === "wishlist"
+          ? "這一頁用來寫願望。按新增取號，寫完再送出開 change。"
+          : currentTab === "specs"
+            ? "從左邊開一份現況規格。這不是待辦。"
+          : !entry
+            ? "這個專案還沒有 openspec/ 內容。用右上角「開新 change」建一個，或先到 Wishlist 累積想做的事。"
+            : `從左邊挑一個檔案打開。<code>${escapeHtml(entry.id)}</code> 底下有 ${entry.group.rows.length} 個檔。`
     }
   </div>`;
 }
@@ -1644,11 +1922,169 @@ function healthCardHtml(id: string): string {
   </div>`;
 }
 
+function syncCoachHead() {
+  const title = document.querySelector(".coach .wb-head h2");
+  if (!(title instanceof HTMLElement)) return;
+  if (currentTab === "wishlist") title.textContent = "願望";
+  else if (currentTab === "specs") title.textContent = "誰在改這份";
+  else title.textContent = "這個 Change";
+}
+
+async function renameCurrentChange() {
+  const e = currentEntry();
+  if (!e || e.archived) {
+    toast("選一個還沒封存的 change 再改名");
+    return;
+  }
+  if (!canEditFiles() || !isNative()) {
+    toast("改名要在桌面版，瀏覽器搬不了資料夾");
+    return;
+  }
+  const raw = await askText({
+    title: `更改「${e.id}」的名稱`,
+    body: "這會把 openspec/changes/ 底下的資料夾改名。請用英數與連字號。若有 agent 還握著舊路徑，改完要重新交接。",
+    value: e.id,
+    confirmLabel: "改名",
+  });
+  if (raw == null) return;
+  const existing = changeEntries(osGroups()).map((x) => x.id);
+  const v = validateChangeRename(e.id, raw, existing);
+  if (!v.ok) {
+    toast(v.reason);
+    return;
+  }
+  const p = activeProject();
+  const root = p?.importSummary?.rootPath ?? "";
+  const summary = p?.importSummary;
+  if (!p || !root || !summary) {
+    toast("這個專案還沒有綁定資料夾");
+    return;
+  }
+  if (
+    !(await askConfirm({
+      title: `把 ${e.id} 改成 ${v.slug}？`,
+      body: "資料夾會被改名。開著的檔會跟著換路徑。",
+      danger: true,
+    }))
+  ) {
+    return;
+  }
+  try {
+    await native.renameOpenspecChange(root, e.id, v.slug);
+  } catch (err) {
+    toast(err instanceof Error ? err.message : "改名失敗");
+    return;
+  }
+  const paths = rewriteChangePaths(summary.allPaths ?? [], e.id, v.slug);
+  if (openFile) {
+    const nextPath = rewriteChangePaths([openFile.path], e.id, v.slug)[0] ?? openFile.path;
+    openFile = { path: nextPath, original: openFile.original };
+    store.setActiveOpenSpecFile(nextPath);
+  }
+  store.bindProjectFolder(p.id, summary.folderName, root, paths, summary.matchedFiles ?? []);
+  store.setActiveOpenSpecChange(v.slug);
+  lastSideKey = "";
+  void refreshSideData(true);
+  render();
+  toast(`已改名為 ${v.slug}`);
+}
+
+function renderStall() {
+  const host = document.getElementById("osw-stall");
+  if (!host) return;
+  if (currentTab === "wishlist") {
+    host.hidden = true;
+    host.innerHTML = "";
+    return;
+  }
+  if (currentTab === "specs") {
+    const cur = store.get().activeOpenSpecFile;
+    const row = specRows(osGroups()).find((r) => {
+      const root = activeProject()?.importSummary?.rootPath ?? "";
+      return absolutePathFor(root, r.rel) === cur;
+    });
+    if (!row) {
+      host.hidden = true;
+      host.innerHTML = "";
+      return;
+    }
+    host.hidden = false;
+    host.innerHTML = `
+      <p class="osw-stall-k">這不是未完成的 change</p>
+      <p>這份已經生效。畫面上沒有勾選進度，是因為它不走 tasks.md。要改行為，開一個新 change。</p>
+      <div class="osw-q-act"><a class="btn btn-sm btn-primary" href="openspec.html">開 change 改 ${escapeHtml(row.label)}</a></div>
+    `;
+    return;
+  }
+  const e = currentEntry();
+  if (!e || e.archived) {
+    host.hidden = true;
+    host.innerHTML = "";
+    return;
+  }
+  const stall = stallOf(e);
+  host.hidden = false;
+  host.innerHTML = `
+    <p class="osw-stall-k">這個 change 為什麼還沒收</p>
+    <p>${escapeHtml(stall.why)}</p>
+    ${
+      stall.actionKind === "none"
+        ? ""
+        : `<div class="osw-q-act">
+            <button type="button" class="btn btn-sm btn-primary" data-osw-stall-act="${stall.actionKind}">${escapeHtml(stall.actionLabel)}</button>
+            <button type="button" class="btn btn-sm" data-osw-stall-act="handoff">複製交接</button>
+          </div>`
+    }
+  `;
+  host.querySelectorAll<HTMLButtonElement>("[data-osw-stall-act]").forEach((btn) => {
+    btn.onclick = () =>
+      void runChangeAction(e, btn.dataset.oswStallAct as ChangeStall["actionKind"] | "handoff");
+  });
+}
+
 function renderSide() {
   const host = document.getElementById("osw-side-body");
   if (!host) return;
-  const id = currentChangeId();
   const pill = document.getElementById("osw-health-pill");
+  syncCoachHead();
+
+  if (currentTab === "wishlist") {
+    if (pill) pill.textContent = String(wishDoc.active.length);
+    host.innerHTML = `<div class="osw-card">
+      <h3>送出之後</h3>
+      <p class="osw-note">勾選願望再按送出，會帶到開新 change 的三步驟。精靈結束後回到這一頁的 Changes。</p>
+    </div>`;
+    return;
+  }
+
+  if (currentTab === "specs") {
+    const root = activeProject()?.importSummary?.rootPath ?? "";
+    const cur = store.get().activeOpenSpecFile;
+    const row = specRows(osGroups()).find((r) => absolutePathFor(root, r.rel) === cur);
+    if (pill) pill.textContent = row ? "現況" : "—";
+    if (!row) {
+      host.innerHTML = `<div class="osw-card">
+        <h3>現況規格</h3>
+        <p class="osw-note">從左邊開一份 spec。這不是待辦佇列。</p>
+      </div>`;
+      return;
+    }
+    const domain = row.label.split("/")[0] ?? row.label;
+    const deltas = changeEntries(osGroups()).filter((e) =>
+      e.group.rows.some((r) => r.sub === `specs/${domain}` || r.rel.includes(`/specs/${domain}/`)),
+    );
+    host.innerHTML = `<div class="osw-card">
+      <h3>${escapeHtml(row.label)}</h3>
+      <p class="osw-note">${
+        deltas.length
+          ? `進行中的 delta：${deltas.map((d) => escapeHtml(d.id)).join("、")}。`
+          : "沒有 change 正在改這份。這份就是現行承諾。"
+      }</p>
+    </div>`;
+    return;
+  }
+
+  const id = currentChangeId();
 
   if (!id) {
     if (pill) pill.textContent = "—";
@@ -1671,15 +2107,28 @@ function renderSide() {
           : "—";
   }
 
+  const stall = currentEntry() ? stallOf(currentEntry()!) : null;
+  const root = activeProject()?.importSummary?.rootPath ?? "";
   host.innerHTML = `
     <div class="osw-card">
       <h3>Change</h3>
       <p class="osw-num">${escapeHtml(id)}</p>
       ${currentEntry()?.archived ? `<p class="osw-note">已封存。</p>` : ""}
+      ${
+        currentEntry()?.archived
+          ? ""
+          : `<p class="osw-note"><button type="button" class="btn btn-sm" id="osw-rename-side">改名</button></p>`
+      }
     </div>
     ${progressCardHtml(id)}
     ${healthCardHtml(id)}
+    ${
+      stall?.actionKind === "archive" && root
+        ? `<div class="osw-card"><h3>archive</h3><p class="osw-note"><code>${escapeHtml(archiveCommand(root, id))}</code></p></div>`
+        : ""
+    }
   `;
+  document.getElementById("osw-rename-side")?.addEventListener("click", () => void renameCurrentChange());
 }
 
 // ── 進場：URL 參數與記住的位置 ────────────────────────────────────────
@@ -1745,6 +2194,7 @@ function render() {
   renderChanges();
   renderSpecs();
   renderFileView();
+  renderStall();
   renderSide();
   syncUser();
 
@@ -1756,6 +2206,14 @@ function render() {
     void loadAndRenderWishlist();
   }
 }
+
+document.querySelectorAll<HTMLButtonElement>("[data-osw-tab]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const tab = btn.dataset.oswTab;
+    if (tab === "wishlist" || tab === "changes" || tab === "specs") applyTab(tab);
+  });
+});
+document.getElementById("osw-rename")?.addEventListener("click", () => void renameCurrentChange());
 
 document.getElementById("btn-osw-refresh")?.addEventListener("click", () => {
   // 檔案清單來自 store 的 importSummary（重掃資料夾是專案頁的事），
@@ -1777,6 +2235,16 @@ initCollapsible("btn-wish-toggle", "os-wish", "anchorline:osw-wish-collapsed", "
 
 try {
   applyEntryIntent();
+  const q = new URLSearchParams(location.search);
+  applyTab(
+    resolveWorkbenchTab({
+      urlTab: q.get("tab"),
+      urlChange: q.get("change"),
+      stored: storedTab(),
+      openChangeCount: changeEntries(osGroups()).filter((e) => !e.archived).length,
+    }),
+    false,
+  );
   render();
   // 側欄資料與上次開著的檔案都是非同步的：拿到 pending promise 時三欄
   // 已經有真內容了，所以遮罩不等它們——那段改由頁內的狀態自己表達。

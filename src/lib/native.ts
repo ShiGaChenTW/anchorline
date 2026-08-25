@@ -327,6 +327,12 @@ export const native = {
    */
   writeChangeBundle: (root: string, files: { rel: string; content: string }[]) =>
     callMaybe<{ paths: string[] }>("write_change_bundle", { root, files }),
+  /**
+   * 把 `openspec/changes/<from>` 改名成 `<to>`。兩個 id 都在 Rust 端驗證
+   * （kebab-case，不能叫 archive）。撞名不覆寫。
+   */
+  renameOpenspecChange: (root: string, from: string, to: string) =>
+    call<{ path: string }>("rename_openspec_change", { root, from, to }),
   ghStatus: () => callMaybe<{ raw: string; fetchedAt: string }>("gh_status"),
   onefetch: (folderPath: string) => callMaybe<{ raw: string }>("onefetch", { folderPath }),
   fastfetch: () => callMaybe<{ raw: string }>("fastfetch"),

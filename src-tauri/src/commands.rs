@@ -1101,6 +1101,67 @@ fn write_change_bundle_inner(
     })
 }
 
+/// 把 `openspec/changes/<from>` 改名成 `<to>`。
+///
+/// 只動這一個資料夾。不跑 `openspec archive`（那會改寫真相來源），
+/// 也不接受 `archive/` 前綴。前端只能送兩個 kebab-case id。
+#[tauri::command]
+pub fn rename_openspec_change(
+    root: String,
+    from: String,
+    to: String,
+    roots: State<'_, RegisteredRoots>,
+) -> R<FilePath> {
+    rename_openspec_change_inner(&root, &from, &to, &roots)
+}
+
+pub fn rename_openspec_change_inner(
+    root: &str,
+    from: &str,
+    to: &str,
+    roots: &RegisteredRoots,
+) -> R<FilePath> {
+    let Some(base) = paths::registered_root(&PathBuf::from(root), roots) else {
+        return Err(
+            "這個專案資料夾沒有被授權過。到「專案匯入」重新選一次資料夾就會取得授權。".into(),
+        );
+    };
+    if !paths::change_id_ok(from) {
+        return Err("原來的名稱不合法。".into());
+    }
+    if !paths::change_id_ok(to) {
+        return Err("新名稱請用英數與連字號，例如 add-habit-tracker。".into());
+    }
+    if from == to {
+        return Err("名稱沒有改。".into());
+    }
+
+    let changes_dir = base.join("openspec").join("changes");
+    let src = changes_dir.join(from);
+    let dest = changes_dir.join(to);
+    if !src.is_dir() {
+        return Err(format!("找不到 change「{from}」。"));
+    }
+    if dest.exists() {
+        return Err(format!("已經有一個叫 {to} 的 change。"));
+    }
+
+    let src_canon = src
+        .canonicalize()
+        .map_err(|e| format!("讀不到來源：{e}"))?;
+    let dir_canon = changes_dir
+        .canonicalize()
+        .map_err(|e| format!("讀不到 openspec/changes：{e}"))?;
+    if !src_canon.starts_with(&dir_canon) || src_canon == dir_canon {
+        return Err("來源不在 openspec/changes/ 底下。".into());
+    }
+
+    fs::rename(&src, &dest).map_err(|e| format!("改名失敗：{e}"))?;
+    Ok(FilePath {
+        path: dest.to_string_lossy().to_string(),
+    })
+}
+
 // ── 願望截圖 ────────────────────────────────────────────────────────
 //
 // 圖進 `.anchorline/wishlist-assets/`，正文裡只留相對 markdown。
@@ -2292,6 +2353,7 @@ pub fn ping() -> R<Pong> {
             "openUatEvidence",
             "writeWishlist",
             "writeChangeBundle",
+            "renameOpenspecChange",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -2440,6 +2502,102 @@ mod write_change_bundle_tests {
         }
         // 驗證在寫入之前跑完，所以那份合法的也不該落地
         assert!(!dir.join("plans").exists());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod rename_openspec_change_tests {
+    use super::*;
+
+    fn fresh(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(name);
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn plant_change(dir: &Path, id: &str) {
+        let p = dir.join("openspec/changes").join(id);
+        std::fs::create_dir_all(&p).unwrap();
+        std::fs::write(p.join("proposal.md"), "# p").unwrap();
+    }
+
+    #[test]
+    fn renames_the_change_folder() {
+        let dir = fresh("anc-os-rename-ok");
+        let roots = RegisteredRoots::default();
+        roots.register(&dir);
+        plant_change(&dir, "add-old");
+
+        let out = rename_openspec_change_inner(
+            dir.to_str().unwrap(),
+            "add-old",
+            "add-habit-tracker",
+            &roots,
+        )
+        .unwrap();
+        assert!(out.path.ends_with("openspec/changes/add-habit-tracker"));
+        assert!(!dir.join("openspec/changes/add-old").exists());
+        assert!(dir
+            .join("openspec/changes/add-habit-tracker/proposal.md")
+            .exists());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn refuses_collision_and_leaves_source() {
+        let dir = fresh("anc-os-rename-collide");
+        let roots = RegisteredRoots::default();
+        roots.register(&dir);
+        plant_change(&dir, "add-old");
+        plant_change(&dir, "add-new");
+
+        let err = match rename_openspec_change_inner(
+            dir.to_str().unwrap(),
+            "add-old",
+            "add-new",
+            &roots,
+        ) {
+            Ok(p) => panic!("should fail, got {}", p.path),
+            Err(e) => e,
+        };
+        assert!(err.contains("已經有"), "got: {err}");
+        assert!(dir.join("openspec/changes/add-old/proposal.md").exists());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn refuses_archive_reserved_and_unregistered() {
+        let dir = fresh("anc-os-rename-bad");
+        let roots = RegisteredRoots::default();
+        plant_change(&dir, "add-old");
+        let err = match rename_openspec_change_inner(
+            dir.to_str().unwrap(),
+            "add-old",
+            "add-new",
+            &roots,
+        ) {
+            Ok(p) => panic!("should fail, got {}", p.path),
+            Err(e) => e,
+        };
+        assert!(err.contains("授權"), "got: {err}");
+
+        roots.register(&dir);
+        let err = match rename_openspec_change_inner(
+            dir.to_str().unwrap(),
+            "add-old",
+            "archive",
+            &roots,
+        ) {
+            Ok(p) => panic!("should fail, got {}", p.path),
+            Err(e) => e,
+        };
+        assert!(err.contains("英數") || err.contains("archive"), "got: {err}");
+        assert!(dir.join("openspec/changes/add-old").exists());
 
         std::fs::remove_dir_all(&dir).ok();
     }

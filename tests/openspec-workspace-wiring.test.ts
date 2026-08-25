@@ -174,6 +174,15 @@ describe("openspec-workspace.html 的三欄", () => {
     }
   });
 
+  test("Wishlist / Changes / Specs 是標籤頁", () => {
+    const h = html();
+    expect(h).toContain(`data-osw-tab="wishlist"`);
+    expect(h).toContain(`data-osw-tab="changes"`);
+    expect(h).toContain(`data-osw-tab="specs"`);
+    expect(h).toContain(`id="osw-rename"`);
+    expect(h).toContain(`id="osw-stall"`);
+  });
+
   test("「這個 Change 的檔案」面板已經拿掉（2026-08-21 拍板：點 change 就直接開第一個檔案）", () => {
     const h = html();
     for (const id of ["os-files", "os-count", "osw-other-groups", "openspec-list", "btn-openspec-toggle"]) {

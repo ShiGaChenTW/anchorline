@@ -114,6 +114,184 @@
     font-size: var(--fs-1);
     color: var(--muted);
   }
+
+  .osw-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 8px 12px 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex: 0 0 auto;
+  }
+  .osw-tab {
+    border: 1px solid transparent;
+    border-bottom: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: var(--fs-2);
+    font-weight: 600;
+    padding: 8px 12px 9px;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+  }
+  .osw-tab:hover { color: var(--fg); }
+  .osw-tab[aria-selected="true"] {
+    background: var(--bg);
+    color: var(--fg);
+    border-color: var(--border);
+  }
+  .osw-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .osw-tab-n {
+    display: inline-block;
+    margin-left: 8px;
+    font-family: var(--mono);
+    font-size: var(--fs-1);
+    font-weight: 500;
+    background: var(--inset);
+    color: var(--muted);
+    padding: 1px 6px;
+    border-radius: 99px;
+    vertical-align: 1px;
+  }
+  .osw-tab[aria-selected="true"] .osw-tab-n {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .osw-tab.is-warn .osw-tab-n {
+    background: var(--warn-bg);
+    color: var(--warn);
+  }
+
+  .osw-now {
+    margin: 8px 8px 10px;
+    padding: 10px 11px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--border));
+    background: color-mix(in oklab, var(--accent) 10%, var(--bg));
+  }
+  .osw-now-k {
+    margin: 0 0 4px;
+    font-size: var(--fs-1);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .osw-now-t { margin: 0 0 4px; font-size: var(--fs-3); font-weight: 600; }
+  .osw-now-w { margin: 0 0 8px; font-size: var(--fs-2); color: var(--muted); line-height: 1.45; }
+  .osw-now-act, .osw-q-act { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .osw-q {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 8px;
+    width: calc(100% - 12px);
+    margin: 0 6px 4px;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .osw-q:hover { background: var(--inset); }
+  .osw-q.on {
+    background: color-mix(in oklab, var(--accent) 15%, transparent);
+    border-color: color-mix(in oklab, var(--accent) 30%, transparent);
+  }
+  .osw-q:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .osw-q-name { font-size: var(--fs-3); color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .osw-q.on .osw-q-name { color: var(--fg); font-weight: 600; }
+  .osw-q-n {
+    font-family: var(--mono);
+    font-size: var(--fs-1);
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+  .osw-q-why { grid-column: 1 / -1; font-size: var(--fs-1); color: var(--muted); line-height: 1.4; }
+  .osw-q-act { grid-column: 1 / -1; margin-top: 4px; }
+  .osw-files {
+    grid-column: 1 / -1;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid color-mix(in oklab, var(--accent) 20%, var(--border));
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .osw-file {
+    display: grid;
+    grid-template-columns: 8px 1fr auto;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
+    padding: 4px 2px;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: var(--fs-2);
+    text-align: left;
+    cursor: pointer;
+  }
+  .osw-file:hover { background: var(--inset); }
+  .osw-file.next .osw-file-name { color: var(--accent); font-weight: 600; }
+  .osw-stall {
+    flex: 0 0 auto;
+    margin: 10px 12px 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--warn-bg);
+    border: 1px solid color-mix(in oklab, var(--warn) 35%, var(--border));
+  }
+  .osw-stall-k {
+    margin: 0 0 4px;
+    font-size: var(--fs-1);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--warn);
+  }
+  .osw-stall p { margin: 0 0 8px; font-size: var(--fs-2); line-height: 1.45; color: var(--fg); }
+  .osw-stall p:last-child { margin-bottom: 0; }
+  .osw-spec-note {
+    margin: 8px 12px 10px;
+    font-size: var(--fs-2);
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  #osw-panel-wishlist,
+  #osw-panel-changes,
+  #osw-panel-specs {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  #osw-panel-changes .osw-changes,
+  #osw-panel-specs .osw-changes { flex: 1 1 auto; }
+  .wb[data-osw-stage="wishlist"] .os-wish {
+    flex: 1 1 auto;
+    border-bottom: 0;
+    overflow: auto;
+  }
+
+  .wb[data-osw-stage="wishlist"] .osw-stall,
+  .wb[data-osw-stage="wishlist"] #osw-panel-changes,
+  .wb[data-osw-stage="wishlist"] #osw-panel-specs,
+  .wb[data-osw-stage="changes"] #osw-panel-wishlist,
+  .wb[data-osw-stage="changes"] #osw-panel-specs,
+  .wb[data-osw-stage="specs"] #osw-panel-wishlist,
+  .wb[data-osw-stage="specs"] #osw-panel-changes { display: none; }
+
+  .wb[data-osw-stage="specs"] .osw-stall {
+    background: var(--accent-soft);
+    border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+  }
+  .wb[data-osw-stage="specs"] .osw-stall-k { color: var(--accent); }
 </style>
 <script>(function(){try{var t=localStorage.getItem("anchorline:theme")||localStorage.getItem("specforge:theme");if(t==="warp")t="terminal";if(t==="claude")t="kami";var m={kami:["light","#f5f4ed"],github:["dark","#0d1117"],terminal:["dark","#0d0b08"]};if(!m[t])t="github";var r=document.documentElement;r.setAttribute("data-theme",t);r.style.colorScheme=m[t][0];r.style.background=m[t][1];}catch(e){document.documentElement.setAttribute("data-theme","github");}})();</script>
 </head>
@@ -198,34 +376,52 @@
       <p id="perm-banner" hidden class="sub" style="margin:0;padding:8px 16px;background:var(--warn-bg);color:var(--fg);border-bottom:1px solid var(--border);font-size: var(--fs-3)"></p>
 
       <div class="content" style="overflow:hidden;display:flex;flex-direction:column">
-        <div class="wb" data-od-id="workbench">
-          <!-- 左欄：願望清單 → change 選單 → 這個 change 的檔案。
-               願望清單放最前面——Changes 常常一長串（20+ 項很常見），排在前面
-               會把願望清單擠到捲軸下面，變得要找才看得到。 -->
+        <div class="osw-tabs" role="tablist" aria-label="OpenSpec 工作台">
+          <button type="button" class="osw-tab" role="tab" id="osw-tab-wishlist"
+                  data-osw-tab="wishlist" aria-selected="false" aria-controls="osw-panel-wishlist">
+            Wishlist<span class="osw-tab-n" id="osw-tab-wish-n">0</span>
+          </button>
+          <button type="button" class="osw-tab" role="tab" id="osw-tab-changes"
+                  data-osw-tab="changes" aria-selected="true" aria-controls="osw-panel-changes">
+            Changes<span class="osw-tab-n" id="osw-change-count">—</span>
+          </button>
+          <button type="button" class="osw-tab" role="tab" id="osw-tab-specs"
+                  data-osw-tab="specs" aria-selected="false" aria-controls="osw-panel-specs">
+            Specs<span class="osw-tab-n" id="osw-spec-count">—</span>
+          </button>
+        </div>
+        <div class="wb" data-od-id="workbench" data-osw-stage="changes">
+          <!-- 左欄三個分頁共用這一格，避免第五個 grid item 把 resize-panels 擠塌。 -->
           <div class="wb-col osw-left" data-od-id="osw-left-col">
-            <div class="wb-head">
-              <h2>Function Wish List</h2>
-              <button type="button" class="ft-collapse" id="btn-wish-toggle"
-                      aria-expanded="true" aria-controls="os-wish" title="收合願望清單">
-                <span aria-hidden="true">‹</span>
-              </button>
+            <div id="osw-panel-wishlist" role="tabpanel" aria-labelledby="osw-tab-wishlist">
+              <div class="wb-head">
+                <h2>Function Wish List</h2>
+                <button type="button" class="ft-collapse" id="btn-wish-toggle"
+                        aria-expanded="true" aria-controls="os-wish" title="收合願望清單">
+                  <span aria-hidden="true">‹</span>
+                </button>
+              </div>
+              <div id="os-wish" class="os-wish" hidden></div>
             </div>
-            <div id="os-wish" class="os-wish" hidden></div>
 
-            <div class="wb-head">
-              <h2>Changes</h2>
-              <span class="mono" id="osw-change-count">—</span>
+            <div id="osw-panel-changes" role="tabpanel" aria-labelledby="osw-tab-changes">
+              <div class="wb-head">
+                <h2>Changes</h2>
+                <button type="button" class="btn btn-sm btn-ghost" id="osw-rename"
+                        title="更改目前這個 change 的資料夾名稱">改名</button>
+              </div>
+              <div class="osw-changes" id="osw-changes" role="listbox" aria-label="OpenSpec changes"></div>
             </div>
-            <div class="osw-changes" id="osw-changes" role="listbox" aria-label="OpenSpec changes"></div>
 
             <!-- Specs 是 change 走完 `openspec archive` 之後留下的現況規格。
                  Changes 只回答「還沒收完的提案有哪些」，看不到已經生效的承諾；
                  少了這一區，這一頁就沒有任何入口讀得到 openspec/specs/。 -->
-            <div class="wb-head">
-              <h2>Specs</h2>
-              <span class="mono" id="osw-spec-count">—</span>
+            <div id="osw-panel-specs" role="tabpanel" aria-labelledby="osw-tab-specs">
+              <div class="wb-head">
+                <h2>Specs</h2>
+              </div>
+              <div class="osw-changes" id="osw-specs" role="listbox" aria-label="OpenSpec specs"></div>
             </div>
-            <div class="osw-changes" id="osw-specs" role="listbox" aria-label="OpenSpec specs"></div>
           </div>
 
           <!-- 中欄：原始檔案檢視／編輯 -->
@@ -233,6 +429,7 @@
             <div class="wb-head">
               <h2 id="sec-label">選一個檔案</h2>
             </div>
+            <div id="osw-stall" class="osw-stall" hidden></div>
             <div class="editor-body" id="editor-body" data-od-id="osw-file-body"></div>
           </div>
 

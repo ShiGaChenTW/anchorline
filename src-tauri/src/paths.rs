@@ -435,6 +435,11 @@ fn slug_ok(s: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
+/// `openspec/changes/<id>` 的資料夾名。`archive` 是保留目錄，不能當 change id。
+pub fn change_id_ok(id: &str) -> bool {
+    slug_ok(id) && id != "archive"
+}
+
 fn plan_name_ok(name: &str) -> bool {
     let Some(stem) = name.strip_suffix(".md") else {
         return false;
@@ -468,10 +473,10 @@ pub fn change_bundle_rel_ok(rel: &str) -> bool {
     match parts.as_slice() {
         ["plans", name] => plan_name_ok(name),
         ["openspec", "changes", slug, file] => {
-            slug_ok(slug) && matches!(*file, "proposal.md" | "design.md" | "tasks.md")
+            change_id_ok(slug) && matches!(*file, "proposal.md" | "design.md" | "tasks.md")
         }
         ["openspec", "changes", slug, "specs", domain, "spec.md"] => {
-            slug_ok(slug) && slug_ok(domain)
+            change_id_ok(slug) && slug_ok(domain)
         }
         _ => false,
     }
@@ -700,6 +705,8 @@ mod why_not_editable_tests {
             "openspec/changes/-lead/proposal.md",
             "openspec/changes/Upper/proposal.md",
             "openspec/changes/has space/proposal.md",
+            // archive 是保留目錄，不能當 change id（改名也走同一條）
+            "openspec/changes/archive/proposal.md",
             // plans 只收 .md
             "plans/x.sh",
             "plans/.md",

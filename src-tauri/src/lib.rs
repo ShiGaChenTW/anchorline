@@ -18,13 +18,13 @@ mod paths;
 pub mod testing {
     pub use crate::commands::{
         append_line, scan_plans, valid_commit_hash, valid_history_name, valid_repo_rel_path,
-        write_wishlist_file,
+        rename_openspec_change_inner, write_wishlist_file,
     };
     pub use crate::exec::{git_init, strip_ansi, CliOverrides, CliResult};
     pub use crate::paths::{
         append_allowed, domain_pack_writable, editable, normalize_line,
         uat_evidence_dest, uat_evidence_name_ok, wish_image_dest, wish_image_name_ok,
-        wishlist_path, wishlist_writable,
+        change_id_ok, wishlist_path, wishlist_writable,
         RegisteredRoots,
     };
 }
@@ -69,6 +69,7 @@ pub fn run() {
             commands::write_file,
             commands::write_domain_pack,
             commands::write_change_bundle,
+            commands::rename_openspec_change,
             commands::save_uat_evidence,
             commands::pick_uat_images,
             commands::read_uat_evidence,
