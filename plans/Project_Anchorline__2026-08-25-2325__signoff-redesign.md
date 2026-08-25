@@ -124,7 +124,26 @@
 
 ## 進度
 - [x] 規格拍板（2026-08-25 23:25）
-- [ ] Wave 1 資料層
+- [x] Wave 1 資料層（2026-08-26；`bunx tsc --noEmit` exit 0、`bun test` 1563 pass / 0 fail，
+      基準 1514 → +49 測試、零退步）
 - [ ] Wave 1 Cato 審查
 - [ ] Wave 2 UI
 - [ ] 實機 UAT
+
+### Wave 1 實作與規格的落差（實作時補的決定）
+
+1. **範本分類要存在專案上。** 規格說「範本分類給骨架」，但 `Project` 原本
+   記不得自己套過哪一份整份範本 —— `applyFullTemplate()` 只收章節陣列。
+   補了 `Project.templateCat`，由 `applyFullTemplate` 的新參數寫入。
+   沒套過整份範本的專案走 `lean`。
+2. **`edit` 關卡的落地目標規格沒定義。** 「存檔＝寫進指定的 PRD 欄位」沒說
+   指定在哪。補了 `WorkflowStageDef.editTarget`；enterprise 的「文件補完」
+   指向 `open.oq` —— 那正是舊版靜默追加摘要的地方，落地目標不變，
+   變的是這次會先問過人。
+3. **`Template.stages` 的用途規格沒展開。** 依型別加了，並補
+   `Project.templateStages` 讓自訂範本的骨架能存活到送審那一刻。
+   內建十份範本都沒用到這條路。
+4. **個案早在建專案時就開好了。** 規格假設「送審才建個案」，實際上
+   `addProject` 就會建一個（走全域預設流程）。所以落地時要判斷個案有沒有
+   留下痕跡：沒痕跡的重建，有痕跡的沿用。細節見 `submitForReview`。
+5. **規格寫的「現有 1229 測試」是舊數字。** 實測基準為 1514（77 檔）。
