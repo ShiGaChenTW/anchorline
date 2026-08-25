@@ -53,6 +53,7 @@ import {
   capVersions,
   changedFieldCount,
   pickBaseline,
+  isNewRound,
   pickLatestCommit,
   stagesAfterResubmit,
 } from "../lib/prd-versions";
@@ -89,7 +90,14 @@ import {
   normalizeAgentFamily,
   validateEmployeeRole,
 } from "../lib/permissions";
-import { canSignStage, caseHasRun, separationOfDuties, stagesFromWorkflow } from "../lib/signoff";
+import {
+  canSignStage,
+  caseHasRun,
+  normalizeStageAssignee,
+  separationOfDuties,
+  stageAssignment,
+  stagesFromWorkflow,
+} from "../lib/signoff";
 import { hasHumanApproval, resolveWorkflow } from "../lib/workflow-resolve";
 import { nowIso } from "../lib/time-format";
 
@@ -693,6 +701,11 @@ function sanitizeSkeletons(
 function normalizeCases(
   raw: unknown,
   workflowStages: readonly WorkflowStageDef[],
+  /**
+   * 收斂 `assigneeName` 用。舊存檔裡有一批被寫成「某某 · 已簽」的關卡，
+   * 只修寫入端的話它們重新載入之後照樣同時顯示「已簽」與「待簽核」。
+   */
+  employees: readonly Employee[],
 ): Record<string, CaseRecord> {
   const defByStageId = Object.fromEntries(workflowStages.map((w) => [w.id, w]));
   return Object.fromEntries(
@@ -702,11 +715,16 @@ function normalizeCases(
         ...c,
         round: c.round ?? 1,
         log: Array.isArray(c.log) ? c.log : [],
-        stages: (c.stages ?? []).map((st) => ({
-          ...st,
-          mode: st.mode ?? defByStageId[st.stageDefId]?.mode ?? "parallel",
-          required: st.required ?? defByStageId[st.stageDefId]?.required ?? true,
-        })),
+        stages: (c.stages ?? []).map((st) =>
+          normalizeStageAssignee(
+            {
+              ...st,
+              mode: st.mode ?? defByStageId[st.stageDefId]?.mode ?? "parallel",
+              required: st.required ?? defByStageId[st.stageDefId]?.required ?? true,
+            },
+            employees,
+          ),
+        ),
       },
     ]),
   );
@@ -761,7 +779,7 @@ function load(): AppState {
         : base.workflowStages
     ).map((w) => ({ ...w, mode: w.mode ?? ("parallel" as const) }));
 
-    const cases = normalizeCases(parsed.cases, workflowStages);
+    const cases = normalizeCases(parsed.cases, workflowStages, employees);
     const activeProjectId =
       parsed.activeProjectId && projects.some((p) => p.id === parsed.activeProjectId)
         ? parsed.activeProjectId
@@ -2504,8 +2522,14 @@ export const store = {
       return {
         ...s,
         state: "approved" as const,
+        // `assigneeName` 只存「這一關派給誰」。以前這裡覆寫成 `"名字 · 已簽"`，
+        // 而 `stagesAfterResubmit` 重送審時只把 `state` 退回 pending —— 那行字
+        // 沒人清，同一關就同時宣稱「待簽核」與「Scott · 已簽」。而且原本的
+        // `assigneeId` 是保留的，改派下拉顯示 agent、旁邊那行字顯示簽核者。
+        // 「誰簽的」寫在下面三欄（`decidedBy*`），畫面讀 `state` + `decidedByName`。
+        // 本來就沒派人的關卡（`empty`）才把簽核者填進去 —— 那是它真的執行者。
         assigneeId: s.assigneeId ?? u.id,
-        assigneeName: `${u.name} · 已簽`,
+        assigneeName: s.assigneeId ? s.assigneeName : u.name,
         decidedAt: at,
         decidedById: u.id,
         decidedByName: u.name,
@@ -2822,10 +2846,9 @@ export const store = {
     // 那套全域預設關卡，而專案上剛落地的流程只是一份沒人用的資料 —— 兩者不一致
     // 而且畫面上完全看不出來。
     const c = touched ? live! : caseFromWorkflow(id, landed, state.employees, assignments);
-    const nextRound =
-      Boolean(c.stages.length) &&
-      (Boolean(commitId && commitId !== c.reviewCommitId) ||
-        c.stages.some((x) => x.state === "changes_requested"));
+    // 判斷抽進 `isNewRound`：舊條件是 `commitId !== c.reviewCommitId`，而全新案子的
+    // `reviewCommitId` 是 null，第一次送審必然不相等 —— 於是紀錄上永遠沒有第 1 輪。
+    const nextRound = isNewRound(c.stages, c.reviewCommitId ?? null, commitId ?? null);
     state = {
       ...state,
       activeProjectId: id,
@@ -3108,8 +3131,9 @@ export const store = {
       if (s.id !== stageId) return s;
       return {
         ...s,
-        assigneeId: emp?.id ?? null,
-        assigneeName: emp ? (s.state === "approved" ? `${emp.name} · 已簽` : emp.name) : "待指派",
+        // 改派只改「派給誰」。原本這裡對已核准的關卡補上「· 已簽」後綴，
+        // 於是這個欄位同時是狀態欄 —— 而重送審把狀態退回 pending 時沒人清得掉。
+        ...stageAssignment(emp),
         state: s.state === "approved" ? s.state : emp ? ("pending" as const) : ("empty" as const),
       };
     });
@@ -3255,7 +3279,7 @@ export const store = {
         : base.projects,
       workflowStages,
       workflowSkeletons: sanitizeSkeletons(newState.workflowSkeletons),
-      cases: normalizeCases(newState.cases, workflowStages),
+      cases: normalizeCases(newState.cases, workflowStages, employees),
     };
     // 匯入的備份可能是 Comment 還沒有 projectId 的年代產生的。
     // 載入路徑有跑 migration，匯入路徑原本沒有 —— 於是舊備份匯進來之後

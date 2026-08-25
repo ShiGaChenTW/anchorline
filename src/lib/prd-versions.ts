@@ -157,6 +157,28 @@ export function allStagesSettled(
   return gating.every((s) => s.state === "approved" || s.state === "skipped");
 }
 
+/**
+ * 這一次送審算不算「新的一輪」。
+ *
+ * `prevCommitId` 為 `null` 代表**這份 PRD 從來沒送審過** —— 第一次送審是第 1 輪，
+ * 不是「從第 1 輪進到第 2 輪」。舊條件只比 `next !== prev`，而 null !== "c1"
+ * 恆真，於是全新案子第一次按送審 `round` 就跳到 2：紀錄上永遠沒有第 1 輪，
+ * 而「第 2 輪」這個詞在畫面上指的是使用者做的第一件事。
+ *
+ * 有人要求修改過就算新的一輪，即使快照沒換 —— 作者動過東西，
+ * 跟 `stagesAfterResubmit` 的作廢條件用同一條理由。
+ */
+export function isNewRound(
+  stages: readonly { state: StageStateLike }[],
+  prevCommitId: string | null,
+  nextCommitId: string | null,
+): boolean {
+  if (!stages.length) return false;
+  const newSnapshot =
+    Boolean(prevCommitId) && Boolean(nextCommitId) && nextCommitId !== prevCommitId;
+  return newSnapshot || stages.some((s) => s.state === "changes_requested");
+}
+
 type StageStateLike = "approved" | "changes_requested" | "pending" | "empty" | "skipped";
 
 /**

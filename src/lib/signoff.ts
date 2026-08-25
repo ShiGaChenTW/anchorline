@@ -149,6 +149,55 @@ export function caseHasRun(c: CaseRecord | null | undefined): boolean {
   );
 }
 
+/** 沒有指派對象時，`assigneeName` 的字面值 */
+export const UNASSIGNED = "待指派";
+
+/** 舊資料裡 `assigneeName` 被覆寫成「某某 · 已簽」留下的後綴 */
+export const SIGNED_SUFFIX = " · 已簽";
+
+/**
+ * 「這一關派給誰」的兩個欄位 —— **唯一的產生處**。
+ *
+ * `assigneeName` 只存被指派者的名字。它一度同時扛「派給誰」與「誰簽的」兩件事
+ * （`approveAndLock` 的 sign() 把它覆寫成 `"名字 · 已簽"`），於是重送審把 `state`
+ * 退回 `pending` 之後，同一關同時宣稱「待簽核」與「Scott · 已簽」—— 而 sign()
+ * 保留原本的 `assigneeId`，改派下拉顯示的還是那個 agent。兩個欄位互相矛盾。
+ *
+ * 「誰簽的」一律由 `state` + `decidedByName` 表達，那兩欄本來就有。
+ */
+export function stageAssignment(emp: Employee | null | undefined): {
+  assigneeId: string | null;
+  assigneeName: string;
+} {
+  return emp
+    ? { assigneeId: emp.id, assigneeName: emp.name }
+    : { assigneeId: null, assigneeName: UNASSIGNED };
+}
+
+/**
+ * 既有資料的收斂 —— localStorage 裡已經有一批被覆寫過的 `assigneeName`。
+ *
+ * 只修好寫入端不夠：那行字是**存下來的**，不是每次算出來的。既有個案重新載入
+ * 之後照樣同時顯示「已簽」與「待簽核」，而且看起來像沒修好。
+ *
+ * 收斂順序刻意分兩段：查得到執行者就照員工名單重新取名（那才是「派給誰」的
+ * 真相，也才修得掉「下拉顯示 agent、那行字顯示簽核者」）；查不到（人被刪了、
+ * 或這一關本來就沒派人）就只把後綴切掉 —— 不要憑空造一個名字出來。
+ *
+ * 同名時回傳原物件，不製造無謂的新參考。
+ */
+export function normalizeStageAssignee<
+  T extends { assigneeId: string | null; assigneeName: string },
+>(st: T, employees: readonly Employee[]): T {
+  const emp = st.assigneeId ? employees.find((e) => e.id === st.assigneeId) : null;
+  const name = emp
+    ? emp.name
+    : st.assigneeName.endsWith(SIGNED_SUFFIX)
+      ? st.assigneeName.slice(0, -SIGNED_SUFFIX.length)
+      : st.assigneeName;
+  return name === st.assigneeName ? st : { ...st, assigneeName: name };
+}
+
 /**
  * 從流程定義長出個案關卡 —— **建立關卡的唯一原語**。
  *
@@ -182,8 +231,7 @@ export function stagesFromWorkflow(
         stageDefId: w.id,
         order: w.order,
         name: w.name,
-        assigneeId: emp?.id ?? null,
-        assigneeName: emp ? emp.name : "待指派",
+        ...stageAssignment(emp),
         state: emp ? ("pending" as const) : ("empty" as const),
         mode: w.mode ?? "parallel",
         required: w.required,

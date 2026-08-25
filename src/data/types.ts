@@ -318,9 +318,11 @@ export type CaseStage = {
    * 決策戳記。**全部 optional** —— 這四個欄位是後來補的，舊個案沒有，
    * 畫面顯示「—」而不是假裝有。
    *
-   * 為什麼不重用 `assigneeName`：既有程式碼在簽核時把它改成 `"名字 · 已簽"`，
-   * 那個欄位同時扛「被指派給誰」與「誰簽的」兩件事，改派之後就分不出來了。
-   * 紀錄一律以 `decidedByName` 為準。
+   * 為什麼不重用 `assigneeName`：簽核路徑一度把它覆寫成 `"名字 · 已簽"`，
+   * 那個欄位就同時扛「被指派給誰」與「誰簽的」兩件事 —— 重送審把 `state` 退回
+   * `pending` 之後那行字沒人清，同一關同時顯示「待簽核」與「某某 · 已簽」
+   * （B1，2026-08-26 修）。`assigneeName` 現在只存「派給誰」，
+   * 「誰簽的」一律以 `state` + `decidedByName` 為準。
    */
   decidedAt?: string;
   decidedById?: string;
