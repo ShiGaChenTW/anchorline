@@ -20,6 +20,13 @@ import {
   wishNumberOf,
   wishOptionLabel,
   wishlistPath,
+  isWishImageName,
+  nextWishImageName,
+  splitWishText,
+  insertAtCaret,
+  usedWishImageNames,
+  wishImageMarkdown,
+  wishImageNamesIn,
   WISH_ARCHIVED_STATUS,
 } from "../src/lib/function-wishlist";
 
@@ -278,5 +285,65 @@ describe("handoff", () => {
       kind: "bug",
       items: [{ id: "AL-001", text: "修好崩潰", kind: "bug" }],
     });
+  });
+});
+
+describe("願望正文裡的截圖", () => {
+  test("檔名形狀：願望編號 + 兩位流水號 + 圖片副檔名", () => {
+    expect(isWishImageName("ANCHL-002-01.png")).toBe(true);
+    expect(isWishImageName("AL-001-12.jpg")).toBe(true);
+    expect(isWishImageName("ANCHL-002-01.pdf")).toBe(false);
+    expect(isWishImageName("../escape.png")).toBe(false);
+    expect(isWishImageName("ANCHL-002.png")).toBe(false);
+  });
+
+  test("流水號看整份清單，避免撞到磁碟上的舊檔", () => {
+    expect(nextWishImageName("ANCHL-002", [])).toBe("ANCHL-002-01.png");
+    expect(
+      nextWishImageName("ANCHL-002", ["ANCHL-002-01.png", "ANCHL-001-09.png"], "jpg"),
+    ).toBe("ANCHL-002-02.jpg");
+    // 認不得的副檔名退回 png，不讓任意字串進檔名
+    expect(nextWishImageName("ANCHL-002", [], "exe")).toBe("ANCHL-002-01.png");
+  });
+
+  test("usedWishImageNames 掃 Active 與 Archive", () => {
+    let doc = addWish(emptyWishlist(), `一\n\n${wishImageMarkdown("AL-001-01.png")}`, "AL-001", NOW)!;
+    doc = addWish(doc, `二\n\n${wishImageMarkdown("AL-002-01.png")}`, "AL-002", NOW)!;
+    doc = archiveWish(doc, "AL-001", NOW)!;
+    expect(usedWishImageNames(doc).sort()).toEqual(["AL-001-01.png", "AL-002-01.png"]);
+  });
+
+  test("splitWishText 依正文順序交錯出文字與圖", () => {
+    const text = `先看這個\n\n${wishImageMarkdown("AL-001-01.png")}\n\n再看這個\n\n${wishImageMarkdown("AL-001-02.png")}`;
+    expect(splitWishText(text)).toEqual([
+      { kind: "text", text: "先看這個" },
+      { kind: "image", name: "AL-001-01.png", alt: "截圖" },
+      { kind: "text", text: "再看這個" },
+      { kind: "image", name: "AL-001-02.png", alt: "截圖" },
+    ]);
+  });
+
+  test("splitWishText 不認得的 ref 當純文字留著", () => {
+    const text = "看 ![x](https://example.com/a.png) 這張";
+    expect(splitWishText(text)).toEqual([{ kind: "text", text }]);
+  });
+
+  test("insertAtCaret 讓圖自己一行，游標停在插入之後", () => {
+    const r = insertAtCaret("前面後面", 2, 2, "IMG");
+    expect(r.text).toBe("前面\nIMG\n\n後面");
+    expect(r.text.slice(0, r.caret)).toBe("前面\nIMG\n\n");
+  });
+
+  test("insertAtCaret 連續兩次＝兩張圖照順序排", () => {
+    const a = insertAtCaret("說明", 2, 2, "A");
+    const b = insertAtCaret(a.text, a.caret, a.caret, "B");
+    expect(b.text.indexOf("A")).toBeLessThan(b.text.indexOf("B"));
+  });
+
+  test("存進 markdown 再讀回來，圖的 ref 不變", () => {
+    const text = `壞掉了\n\n${wishImageMarkdown("AL-001-01.png")}`;
+    const doc = addWish(emptyWishlist(), text, "AL-001", NOW)!;
+    const back = parseWishlist(serializeWishlist(doc));
+    expect(wishImageNamesIn(back.active[0]!.text)).toEqual(["AL-001-01.png"]);
   });
 });

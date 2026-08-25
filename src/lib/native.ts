@@ -305,6 +305,18 @@ export const native = {
    */
   writeWishlist: (folderPath: string, text: string) =>
     callMaybe<{ path: string }>("write_wishlist", { folderPath, text }),
+  /** 願望正文裡的截圖。落點寫死 `.anchorline/wishlist-assets/`，前端只給檔名。 */
+  saveWishImage: (folderPath: string, name: string, base64: string) =>
+    callMaybe<{ name: string; rel: string; path: string }>("save_wish_image", {
+      folderPath,
+      name,
+      base64,
+    }),
+  readWishImage: (folderPath: string, name: string) =>
+    callMaybe<{ name: string; mime: string; base64: string }>("read_wish_image", {
+      folderPath,
+      name,
+    }),
   /**
    * change／plan 產出直接落進專案資料夾。**建得了新目錄**——這是它與
    * `writeFile`（改既有檔）和 `writeDomainPack`（只收檔名）的差別。

@@ -104,6 +104,58 @@ pub fn wishlist_writable(dir: &Path, roots: &RegisteredRoots) -> bool {
     roots.contains_ancestor_of(dir)
 }
 
+/// 願望截圖的落點：`<root>/.anchorline/wishlist-assets/`。
+///
+/// 與 wishlist 本體同一條窄路——目錄寫死，前端只能說「哪個已註冊根」與「叫什麼」。
+pub const WISH_ASSETS_DIR: &str = "wishlist-assets";
+
+pub const MAX_WISH_IMAGE_BYTES: usize = 8 * 1024 * 1024;
+
+/// 願望截圖檔名：`ANCHL-002-01.png`（願望編號 + 兩位流水號）。
+///
+/// 形狀由 Rust 驗，不是前端說了算：只收 `英數-三位數-兩位以上數字.副檔名`，
+/// 所以路徑分隔符與 `..` 都進不來，前端能決定的只有「叫什麼名字」。
+pub fn wish_image_name_ok(name: &str) -> bool {
+    let Some((stem, ext)) = name.rsplit_once('.') else {
+        return false;
+    };
+    if !matches!(
+        ext.to_ascii_lowercase().as_str(),
+        "png" | "jpg" | "jpeg" | "webp"
+    ) {
+        return false;
+    }
+    let mut parts = stem.split('-');
+    let (Some(code), Some(num), Some(seq), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return false;
+    };
+    !code.is_empty()
+        && code.len() <= 8
+        && code.chars().all(|c| c.is_ascii_alphanumeric())
+        && num.len() == 3
+        && num.chars().all(|c| c.is_ascii_digit())
+        && seq.len() >= 2
+        && seq.len() <= 4
+        && seq.chars().all(|c| c.is_ascii_digit())
+}
+
+/// 專案根 + 檔名 → 圖檔落點。目錄可以還不存在（這條路允許建檔）。
+pub fn wish_image_dest(
+    root: &Path,
+    name: &str,
+    roots: &RegisteredRoots,
+) -> Result<PathBuf, String> {
+    if !wish_image_name_ok(name) {
+        return Err("檔名只能是 ANCHL-002-01.png 這種形狀".into());
+    }
+    if !wishlist_writable(root, roots) {
+        return Err("這個資料夾沒有註冊為專案根目錄".into());
+    }
+    Ok(root.join(".anchorline").join(WISH_ASSETS_DIR).join(name))
+}
+
 /// 領域包檔的建立界線。**比 [`editable`] 鬆一點（允許建新檔），但範圍窄得多。**
 ///
 /// `editable` 要求 `is_file()`，所以它建不了新檔——那是刻意的，寫入既有檔

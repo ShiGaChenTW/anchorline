@@ -386,3 +386,125 @@ function defaultSession(): Pick<Storage, "getItem" | "setItem"> | null {
     return null;
   }
 }
+
+// ── 願望正文裡的截圖 ──────────────────────────────────────────────────
+//
+// 圖檔落在 `.anchorline/wishlist-assets/`，正文裡放一行相對 markdown
+// （`![截圖](wishlist-assets/ANCHL-002-01.png)`）。**不另存一份圖片清單**：
+// 「圖要依正文順序排列」這個要求，只要 ref 就在正文裡就自動成立；
+// 額外維護一個 evidence 陣列反而要再想辦法把順序對回正文。
+//
+// 刪圖＝在正文刪掉那一行。孤兒檔留在 assets 目錄裡，不做刪檔——
+// 正文是唯一的紀錄，多一個檔案不會讓任何判定出錯。
+
+/** 相對 `.anchorline/function-wishlist.md` 的資產目錄 */
+export const WISH_ASSET_DIR = "wishlist-assets";
+
+const WISH_IMAGE_NAME_RE = /^[A-Za-z0-9]{1,8}-\d{3}-\d{2,}\.(?:png|jpg|jpeg|webp)$/;
+const WISH_IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp"]);
+
+export function isWishImageName(name: string): boolean {
+  return WISH_IMAGE_NAME_RE.test(name.trim());
+}
+
+export function wishImageRel(name: string): string {
+  return `${WISH_ASSET_DIR}/${name}`;
+}
+
+/** 圖檔絕對路徑。目錄由原生端寫死，這裡只給 UI 顯示用。 */
+export function wishImagePath(rootPath: string, name: string): string {
+  const base = rootPath.replace(/\/+$/, "");
+  return `${base}/.anchorline/${WISH_ASSET_DIR}/${name}`;
+}
+
+/** 正文裡插的那一行 */
+export function wishImageMarkdown(name: string): string {
+  return `![截圖](${wishImageRel(name)})`;
+}
+
+/**
+ * 下一張圖的檔名：`<願望編號>-<兩位流水號>.<副檔名>`（ANCHL-002-01.png）。
+ * 流水號看的是整份清單已用掉的名字，不是這一則的——同一個編號被移除又取回時，
+ * 只看這一則會撞到還躺在磁碟上的舊檔並覆蓋掉它。
+ */
+export function nextWishImageName(
+  wishId: string,
+  used: readonly string[],
+  ext = "png",
+): string {
+  const head = wishId.trim();
+  const safeExt = WISH_IMAGE_EXTS.has(ext.toLowerCase()) ? ext.toLowerCase() : "png";
+  const re = new RegExp(`^${escapeRe(head)}-(\\d{2,})\\.`, "i");
+  let max = 0;
+  for (const name of used) {
+    const m = re.exec(name);
+    if (!m) continue;
+    const n = Number(m[1]);
+    if (n > max) max = n;
+  }
+  return `${head}-${String(max + 1).padStart(2, "0")}.${safeExt}`;
+}
+
+const WISH_IMAGE_REF_RE = /!\[[^\]]*\]\(([^)\s]+)\)/g;
+
+/** 一段正文裡引用到的圖檔名，依出現順序 */
+export function wishImageNamesIn(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(WISH_IMAGE_REF_RE)) {
+    const name = (m[1] ?? "").split("/").pop() ?? "";
+    if (isWishImageName(name)) out.push(name);
+  }
+  return out;
+}
+
+/** 整份清單已經用掉的圖檔名（含封存），給 `nextWishImageName` 當基準 */
+export function usedWishImageNames(doc: WishlistDoc): string[] {
+  return [...doc.active, ...doc.archive].flatMap((it) => wishImageNamesIn(it.text));
+}
+
+export type WishSegment =
+  | { kind: "text"; text: string }
+  | { kind: "image"; name: string; alt: string };
+
+/**
+ * 正文 → 文字與圖交錯的片段，順序就是正文順序。清單那一格照這個順序畫，
+ * 使用者看到的排列才會跟他打的字一致。
+ */
+export function splitWishText(text: string): WishSegment[] {
+  const out: WishSegment[] = [];
+  let last = 0;
+  const re = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
+  for (const m of text.matchAll(re)) {
+    const name = (m[2] ?? "").split("/").pop() ?? "";
+    if (!isWishImageName(name)) continue;
+    const at = m.index ?? 0;
+    const before = text.slice(last, at);
+    if (before.trim()) out.push({ kind: "text", text: before.trim() });
+    out.push({ kind: "image", name, alt: (m[1] ?? "").trim() || name });
+    last = at + m[0].length;
+  }
+  const tail = text.slice(last);
+  if (tail.trim()) out.push({ kind: "text", text: tail.trim() });
+  return out;
+}
+
+/**
+ * 在游標位置插一段字，回新的正文與插完後的游標位置。
+ * 貼多張圖時呼叫端會連續呼叫，游標一路往後推，圖才會照貼上的順序排。
+ */
+export function insertAtCaret(
+  text: string,
+  start: number,
+  end: number,
+  insert: string,
+): { text: string; caret: number } {
+  const a = Math.max(0, Math.min(start, text.length));
+  const b = Math.max(a, Math.min(end, text.length));
+  const before = text.slice(0, a);
+  const after = text.slice(b);
+  // 圖自己一行：貼在句子中間時不要把那一行的字擠到圖旁邊
+  const head = before && !before.endsWith("\n") ? "\n" : "";
+  const tail = after.startsWith("\n") || !after ? "\n" : "\n\n";
+  const chunk = `${head}${insert}${tail}`;
+  return { text: `${before}${chunk}${after}`, caret: before.length + chunk.length };
+}

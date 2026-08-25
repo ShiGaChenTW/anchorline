@@ -10785,6 +10785,17 @@ html.hide-focus-strip #adhd-focus-strip {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* 願望正文裡的截圖 —— 依正文順序畫，所以就跟在文字片段後面 */
+.os-wish-shot {
+  display: block;
+  max-width: 100%;
+  max-height: 10rem;
+  margin: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  object-fit: contain;
+  background: var(--inset);
+}
 .os-wish-item-actions {
   display: flex;
   flex-direction: column;

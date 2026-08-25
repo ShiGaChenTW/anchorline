@@ -1,5 +1,6 @@
 import { store } from "../data/store";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
+import { blobsFromClipboard } from "../lib/clipboard-images";
 import { deriveFlowLayers } from "../lib/flow-layers";
 import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import { initHelpOverlay } from "../lib/help-overlay";
@@ -1728,36 +1729,6 @@ if (__authed) {
 
   async function persistItemEvidence(id: string, evidence: UatEvidence[]) {
     await applyUatText((text) => setEvidence(text, id, evidence, { now: nowStamp() }));
-  }
-
-  async function blobsFromClipboard(e?: ClipboardEvent): Promise<Blob[]> {
-    const out: Blob[] = [];
-    const fromEvent = e?.clipboardData;
-    if (fromEvent) {
-      for (const item of Array.from(fromEvent.items)) {
-        if (!item.type.startsWith("image/")) continue;
-        const f = item.getAsFile();
-        if (f) out.push(f);
-      }
-      if (fromEvent.files?.length) {
-        for (const f of Array.from(fromEvent.files)) {
-          if (f.type.startsWith("image/")) out.push(f);
-        }
-      }
-    }
-    if (out.length) return out;
-    if (!navigator.clipboard?.read) return [];
-    try {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        const type = item.types.find((t) => t.startsWith("image/"));
-        if (!type) continue;
-        out.push(await item.getType(type));
-      }
-    } catch {
-      /* 權限被拒就當沒圖 */
-    }
-    return out;
   }
 
   async function saveBlobs(

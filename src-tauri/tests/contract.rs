@@ -9,7 +9,8 @@
 
 use anchorline_lib::testing::{
     append_line, domain_pack_writable, git_init, scan_plans, valid_commit_hash, valid_repo_rel_path,
-    write_wishlist_file, wishlist_path, wishlist_writable, CliOverrides, CliResult, RegisteredRoots,
+    wish_image_dest, wish_image_name_ok, write_wishlist_file, wishlist_path, wishlist_writable,
+    CliOverrides, CliResult, RegisteredRoots,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -393,4 +394,32 @@ fn git_init_creates_repo_and_refuses_the_second_time() {
         ),
         CliResult::Ok(_) => panic!("既有 repo 再 init 必須 Missing，不能當成功"),
     }
+}
+
+#[test]
+fn wish_image_name_only_takes_the_fixed_shape() {
+    assert!(wish_image_name_ok("ANCHL-002-01.png"));
+    assert!(wish_image_name_ok("AL-001-12.jpg"));
+    // 帶路徑、逃逸、不是圖 —— 前端只能決定名字，不能決定放到哪裡去
+    assert!(!wish_image_name_ok("../ANCHL-002-01.png"));
+    assert!(!wish_image_name_ok("ANCHL-002-01.png/x"));
+    assert!(!wish_image_name_ok("ANCHL-002-01.sh"));
+    assert!(!wish_image_name_ok("ANCHL-002.png"));
+    assert!(!wish_image_name_ok(".."));
+}
+
+#[test]
+fn wish_image_dest_is_pinned_under_anchorline_and_needs_a_registered_root() {
+    let dir = tmp("wish-img");
+    fs::create_dir_all(&dir).unwrap();
+    let other = tmp("wish-img-other");
+    fs::create_dir_all(&other).unwrap();
+    let roots = roots_with(&dir);
+
+    assert_eq!(
+        wish_image_dest(&dir, "ANCHL-002-01.png", &roots).unwrap(),
+        dir.join(".anchorline").join("wishlist-assets").join("ANCHL-002-01.png")
+    );
+    assert!(wish_image_dest(&other, "ANCHL-002-01.png", &roots).is_err());
+    assert!(wish_image_dest(&dir, "../../etc/passwd", &roots).is_err());
 }

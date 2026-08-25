@@ -23,7 +23,8 @@ pub mod testing {
     pub use crate::exec::{git_init, strip_ansi, CliOverrides, CliResult};
     pub use crate::paths::{
         append_allowed, domain_pack_writable, editable, normalize_line,
-        uat_evidence_dest, uat_evidence_name_ok, wishlist_path, wishlist_writable,
+        uat_evidence_dest, uat_evidence_name_ok, wish_image_dest, wish_image_name_ok,
+        wishlist_path, wishlist_writable,
         RegisteredRoots,
     };
 }
@@ -88,6 +89,8 @@ pub fn run() {
             commands::write_snapshot,
             commands::write_export,
             commands::write_wishlist,
+            commands::save_wish_image,
+            commands::read_wish_image,
             commands::gh_status,
             commands::onefetch,
             commands::fastfetch,

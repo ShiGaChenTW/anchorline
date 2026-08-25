@@ -1101,6 +1101,99 @@ fn write_change_bundle_inner(
     })
 }
 
+// ── 願望截圖 ────────────────────────────────────────────────────────
+//
+// 圖進 `.anchorline/wishlist-assets/`，正文裡只留相對 markdown。
+// 讀回來走 base64 而不是 asset 協定：CSP 已經允許 `data:`，
+// 開 asset 協定要另外配 scope，那個 scope 會比這一格需要的寬。
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WishImageSaved {
+    name: String,
+    rel: String,
+    path: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WishImageRead {
+    name: String,
+    mime: String,
+    base64: String,
+}
+
+#[tauri::command]
+pub fn save_wish_image(
+    folder_path: String,
+    name: String,
+    base64: String,
+    roots: State<'_, RegisteredRoots>,
+) -> R<Maybe<WishImageSaved>> {
+    use base64::Engine;
+    let dest = match paths::wish_image_dest(&PathBuf::from(&folder_path), &name, &roots) {
+        Ok(p) => p,
+        Err(m) => return Ok(Maybe::Missing(Unavailable::new(m))),
+    };
+    let bytes = match base64::engine::general_purpose::STANDARD.decode(base64.trim()) {
+        Ok(b) => b,
+        Err(_) => {
+            return Ok(Maybe::Missing(Unavailable::new(
+                "圖的內容讀不回來（不是合法的圖片資料）".to_string(),
+            )))
+        }
+    };
+    if bytes.is_empty() {
+        return Ok(Maybe::Missing(Unavailable::new("圖是空的".to_string())));
+    }
+    if bytes.len() > paths::MAX_WISH_IMAGE_BYTES {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "單張圖不能超過 8MB".to_string(),
+        )));
+    }
+    if let Some(dir) = dest.parent() {
+        if let Err(e) = fs::create_dir_all(dir) {
+            return Ok(Maybe::Missing(Unavailable::new(format!(
+                "建不出截圖目錄：{e}"
+            ))));
+        }
+    }
+    if let Err(e) = fs::write(&dest, &bytes) {
+        return Ok(Maybe::Missing(Unavailable::new(format!("寫不進截圖：{e}"))));
+    }
+    Ok(Maybe::Ok(WishImageSaved {
+        rel: format!("{}/{name}", paths::WISH_ASSETS_DIR),
+        path: dest.to_string_lossy().to_string(),
+        name,
+    }))
+}
+
+#[tauri::command]
+pub fn read_wish_image(
+    folder_path: String,
+    name: String,
+    roots: State<'_, RegisteredRoots>,
+) -> R<Maybe<WishImageRead>> {
+    use base64::Engine;
+    let dest = match paths::wish_image_dest(&PathBuf::from(&folder_path), &name, &roots) {
+        Ok(p) => p,
+        Err(m) => return Ok(Maybe::Missing(Unavailable::new(m))),
+    };
+    let bytes = match fs::read(&dest) {
+        Ok(b) => b,
+        Err(e) => return Ok(Maybe::Missing(Unavailable::new(format!("讀不到截圖：{e}")))),
+    };
+    if bytes.len() > paths::MAX_WISH_IMAGE_BYTES {
+        return Ok(Maybe::Missing(Unavailable::new("截圖太大，讀不回來")));
+    }
+    let ext = dest.extension().and_then(|e| e.to_str()).unwrap_or("png");
+    Ok(Maybe::Ok(WishImageRead {
+        mime: mime_of_ext(&ext.to_ascii_lowercase()).into(),
+        base64: base64::engine::general_purpose::STANDARD.encode(bytes),
+        name,
+    }))
+}
+
 // ── UAT 證物（剪貼簿貼上／選檔）─────────────────────────────────────
 
 #[derive(Serialize)]

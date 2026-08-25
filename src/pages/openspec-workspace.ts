@@ -38,9 +38,17 @@ import {
   type OsGroup,
 } from "../lib/openspec-tree";
 import { canEditFiles, readFile, shortPath, writeFile } from "../lib/file-editor";
+import { blobsFromClipboard, clipboardHasImage } from "../lib/clipboard-images";
+import { blobToBase64, extOfMime } from "../lib/uat-evidence";
 import {
   addWish,
   emptyWishlist,
+  insertAtCaret,
+  nextWishImageName,
+  splitWishText,
+  usedWishImageNames,
+  wishImageMarkdown,
+  wishImageNamesIn,
   parseWishKind,
   parseWishlist,
   removeWish,
@@ -511,9 +519,11 @@ function renderWishlist() {
       ? `<div class="os-wish-compose">
         <p class="os-wish-taken">編號 <span class="os-wish-id">${escapeHtml(wishDraftId)}</span>（取消則退號）</p>
         ${wishKindSelectHtml("os-wish-kind", undefined, true)}
-        <textarea id="os-wish-text" rows="4" placeholder="期望的功能說明。寫完按存檔。"></textarea>
+        <textarea id="os-wish-text" rows="4" data-wish-shots="${escapeHtml(wishDraftId)}"
+          placeholder="期望的功能說明。寫完按存檔。截圖直接 ⌘V 貼進來，張數不限——圖會插在游標的位置。"></textarea>
         <div class="os-wish-compose-actions">
           <button type="button" class="btn btn-sm btn-primary" id="os-wish-save">存檔</button>
+          <button type="button" class="btn btn-sm" data-wish-paste="${escapeHtml(wishDraftId)}">貼上截圖</button>
           <button type="button" class="btn btn-sm btn-ghost" id="os-wish-cancel">取消</button>
         </div>
       </div>`
@@ -551,7 +561,7 @@ function renderWishlist() {
       ${codeLabel}
       <span class="os-wish-count">${count || "—"}</span>
     </div>
-    <p class="os-wish-lead">點新增取號並選類型。下拉選「撰寫 Spec」會帶進 OpenSpec 入口。</p>
+    <p class="os-wish-lead">點新增取號並選類型。說明欄可直接貼截圖。下拉選「撰寫 Spec」會帶進 OpenSpec 入口。</p>
     ${codeForm}
     ${compose}
     <div class="os-wish-toolbar">
@@ -564,6 +574,7 @@ function renderWishlist() {
   `;
 
   bindWishlist();
+  void fillWishImages(host);
   const ta = document.getElementById("os-wish-text") as HTMLTextAreaElement | null;
   const code = document.getElementById("os-wish-code") as HTMLInputElement | null;
   (ta ?? code)?.focus();
@@ -587,9 +598,11 @@ function wishRowHtml(it: WishlistItem, archived: boolean): string {
     return `<div class="os-wish-item is-editing" data-wish-id="${escapeHtml(it.id)}">
       <p class="os-wish-taken">編號 <span class="os-wish-id">${escapeHtml(it.id)}</span></p>
       ${wishKindSelectHtml("os-wish-edit-kind", it.kind, true)}
-      <textarea data-wish-edit-text rows="3">${escapeHtml(it.text)}</textarea>
+      <textarea data-wish-edit-text rows="3" data-wish-shots="${escapeHtml(it.id)}"
+        placeholder="截圖直接 ⌘V 貼進來，圖會插在游標的位置。">${escapeHtml(it.text)}</textarea>
       <div class="os-wish-compose-actions">
         <button type="button" class="btn btn-sm btn-primary" data-wish-save-edit>儲存</button>
+        <button type="button" class="btn btn-sm" data-wish-paste="${escapeHtml(it.id)}">貼上截圖</button>
         <button type="button" class="btn btn-sm btn-ghost" data-wish-cancel-edit>取消</button>
       </div>
     </div>`;
@@ -609,7 +622,7 @@ function wishRowHtml(it: WishlistItem, archived: boolean): string {
     <div class="os-wish-item-body">
       <span class="os-wish-id">${escapeHtml(it.id)}</span>
       ${kindChip}
-      <span class="os-wish-item-text">${escapeHtml(it.text)}</span>
+      ${wishBodyHtml(it.text)}
       ${badge}
     </div>
     <div class="os-wish-item-actions">
@@ -623,9 +636,120 @@ function wishRowHtml(it: WishlistItem, archived: boolean): string {
   </div>`;
 }
 
+// ── 願望正文裡的截圖 ──────────────────────────────────────────────────
+//
+// 圖存進 `.anchorline/wishlist-assets/`，正文插一行 markdown ref。
+// 插在游標位置而不是附在最後：使用者要的是「圖照正文的順序排」，
+// 而正文本身就是那個順序，不必再維護第二份清單。
+
+/** 檔名 → data URL。剛貼的那張直接進快取，不必為了畫縮圖再讀一次磁碟。 */
+const wishImgCache = new Map<string, string>();
+
+function wishBodyHtml(text: string): string {
+  return splitWishText(text)
+    .map((seg) =>
+      seg.kind === "text"
+        ? `<span class="os-wish-item-text">${escapeHtml(seg.text)}</span>`
+        : `<img class="os-wish-shot" data-wish-img="${escapeHtml(seg.name)}" alt="${escapeHtml(seg.alt)}" />`,
+    )
+    .join("");
+}
+
+async function fillWishImages(root: HTMLElement) {
+  const p = activeProject();
+  const dir = p?.importSummary?.rootPath;
+  for (const img of Array.from(root.querySelectorAll<HTMLImageElement>("img[data-wish-img]"))) {
+    const name = img.dataset.wishImg;
+    if (!name) continue;
+    const cached = wishImgCache.get(name);
+    if (cached) {
+      img.src = cached;
+      continue;
+    }
+    if (!dir || !isNative()) {
+      img.alt = `${name}（桌面版才看得到）`;
+      continue;
+    }
+    const got = await native.readWishImage(dir, name);
+    if (isUnavailable(got)) {
+      img.alt = `${name}（讀不到）`;
+      continue;
+    }
+    const url = `data:${got.mime};base64,${got.base64}`;
+    wishImgCache.set(name, url);
+    img.src = url;
+  }
+}
+
+/**
+ * 把剪貼簿裡的圖寫進專案，並在游標處插入 ref。多張圖依剪貼簿順序連續插入，
+ * 游標一路往後推 —— 所以貼上的順序就是正文裡的順序。
+ */
+async function pasteWishImages(ta: HTMLTextAreaElement, wishId: string, e?: ClipboardEvent) {
+  const p = activeProject();
+  const dir = p?.importSummary?.rootPath;
+  if (!p || !dir || !isNative()) {
+    toast("貼圖要在桌面版，瀏覽器寫不進專案資料夾");
+    return;
+  }
+  const blobs = await blobsFromClipboard(e);
+  if (!blobs.length) {
+    toast("剪貼簿裡沒有圖片。先截圖，再貼上。");
+    return;
+  }
+  // 佔號要看整份清單加上這一格還沒存的正文 —— 只看這一則會蓋掉磁碟上的舊檔
+  const used = [...usedWishImageNames(wishDoc), ...wishImageNamesIn(ta.value)];
+  let n = 0;
+  for (const blob of blobs) {
+    const ext = extOfMime(blob.type) ?? "png";
+    const name = nextWishImageName(wishId, used, ext);
+    const base64 = await blobToBase64(blob);
+    const saved = await native.saveWishImage(dir, name, base64);
+    if (isUnavailable(saved)) {
+      toast(saved.message);
+      break;
+    }
+    used.push(saved.name);
+    wishImgCache.set(saved.name, `data:${blob.type || "image/png"};base64,${base64}`);
+    const at = insertAtCaret(
+      ta.value,
+      ta.selectionStart,
+      ta.selectionEnd,
+      wishImageMarkdown(saved.name),
+    );
+    ta.value = at.text;
+    ta.selectionStart = at.caret;
+    ta.selectionEnd = at.caret;
+    n += 1;
+  }
+  ta.focus();
+  if (n) toast(`已插入 ${n} 張截圖，記得按存檔`);
+}
+
+function bindWishShots(host: HTMLElement) {
+  host.querySelectorAll<HTMLTextAreaElement>("textarea[data-wish-shots]").forEach((ta) => {
+    const id = ta.dataset.wishShots ?? "";
+    ta.addEventListener("paste", (ev) => {
+      if (!clipboardHasImage(ev)) return; // 純文字照常貼
+      ev.preventDefault();
+      void pasteWishImages(ta, id, ev);
+    });
+  });
+  host.querySelectorAll<HTMLButtonElement>("[data-wish-paste]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.wishPaste ?? "";
+      const ta = btn
+        .closest(".os-wish-compose, .os-wish-item")
+        ?.querySelector<HTMLTextAreaElement>("textarea[data-wish-shots]");
+      if (ta) void pasteWishImages(ta, id);
+    });
+  });
+}
+
 function bindWishlist() {
   const host = document.getElementById("os-wish");
   if (!host) return;
+  bindWishShots(host);
 
   host.querySelector<HTMLButtonElement>("#os-wish-add")?.addEventListener("click", () => {
     beginNewWish();
