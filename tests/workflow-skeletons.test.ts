@@ -496,10 +496,18 @@ describe("reapplyWorkflow", () => {
   });
 
   /**
-   * 個案的 stages **不動**。在這裡順手砍掉的話，一個跑到一半的案子會連同
-   * 已經簽過的關卡與 agent 分析一起消失 —— 而那正是簽核紀錄的全部價值。
+   * 沒有簽核痕跡的案子：個案雖然被重建，**重建出來的那一份逐字等於原本那一份**。
+   *
+   * 2026-08-26：`reapplyWorkflow` 改成連個案一起重建之後，這條的**斷言一個字沒改**
+   * （重建走的是同一支 `caseFromWorkflow`、同一份 `resolveWorkflowFor`，關卡 id
+   * 是 `cs-<defId>-<pid>` 這種算出來的值，所以結果 deep-equal）。改的是名稱與
+   * 理由 —— 舊註解寫的是「在這裡順手砍掉的話……」，那個理由已經被 Scott 推翻，
+   * 留著就是一句跟程式碼相反的話。**跟文案說謊是同一個缺陷，只是換到註解上。**
+   *
+   * 它現在防的是另一件事：骨架沒變的時候，重套**不得**無故換掉關卡 id ——
+   * 換掉就會讓紀錄顯示「（已移除的關卡）」。
    */
-  test("不動個案的 stages", () => {
+  test("沒有簽核痕跡的案子：重建出來的關卡逐字等於原本那一份", () => {
     const id = freshProject("wsk-p-case", "lean");
     store.submitForReview(id);
     const before = store.get().cases[id]!.stages;
@@ -508,37 +516,77 @@ describe("reapplyWorkflow", () => {
   });
 
   /**
-   * **這一條是把限制變成寫下來的合約。**
+   * **反轉（2026-08-26，Scott 拍板）。**
    *
-   * `reapplyWorkflow` 只清 `project.workflowStages`。對一個**已經跑過簽核**的案子，
-   * `submitPlanFor` 走 `caseHasRun(live) === true` → `workflowFromCase(live)`，
-   * 從個案自己反推流程，根本不回頭讀骨架。所以重套對它做的事是：清掉一份沒人會
-   * 再讀的紀錄，其餘什麼都沒發生。
+   * 這條原本叫「跑過的案子：重套之後仍不重解析，且既有簽章原封不動」，斷言的是
+   * `landsNow === false` 且 `stages` 逐字不變 —— 也就是「這顆鈕對跑過的案子是個
+   * no-op」這個**限制**。Scott 決定要讓它生效，所以那份合約整條翻面：現在斷言的
+   * 是重套**真的**把個案重建了。
    *
-   * 這個行為是規格拍板的（「不要順手把個案的 stages 也砍掉」），不是 bug。
-   * 但第一版 UI 文案對使用者說「簽核狀態會被清掉、關卡會換一份」—— 兩句都是假的，
-   * 而且是一顆 `danger: true` 的鈕在說謊。行為留著、文案對齊，並用這一條釘住：
-   * 之後有人要改行為，會先撞到它。
+   * 三件事一起驗，缺一條都會讓「畫面說的」跟「實際發生的」再度分岔：
+   * 1. `submitPlan().landsNow` 變回 true（下次送審會照骨架重解析）
+   * 2. 簽章確實被清掉（文案敢說「會清掉」，是因為這一行證明了它真的清）
+   * 3. `log` 與已存的 `agentResult` 一起清 —— `caseHasRun` 讀這兩個，留任何一個
+   *    這顆鈕就又變回 no-op
    */
-  test("跑過的案子：重套之後仍不重解析，且既有簽章原封不動", () => {
+  test("跑過的案子：重套之後下次送審重新解析，且簽章／紀錄確實被清掉", () => {
     const id = freshProject("wsk-p-ran", "lean");
     store.submitForReview(id);
 
     // 簽掉第一關 —— 這就是「跑過」的痕跡（caseHasRun 為 true）
     const first = store.get().cases[id]!.stages[0]!;
     store.approveAndLock({ stageIds: [first.id] });
-    const signedBefore = store
-      .get()
-      .cases[id]!.stages.map((s) => `${s.id}:${s.state}`);
-    expect(signedBefore.some((x) => x.endsWith(":approved"))).toBe(true);
+    const ran = store.get().cases[id]!;
+    expect(ran.stages.some((x) => x.state === "approved")).toBe(true);
+    expect(store.submitPlan(id).landsNow).toBe(false); // 反轉前的狀態，先釘住
 
     expect(store.reapplyWorkflow(id).ok).toBe(true);
 
     // 落地紀錄清掉了……
     expect(store.get().projects.find((p) => p.id === id)!.workflowStages).toBeUndefined();
-    // ……但下次送審**不會**重新解析，而且簽章一個都沒掉
-    expect(store.submitPlan(id).landsNow).toBe(false);
-    expect(store.get().cases[id]!.stages.map((s) => `${s.id}:${s.state}`)).toEqual(signedBefore);
+    // ……而且下次送審**真的**重新解析
+    expect(store.submitPlan(id).landsNow).toBe(true);
+
+    const after = store.get().cases[id]!;
+    // 簽章一個都不剩：`approved` / `changes_requested` / `skipped` 全部歸零
+    expect(after.stages.some((x) => x.state === "approved")).toBe(false);
+    expect(
+      after.stages.some(
+        (x) => x.state === "approved" || x.state === "changes_requested" || x.state === "skipped",
+      ),
+    ).toBe(false);
+    // `caseHasRun` 的另外三個判準也要歸零，否則這顆鈕又變回 no-op
+    expect(after.log ?? []).toEqual([]);
+    expect(after.reviewCommitId).toBeNull();
+    expect(after.stages.some((x) => Boolean(x.agentResult?.trim()))).toBe(false);
+    // 個案還在（不是把 key 刪掉）—— 刪掉的話簽核頁的 approvals 會退回種子
+    expect(after.projectId).toBe(id);
+    expect(after.stages.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * **重建出來的關卡是「下次送審會用的那一份」，不是全域 `workflowStages`。**
+   *
+   * `caseForProject()`（`reopenCase` 走的那支）用的是 `workflowFor()` → 全域流程；
+   * 而這顆鈕承諾的是骨架 + 領域包。用錯來源的症狀很安靜：管理員眼前這份個案
+   * 看起來重套好了，下次送審卻被靜默換成另一份關卡。
+   */
+  test("重建的關卡照現在的骨架，不是全域流程", () => {
+    const id = freshProject("wsk-p-ran-src", "lean");
+    store.submitForReview(id);
+    const first = store.get().cases[id]!.stages[0]!;
+    store.approveAndLock({ stageIds: [first.id] });
+
+    // 骨架改名 —— 重套之後個案上要看得到這個新名字
+    const sk = store.workflowSkeletons().lean.map((x) => ({ ...x }));
+    sk[0] = { ...sk[0]!, name: "重套後才有的關卡名" };
+    expect(store.setWorkflowSkeleton("lean", sk).ok).toBe(true);
+
+    expect(store.reapplyWorkflow(id).ok).toBe(true);
+    const names = store.get().cases[id]!.stages.map((x) => x.name);
+    expect(names).toContain("重套後才有的關卡名");
+    // 而且下次送審算出來的流程跟個案上這一份是同一套
+    expect(store.submitPlan(id).stages.map((x) => x.name)).toEqual(names);
   });
 
   /** 對照組：沒有簽核痕跡的案子，重套是真的有效的 */
@@ -567,13 +615,39 @@ describe("reapplyWorkflow", () => {
     store.setCurrentUser(ADMIN);
   });
 
+  /**
+   * 行為放寬的那一輪，最容易順手鬆掉的就是閘門。`locked` 一條都沒放寬：
+   * 已結案鎖定的流程是紀錄，不是還能改的東西。
+   */
+  test("已結案鎖定的案子被拒，而且個案一個字都沒動", () => {
+    const id = freshProject("wsk-p-locked", "lean");
+    store.submitForReview(id);
+    // 串行關卡一次只簽得動排在最前面那幾關（順序閘門看的是**簽之前**的狀態），
+    // 所以要一輪一輪簽到結案為止
+    for (let i = 0; i < 10 && !store.get().cases[id]!.locked; i++) {
+      if (!store.approveAndLock({}).ok) break;
+    }
+    expect(store.get().cases[id]!.locked).toBe(true);
+
+    const before = store.get().cases[id]!;
+    const r = store.reapplyWorkflow(id);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toContain("已鎖定");
+    // 拒絕就是完全沒發生 —— 簽章與落地流程都還在
+    expect(store.get().cases[id]).toEqual(before);
+    expect(store.get().projects.find((p) => p.id === id)!.workflowStages).toBeDefined();
+  });
+
   test("已抽單的案子要走「重開案件」，不是重套", () => {
     const id = freshProject("wsk-p-withdrawn", "lean");
     store.submitForReview(id);
     store.withdrawCase(id, "測試抽單");
+    const before = store.get().cases[id]!;
     const r = store.reapplyWorkflow(id);
     expect(r.ok).toBe(false);
     expect(r.reason).toContain("重開案件");
+    // 拒絕就是完全沒發生（這一輪放寬的是行為，不是閘門）
+    expect(store.get().cases[id]).toEqual(before);
   });
 });
 
@@ -651,22 +725,71 @@ describe("admin.ts 真的把三個欄位交給了 store", () => {
   });
 
   /**
-   * 第一版文案說「簽核狀態會被清掉……關卡與已簽的紀錄都會換一份」，而實測是
-   * `approved` 原封不動、`landsNow: false`。**一顆 danger 鈕在說「我會破壞你的
-   * 東西」，而它什麼都沒做** —— 使用者要嘛不敢按，要嘛按了以為重套好了。
+   * **負向斷言跟著行為翻面（2026-08-26）。**
+   *
+   * 上一輪禁的是「簽核狀態會被清掉」這句話 —— 因為當時它是假的。現在
+   * `reapplyWorkflow` 真的會清，那句話變成真話，**不能再禁**；禁著等於逼文案
+   * 對使用者隱瞞一件真的會發生的破壞。
+   *
+   * 所以禁的對象換成「講錯地方的那一份」：`freshBody` 是給**沒有簽核痕跡**的案子
+   * 看的，那種案子身上沒有簽章可清，在那裡喊「會清掉既有簽章」是另一個方向的
+   * 說謊（嚇走一個其實無害的操作）。
    */
-  test("文案不再宣稱會清掉簽核狀態 —— 那句話是假的", () => {
-    expect(ADMIN_SRC).not.toContain("簽核狀態會被清掉");
-    expect(ADMIN_SRC).not.toContain("已簽的紀錄都會換一份");
-    expect(REAPPLY_COPY.freshBody).not.toContain("簽核狀態會被清掉");
+  test("有簽章可清的那份才准講「清掉簽章」，沒有的那份不准嚇人", () => {
+    // 破壞性那份：必須明講失去什麼，以及救不回來
+    expect(REAPPLY_COPY.ranBody).toContain("簽章");
+    expect(REAPPLY_COPY.ranBody).toContain("救不回來");
+    // 沒有簽核痕跡那份：不得宣稱會清掉根本不存在的東西
+    expect(REAPPLY_COPY.freshBody).not.toContain("簽章");
+    expect(REAPPLY_COPY.freshBody).not.toContain("救不回來");
+    // 上一輪那句「不生效」現在是假話，全檔不得再出現
+    expect(ADMIN_SRC).not.toContain("對這個案子不生效");
+    expect(Object.values(REAPPLY_COPY).join("")).not.toContain("不生效");
   });
 
-  test("有效／不生效兩種案子各有自己的文案，而且不生效那份指得出路", () => {
+  /**
+   * **文案 ⇔ 行為的合約。** 上一輪的缺陷是鈕說「我會破壞你的東西」而它什麼都沒做；
+   * 這一輪的風險是反過來 —— 行為改了、文案先寫好了，但行為其實沒做到。
+   *
+   * 所以這條**同時持有兩邊**：真的跑一次 store，證明簽章確實被清掉，才允許
+   * 文案講那句話。單獨測文案或單獨測 store 都漏得掉這個形狀。
+   */
+  test("文案敢說「會清掉簽章」，是因為 store 真的清了", () => {
+    const id = freshProject("wsk-p-copy-contract", "lean");
+    store.submitForReview(id);
+    store.approveAndLock({ stageIds: [store.get().cases[id]!.stages[0]!.id] });
+    expect(store.get().cases[id]!.stages.some((x) => x.state === "approved")).toBe(true);
+
+    store.reapplyWorkflow(id);
+
+    const cleared = !store.get().cases[id]!.stages.some((x) => x.state === "approved");
+    expect(cleared).toBe(true);
+    // 行為做到了 ⇒ 文案**必須**講。做不到而文案講了，上面那行會先紅
+    expect(REAPPLY_COPY.ranBody).toContain("既有的簽章");
+    expect(REAPPLY_COPY.ranWarn).toContain("既有簽章");
+    expect(REAPPLY_COPY.ranOkToast).toContain("已清掉");
+  });
+
+  test("兩種案子各有自己的文案，而且鈕上就看得出後果", () => {
     // 有效的那條講「還沒有任何簽核痕跡」，不是泛泛的「會重新解析」
     expect(REAPPLY_COPY.freshBody).toContain("還沒有任何簽核痕跡");
-    // 不生效的那條要明講不生效，並指向真的做得到的地方
-    expect(REAPPLY_COPY.ranNote).toContain("不生效");
-    expect(REAPPLY_COPY.ranNote).toContain("套用目前流程");
+    // 破壞性那條的後果要在**鈕上**看得到，不是等對話框才講
+    expect(REAPPLY_COPY.ranButton).toContain("清掉既有簽章");
+    // 兩份對話框內文不得是同一段字（同一段 = 等於沒分）
+    expect(REAPPLY_COPY.ranBody).not.toBe(REAPPLY_COPY.freshBody);
+  });
+
+  /**
+   * **不得指向一條不存在的退路。** 上一版的 `ranNote` 說「要換掉這個案子的關卡，
+   * 請到『個案調整』按『套用目前流程』」—— 而 `applyWorkflowToCase` 走的是
+   * `caseForProject()`，同樣整份重建，簽章與 log 一樣不留。那句指路是假的。
+   *
+   * 這 repo 裡沒有任何一條路能換掉關卡又保住簽核紀錄，所以文案不准暗示有。
+   */
+  test("文案不得暗示有一條「換關卡又保住紀錄」的路", () => {
+    const all = Object.values(REAPPLY_COPY).join("");
+    expect(all).not.toContain("套用目前流程");
+    expect(all).not.toContain("保留");
   });
 
   test("「這顆鈕有沒有效」問 store.submitPlan，UI 不自己重寫一份 caseHasRun", () => {
@@ -680,22 +803,47 @@ describe("admin.ts 真的把三個欄位交給了 store", () => {
     expect(ADMIN_SRC).not.toContain("caseHasRun(");
   });
 
-  test("跑過的案子把鈕停用，而且旁邊講得出原因", () => {
+  /**
+   * **翻面（2026-08-26）。** 這條原本要求跑過的案子把鈕 `disabled` —— 那是上一輪
+   * 為了誠實而做的事，而行為改了之後，停用自己變成了那句假話（鈕明明有效）。
+   *
+   * 現在要求的是：**按得到**、鈕上就看得出後果、旁邊有一段按之前就讀得到的警語。
+   * 斷言沒有變鬆 —— 從「畫面上禁止一個動作」換成「畫面上必須說出這個動作的代價」。
+   */
+  test("跑過的案子按得到，但鈕上與旁邊都要講出代價", () => {
     const block = ADMIN_SRC.slice(
       ADMIN_SRC.indexOf("function reapplyBlockHtml"),
       ADMIN_SRC.indexOf("function renderLandedFlows"),
     );
-    expect(block).toContain("disabled");
-    expect(block).toContain("REAPPLY_COPY.ranNote");
-    expect(block).toContain("不生效");
+    // 不生效那條路已經沒有停用這回事
+    expect(block).not.toContain("disabled");
+    // 代價寫在鈕上，警語貼在鈕旁邊
+    expect(block).toContain("REAPPLY_COPY.ranButton");
+    expect(block).toContain("REAPPLY_COPY.ranWarn");
+    // 兩條都是 danger 色 —— 兩邊現在都真的會動到東西
+    expect((block.match(/var\(--danger\)/g) ?? []).length).toBe(2);
   });
 
-  test("點下去之前再問一次 —— disabled 只是 DOM 狀態，不是守衛", () => {
+  /**
+   * **改寫（2026-08-26）。** 原本斷言的是 `toContain("if (!reapplyEffective(pid))")`
+   * —— 那釘的是「不生效就擋下來」那個分支的**寫法**，而那個分支已經不存在了
+   * （兩種案子現在都按得下去）。
+   *
+   * 意圖沒變、而且變嚴了：仍然要求點下去的當下**重問一次**（畫面可能是上一次
+   * render 留下的），並且多要求一件上一版沒有要求的事 —— 重問的答案要**真的**
+   * 決定用哪一份文案。只重問卻永遠跳同一份對話框，是這一輪最像成功的失敗。
+   */
+  test("點下去再問一次，而且那個答案決定跳哪一份對話框", () => {
     const block = ADMIN_SRC.slice(
       ADMIN_SRC.indexOf('querySelector(".lf-reapply")'),
       ADMIN_SRC.indexOf("function renderCases"),
     );
-    expect(block).toContain("if (!reapplyEffective(pid))");
+    expect(block).toContain("reapplyEffective(pid)");
+    // 兩份文案都要在這個分支裡被選到
+    expect(block).toContain("REAPPLY_COPY.freshBody");
+    expect(block).toContain("REAPPLY_COPY.ranBody");
+    expect(block).toContain("REAPPLY_COPY.okToast");
+    expect(block).toContain("REAPPLY_COPY.ranOkToast");
     expect(block).toContain("danger: true");
   });
 

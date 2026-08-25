@@ -3016,14 +3016,46 @@ export const store = {
   },
 
   /**
-   * 讓一個專案的流程**回到未落地狀態**，下次送審重新照範本解析。
+   * 讓一個專案的流程**回到未落地狀態**，並把個案一起重建 —— 下次送出審閱會照
+   * 現在的範本骨架與領域包重新解析一份新的關卡。
    *
-   * 只清 `project.workflowStages` —— **不動個案的 stages**。個案那一份要不要
-   * 重建是 `submitForReview` 的 `touched` 判斷要處理的事（`caseHasRun`）；
-   * 在這裡順手砍掉的話，一個跑到一半的案子會連同已經簽過的關卡與 agent 分析
-   * 一起消失，而那正是簽核紀錄的全部價值。
+   * ## 為什麼連個案一起重建（2026-08-26 Scott 拍板）
    *
-   * 鎖定與抽單的案子拒絕：前者的流程已經是歷史紀錄，後者要走 `reopenCase`。
+   * 原本這裡只清 `project.workflowStages`。對一個**已經跑過簽核**的案子，
+   * `submitPlanFor` 走 `caseHasRun(live) === true` → `workflowFromCase(live)`，
+   * 從個案自己反推流程，**根本不回頭讀骨架** —— 所以那顆鈕對它是個 no-op：
+   * 清掉一份沒人會再讀的紀錄，其餘什麼都沒發生。
+   *
+   * 現在個案跟著重建，`caseHasRun` 的四個判準（`reviewCommitId`、非 comment 的
+   * `log`、關卡狀態、已存的 `agentResult`）隨新個案一起歸零，`submitPlan().landsNow`
+   * 因此變回 true。**畫面上的文案要跟這件事一致**（`REAPPLY_COPY`）——
+   * 上一輪的缺陷是鈕說「會清掉簽核狀態」而它什麼都沒做；反過來做了卻不說，
+   * 是同一個缺陷換個方向。
+   *
+   * ## `CaseRecord.log` 不留 —— 兩個獨立的理由
+   *
+   * 1. **留著這顆鈕就又變回 no-op。** `caseHasRun` 直接讀它
+   *    （`log.some(d => d.kind !== "comment")`），一筆核准就足以讓下次送審不重解析。
+   *    要留就得改 `caseHasRun`，而那支管的是每一次送審，不是這一批的地盤。
+   * 2. **留著會讓紀錄說謊。** 關卡 id 是 `cs-<stageDefId>-<projectId>`，而重套的
+   *    前提就是骨架換了 → def id 換了 → 留下來的每一筆在 `signoffTimeline` 都是
+   *    「（已移除的關卡）」；更糟的是新個案是 `round: 1`、舊紀錄也帶著 1..N，
+   *    `groupTimelineByRound` 會把重套**之前**的決策併進**現在這一輪**。那不是
+   *    保留歷史，是把歷史接到一份它沒發生過的流程上。
+   *
+   * 要真的留住那段歷史，該做的是一個有自己輪次與關卡名快照的「案件歷程封存」，
+   * 不是在 `CaseRecord` 上掛一個側欄位。那不屬於這一批。
+   *
+   * ## 為什麼不是 `caseForProject()`
+   *
+   * 它走 `workflowFor()` → 落地那份、否則**全域** `state.workflowStages`；而這顆鈕
+   * 承諾的是**骨架 + 領域包**（`resolveWorkflowFor`），也就是 `submitPlanFor` 下次
+   * 真的會用的那一份。用 `caseForProject` 的話，管理員眼前這份個案會在下次送審被
+   * 靜默換成另一份關卡。重建的原語仍然是同一支 `caseFromWorkflow`，**沒有第二條
+   * 清簽章的路** —— `reopenCase` / `applyWorkflowToCase` / 這裡，三個呼叫端都是它。
+   *
+   * 鎖定與抽單的案子照舊拒絕，一條都沒放寬：前者的流程已經是歷史紀錄，
+   * 後者要走 `reopenCase`。
    */
   reapplyWorkflow(projectId: string): { ok: boolean; reason?: string } {
     if (state.currentUser.accessRole !== "admin") {
@@ -3038,6 +3070,9 @@ export const store = {
     if (c?.withdrawn || p.status === "withdrawn") {
       return { ok: false, reason: "已抽單的案子請先「重開案件」" };
     }
+    // 照**下次送審會用的那一份**重建。`resolveWorkflowFor` 是純算出來的，
+    // 不看 `p.workflowStages`，所以先算後刪或先刪後算都一樣 —— 這裡不依賴順序
+    const fresh = caseFromWorkflow(projectId, resolveWorkflowFor(p), state.employees);
     state = {
       ...state,
       projects: state.projects.map((x) => {
@@ -3048,7 +3083,11 @@ export const store = {
         const { workflowStages: _dropped, ...rest } = x;
         return rest as Project;
       }),
+      cases: { ...state.cases, [projectId]: fresh },
     };
+    // 簽核頁的 `approvals` 是個案的鏡像。不同步的話，重套完的案子在畫面上
+    // 還掛著剛剛被清掉的那幾個「已簽」，而資料裡已經沒有了
+    if (projectId === state.activeProjectId) syncApprovalsFromActiveCase();
     // 刻意不寫 event log：`EventKind` 沒有對應的種類，而為了這一個動作硬借
     // 一個現有的 kind（`review.withdraw`？`decision.record`？）會讓任何依 kind
     // 聚合的治理統計把它算成別的東西。要留紀錄就該新增一個 kind，那不屬於這一批

@@ -504,20 +504,24 @@ if (__authed) {
   }
 
   /**
-   * 「重新套用範本」那一塊。跑過的案子**把鈕停用並說出原因**，不讓人按一顆無效的鈕。
+   * 「重新套用範本」那一塊。**兩種案子現在都按得到**，因為兩邊都真的會發生事情；
+   * 差別在後果的嚴重度，所以鈕的字樣、旁邊的說明、對話框與 toast 全部分兩套。
    *
-   * 為什麼是「停用 + 說明」而不是整塊拿掉：管理員找的就是這顆鈕，整塊消失只會讓他
-   * 以為功能不見了，然後去別的地方翻。原因要貼在他想按的東西旁邊。
+   * 跑過的案子為什麼不再停用：`reapplyWorkflow` 已經連個案一起重建（Scott 拍板），
+   * 那顆鈕對它真的生效了。停用是上一輪的誠實做法，現在它自己變成了那句假話。
+   *
+   * 破壞性的那條**在鈕上就要看得出後果**（不是等對話框才講）——
+   * 管理員按之前就該知道自己要失去什麼。
    */
   function reapplyBlockHtml(projectId: string): string {
     if (!reapplyEffective(projectId)) {
-      return `<p class="lf-note">${escapeHtml(REAPPLY_COPY.ranNote)}</p>
+      return `<p class="lf-note">${escapeHtml(REAPPLY_COPY.ranWarn)}</p>
         <div class="sk-actions">
-          <button type="button" class="btn btn-sm btn-ghost lf-reapply" disabled>重新套用範本（對這個案子不生效）</button>
+          <button type="button" class="btn btn-sm btn-ghost lf-reapply" style="color:var(--danger)">${escapeHtml(REAPPLY_COPY.ranButton)}</button>
         </div>`;
     }
     return `<div class="sk-actions">
-      <button type="button" class="btn btn-sm btn-ghost lf-reapply" style="color:var(--danger)">重新套用範本</button>
+      <button type="button" class="btn btn-sm btn-ghost lf-reapply" style="color:var(--danger)">${escapeHtml(REAPPLY_COPY.freshButton)}</button>
     </div>`;
   }
 
@@ -576,21 +580,17 @@ if (__authed) {
         else openFlows.delete(pid);
       });
       block.querySelector(".lf-reapply")?.addEventListener("click", async () => {
-        // 再問一次：畫面可能是上一次 render 留下的，而這個案子在那之後跑過了。
-        // 停用的鈕按不下去，但 `disabled` 只是 DOM 狀態，不是守衛
-        if (!reapplyEffective(pid)) {
-          toast(REAPPLY_COPY.ranNote);
-          renderLandedFlows();
-          return;
-        }
-        const ok = await askConfirm({
-          title: REAPPLY_COPY.freshTitle,
-          body: REAPPLY_COPY.freshBody,
-          danger: true,
-        });
+        // 再問一次「**現在**」的狀態，不是畫這顆鈕的那一次：畫面可能是上一次
+        // render 留下的，而這個案子在那之後跑過了 —— 那時該跳的是破壞性那份
+        // 對話框，而不是「不會弄丟東西」那份。兩種後果的嚴重度不同，
+        // 對話框與 toast 都跟著這一次的答案走
+        const copy = reapplyEffective(pid)
+          ? { title: REAPPLY_COPY.freshTitle, body: REAPPLY_COPY.freshBody, done: REAPPLY_COPY.okToast }
+          : { title: REAPPLY_COPY.ranTitle, body: REAPPLY_COPY.ranBody, done: REAPPLY_COPY.ranOkToast };
+        const ok = await askConfirm({ title: copy.title, body: copy.body, danger: true });
         if (!ok) return;
         const r = store.reapplyWorkflow(pid);
-        toast(r.ok ? REAPPLY_COPY.okToast : (r.reason ?? "失敗"));
+        toast(r.ok ? copy.done : (r.reason ?? "失敗"));
         renderLandedFlows();
       });
     });
