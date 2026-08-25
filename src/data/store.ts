@@ -23,6 +23,7 @@ import { canAddItem } from "../lib/release-track";
 import { logEvent } from "../lib/event-writer";
 import { isNative, native } from "../lib/native";
 import type {
+  ActorKind,
   AgentFamily,
   AgentJob,
   AgentTaskType,
@@ -34,6 +35,7 @@ import type {
   CaseStage,
   Comment,
   Employee,
+  FullCat,
   PrdVersion,
   Project,
   ProjectImportSummary,
@@ -42,6 +44,7 @@ import type {
   Template,
   WorkflowStageDef,
 } from "./types";
+import { stageKind } from "./types";
 import { buildProjectProfile, emptySectionValues } from "../lib/export";
 import {
   allStagesSettled,
@@ -50,7 +53,6 @@ import {
   changedFieldCount,
   pickBaseline,
   pickLatestCommit,
-  stageBlockedBy,
   stagesAfterResubmit,
 } from "../lib/prd-versions";
 import { canResolveComment, migrateComments, projectOfComment } from "../lib/comment-scope";
@@ -81,11 +83,13 @@ import type { GateSpec } from "../lib/gate-rules";
 import type { ProjectCandidate } from "../lib/folder-import";
 import { mapCandidateToSectionValues } from "../lib/folder-import";
 import {
-  canApproveProject,
+  canApprove,
   canPeerReview,
   normalizeAgentFamily,
   validateEmployeeRole,
 } from "../lib/permissions";
+import { canSignStage } from "../lib/signoff";
+import { resolveWorkflow } from "../lib/workflow-resolve";
 import { nowIso } from "../lib/time-format";
 
 /** v6：正式版無示範內容 + 首次引導；依變體分 key 避免互污染 */
@@ -132,6 +136,93 @@ function domainGates(domain: string): GateSpec {
   } catch {
     return BASE_GATE_SPEC;
   }
+}
+
+/** 領域包宣告的追加關卡。領域包壞掉時退回「不追加」，不讓整條送審路徑爆掉 */
+function domainStages(domain: string): WorkflowStageDef[] {
+  try {
+    return resolveDomain(domain, domainPacks(), {
+      sections: SEED_SECTIONS,
+      gates: BASE_GATE_SPEC,
+    }).stages;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 這個專案**應該**跑哪一套流程 —— 範本分類給骨架，領域包疊加合規關卡。
+ *
+ * 純粹是算出來的，不看專案上已經落地的那一份。要拿「這個案子實際在跑的流程」
+ * 請用 `workflowFor()`。
+ */
+function resolveWorkflowFor(p: Project | undefined): WorkflowStageDef[] {
+  const skeleton = p?.templateStages?.length ? p.templateStages : undefined;
+  const stages = domainStages(domainOf(p));
+  // 自訂範本自帶骨架時，它就是骨架本身，不再依 cat 查表
+  if (skeleton) {
+    return resolveWorkflow(p?.templateCat ?? null, stages, {
+      lean: skeleton,
+      narrative: skeleton,
+      enterprise: skeleton,
+      agile: skeleton,
+      technical: skeleton,
+    });
+  }
+  return resolveWorkflow(p?.templateCat ?? null, stages);
+}
+
+/**
+ * 這個案子**實際在跑**的流程。
+ *
+ * 落地過的專案一律用自己那一份 —— 這是 D2 的整個重點：第一次送審之後改範本
+ * 不影響進行中的案子。`signoffTimeline` 靠 stageId 跨輪串接決策，重解析出來的
+ * 關卡 id 會隨範本／領域包變動，一變第一輪的意見就顯示「（已移除的關卡）」。
+ *
+ * 沒落地過的（舊資料、還沒送過審）退回全域 `workflowStages` —— 那是這個欄位
+ * 出現之前唯一存在的流程，跑到一半的案子不能因為升級就換一套關卡。
+ * 注意判斷的是 `undefined` 而不是長度：空陣列是「這個專案的流程真的沒有關卡」。
+ */
+function workflowFor(p: Project | undefined): WorkflowStageDef[] {
+  return p?.workflowStages ?? state.workflowStages;
+}
+
+/**
+ * 依專案**當下在跑的**流程建個案。
+ *
+ * 所有重建個案的路徑都走這裡，不再各自讀全域 `state.workflowStages` ——
+ * 那正是「改 A 專案的流程、B 專案下次送審也跟著變」的來源。
+ */
+/**
+ * 從一個跑到一半的個案反推流程定義。
+ *
+ * 只在移轉時用得到：`Project.workflowStages` 出現之前送出去的案子沒有落地流程，
+ * 而重解析會換掉 stageId。反推出來的定義保留原本的 id，紀錄才接得起來。
+ *
+ * `defaultActor` 推不出來（個案上沒有這個資訊），依指派對象是不是 agent 來猜；
+ * 沒指派的猜 agent —— 這個欄位只影響 Wave 2 送審對話框的預設選項，猜錯的代價
+ * 是使用者要多改一次下拉選單，不是流程跑錯。
+ */
+function workflowFromCase(c: CaseRecord): WorkflowStageDef[] {
+  const byId = Object.fromEntries(state.employees.map((e) => [e.id, e]));
+  return [...c.stages]
+    .sort((a, b) => a.order - b.order)
+    .map((s, i) => ({
+      id: s.stageDefId || s.id,
+      order: i + 1,
+      name: s.name,
+      defaultAssigneeId: s.assigneeId ?? null,
+      required: s.required ?? true,
+      mode: s.mode ?? "parallel",
+      kind: stageKind(s),
+      defaultActor: (s.assigneeId && byId[s.assigneeId]?.kind === "human" ? "human" : "agent") as ActorKind,
+      ...(s.editTarget ? { editTarget: { ...s.editTarget } } : {}),
+    }));
+}
+
+function caseForProject(projectId: string): CaseRecord {
+  const p = state.projects.find((x) => x.id === projectId);
+  return caseFromWorkflow(projectId, workflowFor(p), state.employees);
 }
 
 /** 把改好的骨架寫回「這個專案自己的結構」，並重算目前畫面的章節 */
@@ -245,27 +336,21 @@ function approvalsFromCase(c: CaseRecord | undefined): Approval[] {
   }));
 }
 
-function canSignStageInternal(
-  u: Employee,
-  stage: CaseStage,
-  c: CaseRecord | undefined,
-): boolean {
-  if (stageBlockedBy(stage, c?.stages ?? [])) return false;
-  if (u.accessRole === "admin") return true;
-  if (stage.assigneeId === u.id) return true;
-  return !stage.assigneeId && u.accessRole === "approver";
-}
-
 function caseFromWorkflow(
   projectId: string,
   workflow: WorkflowStageDef[],
   employees: Employee[],
+  /** 逐關指派：`stageDefId → 執行者 id`。送審對話框選的東西 */
+  assignments?: Record<string, string | null>,
 ): CaseRecord {
   const byId = Object.fromEntries(employees.map((e) => [e.id, e]));
   const stages: CaseStage[] = [...workflow]
     .sort((a, b) => a.order - b.order)
     .map((w) => {
-      const emp = w.defaultAssigneeId ? byId[w.defaultAssigneeId] : null;
+      // 逐關指派蓋過範本的預設執行者。`null` 是明確的「這一關不派人」，
+      // 跟「沒有提到這一關」不同 —— 後者才退回 defaultAssigneeId
+      const picked = assignments && w.id in assignments ? assignments[w.id] : w.defaultAssigneeId;
+      const emp = picked ? byId[picked] : null;
       return {
         id: `cs-${w.id}-${projectId}`,
         stageDefId: w.id,
@@ -276,6 +361,11 @@ function caseFromWorkflow(
         state: emp ? ("pending" as const) : ("empty" as const),
         mode: w.mode ?? "parallel",
         required: w.required,
+        // kind 與 editTarget 從流程定義複製到個案上。不複製的話，簽核頁要靠
+        // stageDefId 回頭查流程定義 —— 而流程可能已經被改過，那時查到的
+        // 是「現在的定義」，不是這個案子當初依據的那一份
+        kind: w.kind,
+        ...(w.editTarget ? { editTarget: { ...w.editTarget } } : {}),
       };
     });
   return {
@@ -427,6 +517,17 @@ export function migrateProject(raw: Record<string, unknown>, employees: Employee
     // 第三次踩同一個坑：漏了這行，改採 vX.YY.ZZ 每次重新載入就退回 loose，
     // 版號紀錄卡又重新問一次 —— 選擇「存了」但被這裡吃掉。
     versionPolicy: raw.versionPolicy === "strict" ? "strict" : undefined,
+    // 第五、六、七次。同一個坑的註解上面已經寫了三遍，所以這裡只講後果：
+    // 漏了 workflowStages，跑到一半的案子重新載入就退回全域流程，關卡 id 跟著
+    // 變，第一輪的簽核意見在紀錄上變成「（已移除的關卡）」—— 而簽核紀錄
+    // 正是這整套東西的賣點。漏了 templateCat 則是每次重載都退回 lean 骨架。
+    workflowStages: Array.isArray(raw.workflowStages)
+      ? (raw.workflowStages as WorkflowStageDef[])
+      : undefined,
+    templateCat: raw.templateCat ? (raw.templateCat as FullCat) : undefined,
+    templateStages: Array.isArray(raw.templateStages)
+      ? (raw.templateStages as WorkflowStageDef[])
+      : undefined,
   };
 }
 
@@ -1051,7 +1152,7 @@ export const store = {
           ...state,
           cases: {
             ...state.cases,
-            [id]: caseFromWorkflow(id, state.workflowStages, state.employees),
+            [id]: caseForProject(id),
           },
         };
       }
@@ -1819,6 +1920,13 @@ export const store = {
     projectId: string,
     sections: Section[],
     seed: Record<string, Record<string, string>> = {},
+    /**
+     * 這份範本的分類與自帶骨架。**決定這個專案之後跑哪一套簽核流程。**
+     *
+     * 可以不給（舊呼叫端、或不是從範本頁進來的路徑），那時專案維持原本的
+     * 分類 —— 沒有分類的走 `lean`。不是每一種套用骨架的動作都該重設簽核流程。
+     */
+    template?: { cat?: FullCat; stages?: WorkflowStageDef[] },
   ): { ok: boolean; reason?: string; count?: number } {
     if (!canEditContent(state.currentUser)) return { ok: false, reason: "目前身分無法編輯內文" };
     if (!sections.length) return { ok: false, reason: "這份範本讀不出任何章節標題" };
@@ -1845,6 +1953,19 @@ export const store = {
       // 換骨架 = 舊的標記對不上新的章節 id，留著只會讓分數與勾選錯位
       projectSectionMeta: { ...state.projectSectionMeta, [projectId]: {} },
       sections: projectId === state.activeProjectId ? nextSections : state.sections,
+      // 換整份範本 = 換簽核骨架。但**不動已經落地的流程** —— 進行中的案子
+      // 換掉關卡 id 會讓第一輪的意見顯示「（已移除的關卡）」
+      projects: template
+        ? state.projects.map((p) =>
+            p.id === projectId
+              ? {
+                  ...p,
+                  ...(template.cat ? { templateCat: template.cat } : {}),
+                  ...(template.stages?.length ? { templateStages: template.stages } : {}),
+                }
+              : p,
+          )
+        : state.projects,
     };
     touchProjectMeta(projectId);
     emit();
@@ -2080,7 +2201,10 @@ export const store = {
       user: state.currentUser,
       project,
       hasPeerReview: canPeerReview(state.currentUser, project).ok,
-      hasApprove: canApproveProject(state.currentUser, project).ok,
+      // 這裡要的是「有沒有簽核這件能力」，不是「能不能簽某一關」——
+      // 自審的判斷 canResolveComment 自己有一份（而且規則不一樣：它擋的是
+      // 編輯人員覆核自己的檔案）。傳關卡層級的判斷進去會擋掉合法的覆核。
+      hasApprove: canApprove(state.currentUser),
     });
     if (!check.ok) return check;
     state = {
@@ -2100,7 +2224,7 @@ export const store = {
           ...state,
           cases: {
             ...state.cases,
-            [id]: caseFromWorkflow(id, state.workflowStages, state.employees),
+            [id]: caseForProject(id),
           },
         };
         syncApprovalsFromActiveCase();
@@ -2139,7 +2263,7 @@ export const store = {
         ...state,
         cases: {
           ...state.cases,
-          [id]: caseFromWorkflow(id, state.workflowStages, state.employees),
+          [id]: caseForProject(id),
         },
       };
     }
@@ -2180,8 +2304,6 @@ export const store = {
     if (!project) return { ok: false, reason: "找不到專案" };
     const c = state.cases[project.id];
     if (c?.withdrawn) return { ok: false, reason: "此案已抽單，無法簽核" };
-    const check = canApproveProject(state.currentUser, project);
-    if (!check.ok) return check;
 
     const u = state.currentUser;
     if (opts.override && u.accessRole !== "admin") {
@@ -2192,6 +2314,7 @@ export const store = {
     }
 
     const only = opts.stageIds?.length ? new Set(opts.stageIds) : null;
+    let blockedReason: string | undefined;
     const at = new Date().toISOString();
     const round = c?.round ?? 1;
     const decisions: CaseDecision[] = [];
@@ -2225,21 +2348,31 @@ export const store = {
     const open = (s: CaseStage) =>
       s.state === "pending" || s.state === "empty" || s.state === "changes_requested";
 
+    // 權限判斷收斂成單一入口。以前這裡是行內條件，而職責分立在
+    // `permissions.canApproveProject`、關卡歸屬在 `signoff.canSignStage` ——
+    // 三份判斷各自演化，畫面要解釋「為什麼不能按」時第三份根本沒得呼叫。
+    // 代簽也走同一支：它放行的只有關卡歸屬與順序閘門，職責分立照擋。
     const stages = (c?.stages ?? []).map((s) => {
       if (only && !only.has(s.id)) return s;
       if (!open(s)) return s;
-      if (opts.override) return sign(s, "override");
-      if (!canSignStageInternal(u, s, c)) return s;
-      return sign(s, "approved");
+      const ability = canSignStage(u, project, s, c, { override: Boolean(opts.override) });
+      if (!ability.can) {
+        // 指名單關被擋下時，那個理由就是要顯示給使用者的解釋
+        if (only) blockedReason ??= ability.reason;
+        return s;
+      }
+      return sign(s, opts.override ? "override" : "approved");
     });
 
     // 代簽以外，不再有 admin 的隱形一鍵全簽 —— 舊行為是「只要你是 admin，
     // 按一次就把所有未簽關卡吃掉」，畫面上完全看不出來發生了什麼事
     const nextStages = stages;
-    if (only && signed === 0) return { ok: false, reason: "這一關現在不是你可以簽的" };
+    // 講得出**為什麼**不能簽，不是含糊的「不是你可以簽的」——
+    // canSignStage 的 reason 本來就是寫給使用者讀的
+    if (only && signed === 0) return { ok: false, reason: blockedReason ?? "這一關現在不是你可以簽的" };
     if (!only && signed === 0) return { ok: false, reason: "現在沒有你可以簽的關卡" };
     const allDone = allStagesSettled(nextStages);
-    const base0 = c ?? caseFromWorkflow(project.id, state.workflowStages, state.employees);
+    const base0 = c ?? caseForProject(project.id);
     const nextCase: CaseRecord = {
       ...base0,
       stages: nextStages,
@@ -2290,11 +2423,10 @@ export const store = {
     if (!body) return { ok: false, reason: "要求修改一定要寫理由 —— 作者要靠它知道改什麼" };
 
     const u = state.currentUser;
-    const check = canApproveProject(u, project);
-    if (!check.ok) return check;
     const stage = c.stages.find((x) => x.id === stageId);
     if (!stage) return { ok: false, reason: "找不到這一關" };
-    if (!canSignStageInternal(u, stage, c)) return { ok: false, reason: "這一關現在不是你可以動的" };
+    const ability = canSignStage(u, project, stage, c);
+    if (!ability.can) return { ok: false, reason: ability.reason };
 
     const at = new Date().toISOString();
     const decision: CaseDecision = {
@@ -2424,15 +2556,55 @@ export const store = {
     return { ok: true };
   },
 
-  submitForReview(projectId?: string, commitId?: string) {
+  /**
+   * 送出審閱 —— **流程在這裡落地到專案上**。
+   *
+   * 第一次送審時把「範本分類 + 領域包」算出來的關卡複製一份寫進
+   * `project.workflowStages`，之後改範本不影響這個案子。已經落地的專案重送審
+   * **沿用同一組關卡 id**：`signoffTimeline` 靠 stageId 跨輪串接決策，id 一變
+   * 第一輪的意見就會顯示「（已移除的關卡）」，而那正是簽核紀錄最該講清楚的一段。
+   *
+   * `assignments` 是逐關指派（`stageDefId → 執行者 id`，`null` = 這一關不派人）。
+   * 只在**建立關卡的那一次**生效 —— 已經在跑的案子要改人請走
+   * `reassignCaseStage`，那條路徑會留下紀錄。
+   */
+  submitForReview(
+    projectId?: string,
+    commitId?: string,
+    assignments?: Record<string, string | null>,
+  ) {
     // 只有「真的有東西變了」才算新的一輪：換了快照，或上一輪有人要求修改。
     // 同一份內容重按送審不該把輪次灌高，那會讓紀錄的分組失去意義。
     const id = projectId ?? state.activeProjectId ?? "p1";
+    const project = state.projects.find((p) => p.id === id);
     const existing = state.cases[id];
-    const c =
-      existing && !existing.withdrawn
-        ? existing
-        : caseFromWorkflow(id, state.workflowStages, state.employees);
+    const live = existing && !existing.withdrawn ? existing : undefined;
+
+    // 建專案時就會先開一個個案（走全域預設流程），所以「有個案」不等於
+    // 「這個案子跑過」。真正不能動的是**已經留下痕跡**的個案：綁過快照、
+    // 有決策紀錄、或任何一關已經簽掉／被退回。
+    const touched = Boolean(
+      live &&
+        (live.reviewCommitId ||
+          live.log?.length ||
+          live.stages.some((x) => x.state === "approved" || x.state === "changes_requested")),
+    );
+
+    const landed = project?.workflowStages
+      ? // 落地過的一律沿用自己那一份 —— 連「範本換了類別」都不重算。
+        // D2 拍板的取捨：紀錄的連續性比流程的即時性重要
+        project.workflowStages
+      : touched
+        ? // 舊資料：跑到一半、但還沒有落地欄位的案子。**用它自己的關卡當流程**，
+          // 不要重解析 —— 重解析會換掉 stageId，第一輪的意見在紀錄上就變成
+          // 「（已移除的關卡）」。升級不能讓跑到一半的案子壞掉。
+          workflowFromCase(live!)
+        : resolveWorkflowFor(project);
+
+    // 沒留下痕跡的個案照新流程重建。不重建的話，第一次送審跑的會是建專案當下
+    // 那套全域預設關卡，而專案上剛落地的流程只是一份沒人用的資料 —— 兩者不一致
+    // 而且畫面上完全看不出來。
+    const c = touched ? live! : caseFromWorkflow(id, landed, state.employees, assignments);
     const nextRound =
       Boolean(c.stages.length) &&
       (Boolean(commitId && commitId !== c.reviewCommitId) ||
@@ -2462,7 +2634,15 @@ export const store = {
       },
       locked: false,
       projects: state.projects.map((p) =>
-        p.id === id ? { ...p, status: "review", updated: "剛剛" } : p,
+        p.id === id
+          ? {
+              ...p,
+              status: "review",
+              updated: "剛剛",
+              // 流程落地。已經有的不覆寫 —— 重送審沿用同一組關卡 id
+              workflowStages: p.workflowStages ?? landed,
+            }
+          : p,
       ),
     };
     syncApprovalsFromActiveCase();
@@ -2489,6 +2669,11 @@ export const store = {
       required: partial?.required ?? true,
       // 新關卡預設串行（市場常態）；既有關卡在移轉時給 parallel 以保留現行行為
       mode: partial?.mode ?? "sequential",
+      // 手動加的關卡預設只出意見。預設成 edit 等於讓使用者在管理中心點兩下
+      // 就多出一個會改 PRD 內文的關卡，而畫面上跟 review 關卡長得一樣
+      kind: partial?.kind ?? "review",
+      defaultActor: partial?.defaultActor ?? "agent",
+      ...(partial?.editTarget ? { editTarget: partial.editTarget } : {}),
     };
     state = { ...state, workflowStages: [...state.workflowStages, stage] };
     emit();
@@ -2531,7 +2716,7 @@ export const store = {
     if (state.cases[projectId] && !state.cases[projectId]!.withdrawn) {
       return state.cases[projectId]!;
     }
-    const c = caseFromWorkflow(projectId, state.workflowStages, state.employees);
+    const c = caseForProject(projectId);
     state = { ...state, cases: { ...state.cases, [projectId]: c } };
     return c;
   },
@@ -2546,7 +2731,7 @@ export const store = {
     }
     let c = state.cases[projectId];
     if (!c || c.withdrawn) {
-      c = caseFromWorkflow(projectId, state.workflowStages, state.employees);
+      c = caseForProject(projectId);
       state = { ...state, cases: { ...state.cases, [projectId]: c } };
     }
     if (c.locked) return { ok: false, reason: "已鎖定案件不可異動關卡" };
@@ -2587,7 +2772,7 @@ export const store = {
     }
     let c = state.cases[projectId];
     if (!c) {
-      c = caseFromWorkflow(projectId, state.workflowStages, state.employees);
+      c = caseForProject(projectId);
     }
     const next: CaseRecord = {
       ...c,
@@ -2617,7 +2802,7 @@ export const store = {
     if (state.currentUser.accessRole !== "admin") {
       return { ok: false, reason: "僅管理員可重開抽單案件" };
     }
-    const c = caseFromWorkflow(projectId, state.workflowStages, state.employees);
+    const c = caseForProject(projectId);
     state = {
       ...state,
       cases: { ...state.cases, [projectId]: c },
@@ -2637,7 +2822,7 @@ export const store = {
     if (state.currentUser.accessRole !== "admin") {
       return { ok: false, reason: "僅管理員可套用流程到個案" };
     }
-    const c = caseFromWorkflow(projectId, state.workflowStages, state.employees);
+    const c = caseForProject(projectId);
     state = {
       ...state,
       cases: { ...state.cases, [projectId]: c },
@@ -3086,6 +3271,9 @@ export const store = {
                   ...(status === "done" || status === "failed"
                     ? { finishedAt: new Date().toISOString() }
                     : {}),
+                  // 跑完了但還沒落地。失敗的工作單不進這個狀態 —— 沒有結果可以存，
+                  // 標成待確認只會在畫面上多一顆按不出東西的按鈕
+                  ...(status === "done" ? { landed: "pending" as const } : {}),
                 }
               : j,
           ),
@@ -3103,7 +3291,15 @@ export const store = {
           );
           return;
         }
-        const bag = state.sectionValues;
+        // **這個專案的**正文，不是畫面上正在開著的那一份。
+        //
+        // 原本讀 `state.sectionValues`（＝ active 專案的投影）。對別的專案下
+        // 工作單時，送進模型的會是另一個專案的內文 —— 分析看起來完全正常，
+        // 只是講的是錯的文件。簽核頁對非 active 專案執行分析就會踩到。
+        const bag =
+          project.id === state.activeProjectId
+            ? state.sectionValues
+            : (state.projectSectionValues[project.id] ?? {});
         const contextSnippet = Object.entries(bag)
           .map(([sid, fields]) => {
             const title = state.sections.find((s) => s.id === sid)?.title ?? sid;
@@ -3124,38 +3320,15 @@ export const store = {
           contextSnippet,
         });
 
-        // 僅留下意見／開放問題線索，不自動「假核准」
-        if (opts.task === "edit" || opts.task === "coach") {
-          const open = state.sectionValues["open"] ?? {};
-          const prev = open.oq ?? "";
-          const line = `\n• [Agent ${agent.name} · ${opts.task}] ${opts.note || "進場建議"} — 剛剛（見進場紀錄全文）`;
-          state = {
-            ...state,
-            sectionValues: {
-              ...state.sectionValues,
-              open: { ...open, oq: (prev + line).trim() },
-            },
-          };
-        } else if (opts.task === "review" || opts.task === "approve") {
-          state = {
-            ...state,
-            comments: [
-              {
-                id: `c${Date.now()}`,
-                projectId: job.projectId,
-                author: agent.name,
-                authorId: agent.id,
-                avatar: agent.avatar,
-                time: "剛剛",
-                anchor: "§ Agent 進場",
-                body: result.slice(0, 1200),
-                resolved: false,
-              },
-              ...state.comments,
-            ],
-          };
-        }
-
+        // **這裡刻意什麼都不改。**
+        //
+        // 以前跑完就直接寫 state：`edit`/`coach` 把摘要追加進「開放問題」欄位、
+        // `review`/`approve` 自動貼一則留言。使用者沒機會看完整內容再決定 ——
+        // 文件被改了，而且沒有任何地方問過他。更糟的是那份摘要寫的是
+        // 「見進場紀錄全文」，等於在 PRD 裡留一行指向別處的佔位字串。
+        //
+        // 落地改由 `saveAgentResult` / `discardAgentResult` 拍板，工作單先停在
+        // `landed: "pending"`。
         mark("done", result);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -3164,6 +3337,133 @@ export const store = {
     })();
 
     return { ok: true, jobId };
+  },
+
+  /**
+   * 把一份跑完的 Agent 結果**落地**。
+   *
+   * 這是 `invokeAgent` 拿掉自動副作用之後的另一半：跑完只是有了結果，要不要
+   * 進到文件裡是一個獨立的、使用者按下去的決定。
+   *
+   * 兩種落地方式，由關卡的 `kind` 決定（舊個案沒有 kind，一律當 `review`）：
+   * - `review` —— 意見**釘在關卡上**（寫進 `CaseStage.comment`），不碰 PRD 內文。
+   *   沒有綁關卡的一般進場（Agent 管理頁）退回貼一則留言，那是它唯一的去處。
+   * - `edit` —— 寫進關卡指定的 PRD 欄位。`editTarget` 缺值時退回「開放問題」，
+   *   那是舊版靜默追加摘要的地方 —— 落地目標不變，變的是這次問過人。
+   *
+   * 為什麼 `edit` 是整段替換而不是逐條套用：逐條勾選的 diff UI 這一輪不做
+   * （規格「不做」那一節）。整段替換配上存檔前的前後對照，是這個階段講得清楚
+   * 而且不會騙人的做法。
+   */
+  saveAgentResult(jobId: string): { ok: boolean; reason?: string } {
+    const job = state.agentJobs.find((j) => j.id === jobId);
+    if (!job) return { ok: false, reason: "找不到這張工作單" };
+    if (job.status !== "done") return { ok: false, reason: "這張工作單還沒跑完" };
+    if (!job.result.trim()) return { ok: false, reason: "這張工作單沒有結果可以存" };
+    // 已經落地過的不再落地一次。重複按下去會把同一份意見貼兩遍，
+    // 而簽核紀錄上那兩筆看起來像兩次獨立的審查
+    if (job.landed === "saved") return { ok: false, reason: "這份結果已經存過了" };
+
+    const at = nowIso();
+    const c = state.cases[job.projectId];
+    const stage = job.stageId ? c?.stages.find((s) => s.id === job.stageId) : undefined;
+
+    if (stage && stageKind(stage) === "edit") {
+      const target = stage.editTarget ?? { sectionId: "open", fieldKey: "oq" };
+      const bag = state.projectSectionValues[job.projectId] ?? {};
+      const section = bag[target.sectionId] ?? {};
+      state = {
+        ...state,
+        projectSectionValues: {
+          ...state.projectSectionValues,
+          [job.projectId]: {
+            ...bag,
+            [target.sectionId]: { ...section, [target.fieldKey]: job.result },
+          },
+        },
+        // 正文袋與畫面上那一份是同一件事的兩個投影，只改一邊會讓編輯台
+        // 顯示舊內容直到切換專案為止
+        ...(job.projectId === state.activeProjectId
+          ? {
+              sectionValues: {
+                ...state.sectionValues,
+                [target.sectionId]: {
+                  ...(state.sectionValues[target.sectionId] ?? {}),
+                  [target.fieldKey]: job.result,
+                },
+              },
+            }
+          : {}),
+      };
+    } else if (stage) {
+      // review 關卡：意見釘在關卡上。不動 `state` —— 那一關的狀態由簽核決定，
+      // 存下分析不等於簽了它
+      state = {
+        ...state,
+        cases: {
+          ...state.cases,
+          [job.projectId]: {
+            ...c!,
+            stages: c!.stages.map((s) =>
+              s.id === stage.id ? { ...s, comment: job.result.slice(0, 4000) } : s,
+            ),
+          },
+        },
+      };
+    } else {
+      // 沒綁關卡的一般進場：留言是它唯一的去處
+      const agent = state.employees.find((e) => e.id === job.agentId);
+      state = {
+        ...state,
+        comments: [
+          {
+            id: `c${Date.now()}`,
+            projectId: job.projectId,
+            author: job.agentName,
+            authorId: job.agentId,
+            avatar: agent?.avatar ?? "AI",
+            time: "剛剛",
+            anchor: "§ Agent 進場",
+            body: job.result.slice(0, 1200),
+            resolved: false,
+          },
+          ...state.comments,
+        ],
+      };
+    }
+
+    state = {
+      ...state,
+      agentJobs: state.agentJobs.map((j) => (j.id === jobId ? { ...j, landed: "saved" as const } : j)),
+    };
+    touchProjectMeta(job.projectId);
+    audit(state, job.projectId, "agent.result.saved", `prd:${job.projectId}`, {
+      job: jobId,
+      stage: job.stageId ?? "none",
+      at,
+    });
+    emit();
+    return { ok: true };
+  },
+
+  /**
+   * 丟掉一份跑完的 Agent 結果。
+   *
+   * **全文留著**，只把落地狀態標成 `discarded`：使用者要看得到「我叫它跑過、
+   * 而且我決定不用」。刪掉全文的話，那個決定在紀錄上跟「從來沒跑過」一模一樣。
+   */
+  discardAgentResult(jobId: string): { ok: boolean; reason?: string } {
+    const job = state.agentJobs.find((j) => j.id === jobId);
+    if (!job) return { ok: false, reason: "找不到這張工作單" };
+    if (job.landed === "saved") return { ok: false, reason: "這份結果已經存進文件了，不能改成不採用" };
+    state = {
+      ...state,
+      agentJobs: state.agentJobs.map((j) =>
+        j.id === jobId ? { ...j, landed: "discarded" as const } : j,
+      ),
+    };
+    emit();
+    return { ok: true };
   },
 
   cancelAgentJob(jobId: string) {

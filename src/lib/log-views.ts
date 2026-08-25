@@ -30,6 +30,7 @@ const KIND_LABEL: Record<string, string> = {
   "release.tag": "版本取號",
   "agent.job.start": "Agent 進場",
   "agent.job.done": "Agent 完成",
+  "agent.result.saved": "採用 Agent 產出",
   "pr.open": "開 PR",
   "pr.review": "PR 審查",
   "pr.merge": "PR 合併",
