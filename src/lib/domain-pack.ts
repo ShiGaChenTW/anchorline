@@ -14,7 +14,7 @@
  * `src/data/domains/index.ts`，解析與合併留在這裡才測得動。
  */
 import { parse as parseYaml } from "yaml";
-import type { FieldDef, Section } from "../data/types";
+import type { FieldDef, Section, WorkflowStageDef } from "../data/types";
 import type { GateGroup, GateSpec } from "./gate-rules";
 
 export class DomainPackError extends Error {
@@ -40,6 +40,17 @@ export type DomainPack = {
   gates?: GateGroup[];
   /** 只給寫作教練看的軟提示，不進 gate、不影響簽核 */
   hints?: GateGroup[];
+  /**
+   * 這個領域要**追加**的簽核關卡（疊在範本骨架上，不取代它）。
+   *
+   * 為什麼寫在 frontmatter 而不是 TypeScript：金融四包各要一關「金融法遵與風險」，
+   * 寫成程式碼的話「加一個 .md 就加一個領域，零程式碼改動」這個契約當場破功 ——
+   * 下一個要合規關卡的產業就得回來改 `resolveWorkflow`。
+   *
+   * 疊加語意由 `lib/workflow-resolve.ts` 定義（同名以骨架為準、我核准殿後）。
+   * 這裡只負責把資料帶出來。
+   */
+  stages?: WorkflowStageDef[];
 };
 
 export type SectionPatch = Partial<Omit<Section, "id" | "fields">> & {
@@ -56,6 +67,8 @@ export type ResolvedDomain = {
   prompt: string;
   sections: Section[];
   gateSpec: GateSpec;
+  /** 繼承鏈上所有包宣告的追加關卡，依 parent → child 串接 */
+  stages: WorkflowStageDef[];
 };
 
 // ── 解析 ────────────────────────────────────────────────────
@@ -121,6 +134,19 @@ export function parseDomainPack(raw: string, sourceHint = "<inline>"): DomainPac
       if (!r.section?.trim()) throw new DomainPackError(`${sourceHint}：規則 ${r.id} 缺少 section`);
     }
   }
+  // 關卡的欄位在 TypeScript 那頭是必填，但 frontmatter 是手寫的 YAML，型別擋不到。
+  // 這裡擋掉的是最安靜的那一種錯：漏了 kind 的關卡會被當成 review，
+  // 而它可能本來要改 PRD 內文。
+  for (const w of pack.stages ?? []) {
+    if (!w?.id?.trim()) throw new DomainPackError(`${sourceHint}：stages 有一關缺少 id`);
+    if (!w.name?.trim()) throw new DomainPackError(`${sourceHint}：關卡 ${w.id} 缺少 name`);
+    if (w.kind !== "review" && w.kind !== "edit") {
+      throw new DomainPackError(`${sourceHint}：關卡 ${w.id} 的 kind 必須是 review 或 edit`);
+    }
+    if (w.defaultActor !== "human" && w.defaultActor !== "agent") {
+      throw new DomainPackError(`${sourceHint}：關卡 ${w.id} 的 defaultActor 必須是 human 或 agent`);
+    }
+  }
   return pack;
 }
 
@@ -166,11 +192,15 @@ export function resolveDomain(
   // gate 全綠、測試全綠，只有教練欄默默少講幾句話。
   const hints = [...(base.gates.hints ?? [])];
   const prompts = [base.prompt?.trim()].filter(Boolean) as string[];
+  // 關卡跟 gates 一樣是「累加」而非「覆寫」：繼承 _base 的包不該因此失去
+  // 自己宣告的合規關卡。去重留給 resolveWorkflow —— 那裡才知道骨架有哪幾關。
+  const stages: WorkflowStageDef[] = [];
 
   for (const p of chain) {
     if (p.sections?.length) sections = applySectionPatches(sections, p.sections);
     if (p.gates?.length) groups.push(...p.gates);
     if (p.hints?.length) hints.push(...p.hints);
+    if (p.stages?.length) stages.push(...p.stages);
     if (p.prompt?.trim()) prompts.push(p.prompt.trim());
   }
 
@@ -181,6 +211,7 @@ export function resolveDomain(
     prompt: prompts.join("\n\n"),
     sections,
     gateSpec: { groups, hints, emptySections: base.gates.emptySections },
+    stages,
   };
 }
 

@@ -18,6 +18,7 @@ import {
 import { BASE_GATE_SPEC } from "../src/lib/prd-gates";
 import { runGateSpec } from "../src/lib/gate-rules";
 import { SEED_SECTIONS } from "../src/data/seed";
+import { FINANCIAL_COMPLIANCE_STAGE_NAME, resolveWorkflow } from "../src/lib/workflow-resolve";
 
 const DIR = join(import.meta.dir, "../src/data/domains");
 
@@ -318,5 +319,44 @@ describe("digital_account 端到端", () => {
     const r = runGateSpec({ sectionValues: {}, sectionStatuses: statuses }, d.gateSpec);
     expect(r.findings.map((f) => f.id)).toContain("summary-incomplete");
     expect(r.findings.map((f) => f.id)).toContain("non-goals-min");
+  });
+});
+
+// ── 簽核關卡（frontmatter → resolveWorkflow）─────────────────
+
+describe("領域包的 stages", () => {
+  const FINANCIAL = ["payment", "lending", "wealth", "digital_account"];
+
+  test("金融四包各自宣告了「金融法遵與風險」，而且逐字相同", () => {
+    // 逐字相同才去得掉重複 —— 去重鍵是名字，差一個空格會變成兩個一樣的關卡
+    for (const name of FINANCIAL) {
+      const stages = PACKS[name]?.stages ?? [];
+      expect(stages.map((w) => w.name)).toEqual([FINANCIAL_COMPLIANCE_STAGE_NAME]);
+      expect(stages[0]!.kind).toBe("review");
+      expect(stages[0]!.defaultActor).toBe("agent");
+      expect(stages[0]!.required).toBe(true);
+    }
+  });
+
+  test("generic 與 _base 不追加關卡", () => {
+    expect(PACKS.generic?.stages ?? []).toHaveLength(0);
+    expect(PACKS._base?.stages ?? []).toHaveLength(0);
+  });
+
+  test("resolveDomain 把關卡沿繼承鏈帶出來 —— 繼承 _base 不該把它吃掉", () => {
+    for (const name of FINANCIAL) {
+      const r = resolveDomain(name, PACKS, BASE);
+      expect(r.stages.map((w) => w.name)).toEqual([FINANCIAL_COMPLIANCE_STAGE_NAME]);
+    }
+    expect(resolveDomain("generic", PACKS, BASE).stages).toHaveLength(0);
+  });
+
+  test("端到端：金融領域 × lean 範本 = 三關，合規關插在我核准之前", () => {
+    const stages = resolveDomain("payment", PACKS, BASE).stages;
+    expect(resolveWorkflow("lean", stages).map((w) => w.name)).toEqual([
+      "AI 結構審查",
+      FINANCIAL_COMPLIANCE_STAGE_NAME,
+      "我核准",
+    ]);
   });
 });
