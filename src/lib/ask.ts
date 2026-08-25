@@ -27,12 +27,42 @@ export interface AskTextOptions extends AskOptions {
   placeholder?: string;
 }
 
+/**
+ * 自訂內容的對話框。
+ *
+ * 為什麼不讓呼叫端自己刻一個 modal：dialog lock、focus trap、Escape、
+ * 以及「對話框開著時頁面熱鍵不外流」這四件事正是 2026-08-16 那批修掉的東西
+ * （`tauri-plugin-dialog` 把 `window.confirm` 蓋成 async 恆真函式造成的全 App
+ * 守門失效）。手刻第二個 modal 等於把那四件事重新犯一遍，而且症狀一樣安靜。
+ *
+ * 所以這裡走的是 `openDialog` 的同一條路，只多一個 `"custom"` kind。
+ */
+export interface AskCustomOptions extends AskOptions {
+  /** 對話框內容 HTML。呼叫端自己負責 escape */
+  bodyHtml: string;
+  /** 第三顆按鈕（例如「不採用」）。按下時 action = "extra" */
+  extraLabel?: string;
+  extraDanger?: boolean;
+  /** 對話框掛上 DOM 之後呼叫一次，用來綁事件／設預設值 */
+  onMount?: (root: HTMLElement) => void;
+  /** 按下確認時從 DOM 讀出結果。只有 action === "confirm" 會呼叫 */
+  read?: (root: HTMLElement) => unknown;
+}
+
+export interface AskCustomResult {
+  action: "confirm" | "cancel" | "extra";
+  value?: unknown;
+}
+
 // escapeHtml 的單一擁有者是 ui.ts（早於本檔存在）。規格原本要求在這裡再寫一份，
 // 那會讓 repo 裡的複本從四份變五份 —— 已改為直接沿用。
 import { escapeHtml } from "./ui";
 
-type AskKind = "confirm" | "text" | "alert";
-type AskOutcome = "confirm" | "cancel";
+type AskKind = "confirm" | "text" | "alert" | "custom";
+type AskOutcome = "confirm" | "cancel" | "extra";
+
+/** openDialog 內部收的聯集。custom 專屬欄位對其他 kind 一律是 undefined。 */
+type AnyAskOptions = AskOptions & Partial<AskTextOptions> & Partial<AskCustomOptions>;
 
 let dialogOpen = false;
 let dialogSeq = 0;
@@ -55,7 +85,15 @@ export function mapOutcome(
   kind: AskKind,
   outcome: AskOutcome,
   raw?: string,
-): boolean | string | null | void {
+  customValue?: unknown,
+): boolean | string | null | void | AskCustomResult {
+  // custom 三態都要講得出來 —— 「取消」與「不採用」在 W2-B 是兩個不同的決定
+  // （前者工作單留在 pending，後者寫進 discarded），塌成同一個 falsy 就分不開了。
+  if (kind === "custom") {
+    return outcome === "confirm"
+      ? { action: "confirm", value: customValue }
+      : { action: outcome };
+  }
   if (kind === "confirm") return outcome === "confirm";
   if (kind === "text") return outcome === "confirm" ? (raw ?? "") : null;
 }
@@ -111,10 +149,20 @@ export async function showAlert(opts: AskOptions): Promise<void> {
   }
 }
 
+export async function askCustom(opts: AskCustomOptions): Promise<AskCustomResult> {
+  rejectIfBusy();
+  try {
+    return (await openDialog("custom", opts)) as AskCustomResult;
+  } catch (err) {
+    releaseDialogLock();
+    throw err;
+  }
+}
+
 function openDialog(
   kind: AskKind,
-  opts: AskTextOptions,
-): Promise<boolean | string | null | void> {
+  opts: AnyAskOptions,
+): Promise<boolean | string | null | void | AskCustomResult> {
   const labels = resolveLabels(opts, kind);
   const danger = !!opts.danger;
   const uid = ++dialogSeq;
@@ -130,12 +178,22 @@ function openDialog(
       `<input type="text" value="${escapeHtml(opts.value ?? "")}" placeholder="${escapeHtml(opts.placeholder ?? "")}">`,
     );
   }
+  // custom 的內容不 escape —— 那是這個 kind 存在的理由。**呼叫端負責 escape**，
+  // 而 W2-B 要塞的 agent 全文是外部輸入，那一端漏掉就是一個 XSS。
+  if (kind === "custom") bodyBits.push(opts.bodyHtml ?? "");
 
-  // alert 只有一顆關閉鈕；confirm / text 才有取消＋確認。
+  // 第三顆按鈕只有 custom 給得出來。沒給 extraLabel 就維持兩顆，不留空殼。
+  const extraBtn =
+    kind === "custom" && opts.extraLabel
+      ? `<button type="button" class="${opts.extraDanger ? "btn btn-warn-confirm" : "btn"}" data-dlg="extra">${escapeHtml(opts.extraLabel)}</button>`
+      : "";
+
+  // alert 只有一顆關閉鈕；confirm / text / custom 才有取消＋確認。
   const footer =
     kind === "alert"
       ? `<button type="button" class="${confirmClass}" data-dlg="ok">${escapeHtml(labels.confirmLabel)}</button>`
       : `<button type="button" class="btn" data-dlg="cancel">${escapeHtml(labels.cancelLabel)}</button>` +
+        extraBtn +
         `<button type="button" class="${confirmClass}" data-dlg="ok">${escapeHtml(labels.confirmLabel)}</button>`;
 
   const back = document.createElement("div");
@@ -160,10 +218,14 @@ function openDialog(
     const finish = (outcome: AskOutcome) => {
       if (closed) return;
       closed = true;
+      // read 必須跑在 back.remove() 之前：呼叫端可能從 document 而不是 root 出發
+      // 找節點（例如 getElementById），拔掉之後那條路就找不到東西了。
+      const customValue =
+        kind === "custom" && outcome === "confirm" ? opts.read?.(back) : undefined;
       document.removeEventListener("keydown", onKeyDown);
       back.remove();
       releaseDialogLock();
-      resolve(mapOutcome(kind, outcome, input?.value));
+      resolve(mapOutcome(kind, outcome, input?.value, customValue));
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -174,7 +236,9 @@ function openDialog(
         return;
       }
       // danger 時 Enter 不得觸發確認（預設焦點在取消，避免誤刪）。
-      if (e.key === "Enter" && !danger) {
+      // custom 一律不讓 Enter 確認：裡面有 <select>，Enter 是選單自己的按鍵，
+      // 不該同時把整個對話框送出去。
+      if (e.key === "Enter" && !danger && kind !== "custom") {
         e.preventDefault();
         e.stopImmediatePropagation();
         finish("confirm");
@@ -196,6 +260,7 @@ function openDialog(
     // 同一個 target 上的兄弟監聽器，只有 stopImmediatePropagation 可以。
     document.addEventListener("keydown", onKeyDown, true);
     back.querySelector('[data-dlg="ok"]')?.addEventListener("click", () => finish("confirm"));
+    back.querySelector('[data-dlg="extra"]')?.addEventListener("click", () => finish("extra"));
     back.querySelectorAll('[data-dlg="cancel"]').forEach((el) => {
       el.addEventListener("click", () => finish("cancel"));
     });
@@ -203,14 +268,27 @@ function openDialog(
     // 文字輸入一律把焦點放進輸入框並選取既有內容 —— 對齊原生 prompt() 的行為。
     // 少了這一條，帶預設值的 askText 會把焦點停在「確認」上：使用者看不到游標，
     // 一個 Enter 就把預設值送出去。抽單理由那種地方，那等於沒問就執行。
+    // custom 的焦點先給內容區第一個可操作元素 —— 那才是使用者要做的事
+    // （逐關選人）。停在「確認」上的話，一份沒動過的預設指派看起來像已經填完了。
+    const customFirst =
+      kind === "custom"
+        ? back.querySelector<HTMLElement>(
+            '.body select:not([disabled]), .body textarea:not([disabled]), .body input:not([disabled])',
+          )
+        : null;
     const focusTarget = input
       ? input
-      : danger
-        ? back.querySelector<HTMLElement>('footer [data-dlg="cancel"]') ??
-          back.querySelector<HTMLElement>('[data-dlg="cancel"]')
-        : back.querySelector<HTMLElement>('[data-dlg="ok"]');
+      : customFirst
+        ? customFirst
+        : danger
+          ? back.querySelector<HTMLElement>('footer [data-dlg="cancel"]') ??
+            back.querySelector<HTMLElement>('[data-dlg="cancel"]')
+          : back.querySelector<HTMLElement>('[data-dlg="ok"]');
     focusTarget?.focus();
     if (input) input.select();
+
+    // onMount 最後跑，而且在預設焦點之後 —— 呼叫端要改焦點時它的決定要贏。
+    if (kind === "custom") opts.onMount?.(back);
   });
 }
 

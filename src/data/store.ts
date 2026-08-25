@@ -198,6 +198,42 @@ function workflowFor(p: Project | undefined): WorkflowStageDef[] {
 }
 
 /**
+ * 「這一次送審會不會建立關卡、會建哪幾關」—— `submitForReview` 與送審對話框
+ * **共用的同一段判斷**。
+ *
+ * 為什麼一定要共用：UI 要先問「每一關派給誰」，而 `assignments` 只在
+ * `caseFromWorkflow` 那一次生效。UI 自己重寫一份「這次會不會落地」的判斷，
+ * 兩份就會分岔 —— 而分岔的症狀是「對話框問了指派，送審卻沒套用」：
+ * 沒有錯誤訊息，關卡全部顯示「待指派」，看起來像使用者自己沒選。
+ *
+ * `landsNow` ⇔ `!caseHasRun(live)` ⇔ 這次會走 `caseFromWorkflow`。
+ */
+function submitPlanFor(id: string): { landsNow: boolean; stages: WorkflowStageDef[] } {
+  const project = state.projects.find((p) => p.id === id);
+  const existing = state.cases[id];
+  const live = existing && !existing.withdrawn ? existing : undefined;
+
+  // 建專案時就會先開一個個案（走全域預設流程），所以「有個案」不等於
+  // 「這個案子跑過」。判準收在 `caseHasRun` —— 它問的是流程狀態上有沒有進展，
+  // 不是「有沒有人在上面留下字」。差別很要緊：判成 true 就會把舊個案的關卡
+  // 永久寫進 `project.workflowStages`，之後重新套範本也救不回來。
+  const touched = caseHasRun(live);
+
+  const stages = project?.workflowStages
+    ? // 落地過的一律沿用自己那一份 —— 連「範本換了類別」都不重算。
+      // D2 拍板的取捨：紀錄的連續性比流程的即時性重要
+      project.workflowStages
+    : touched
+      ? // 舊資料：跑到一半、但還沒有落地欄位的案子。**用它自己的關卡當流程**，
+        // 不要重解析 —— 重解析會換掉 stageId，第一輪的意見在紀錄上就變成
+        // 「（已移除的關卡）」。升級不能讓跑到一半的案子壞掉。
+        workflowFromCase(live!)
+      : resolveWorkflowFor(project);
+
+  return { landsNow: !touched, stages };
+}
+
+/**
  * 依專案**當下在跑的**流程建個案。
  *
  * 所有重建個案的路徑都走這裡，不再各自讀全域 `state.workflowStages` ——
@@ -2606,6 +2642,19 @@ export const store = {
    * 只在**建立關卡的那一次**生效 —— 已經在跑的案子要改人請走
    * `reassignCaseStage`，那條路徑會留下紀錄。
    */
+  /**
+   * 送審前的預判：這一次會不會建立關卡、會建哪幾關。
+   *
+   * 給送審對話框用 —— 只有 `landsNow === true` 的那一次 `assignments` 才生效，
+   * 已落地的案子重送審直接送（S2：改人走簽核頁的 `reassignCaseStage`，
+   * 那條路徑會留下紀錄）。純讀，不動 state。
+   */
+  submitPlan(projectId?: string): { landsNow: boolean; stages: WorkflowStageDef[] } {
+    // 預設專案的解析要跟 `submitForReview` 逐字一致，否則對話框問的是 A 專案、
+    // 送審送的是 B 專案。
+    return submitPlanFor(projectId ?? state.activeProjectId ?? "p1");
+  },
+
   submitForReview(
     projectId?: string,
     commitId?: string,
@@ -2614,26 +2663,13 @@ export const store = {
     // 只有「真的有東西變了」才算新的一輪：換了快照，或上一輪有人要求修改。
     // 同一份內容重按送審不該把輪次灌高，那會讓紀錄的分組失去意義。
     const id = projectId ?? state.activeProjectId ?? "p1";
-    const project = state.projects.find((p) => p.id === id);
     const existing = state.cases[id];
     const live = existing && !existing.withdrawn ? existing : undefined;
 
-    // 建專案時就會先開一個個案（走全域預設流程），所以「有個案」不等於
-    // 「這個案子跑過」。判準收在 `caseHasRun` —— 它問的是流程狀態上有沒有進展，
-    // 不是「有沒有人在上面留下字」。差別很要緊：判成 true 就會把舊個案的關卡
-    // 永久寫進 `project.workflowStages`，之後重新套範本也救不回來。
-    const touched = caseHasRun(live);
-
-    const landed = project?.workflowStages
-      ? // 落地過的一律沿用自己那一份 —— 連「範本換了類別」都不重算。
-        // D2 拍板的取捨：紀錄的連續性比流程的即時性重要
-        project.workflowStages
-      : touched
-        ? // 舊資料：跑到一半、但還沒有落地欄位的案子。**用它自己的關卡當流程**，
-          // 不要重解析 —— 重解析會換掉 stageId，第一輪的意見在紀錄上就變成
-          // 「（已移除的關卡）」。升級不能讓跑到一半的案子壞掉。
-          workflowFromCase(live!)
-        : resolveWorkflowFor(project);
+    // 判斷整段抽到 `submitPlanFor` —— 送審對話框要先問「每一關派給誰」，
+    // 而它必須用**同一份**判斷才知道 `assignments` 這次到底會不會生效。
+    const { landsNow, stages: landed } = submitPlanFor(id);
+    const touched = !landsNow;
 
     // 沒留下痕跡的個案照新流程重建。不重建的話，第一次送審跑的會是建專案當下
     // 那套全域預設關卡，而專案上剛落地的流程只是一份沒人用的資料 —— 兩者不一致

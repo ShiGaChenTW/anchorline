@@ -15159,3 +15159,50 @@ p.gd-warn {
   color: var(--muted);
   font-size: var(--fs-1);
 }
+
+/* ── 送審前的逐關指派對話框（W2-A）────────────────────────────
+   關卡多的時候（enterprise 五關 + 領域包）內容會超出視窗，所以捲軸掛在
+   清單上而不是整個 modal —— 標題與按鈕要一直看得到，不然使用者得先捲回
+   頂端才找得到「送出審閱」。 */
+.assign-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.assign-row {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.assign-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.assign-order {
+  flex: 0 0 auto;
+  min-width: 20px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--fs-2);
+}
+.assign-name {
+  color: var(--fg);
+  font-size: var(--fs-3);
+}
+/* edit 關卡的覆寫警語。用 warn 色是因為它講的是一個破壞性的後果，
+   不是一句補充說明 —— 使用者在這裡不看，就要等到內文被換掉才知道。 */
+.assign-warn {
+  margin: 0 0 8px;
+  color: var(--warn);
+  font-size: var(--fs-2);
+  line-height: 1.5;
+}
+.assign-row select {
+  width: 100%;
+}

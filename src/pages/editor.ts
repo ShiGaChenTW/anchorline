@@ -6,7 +6,14 @@ import {
   isAiConfigured,
   polishTextWithAI,
 } from "../lib/ai-coach";
-import { askConfirm, askText } from "../lib/ask";
+import { askConfirm, askCustom, askText } from "../lib/ask";
+import {
+  assignDialogHtml,
+  buildAssignments,
+  FULL_CAT_LABEL,
+  readAssignments,
+  type Assignments,
+} from "../lib/submit-assign";
 import { evaluateChecks, liveScore, store } from "../data/store";
 import { CUSTOM_SECTION_ID } from "../data/seed";
 import type { Project, Section } from "../data/types";
@@ -1335,6 +1342,39 @@ document.getElementById("btn-next")?.addEventListener("click", () => {
   }
 });
 
+/** 使用者按了取消。`undefined` 是「不必問」，兩者在送審路徑上是相反的決定 */
+const CANCELLED = Symbol("submit-cancelled");
+
+/**
+ * 送審前逐關指派。
+ *
+ * 只在**第一次落地流程**時問（S2）—— 已落地的案子重送審直接送，改人走簽核頁的
+ * `reassignCaseStage`，那條路徑會留下紀錄。「這次會不會落地」的判斷不在這裡重寫，
+ * 一律問 `store.submitPlan()`：UI 自己算一份的話兩份會分岔，而症狀是
+ * 「對話框問了指派，送審卻沒套用」—— 沒有錯誤訊息，看起來像使用者自己沒選。
+ */
+async function askStageAssignments(): Promise<Assignments | undefined | typeof CANCELLED> {
+  const plan = store.submitPlan();
+  if (!plan.landsNow || plan.stages.length === 0) return undefined;
+
+  const st = store.get();
+  const project = activeProject();
+  const sections = project ? store.sectionsFor(project.id) : st.sections;
+  const cat = project?.templateCat;
+  const defaults = buildAssignments(plan.stages, st.employees, st.currentUser);
+
+  const res = await askCustom({
+    title: "送出審閱前，先決定每一關派給誰",
+    body: `這份流程是照「${cat ? FULL_CAT_LABEL[cat] : "精簡型"}」骨架加上領域包算出來的，送出後就跟著這個案子走。之後要改人請到簽核頁改派。`,
+    confirmLabel: "送出審閱",
+    cancelLabel: "取消",
+    bodyHtml: assignDialogHtml(plan.stages, st.employees, st.currentUser, sections, defaults),
+    read: readAssignments,
+  });
+  if (res.action !== "confirm") return CANCELLED;
+  return res.value as Assignments;
+}
+
 document.getElementById("btn-submit")?.addEventListener("click", async () => {
   if (!editable()) {
     toast("目前身分無法送出編輯成果");
@@ -1360,6 +1400,14 @@ document.getElementById("btn-submit")?.addEventListener("click", async () => {
     return;
   }
 
+  // 指派對話框放在 gate 之後、commit 之前。放在 commit 之後的話，
+  // 使用者一按取消就留下一個沒人要的版本快照 —— 而版本清單上看不出它是廢的。
+  const assignments = await askStageAssignments();
+  if (assignments === CANCELLED) {
+    toast("已取消送審");
+    return;
+  }
+
   // 送審 = commit：對整份 PRD 拍快照。審閱者看的是這一份，
   // 不是「送審之後又被改過的當下內容」。
   const commit = store.commitForReview("");
@@ -1368,8 +1416,10 @@ document.getElementById("btn-submit")?.addEventListener("click", async () => {
     return;
   }
 
-  // 把這一份 commit 綁進個案 —— 審閱者看的、核准合併的都必須是它
-  store.submitForReview(undefined, commit.version!.id);
+  // 把這一份 commit 綁進個案 —— 審閱者看的、核准合併的都必須是它。
+  // 第三個參數是逐關指派：**只有這一行把對話框的結果交出去**，漏了它
+  // 整個對話框就變成一個問完就丟的問卷（Wave 1 F0 的形狀）。
+  store.submitForReview(undefined, commit.version!.id, assignments);
   const base = store.prdBaseline();
   const changed = base ? changedFieldCount(base.docs, commit.version!.docs) : null;
   toast(
