@@ -5,7 +5,7 @@ import { askText } from "../lib/ask";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
 import { fieldNo } from "../lib/field-number";
-import { canApproveProject, canEditContent, canPeerReview } from "../lib/permissions";
+import { canApprove, canEditContent, canPeerReview } from "../lib/permissions";
 import { deriveFlowLayers, renderFlowStripHtml } from "../lib/flow-layers";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
@@ -16,6 +16,7 @@ import { inlineDiff } from "../lib/file-history";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { initTheme } from "../lib/theme";
 import { syncRailContext } from "../lib/rail-projects";
+import { canSignAnyStage } from "../lib/signoff";
 import {
   expandEnter,
   flashFocus,
@@ -413,9 +414,19 @@ function renderApprovals() {
   const user = store.get().currentUser;
   const caseRec = cases[activeProjectId] ?? (project ? cases[project.id] : undefined);
   const withdrawn = caseRec?.withdrawn || project?.status === "withdrawn";
-  const gate = withdrawn
+  // 這顆按鈕按下去是 `approveAndLock()` 不帶 stageIds ——「把我簽得動的都簽掉」。
+  // 所以 enable 條件要跟那個迴圈用同一個判斷，否則會出現按得下去卻回
+  // 「現在沒有你可以簽的關卡」。
+  const gate: { ok: boolean; reason?: string } = withdrawn
     ? { ok: false, reason: "此案已抽單，請至管理中心重開" }
-    : canApproveProject(user, project);
+    : project
+      ? (() => {
+          // 員工清單傳進去，「這一關派給同族系 agent」才判得到 ——
+          // 少了它，按鈕的 enable 條件會跟 approveAndLock 的迴圈分岔
+          const a = canSignAnyStage(user, project, caseRec, store.get().employees);
+          return a.can ? { ok: true } : { ok: false, reason: a.reason };
+        })()
+      : { ok: false, reason: "找不到專案" };
 
   const cards = approvals
     .map((a) => {
@@ -529,7 +540,7 @@ function renderComments() {
   const visible = openOnly ? comments.filter((c) => !c.resolved) : comments;
   const project = activeProject();
   const peer = canPeerReview(store.get().currentUser, project);
-  const canResolve = peer.ok || canApproveProject(store.get().currentUser, project).ok;
+  const canResolve = peer.ok || canApprove(store.get().currentUser);
 
   const countEl = document.getElementById("comment-count");
   if (countEl) countEl.textContent = String(comments.length);

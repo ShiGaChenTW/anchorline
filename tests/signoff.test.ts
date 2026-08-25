@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  canSignAnyStage,
   canSignStage,
   groupTimelineByRound,
   signoffSummary,
@@ -440,5 +441,145 @@ describe("analysisVerdict", () => {
   test("結論不在前幾行就當沒有 —— 埋在文末的結論人也看不到", () => {
     const buried = ["a", "b", "c", "d", "e", "f", "建議核准"].join("\n");
     expect(analysisVerdict(buried)).toBeNull();
+  });
+});
+
+// ── 權限收斂（D3）────────────────────────────────────────────
+
+describe("canSignStage 是唯一入口", () => {
+  const agentClaude = emp({
+    id: "a-claude",
+    name: "Claude 核准",
+    kind: "agent",
+    accessRole: "approver",
+    agentFamily: "claude",
+  });
+  const agentCodex = emp({
+    id: "a-codex",
+    name: "Codex 核准",
+    kind: "agent",
+    accessRole: "approver",
+    agentFamily: "codex",
+  });
+  /** 有了員工清單，族系比對才查得到「這一關派給誰」 */
+  const employees = [agentClaude, agentCodex];
+
+  // ── 主要守門：族系比對的主體是**這一關的執行者** ──────────────
+  //
+  // 這一組才是真實流程。以前這個 describe 只驗「簽核者本身是同族系 agent」，
+  // 而那個 user 在真實流程裡不存在 —— agent 只跑 invokeAgent 產出分析，
+  // 按下核准的一律是人。測試因此全綠，守門卻整條沒掛上。
+
+  test("人簽一個派給同族系 agent 的審查關卡 → 擋。這是主要守門", () => {
+    const human = emp({ id: "u-me", accessRole: "admin" });
+    const p = proj({ authorId: "claude-edit", authorAgentFamily: "claude" });
+    const st = stage({ assigneeId: "a-claude", assigneeName: "Claude 核准", kind: "review" });
+    const r = canSignStage(human, p, st, kase({ stages: [st] }), { employees });
+    expect(r.can).toBe(false);
+    // 理由要指得出出路，不然使用者只看到一個永遠按不下去的按鈕
+    expect((r as { reason: string }).reason).toContain("改派");
+  });
+
+  test("執行者是別的族系 → 放行", () => {
+    const human = emp({ id: "u-me", accessRole: "admin" });
+    const p = proj({ authorId: "claude-edit", authorAgentFamily: "claude" });
+    const st = stage({ assigneeId: "a-codex", kind: "review" });
+    expect(canSignStage(human, p, st, kase({ stages: [st] }), { employees }).can).toBe(true);
+  });
+
+  test("edit 關卡不受族系限制 —— 族系隔離守的是審查，不是撰寫", () => {
+    const human = emp({ id: "u-me", accessRole: "admin" });
+    const p = proj({ authorId: "claude-edit", authorAgentFamily: "claude" });
+    const st = stage({ assigneeId: "a-claude", kind: "edit", name: "文件補完" });
+    expect(canSignStage(human, p, st, kase({ stages: [st] }), { employees }).can).toBe(true);
+  });
+
+  test("代簽繞得過關卡歸屬，繞不過執行者的族系", () => {
+    const admin = emp({ id: "u-admin", accessRole: "admin" });
+    const p = proj({ authorId: "claude-edit", authorAgentFamily: "claude" });
+
+    // 一般人代簽：admin 放行
+    const plain = stage({ assigneeId: "someone-else" });
+    expect(canSignStage(admin, p, plain, kase({ stages: [plain] }), { override: true }).can).toBe(true);
+    // 非 admin 不得代簽
+    expect(canSignStage(emp({ accessRole: "approver" }), p, plain, kase({ stages: [plain] }), { override: true }).can).toBe(false);
+    // 執行者撞族系：連 admin 代簽都不放行 —— 代簽繞的是「這關不是你的」，
+    // 不是「審查者跟作者是同一顆腦袋」
+    const claudeStage = stage({ assigneeId: "a-claude", kind: "review" });
+    expect(
+      canSignStage(admin, p, claudeStage, kase({ stages: [claudeStage] }), { override: true, employees }).can,
+    ).toBe(false);
+  });
+
+  // ── 第二層：簽核者本身就是同族系 agent ────────────────────────
+  //
+  // 這條路徑目前沒有 UI 走得到（agent 不按核准），但規則一旦走得到就必須擋。
+  // 保留它是為了「規則本身沒錯」，不是因為它驗得到真實流程 —— 真實流程在上面那一組。
+
+  test("簽核者本身是同族系 agent 也要擋（目前無 UI 走得到，但規則要成立）", () => {
+    const p = proj({ authorId: "claude-edit", authorAgentFamily: "claude" });
+    const st = stage({ assigneeId: "a-claude" });
+    const r = canSignStage(agentClaude, p, st, kase({ stages: [st] }));
+    expect(r.can).toBe(false);
+    expect((r as { reason: string }).reason).toContain("同一種 Agent");
+  });
+
+  test("族系隔離排在關卡歸屬之前 —— 講得出真正的原因", () => {
+    const p = proj({ authorId: "claude-edit", authorAgentFamily: "claude" });
+    // 這一關指派給別人，族系也撞號。兩個理由都成立，要講族系那個
+    const st = stage({ assigneeId: "someone-else", assigneeName: "別人" });
+    const r = canSignStage(agentClaude, p, st, kase({ stages: [st] }));
+    expect((r as { reason: string }).reason).toContain("同一種 Agent");
+  });
+
+  test("不同族系的 agent 簽得動", () => {
+    const p = proj({ authorId: "claude-edit", authorAgentFamily: "claude" });
+    const st = stage({ assigneeId: "a-codex" });
+    expect(canSignStage(agentCodex, p, st, kase({ stages: [st] })).can).toBe(true);
+  });
+
+  test("沒有簽核權限的角色講得出是角色問題", () => {
+    const editor = emp({ id: "u-ed", accessRole: "editor" });
+    const st = stage({ assigneeId: "u-ed" });
+    const r = canSignStage(editor, proj(), st, kase({ stages: [st] }));
+    expect(r.can).toBe(false);
+    expect((r as { reason: string }).reason).toContain("無簽核權限");
+  });
+
+  test("人不可核准自己寫的（admin 例外）", () => {
+    const me = emp({ id: "u1", accessRole: "approver" });
+    const p = proj({ authorId: "u1" });
+    const st = stage({ assigneeId: "u1" });
+    expect(canSignStage(me, p, st, kase({ stages: [st] })).can).toBe(false);
+    const admin = emp({ id: "u1", accessRole: "admin" });
+    expect(canSignStage(admin, p, st, kase({ stages: [st] })).can).toBe(true);
+  });
+});
+
+describe("canSignAnyStage", () => {
+  test("有一關簽得動就是 true", () => {
+    const mine = stage({ id: "s1", assigneeId: "u1" });
+    const theirs = stage({ id: "s2", order: 2, assigneeId: "u9", assigneeName: "別人" });
+    const c = kase({ stages: [mine, theirs] });
+    expect(canSignAnyStage(emp(), proj(), c).can).toBe(true);
+  });
+
+  test("一關都簽不動時，講得出第一個理由而不是含糊的「無法簽核」", () => {
+    const theirs = stage({ id: "s2", assigneeId: "u9", assigneeName: "別人" });
+    const r = canSignAnyStage(emp(), proj(), kase({ stages: [theirs] }));
+    expect(r.can).toBe(false);
+    expect((r as { reason: string }).reason).toContain("別人");
+  });
+
+  test("全部結案講的是「都已結案」，不是「沒有權限」", () => {
+    const done = stage({ state: "approved" });
+    const r = canSignAnyStage(emp(), proj(), kase({ stages: [done] }));
+    expect(r.can).toBe(false);
+    expect((r as { reason: string }).reason).toContain("已結案");
+  });
+
+  test("沒有個案／沒有關卡各有各的說法", () => {
+    expect((canSignAnyStage(emp(), proj(), undefined) as { reason: string }).reason).toContain("還沒有簽核個案");
+    expect((canSignAnyStage(emp(), proj(), kase({ stages: [] })) as { reason: string }).reason).toContain("還沒有關卡");
   });
 });

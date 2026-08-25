@@ -106,6 +106,18 @@ sections:
         type: textarea
         rows: 4
 
+stages:
+  # 金融四包共用的追加關卡。名字必須與其他三包**逐字相同** ——
+  # resolveWorkflow 的去重鍵是名字，差一個空格就會變成兩個長得一樣的關卡。
+  - id: ws-fin-compliance
+    order: 1
+    name: 金融法遵與風險
+    defaultAssigneeId: null
+    required: true
+    mode: sequential
+    kind: review
+    defaultActor: agent
+
 gates:
   - rules:
       - id: lending-rate-cap

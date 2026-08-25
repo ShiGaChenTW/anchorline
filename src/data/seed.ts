@@ -4,6 +4,7 @@ import type {
   CaseRecord,
   Comment,
   Employee,
+  FullCat,
   Project,
   Section,
   Template,
@@ -321,11 +322,75 @@ export const GHOST_USER: Employee = {
 
 /** 正式版預設簽核流：不綁示範 Agent */
 export const SEED_WORKFLOW_PROD: WorkflowStageDef[] = [
-  { id: "ws-eng", order: 1, name: "工程", defaultAssigneeId: null, required: true, mode: "sequential" },
-  { id: "ws-design", order: 2, name: "設計", defaultAssigneeId: null, required: true, mode: "parallel" },
-  { id: "ws-sec", order: 3, name: "資安", defaultAssigneeId: null, required: true, mode: "parallel" },
-  { id: "ws-legal", order: 4, name: "法務", defaultAssigneeId: null, required: false, mode: "sequential" },
+  { id: "ws-eng", order: 1, name: "工程", defaultAssigneeId: null, required: true, mode: "sequential", kind: "review", defaultActor: "agent" },
+  { id: "ws-design", order: 2, name: "設計", defaultAssigneeId: null, required: true, mode: "parallel", kind: "review", defaultActor: "agent" },
+  { id: "ws-sec", order: 3, name: "資安", defaultAssigneeId: null, required: true, mode: "parallel", kind: "review", defaultActor: "agent" },
+  { id: "ws-legal", order: 4, name: "法務", defaultAssigneeId: null, required: false, mode: "sequential", kind: "review", defaultActor: "agent" },
 ];
+
+/**
+ * 「我核准」—— 每一條流程的最後一關，永遠是人。
+ *
+ * 名字被 `resolveWorkflow` 當成排序的錨點（一律殿後）與去重的鍵，所以它必須是
+ * 一個常數而不是各處各打一遍的字串字面值。打錯一個字的症狀是那一關跑到中間去，
+ * 而且不會有任何錯誤訊息。
+ */
+export const HUMAN_APPROVAL_STAGE_NAME = "我核准";
+
+function humanApproval(id: string): WorkflowStageDef {
+  return {
+    id,
+    order: 99,
+    name: HUMAN_APPROVAL_STAGE_NAME,
+    defaultAssigneeId: null,
+    required: true,
+    mode: "sequential",
+    kind: "review",
+    defaultActor: "human",
+  };
+}
+
+/**
+ * 五類整份 PRD 範本各自的簽核骨架。
+ *
+ * 為什麼是資料而不是程式邏輯：這五套關卡的差別純粹是「哪些關、什麼順序」，
+ * 沒有任何條件判斷。寫成 `if (cat === "lean") …` 的話，之後多一類範本就得改
+ * `resolveWorkflow` —— 而那支函式的職責是疊加與排序，不是知道有哪幾類範本。
+ *
+ * 分類依據沿用 `SEED_FULL_TEMPLATES` 的「寫給誰看、要多重」：lean 只驗結構，
+ * enterprise 要拆到風險／技術／補完四關，narrative 與 technical 各自多一關
+ * 對應它們的方法論核心（敘事可讀性、設計取捨）。
+ */
+export const SEED_WORKFLOW_SKELETONS: Record<FullCat, WorkflowStageDef[]> = {
+  lean: [
+    { id: "ws-lean-structure", order: 1, name: "AI 結構審查", defaultAssigneeId: null, required: true, mode: "sequential", kind: "review", defaultActor: "agent" },
+    humanApproval("ws-lean-approve"),
+  ],
+  narrative: [
+    { id: "ws-narr-readable", order: 1, name: "敘事可讀性審查", defaultAssigneeId: null, required: true, mode: "sequential", kind: "review", defaultActor: "agent" },
+    { id: "ws-narr-faq", order: 2, name: "FAQ 完整度", defaultAssigneeId: null, required: false, mode: "parallel", kind: "review", defaultActor: "agent" },
+    humanApproval("ws-narr-approve"),
+  ],
+  enterprise: [
+    { id: "ws-ent-structure", order: 1, name: "結構完整度", defaultAssigneeId: null, required: true, mode: "sequential", kind: "review", defaultActor: "agent" },
+    { id: "ws-ent-risk", order: 2, name: "風險與相依", defaultAssigneeId: null, required: true, mode: "parallel", kind: "review", defaultActor: "agent" },
+    { id: "ws-ent-tech", order: 3, name: "技術可行性", defaultAssigneeId: null, required: true, mode: "parallel", kind: "review", defaultActor: "agent" },
+    // 唯一的 edit 關卡：它要真的改內文，所以要講得出改哪裡。
+    // 指向「開放問題」是因為那正是舊版 `invokeAgent` 靜默追加摘要的地方 ——
+    // 落地目標不變，變的是這次會先問過人。
+    { id: "ws-ent-fill", order: 4, name: "文件補完", defaultAssigneeId: null, required: false, mode: "parallel", kind: "edit", defaultActor: "agent", editTarget: { sectionId: "open", fieldKey: "oq" } },
+    humanApproval("ws-ent-approve"),
+  ],
+  agile: [
+    { id: "ws-agile-appetite", order: 1, name: "範圍胃口審查", defaultAssigneeId: null, required: true, mode: "sequential", kind: "review", defaultActor: "agent" },
+    humanApproval("ws-agile-approve"),
+  ],
+  technical: [
+    { id: "ws-tech-tradeoff", order: 1, name: "設計取捨審查", defaultAssigneeId: null, required: true, mode: "sequential", kind: "review", defaultActor: "agent" },
+    { id: "ws-tech-spec", order: 2, name: "規格一致性", defaultAssigneeId: null, required: false, mode: "parallel", kind: "review", defaultActor: "agent" },
+    humanApproval("ws-tech-approve"),
+  ],
+};
 
 /** 把章節骨架清空為可填寫空白（正式版用） */
 export function blankSections(sections: Section[]): Section[] {
@@ -758,10 +823,10 @@ export const SEED_APPROVALS: Approval[] = [
 
 /** 預設簽核流程設計 */
 export const SEED_WORKFLOW: WorkflowStageDef[] = [
-  { id: "ws-eng", order: 1, name: "工程", defaultAssigneeId: "codex-approve", required: true, mode: "sequential" },
-  { id: "ws-design", order: 2, name: "設計", defaultAssigneeId: "grok-approve", required: true, mode: "parallel" },
-  { id: "ws-sec", order: 3, name: "資安", defaultAssigneeId: "claude-approve", required: true, mode: "parallel" },
-  { id: "ws-legal", order: 4, name: "法務", defaultAssigneeId: "agy-approve", required: false, mode: "sequential" },
+  { id: "ws-eng", order: 1, name: "工程", defaultAssigneeId: "codex-approve", required: true, mode: "sequential", kind: "review", defaultActor: "agent" },
+  { id: "ws-design", order: 2, name: "設計", defaultAssigneeId: "grok-approve", required: true, mode: "parallel", kind: "review", defaultActor: "agent" },
+  { id: "ws-sec", order: 3, name: "資安", defaultAssigneeId: "claude-approve", required: true, mode: "parallel", kind: "review", defaultActor: "agent" },
+  { id: "ws-legal", order: 4, name: "法務", defaultAssigneeId: "agy-approve", required: false, mode: "sequential", kind: "review", defaultActor: "agent" },
 ];
 
 export function buildSeedCase(projectId: string, employees: Employee[]): CaseRecord {

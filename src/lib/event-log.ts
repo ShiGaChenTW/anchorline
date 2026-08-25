@@ -47,6 +47,10 @@ export type EventKind =
   | "release.tag"
   | "agent.job.start"
   | "agent.job.done"
+  // 「這份 AI 產出進到文件裡了」。與 `agent.job.done`（跑完了）分開是刻意的：
+  // 跑完只是有了結果，落地才是內容被改動的那一刻，而治理鏈要能重播的正是後者。
+  // 共用同一個 kind 的話，「叫它跑過但沒採用」與「採用了」在紀錄上分不出來。
+  | "agent.result.saved"
   | "pr.open"
   | "pr.review"
   | "pr.merge"
