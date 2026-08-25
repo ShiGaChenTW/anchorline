@@ -4,15 +4,33 @@ import type {
   ActorKind,
   AgentFamily,
   Employee,
+  FullCat,
   ProjectStatus,
+  Section,
+  WorkflowStageDef,
 } from "../data/types";
-import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL } from "../data/types";
+import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL, FULL_CATS } from "../data/types";
 import { askConfirm, askText } from "../lib/ask";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { canManageUsers } from "../lib/permissions";
+import { editTargetLabel } from "../lib/submit-assign";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
+import {
+  editFieldOptionsHtml,
+  FULL_CAT_TITLE,
+  landedFlowProjects,
+  readStageForm,
+  REAPPLY_COPY,
+  skeletonLandedCounts,
+  SKELETON_D2_NOTICE,
+  stagePatchFrom,
+  STAGE_ACTOR_LABEL,
+  STAGE_FIELD_SEL,
+  STAGE_KIND_LABEL,
+  stageRowFieldsHtml,
+} from "../lib/workflow-admin";
 
 const __authed = requireAuth();
 if (__authed) {
@@ -212,54 +230,102 @@ if (__authed) {
   });
 
   /* ─── Workflow ─── */
+
+  /**
+   * `editTarget` 的章節選項來源。
+   *
+   * 用目前 active 專案解析出來的章節，不是 `SEED_SECTIONS` —— 領域包會加章節
+   * （通用 8 章、payment 12 章），拿種子的話 payment 專屬章節在這裡根本選不到，
+   * 而那正是最需要被 `edit` 關卡改寫的幾章。
+   *
+   * ⚠️ 已知落差：全域關卡與五類骨架都是**跨專案**的，而這份章節清單是
+   * 某一個專案的。選了一個別的領域沒有的章節時，落地端會查不到欄位 ——
+   * `editTargetLabel` 那時顯示 id 而不是猜一個名字，所以看得出來。列進 UAT。
+   */
+  function editorSections(): Section[] {
+    return store.get().sections;
+  }
+
+  function assigneeOptions(stage: WorkflowStageDef, all: Employee[]): string {
+    return [
+      `<option value="">— 待指派 —</option>`,
+      ...all.map(
+        (e) =>
+          `<option value="${e.id}" ${stage.defaultAssigneeId === e.id ? "selected" : ""}>${escapeHtml(e.name)}（${ACCESS_ROLE_LABEL[e.accessRole]}）</option>`,
+      ),
+    ].join("");
+  }
+
+  /**
+   * 一列可編輯的關卡。**全域關卡編輯器與五類骨架編輯器共用。**
+   *
+   * 兩邊各刻一份的話，之後補欄位一定會漏掉其中一邊，而漏掉的那一邊不會報錯 ——
+   * 只會在存檔時把新欄位靜默清成預設值。
+   */
+  function stageRowHtml(s: WorkflowStageDef, all: Employee[], sections: Section[]): string {
+    return `<div class="stage-item" data-id="${escapeHtml(s.id)}">
+      <div class="ord">${String(s.order).padStart(2, "0")}</div>
+      <div class="fields">
+        <label class="st-field-label">關卡名稱
+          <input class="${STAGE_FIELD_SEL.name.slice(1)}" value="${escapeHtml(s.name)}" />
+        </label>
+        <label class="st-field-label">預設簽核人
+          <select class="${STAGE_FIELD_SEL.assignee.slice(1)}">${assigneeOptions(s, all)}</select>
+        </label>
+        <label class="st-field-label" title="串行＝要等前面的關卡結案才輪得到；並行＝隨時可簽">順序
+          <select class="${STAGE_FIELD_SEL.mode.slice(1)}">
+            <option value="sequential" ${(s.mode ?? "parallel") === "sequential" ? "selected" : ""}>串行（等前面結案）</option>
+            <option value="parallel" ${(s.mode ?? "parallel") === "parallel" ? "selected" : ""}>並行（隨時可簽）</option>
+          </select>
+        </label>
+        ${stageRowFieldsHtml(s, sections)}
+        <label class="st-field-label st-check" title="非必簽的關卡不擋結案，而且可以被明確略過">
+          <input type="checkbox" class="${STAGE_FIELD_SEL.required.slice(1)}" ${s.required ? "checked" : ""} /> 必簽關卡
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn btn-sm btn-ghost st-up" title="上移">↑</button>
+        <button type="button" class="btn btn-sm btn-ghost st-down" title="下移">↓</button>
+        <button type="button" class="btn btn-sm btn-primary st-save">儲存</button>
+        <button type="button" class="btn btn-sm btn-ghost st-del">刪除</button>
+      </div>
+    </div>`;
+  }
+
+  /**
+   * 一列的「型態切換」與「章節切換」兩個即時反應。兩邊共用。
+   *
+   * 不重畫整列是刻意的：重畫會把使用者同一列還沒存的其他修改（關卡名打到一半）
+   * 一起丟掉。
+   */
+  function bindStageRowFields(el: Element) {
+    const wraps = Array.from(el.querySelectorAll<HTMLElement>(STAGE_FIELD_SEL.editWrap));
+    const kindSel = el.querySelector<HTMLSelectElement>(STAGE_FIELD_SEL.kind);
+    kindSel?.addEventListener("change", () => {
+      const show = kindSel.value === "edit";
+      for (const w of wraps) w.style.display = show ? "" : "none";
+    });
+    const secSel = el.querySelector<HTMLSelectElement>(STAGE_FIELD_SEL.editSection);
+    const fieldSel = el.querySelector<HTMLSelectElement>(STAGE_FIELD_SEL.editField);
+    secSel?.addEventListener("change", () => {
+      // 換了章節，舊的 fieldKey 一定不屬於新章節 —— 不重建選項的話，
+      // 下拉會留著上一章的欄位名，而存下去是一個查不到的位址
+      if (fieldSel) fieldSel.innerHTML = editFieldOptionsHtml(editorSections(), secSel.value, "");
+    });
+  }
+
   function renderWorkflow() {
     const list = document.getElementById("workflow-list");
     if (!list) return;
     const stages = [...store.get().workflowStages].sort((a, b) => a.order - b.order);
     const all = store.get().employees.filter((e) => e.active !== false);
+    const sections = editorSections();
 
-    list.innerHTML = stages
-      .map((s) => {
-        const opts = [
-          `<option value="">— 待指派 —</option>`,
-          ...all.map(
-            (e) =>
-              `<option value="${e.id}" ${s.defaultAssigneeId === e.id ? "selected" : ""}>${escapeHtml(e.name)}（${ACCESS_ROLE_LABEL[e.accessRole]}）</option>`,
-          ),
-        ].join("");
-        return `<div class="stage-item" data-id="${s.id}">
-          <div class="ord">${String(s.order).padStart(2, "0")}</div>
-          <div class="fields">
-            <label style="font-size:11px;color:var(--muted)">關卡名稱
-              <input class="st-name" value="${escapeHtml(s.name)}" style="width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:6px 8px" />
-            </label>
-            <label style="font-size:11px;color:var(--muted)">預設簽核人
-              <select class="st-assignee" style="width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:6px 8px">${opts}</select>
-            </label>
-            <label style="font-size:11px;color:var(--muted)">順序
-              <select class="st-mode" style="width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:6px 8px"
-                      title="串行＝要等前面的關卡結案才輪得到；並行＝隨時可簽">
-                <option value="sequential" ${(s.mode ?? "parallel") === "sequential" ? "selected" : ""}>串行（等前面結案）</option>
-                <option value="parallel" ${(s.mode ?? "parallel") === "parallel" ? "selected" : ""}>並行（隨時可簽）</option>
-              </select>
-            </label>
-            <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:18px"
-                   title="非必簽的關卡不擋結案，而且可以被明確略過">
-              <input type="checkbox" class="st-req" ${s.required ? "checked" : ""} /> 必簽關卡
-            </label>
-          </div>
-          <div class="actions">
-            <button type="button" class="btn btn-sm btn-ghost st-up" title="上移">↑</button>
-            <button type="button" class="btn btn-sm btn-ghost st-down" title="下移">↓</button>
-            <button type="button" class="btn btn-sm btn-primary st-save">儲存</button>
-            <button type="button" class="btn btn-sm btn-ghost st-del">刪除</button>
-          </div>
-        </div>`;
-      })
-      .join("");
+    list.innerHTML = stages.map((s) => stageRowHtml(s, all, sections)).join("");
 
     list.querySelectorAll(".stage-item").forEach((el) => {
       const id = (el as HTMLElement).dataset.id!;
+      bindStageRowFields(el);
       el.querySelector(".st-up")?.addEventListener("click", () => {
         store.moveWorkflowStage(id, -1);
         renderWorkflow();
@@ -275,12 +341,12 @@ if (__authed) {
         renderWorkflow();
       });
       el.querySelector(".st-save")?.addEventListener("click", () => {
-        const name = (el.querySelector(".st-name") as HTMLInputElement).value.trim() || "關卡";
-        const defaultAssigneeId =
-          (el.querySelector(".st-assignee") as HTMLSelectElement).value || null;
-        const required = (el.querySelector(".st-req") as HTMLInputElement).checked;
-        const mode = (el.querySelector(".st-mode") as HTMLSelectElement).value as "sequential" | "parallel";
-        store.updateWorkflowStage(id, { name, defaultAssigneeId, required, mode });
+        // `kind` / `defaultActor` / `editTarget` 就是在這一行交出去的。
+        // Wave 1 加好了欄位、`updateWorkflowStage` 也收得下，但這裡一直只傳四個 ——
+        // 於是使用者可以在管理中心建一個「會改 PRD 內文」的關卡，而畫面上跟
+        // 只出意見的關卡長得一模一樣。讀回走共用的 `readStageForm`+`stagePatchFrom`，
+        // 測試才驗得到這一行到底有沒有把東西交出去（Wave 1 F0 的教訓）
+        store.updateWorkflowStage(id, stagePatchFrom(readStageForm(el)));
         toast("已更新關卡");
         renderWorkflow();
       });
@@ -292,6 +358,242 @@ if (__authed) {
     toast("已新增關卡");
     renderWorkflow();
   });
+
+  /* ─── C-2：五類 PRD 範本的簽核骨架 ─── */
+
+  /**
+   * 哪幾類是展開的。`store.subscribe(render)` 會把整頁重畫，不記著的話
+   * 使用者每存一次關卡，他正在看的那一類就自己收合起來。
+   */
+  const openSkeletons = new Set<FullCat>();
+
+  /** 這一類目前的骨架（覆寫優先）。畫面與送審讀的是**同一支** */
+  function skeletonOf(cat: FullCat): WorkflowStageDef[] {
+    return [...store.workflowSkeletons()[cat]].sort((a, b) => a.order - b.order);
+  }
+
+  /** 存一份改好的骨架回去，失敗就把 store 的拒絕理由原樣說出來 */
+  function saveSkeleton(cat: FullCat, stages: WorkflowStageDef[], okMsg: string) {
+    const r = store.setWorkflowSkeleton(cat, stages);
+    toast(r.ok ? okMsg : (r.reason ?? "失敗"));
+    renderSkeletons();
+  }
+
+  function renderSkeletons() {
+    const host = document.getElementById("skeleton-list");
+    if (!host) return;
+    const all = store.get().employees.filter((e) => e.active !== false);
+    const sections = editorSections();
+    const counts = skeletonLandedCounts(store.get().projects);
+    const overrides = store.get().workflowSkeletons ?? {};
+
+    host.innerHTML = FULL_CATS.map((cat) => {
+      const stages = skeletonOf(cat);
+      const customized = Boolean(overrides[cat]?.length);
+      return `<details class="skeleton-block" data-cat="${cat}" ${openSkeletons.has(cat) ? "open" : ""}>
+        <summary>
+          <span class="sk-title">${escapeHtml(FULL_CAT_TITLE[cat])}</span>
+          <span class="pill" style="font-size:10px">${stages.length} 關</span>
+          ${customized ? '<span class="pill pill-review" style="font-size:10px">已自訂</span>' : ""}
+          <span class="sk-count">目前有 ${counts[cat]} 個專案落地了這一份</span>
+        </summary>
+        <p class="sk-notice">${escapeHtml(SKELETON_D2_NOTICE)}</p>
+        <div class="stage-list">
+          ${stages.map((s) => stageRowHtml(s, all, sections)).join("")}
+        </div>
+        <div class="sk-actions">
+          <button type="button" class="btn btn-sm btn-primary sk-add">＋ 新增關卡</button>
+          <button type="button" class="btn btn-sm btn-ghost sk-reset" ${customized ? "" : "disabled"}>還原成預設</button>
+        </div>
+      </details>`;
+    }).join("");
+
+    host.querySelectorAll<HTMLDetailsElement>(".skeleton-block").forEach((block) => {
+      const cat = block.dataset.cat as FullCat;
+      block.addEventListener("toggle", () => {
+        if (block.open) openSkeletons.add(cat);
+        else openSkeletons.delete(cat);
+      });
+
+      block.querySelector(".sk-add")?.addEventListener("click", () => {
+        // 新關卡一律 review + agent：預設成 edit 等於讓使用者點兩下就多出一個
+        // 會改 PRD 內文的關卡，而畫面上跟 review 關卡長得一樣。與
+        // `store.addWorkflowStage` 的預設逐字一致
+        const cur = skeletonOf(cat);
+        const next: WorkflowStageDef[] = [
+          ...cur,
+          {
+            id: `wsk-${cat}-${Date.now()}`,
+            order: cur.length + 1,
+            name: `關卡 ${cur.length + 1}`,
+            defaultAssigneeId: null,
+            required: true,
+            mode: "sequential",
+            kind: "review",
+            defaultActor: "agent",
+          },
+        ];
+        saveSkeleton(cat, next, "已新增關卡");
+      });
+
+      block.querySelector(".sk-reset")?.addEventListener("click", async () => {
+        if (
+          !(await askConfirm({
+            title: `把「${FULL_CAT_TITLE[cat]}」的骨架還原成預設？`,
+            body: "這一類的自訂關卡會全部消失。已經落地的專案不受影響。",
+            danger: true,
+          }))
+        ) {
+          return;
+        }
+        store.resetWorkflowSkeleton(cat);
+        toast("已還原成預設骨架");
+        renderSkeletons();
+      });
+
+      block.querySelectorAll(".stage-item").forEach((el) => {
+        const id = (el as HTMLElement).dataset.id!;
+        bindStageRowFields(el);
+        el.querySelector(".st-save")?.addEventListener("click", () => {
+          const patch = stagePatchFrom(readStageForm(el));
+          saveSkeleton(
+            cat,
+            skeletonOf(cat).map((s) => (s.id === id ? { ...s, ...patch } : s)),
+            "已更新骨架關卡",
+          );
+        });
+        el.querySelector(".st-del")?.addEventListener("click", async () => {
+          if (!(await askConfirm({ title: "從這一類骨架刪除此關卡？", danger: true }))) return;
+          // 刪到只剩零關、或把「我核准」刪掉，都會被 store 擋下來並說明原因 ——
+          // UI 這裡刻意不自己先擋一次：兩份規則會分岔，而分岔的那一天，
+          // 畫面上按得下去的東西 store 會拒絕，看起來像存檔壞了
+          saveSkeleton(
+            cat,
+            skeletonOf(cat).filter((s) => s.id !== id),
+            "已刪除骨架關卡",
+          );
+        });
+        const move = (dir: -1 | 1) => {
+          const cur = skeletonOf(cat);
+          const i = cur.findIndex((s) => s.id === id);
+          const j = i + dir;
+          if (i < 0 || j < 0 || j >= cur.length) return;
+          [cur[i], cur[j]] = [cur[j]!, cur[i]!];
+          saveSkeleton(cat, cur, "已調整順序");
+        };
+        el.querySelector(".st-up")?.addEventListener("click", () => move(-1));
+        el.querySelector(".st-down")?.addEventListener("click", () => move(1));
+      });
+    });
+  }
+
+  /* ─── C-3：各專案已落地的流程（唯讀）─── */
+
+  const openFlows = new Set<string>();
+
+  /**
+   * 這顆鈕對這個案子到底有沒有效。
+   *
+   * **一律問 `store.submitPlan()`，不要在這裡重寫一份 `caseHasRun`。**
+   * 那正是 W2-A 把判斷抽進 `submitPlan` 要防的分岔 —— 而分岔的症狀就是這一整段
+   * 在修的東西：畫面說的跟實際發生的不是同一件事。
+   */
+  function reapplyEffective(projectId: string): boolean {
+    return store.submitPlan(projectId).landsNow;
+  }
+
+  /**
+   * 「重新套用範本」那一塊。跑過的案子**把鈕停用並說出原因**，不讓人按一顆無效的鈕。
+   *
+   * 為什麼是「停用 + 說明」而不是整塊拿掉：管理員找的就是這顆鈕，整塊消失只會讓他
+   * 以為功能不見了，然後去別的地方翻。原因要貼在他想按的東西旁邊。
+   */
+  function reapplyBlockHtml(projectId: string): string {
+    if (!reapplyEffective(projectId)) {
+      return `<p class="lf-note">${escapeHtml(REAPPLY_COPY.ranNote)}</p>
+        <div class="sk-actions">
+          <button type="button" class="btn btn-sm btn-ghost lf-reapply" disabled>重新套用範本（對這個案子不生效）</button>
+        </div>`;
+    }
+    return `<div class="sk-actions">
+      <button type="button" class="btn btn-sm btn-ghost lf-reapply" style="color:var(--danger)">重新套用範本</button>
+    </div>`;
+  }
+
+  function renderLandedFlows() {
+    const host = document.getElementById("landed-flow-list");
+    if (!host) return;
+    const { projects, cases, currentUser } = store.get();
+    const landed = landedFlowProjects(projects);
+    const isAdmin = currentUser.accessRole === "admin";
+
+    if (!landed.length) {
+      host.innerHTML =
+        '<div class="admin-card" style="color:var(--muted);font-size:var(--fs-2)">還沒有任何專案落地流程 —— 專案第一次送出審閱時才會落地。</div>';
+      return;
+    }
+
+    host.innerHTML = landed
+      .map((p) => {
+        const sections = store.sectionsFor(p.id);
+        const c = cases[p.id];
+        const rows = [...(p.workflowStages ?? [])]
+          .sort((a, b) => a.order - b.order)
+          .map((s) => {
+            const tags = [`<span class="pill" style="font-size:10px">${escapeHtml(STAGE_KIND_LABEL[s.kind])}</span>`];
+            if (s.required === false) tags.push('<span class="pill pill-draft" style="font-size:10px">非必簽</span>');
+            const warn =
+              s.kind === "edit"
+                ? `<span class="lf-warn">存檔覆寫「${escapeHtml(editTargetLabel(s.editTarget, sections))}」</span>`
+                : "";
+            return `<div class="lf-row">
+              <span class="mono" style="color:var(--muted)">${String(s.order).padStart(2, "0")}</span>
+              <span class="lf-name">${escapeHtml(s.name)}</span>
+              ${tags.join("")}
+              <span class="lf-sub">${escapeHtml(STAGE_ACTOR_LABEL[s.defaultActor])}／${s.mode === "sequential" ? "串行" : "並行"}</span>
+              ${warn}
+            </div>`;
+          })
+          .join("");
+        const state = c?.locked ? "已鎖定" : c?.withdrawn || p.status === "withdrawn" ? "已抽單" : STATUS_LABEL[p.status];
+        return `<details class="admin-card lf-block" data-pid="${escapeHtml(p.id)}" ${openFlows.has(p.id) ? "open" : ""}>
+          <summary>
+            <span style="font-weight:600;color:var(--fg)">${escapeHtml(p.title)}</span>
+            <span class="pill" style="font-size:10px">${escapeHtml(state)}</span>
+            <span class="lf-sub">${(p.workflowStages ?? []).length} 關</span>
+          </summary>
+          <div class="lf-rows">${rows}</div>
+          ${isAdmin ? reapplyBlockHtml(p.id) : ""}
+        </details>`;
+      })
+      .join("");
+
+    host.querySelectorAll<HTMLDetailsElement>(".lf-block").forEach((block) => {
+      const pid = block.dataset.pid!;
+      block.addEventListener("toggle", () => {
+        if (block.open) openFlows.add(pid);
+        else openFlows.delete(pid);
+      });
+      block.querySelector(".lf-reapply")?.addEventListener("click", async () => {
+        // 再問一次：畫面可能是上一次 render 留下的，而這個案子在那之後跑過了。
+        // 停用的鈕按不下去，但 `disabled` 只是 DOM 狀態，不是守衛
+        if (!reapplyEffective(pid)) {
+          toast(REAPPLY_COPY.ranNote);
+          renderLandedFlows();
+          return;
+        }
+        const ok = await askConfirm({
+          title: REAPPLY_COPY.freshTitle,
+          body: REAPPLY_COPY.freshBody,
+          danger: true,
+        });
+        if (!ok) return;
+        const r = store.reapplyWorkflow(pid);
+        toast(r.ok ? REAPPLY_COPY.okToast : (r.reason ?? "失敗"));
+        renderLandedFlows();
+      });
+    });
+  }
 
   /* ─── Cases ─── */
   function renderCases() {
@@ -422,6 +724,8 @@ if (__authed) {
     if (!gate()) return;
     renderPeople();
     renderWorkflow();
+    renderSkeletons();
+    renderLandedFlows();
     renderCases();
   }
 

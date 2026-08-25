@@ -253,7 +253,13 @@ resetWorkflowSkeleton(cat: FullCat): void                   // 還原成 seed
 - [x] W2-B Agent 結果 pop-up（2026-08-26；`bunx tsc --noEmit` exit 0、
       `bun test` **1695 pass / 0 fail / 85 files**，基準 1651/83 → +44 測試、零退步、
       `bunx vite build` 成功。**未 commit**，交 PM 驗）
-- [ ] W2-C 管理中心流程檢視／編輯
+- [x] W2-C 管理中心流程檢視／編輯（2026-08-26；`bunx tsc --noEmit` exit 0、
+      `bun test` **1739 pass / 0 fail / 86 files**，基準 1695/85 → +44 測試、零退步、
+      `bunx vite build` 成功。**另做了實機驗證**（Interceptor 開真 Chrome 跑過
+      C-1 存檔往返與 C-2 兩條拒絕路徑，見筆記）。**未 commit**，交 PM 驗）
+  - [x] C-1 全域關卡編輯器補 `kind` / `defaultActor` / `editTarget`
+  - [x] C-2 五類骨架檢視與編輯（覆寫進 `AppState.workflowSkeletons`）
+  - [x] C-3 專案落地流程唯讀檢視 + admin 專屬「重新套用範本」
 - [ ] 跨 context 審查（Cato / Forge）
 - [ ] 實機 UAT 出題
 
@@ -476,3 +482,235 @@ DOM 行為（焦點、Escape、Tab trap、自動跳窗時機）零自動化覆�
 12. pop-up 內按 Enter → **不得**送出（`askCustom` 一律不讓 Enter 確認）
 13. pop-up 內 Tab 循環、Escape 關閉且不觸動背後簽核頁的熱鍵
 14. 分析全文很長時，`<pre>` 自己捲，整個 modal 不捲（按鈕要一直看得到）
+
+---
+
+## W2-C 實作筆記
+
+> 2026-08-26 · 實作者：Engineer（子代理）。記下**補的決定**與**與規格的落差**。
+> 未 commit、未 push，交 PM 驗。
+
+### 交付前實跑的輸出
+
+```
+bunx tsc --noEmit   → exit 0
+bun test            → 1739 pass / 0 fail / 4054 expect / 86 files（基準 1695/85）
+bunx vite build     → ✓ built in 1.00s
+git diff --stat     → 5 檔 +649/-50，另新增 2 個未追蹤檔
+                      （src/lib/workflow-admin.ts、tests/workflow-skeletons.test.ts）
+```
+
+**既有測試零改動、零刪除、零弱化。** 這一批沒有動到任何一支既有測試檔
+（W2-B 那張「改了哪一行、為什麼」的表在這裡是空的）。
+
+### 實機驗證（這一批多做的一件事）
+
+規格只要求三個自動化閘門，但 C-1 的整個失敗模式就是「測試全綠、App 裡是零」——
+只靠測試證明不了它。所以用 Interceptor 開真 Chrome（自己的 dev server，port 5199，
+不是 5173）實跑了一遍，逐條記結果：
+
+| 驗的事 | 結果 |
+|--------|------|
+| 五個分頁與兩個新面板都在 | `["people","workflow","skeletons","landed","cases"]`，5 個骨架收合區 |
+| C-1 存檔往返 | 把「工程」關卡改成 `edit` + `human` + 覆寫「三行摘要／專案功能說明與願景」→ 存檔 → **localStorage 讀回 `kind:"edit"`、`defaultActor:"human"`、`editTarget:{sectionId:"summary",fieldKey:"vision"}`** |
+| `kind` 切換即時反應 | `st-edit-wrap` 的 `display` 從 `["none","none"]` 變 `["",""]`，沒有重畫整列 |
+| 章節換了欄位選項跟著換 | 選 summary → 欄位下拉變成 `["","vision","what","who","why","tech"]` |
+| C-2 覆寫真的存下去 | 改 lean 第一關名字 → `workflowSkeletons.lean` 出現在 localStorage，收合區標題多一個「已自訂」 |
+| **C-2 拒絕路徑（真的按下去）** | 刪 lean 的「我核准」→ toast 逐字是「骨架一定要留一關由人核准 —— 少了它，這一類 PRD 就再也沒有人簽過」，而且 `lean` 兩關**一關都沒少** |
+| 還原成預設 | 按下去 → `workflowSkeletons` 變回 `{}` |
+| `kind` 改回 review 會清掉 editTarget | revert 之後讀回的物件**沒有** `editTarget` 這個 key |
+| D2 警語真的看得到 | 每一類收合區內第一行，黃色左邊框 |
+| 版面沒爆 | `document.scrollWidth === clientWidth`（無橫向捲動），每個欄位 140px，review 關卡的兩個「覆寫*」label 寬度是 0（正確隱藏） |
+
+截圖：`~/Downloads/interceptor-capture-20260826-030350-23458.png`。
+⚠️ 截圖中央那個「夜深了，測試人」浮層是 App 自己的每日問候 modal，**與這一批無關**。
+
+### 規格沒講、實作時補的決定
+
+1. **產生 HTML 的 class 與讀回用的選擇器收斂成一份常數（`STAGE_FIELD_SEL`）。**
+   這個檔裡有兩段程式必須逐字一致。兩邊各自打字面值的話，改了一邊沒改另一邊 ——
+   表單畫得出來、按下儲存卻讀回空字串，於是那一關被**靜默**改成預設值
+   （`kind` 退回 review、`editTarget` 被清掉）。沒有錯誤訊息，而使用者以為自己
+   存好了一個會改內文的關卡。測試對這條迴路下手（「產出的 class 涵蓋 reader
+   要查的每一個」），是整支測試的樞紐。
+
+2. **DOM 讀回拆成 `readStageForm`（純查詢，零判斷）+ `stagePatchFrom`（純函式）。**
+   這個 repo 沒有 happy-dom，DOM 那半測不到。所以把**所有判斷**推進純函式那半，
+   讓 DOM 那半退化成「查選擇器、取 value」—— 測不到的部分裡就沒有任何會錯的東西。
+
+3. **`editTarget` 章節與欄位「缺一不可」，只選一個一律退回 undefined。**
+   規格說「不選 → 存成 undefined」。但只選章節不選欄位是第三種狀態，規格沒講。
+   存成 `{sectionId, fieldKey: ""}` 的話，落地時 `resolveEditTarget` **不會**退回
+   「開放問題」（它只認 undefined），而是往一個不存在的 key 寫 —— agent 跑完、
+   使用者按下存檔，內容進到一個畫面上永遠顯示不出來的地方。
+
+4. **`kind` 改回 `review` 時強制清掉 `editTarget`。** 規格只說 edit 時才出現。
+   留著的話，使用者把改稿關卡改回審閱之後那個目標還躺在資料裡；下次再切回改稿
+   就會沿用一個他以為已經取消掉的欄位。
+
+5. **`editTarget` 那兩個下拉永遠在 DOM 裡，只用 `style.display` 藏。**
+   不在 DOM 裡的話，切 `kind` 就得整列重畫，而重畫會把同一列還沒存的其他修改
+   （關卡名打到一半）一起丟掉。
+
+6. **`FULL_CATS` 新開在 `types.ts`，沒有複用 `submit-assign.ts` 的 `FULL_CAT_LABEL` keys。**
+   後者所在的檔 import 了 `ui.ts`（`escapeHtml`）。store 要用這份列舉來合併骨架
+   覆寫 —— 從那裡拿等於把 DOM 工具拉進 store 的相依圖，headless 測試會在 import
+   時就炸。`types.ts` 零依賴。（W2-B 為了同一個理由把 `pendingAgentJobsOf` 放在
+   `types.ts`，這是同一條線。）
+
+7. **骨架編輯**不用草稿狀態**，每一次操作（改一列／新增／刪除／上下移）都是一次
+   完整的 `setWorkflowSkeleton`。** 好處是每個操作都過同一組驗證：刪到剩零關、
+   把「我核准」刪掉，當場被擋並說出理由。UI 這一層**刻意不自己先擋一次** ——
+   兩份規則會分岔，而分岔的那一天，畫面上按得下去的東西 store 會拒絕，
+   看起來像存檔壞了。
+
+8. **`resetWorkflowSkeleton` 是把 key 刪掉，不是複製一份種子進去。**
+   複製一份的話，之後種子骨架任何一次修正都到不了這個使用者手上：他的
+   localStorage 裡凍著一份「還原當下」的複本，而畫面上跟真的還原一模一樣。
+   同理 `AppState.workflowSkeletons` 是 `Partial` 而不是存滿五類。
+
+9. **`load()` 加一支 `sanitizeSkeletons`。** `...parsed` 本來就會把這個欄位帶過來，
+   但 localStorage 是使用者改得到的，而這份資料**直接決定送審落地哪幾關**。
+   `{lean: []}` 會讓 lean 專案送審後拿到零關卡流程，而 `allStagesSettled` 對
+   零關卡回 false —— 案子從此結不了，也沒有任何一顆按鈕解得開。認不得的分類
+   一併丟掉（留著會變成管理中心看得到、卻對不上任何編輯器的孤兒）。
+
+10. **`liveSkeletons()` 每次呼叫都重算、而且回傳複本。** 快取的話，管理中心改完
+    骨架、下一個專案送審跑的還是舊的。複本則是因為 `resolveWorkflow` 的結果會被
+    寫進 `project.workflowStages` 再繼續改（指派執行者），共用參考會讓改一個專案
+    動到 state 裡的骨架本身。
+
+11. **落地計數排除 `templateStages` 的專案。** 自訂範本自帶骨架的專案落地的是
+    **範本自己那一份**，不是五類裡的任何一份。算進去的話，使用者改了 lean 骨架，
+    計數裡卻掛著一個毫無關係的專案。沒有 `templateCat` 的算 lean，跟
+    `resolveWorkflow` 的 `FALLBACK_CAT` 一致。
+
+12. **`reapplyWorkflow` 加了 admin 檢查（規格只說 UI 只給 admin 看）。**
+    `applyWorkflowToCase` 與 `reopenCase` 兩支性質相同的 API 都在 store 端擋，
+    只在 UI 藏按鈕的話，那條規則會在下一個呼叫端出現時消失。
+
+13. **`.st-field-label` 取代原本每個 label 上抄一份的行內樣式。** 不只是重複：
+    `background` 簡寫會把 select 的自繪箭頭洗掉（`admin.html` 檔頭那段註解記的
+    就是同一個坑），而每加一個欄位就要再抄一次。
+
+### 與規格的落差 / 沒做的事
+
+- **`reapplyWorkflow` 對「已經跑過的案子」實際上不會讓下次送審重新解析。**
+  規格說「清掉 `project.workflowStages`，下次送審重新解析」，也說「不要順手把
+  個案的 stages 也砍掉 —— 那是 `submitForReview` 的 `touched` 判斷要處理的事」。
+  照做了，但兩件事合起來的結果是：`caseHasRun(live)` 為 true 時，`submitPlanFor`
+  走的是 `workflowFromCase(live)`（從個案反推），**不會**回頭讀骨架。所以
+  「重新套用範本」只對**還沒有任何簽核痕跡**的案子真的生效。
+  **這是規格內部的一個張力，不是我改壞的**，我照規格的字面實作並在這裡指出來 ——
+  要真的重套一個跑過的案子，得配合現有的「個案調整 → 套用目前流程」
+  （`applyWorkflowToCase`），或由 Scott 拍板讓 `reapplyWorkflow` 也重建個案。
+  **行為維持原樣，等 Scott 決定。**
+
+  ✅ **文案已對齊（2026-08-26 第二輪，PM 退件後修）。** 見下方「第二輪修正」。
+- **`editTarget` 的章節選項來源是「目前 active 專案解析出來的章節」。**
+  全域關卡與五類骨架都是**跨專案**的，而章節清單是某一個專案的（領域包會加章節：
+  通用 8 章、payment 12 章）。用 `SEED_SECTIONS` 的話 payment 專屬章節根本選不到，
+  而那正是最需要被 edit 關卡改寫的幾章，所以選了現在這條。已知後果：選一個別的
+  領域沒有的章節時，落地端查不到欄位 —— 那時 `editTargetLabel` 顯示 id 而不是
+  猜一個名字，所以看得出來。**列進 UAT。**
+- **沒有 DOM 層的自動化測試**（這個 repo 不為單一檔案引入 happy-dom）。
+  `readStageForm`、`bindStageRowFields` 的即時切換、`<details>` 展開狀態在
+  `store.subscribe(render)` 重畫後的保留 —— 這三件事靠上面那張實機驗證表
+  與 UAT，沒有自動化覆蓋。
+- **五類骨架沒有「新增一整類」或「改分類名稱」。** 規格只要求五類的檢視與編輯，
+  `FullCat` 是聯合型別，加一類要動型別與種子，不屬於這一批。
+- **`reapplyWorkflow` 沒寫 event log。** `EventKind` 沒有對應的種類，硬借一個現有的
+  （`review.withdraw`？`decision.record`？）會讓任何依 kind 聚合的治理統計把它
+  算成別的東西。要留紀錄就該新增一個 kind，那不屬於這一批。
+
+### 建議的 UAT 題目
+
+上面那張實機驗證表已經蓋掉存檔往返與兩條拒絕路徑，所以這裡只列**機器驗不到**的：
+
+1. 管理中心 → 簽核流程設計 → 任一關卡把「關卡型態」改成「改稿」→
+   兩個「覆寫章節／覆寫欄位」下拉**當場出現**（不必重新整理）
+2. 同一列**先把關卡名改到一半**、再切換關卡型態 → 打到一半的名字**不得**消失
+3. 選了「覆寫章節」之後，「覆寫欄位」的選項換成那一章的欄位（不是上一章的）
+4. 只選章節、不選欄位 → 儲存 → 重新整理，那一關**不得**顯示成有覆寫目標
+5. PRD 範本的簽核骨架 → 展開「完整型」→ 那一份有 5 關，其中「文件補完」是改稿關卡
+6. 改完某一類骨架 → **回頭看已經送過審的專案**，流程**完全沒變**（D2 主戲；
+   而且畫面上那句警語要在使用者找別的開關之前就看得到）
+7. 改完骨架 → 開一個**新專案**、套同一類範本、第一次送審 → 落地的是**改後**的關卡
+8. 某一類旁邊的「目前有 N 個專案落地了這一份」→ 送審一個該類專案之後 N 要 +1
+9. 展開一個收合區 → 在**另一個分頁**做任何會觸發 render 的事（例如切換人員啟用）
+   → 回來時那個收合區**還是展開的**
+10. 各專案已落地的流程 → 展開任一專案 → 內容**唯讀**（沒有任何下拉可以改人）
+11. 以**非管理員**身分登入 → 「重新套用範本」那顆鈕**看不到**
+12. 對已鎖定的案子按「重新套用範本」→ 被擋，訊息說得出「已鎖定的流程是紀錄」
+13. 對已抽單的案子按 → 訊息指向「重開案件」
+14. 對話框內 Tab 循環、Escape 關閉且不觸動背後管理中心的熱鍵
+
+### 沒碰的東西（另外兩批的地盤）
+
+`src/pages/signoff.ts`、`src/pages/editor.ts`、`src/lib/agent-result.ts`、
+`src/lib/submit-assign.ts`（只 **import** 了它的 `editTargetLabel`，一行未改）、
+`saveAgentResult` / `discardAgentResult` / `approveAndLock` / `skipStage` /
+`submitPlan` / `submitForReview` / `pendingAgentJobs` —— 全部未動。
+`resolveWorkflow` 的簽名逐字不變，只是 `resolveWorkflowFor` 開始把第三個參數
+真的餵進去（那個參數本來就是為此留的）。
+
+
+---
+
+## W2-C 第二輪修正 —— 「重新套用範本」的文案在說謊
+
+> 2026-08-26 · PM 退件：筆記裡把限制寫對了，但**畫面上的文案跟那個發現相反**。
+> 只改文案與可用性，**`reapplyWorkflow` 的行為一行未動**（那是 Scott 的決定）。
+
+### 問題
+
+PM 用探針實跑（lean 專案 → 送審 → 簽掉第一關 → `reapplyWorkflow`）：
+`approved` 原封不動、下次送審 `landsNow: false`。而 `admin.ts` 的 `askConfirm` 說：
+
+> 「這個案子既有的簽核狀態會被清掉：下次送出審閱時，流程會照現在的範本骨架與
+> 領域包重新解析，關卡與已簽的紀錄都會換一份。」
+
+兩句都是假的。**一顆 `danger: true` 的按鈕在對使用者說「我會破壞你的東西」，
+而它什麼都沒做** —— 使用者要嘛不敢按一顆其實無害的鈕，要嘛按了以為重套好了。
+比功能沒做到更糟：功能沒做到，使用者至少知道自己沒做到。
+
+### 改了什麼
+
+| 改動 | 內容 |
+|------|------|
+| 文案抽成 `REAPPLY_COPY`（`workflow-admin.ts`） | 常數化才測得到「使用者實際看到的那幾個字」，而不是測一段離畫面很遠的邏輯 |
+| 分兩種案子 | `landsNow === true` → 「這個案子還沒有任何簽核痕跡，所以重套是有效的……」；`landsNow === false` → 明講不生效，並**指路到「個案調整 → 套用目前流程」** |
+| 跑過的案子把鈕停用 | 鈕文字改成「重新套用範本（對這個案子不生效）」，旁邊 `.lf-note` 講原因。**不是整塊拿掉** —— 管理員找的就是這顆鈕，整塊消失只會讓他以為功能不見了然後去別的地方翻 |
+| 判斷來源 | 一律 `store.submitPlan(pid).landsNow`。**沒有在 UI 重寫一份 `caseHasRun`** —— 那正是 W2-A 抽 `submitPlan` 要防的分岔，而分岔的症狀就是這一輪在修的東西 |
+| 點擊時再問一次 | `disabled` 只是 DOM 狀態不是守衛；畫面可能是上一次 render 留下的，而案子在那之後跑過了 |
+| toast | 「已清掉落地流程 —— 下次送審**會照現在的骨架**重新解析」（只有有效的案子按得到，所以這句成立） |
+
+### 新增測試（+6，合計 50 條）
+
+- **`跑過的案子：重套之後仍不重解析，且既有簽章原封不動`** —— 用程式重現 PM 的探針：
+  送審 → `approveAndLock` 簽掉第一關 → `reapplyWorkflow` → 斷言
+  `workflowStages` 清掉了、`submitPlan().landsNow === false`、`stages` 的狀態**逐字**不變。
+  **這一條是把限制變成寫下來的合約**，之後有人要改行為會先撞到它。
+- 對照組：沒跑過的案子重套之後 `landsNow === true`（證明這顆鈕不是永遠無效）
+- `文案不再宣稱會清掉簽核狀態` —— 直接斷言那兩句假話不在原始碼裡
+- 兩種文案各自的斷言（有效那份要講「還沒有任何簽核痕跡」；不生效那份要含「不生效」與「套用目前流程」）
+- `reapplyEffective` 走 `store.submitPlan`，且全檔不含 `caseHasRun(`
+- 停用分支含 `disabled` + `ranNote`；點擊分支含再問一次的守衛
+
+### 實機驗證（兩個分支都跑過）
+
+| 情境 | 結果 |
+|------|------|
+| 已簽掉一關的案子 | 鈕 `disabled: true`，文字「重新套用範本（對這個案子不生效）」，旁邊完整說明並指向「個案調整 → 套用目前流程」 |
+| 沒有簽核痕跡的案子 | 鈕可按，對話框逐字是「這個案子還沒有任何簽核痕跡，所以重套是有效的：清掉它身上那份落地流程之後，下次送出審閱會照現在的範本骨架與領域包重新解析一份新的關卡。」 |
+| 按下確認 | toast「已清掉落地流程 —— 下次送審會照現在的骨架重新解析」，`workflowStages` key 真的不見，該專案從落地清單消失（正確 —— 它不再是落地狀態） |
+
+### 第二輪的三個閘門
+
+```
+bunx tsc --noEmit   → exit 0
+bun test            → 1745 pass / 0 fail / 4072 expect / 86 files（第一輪 1739，+6）
+bunx vite build     → ✓ built in 1.14s
+```
+
+既有測試仍然**零改動、零刪除、零弱化**。`reapplyWorkflow` 的實作一行未動。

@@ -466,6 +466,25 @@ export type SectionCat =
 /** 整份 PRD 範本的分類 —— 依「寫給誰看、要多重」分，不依產業分 */
 export type FullCat = "lean" | "narrative" | "enterprise" | "agile" | "technical";
 
+/**
+ * 五類的**列舉**。型別列不出成員，而「對每一類各做一件事」的地方需要真的跑得完。
+ *
+ * 為什麼放在 `types.ts` 而不是跟 `FULL_CAT_LABEL` 放在一起：那份住在
+ * `lib/submit-assign.ts`，而那個檔 import 了 `ui.ts`（`escapeHtml`）。
+ * store 要用這份列舉來合併骨架覆寫 —— 從那裡拿等於把 DOM 工具拉進 store 的
+ * 相依圖，headless 測試會在 import 時就炸。這裡零依賴。
+ *
+ * 少一類的症狀：那一類的骨架覆寫存得進去、卻永遠不會被 `resolveWorkflowFor`
+ * 讀到 —— 管理中心改完顯示已儲存，送審跑的還是舊骨架。
+ */
+export const FULL_CATS: readonly FullCat[] = [
+  "lean",
+  "narrative",
+  "enterprise",
+  "agile",
+  "technical",
+];
+
 export type TemplateCat = SectionCat | FullCat;
 
 export type Template = {
@@ -739,6 +758,18 @@ export type AppState = {
   approvals: Approval[];
   /** 簽核流程設計（有序關卡） */
   workflowStages: WorkflowStageDef[];
+  /**
+   * 五類 PRD 骨架的**覆寫**。沒有這個欄位（或某一類沒有）就走 `SEED_WORKFLOW_SKELETONS`。
+   *
+   * 為什麼是 `Partial` 而不是把五類全存下來：全存的話，種子骨架之後任何一次
+   * 修正都到不了已經存過檔的使用者手上 —— 他們的 localStorage 裡凍著一份
+   * 上一版的複本，而畫面上完全看不出來那是舊的。只存「使用者真的改過的那幾類」，
+   * 其餘永遠跟著程式碼走。
+   *
+   * ⚠️ 改這裡**只影響之後第一次送審的專案**。已落地的案子沿用自己那一份
+   * （`Project.workflowStages`），不重算 —— 那是 D2 拍板的取捨。
+   */
+  workflowSkeletons?: Partial<Record<FullCat, WorkflowStageDef[]>>;
   /** 各專案個案簽核狀態 */
   cases: Record<string, CaseRecord>;
   /** 審閱頁目前關注的專案 id */

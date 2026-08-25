@@ -238,6 +238,8 @@
         <div class="admin-tabs" role="tablist" aria-label="管理分頁">
           <button type="button" role="tab" data-tab="people" aria-selected="true">人員權限名單</button>
           <button type="button" role="tab" data-tab="workflow" aria-selected="false">簽核流程設計</button>
+          <button type="button" role="tab" data-tab="skeletons" aria-selected="false">PRD 範本的簽核骨架</button>
+          <button type="button" role="tab" data-tab="landed" aria-selected="false">各專案已落地的流程</button>
           <button type="button" role="tab" data-tab="cases" aria-selected="false">個案調整</button>
         </div>
 
@@ -299,6 +301,34 @@
           <p style="font-size: var(--fs-2);color:var(--muted);margin-top:12px">
             提示：流程變更不會自動覆寫已在審閱中的個案，請在「個案調整」中手動「套用目前流程」。
           </p>
+        </section>
+
+        <!-- PRD 範本的簽核骨架 -->
+        <section class="admin-panel" id="panel-skeletons" role="tabpanel">
+          <div class="admin-head">
+            <div>
+              <h2>PRD 範本的簽核骨架</h2>
+              <p>
+                五類整份 PRD 範本各自的預設關卡。專案<strong>第一次送出審閱</strong>時，
+                系統用這裡的骨架加上領域包的合規關卡，算出那個案子要跑的流程。
+              </p>
+            </div>
+          </div>
+          <div id="skeleton-list"></div>
+        </section>
+
+        <!-- 各專案已落地的流程 -->
+        <section class="admin-panel" id="panel-landed" role="tabpanel">
+          <div class="admin-head">
+            <div>
+              <h2>各專案已落地的流程</h2>
+              <p>
+                已經送過審的專案各自帶著一份自己的關卡（唯讀）。改骨架不會動到這裡 ——
+                要讓某個案子重新照範本解析，用「重新套用範本」。
+              </p>
+            </div>
+          </div>
+          <div id="landed-flow-list"></div>
         </section>
 
         <!-- Cases -->

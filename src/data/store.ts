@@ -14,6 +14,7 @@ import {
   SEED_TEMPLATES,
   SEED_WORKFLOW,
   SEED_WORKFLOW_PROD,
+  SEED_WORKFLOW_SKELETONS,
   TEST_CASE_DOCS,
   withCustomSection,
 } from "./seed";
@@ -44,7 +45,7 @@ import type {
   Template,
   WorkflowStageDef,
 } from "./types";
-import { jobLanded, pendingAgentJobsOf, resolveEditTarget, stageKind } from "./types";
+import { FULL_CATS, jobLanded, pendingAgentJobsOf, resolveEditTarget, stageKind } from "./types";
 import { buildProjectProfile, emptySectionValues } from "../lib/export";
 import {
   allStagesSettled,
@@ -89,7 +90,7 @@ import {
   validateEmployeeRole,
 } from "../lib/permissions";
 import { canSignStage, caseHasRun, separationOfDuties } from "../lib/signoff";
-import { resolveWorkflow } from "../lib/workflow-resolve";
+import { hasHumanApproval, resolveWorkflow } from "../lib/workflow-resolve";
 import { nowIso } from "../lib/time-format";
 
 /** v6：正式版無示範內容 + 首次引導；依變體分 key 避免互污染 */
@@ -161,15 +162,45 @@ function domainStages(domain: string): WorkflowStageDef[] {
 }
 
 /**
+ * 五類骨架**目前生效的那一份** —— 管理中心的覆寫優先，沒改過的走種子。
+ *
+ * 為什麼每次呼叫都重算而不是快取：覆寫住在 `state` 裡，而 `state` 每次異動都是
+ * 一個新物件。快取一份的話，使用者在管理中心改完骨架、下一個專案送審跑的還是
+ * 舊的 —— 而畫面上那份改好的骨架看起來完全正常。
+ *
+ * 空陣列的覆寫視同「沒有覆寫」：`setWorkflowSkeleton` 本來就擋掉空陣列，這裡
+ * 是第二道 —— localStorage 是使用者改得到的，而一個空骨架會讓那一類的專案
+ * 送審之後得到一個零關卡的流程，`allStagesSettled` 對零關卡回 false，案子
+ * 永遠結不了。
+ */
+function liveSkeletons(): Record<FullCat, WorkflowStageDef[]> {
+  const over = state.workflowSkeletons ?? {};
+  const out = {} as Record<FullCat, WorkflowStageDef[]>;
+  for (const cat of FULL_CATS) {
+    const custom = over[cat];
+    const src = custom?.length ? custom : SEED_WORKFLOW_SKELETONS[cat];
+    // 複製一份：`resolveWorkflow` 的結果會被寫進 `project.workflowStages` 再繼續改，
+    // 共用參考的話改一個專案會動到 state 裡的骨架本身
+    out[cat] = src.map((s) => ({ ...s }));
+  }
+  return out;
+}
+
+/**
  * 這個專案**應該**跑哪一套流程 —— 範本分類給骨架，領域包疊加合規關卡。
  *
  * 純粹是算出來的，不看專案上已經落地的那一份。要拿「這個案子實際在跑的流程」
  * 請用 `workflowFor()`。
+ *
+ * 骨架來源一律走 `liveSkeletons()`，**不是直接讀 `SEED_WORKFLOW_SKELETONS`** ——
+ * 直接讀種子的話，管理中心那整塊骨架編輯 UI 就是一個改了不生效的表單：存得進去、
+ * 重新載入還在、送審卻完全不理它。`resolveWorkflow` 的第三個參數就是為此留的。
  */
 function resolveWorkflowFor(p: Project | undefined): WorkflowStageDef[] {
   const skeleton = p?.templateStages?.length ? p.templateStages : undefined;
   const stages = domainStages(domainOf(p));
-  // 自訂範本自帶骨架時，它就是骨架本身，不再依 cat 查表
+  // 自訂範本自帶骨架時，它就是骨架本身，不再依 cat 查表 ——
+  // 也不理管理中心的五類覆寫：那份骨架是這個範本自己宣告的
   if (skeleton) {
     return resolveWorkflow(p?.templateCat ?? null, stages, {
       lean: skeleton,
@@ -179,7 +210,7 @@ function resolveWorkflowFor(p: Project | undefined): WorkflowStageDef[] {
       technical: skeleton,
     });
   }
-  return resolveWorkflow(p?.templateCat ?? null, stages);
+  return resolveWorkflow(p?.templateCat ?? null, stages, liveSkeletons());
 }
 
 /**
@@ -603,6 +634,26 @@ function blankDocsForSections(sections: Section[]): Record<string, Record<string
   return emptySectionValues(sections);
 }
 
+/**
+ * 收斂存檔裡的骨架覆寫。回傳 `undefined` 代表「沒有任何覆寫」。
+ *
+ * 為什麼要驗：localStorage 是使用者改得到的，而這份資料直接決定送審會落地
+ * 哪幾關。空陣列與不認得的分類都靜默丟掉 —— 前者會造出結不了案的專案，
+ * 後者會在管理中心變成一份看得到、卻對不上任何一個編輯器的孤兒。
+ */
+function sanitizeSkeletons(
+  raw: unknown,
+): Partial<Record<FullCat, WorkflowStageDef[]>> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const src = raw as Record<string, unknown>;
+  const out: Partial<Record<FullCat, WorkflowStageDef[]>> = {};
+  for (const cat of FULL_CATS) {
+    const v = src[cat];
+    if (Array.isArray(v) && v.length) out[cat] = v as WorkflowStageDef[];
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 function load(): AppState {
   try {
     let raw = localStorage.getItem(KEY);
@@ -752,6 +803,11 @@ function load(): AppState {
         ? approvalsFromCase(activeCase)
         : (parsed.approvals ?? base.approvals),
       workflowStages,
+      // 骨架覆寫：只收真的是「非空陣列」的那幾類。`...parsed` 本來就會帶過來，
+      // 這一行是為了擋掉手改過的 localStorage —— 一個 `{lean: []}` 會讓
+      // lean 專案送審之後得到零關卡的流程，而那種案子永遠結不了案。
+      // 認不得的分類一併丟掉，留著只會在管理中心變成一份看不到也刪不掉的資料。
+      workflowSkeletons: sanitizeSkeletons(parsed.workflowSkeletons),
       cases,
       activeProjectId,
       templates: mergeTemplates(parsed.templates, base.templates),
@@ -2831,6 +2887,113 @@ export const store = {
       workflowStages: list.map((s, idx) => ({ ...s, order: idx + 1 })),
     };
     emit();
+  },
+
+  /* ─── 管理中心：五類 PRD 骨架 ─── */
+
+  /**
+   * 五類骨架目前生效的內容（覆寫優先，否則種子）。純讀，回傳的是複本。
+   *
+   * 管理中心與 `resolveWorkflowFor` **共用這一份**。管理中心自己去讀
+   * `SEED_WORKFLOW_SKELETONS` 的話，畫面會永遠顯示種子 —— 使用者改完看到的是
+   * 改前的內容，於是再改一次，然後以為存檔壞了。
+   */
+  workflowSkeletons(): Record<FullCat, WorkflowStageDef[]> {
+    return liveSkeletons();
+  },
+
+  /**
+   * 覆寫某一類的骨架。
+   *
+   * 兩條拒絕路徑，都不是形式檢查：
+   * - **空陣列** —— 那一類的專案送審會得到零關卡的流程，而 `allStagesSettled`
+   *   對零關卡回 false，案子從此結不了案，也沒有任何一顆按鈕解得開。
+   * - **沒有「我核准」** —— 這一類 PRD 就再也沒有人簽過。整條流程還是會跑、
+   *   還是會顯示「已完成」，只是那個「完成」背後沒有任何一個人的決定。
+   *   `hasHumanApproval` 同時要求 `defaultActor === "human"`：一關叫「我核准」
+   *   但預設執行者是 agent，等於讓 agent 核准自己的分析。
+   *
+   * `order` 一律重編 1..n —— 呼叫端傳進來的順序才是使用者看到的順序，
+   * 而它手上那份的 `order` 可能是刪掉中間一關之後留下的洞。
+   */
+  setWorkflowSkeleton(
+    cat: FullCat,
+    stages: WorkflowStageDef[],
+  ): { ok: boolean; reason?: string } {
+    if (!FULL_CATS.includes(cat)) return { ok: false, reason: "不認得這個範本分類" };
+    if (!stages.length) {
+      return { ok: false, reason: "骨架不能是空的 —— 零關卡的流程送出去就永遠結不了案" };
+    }
+    if (!hasHumanApproval(stages)) {
+      return {
+        ok: false,
+        reason: "骨架一定要留一關由人核准 —— 少了它，這一類 PRD 就再也沒有人簽過",
+      };
+    }
+    state = {
+      ...state,
+      workflowSkeletons: {
+        ...(state.workflowSkeletons ?? {}),
+        [cat]: stages.map((s, i) => ({ ...s, order: i + 1 })),
+      },
+    };
+    emit();
+    return { ok: true };
+  },
+
+  /**
+   * 還原成種子骨架 —— **把 key 刪掉**，不是複製一份種子進去。
+   *
+   * 複製一份的話，之後種子骨架任何一次修正都到不了這個使用者手上：他的
+   * localStorage 裡凍著一份「還原當下」的複本，而畫面上跟真的還原一模一樣。
+   */
+  resetWorkflowSkeleton(cat: FullCat): void {
+    if (!state.workflowSkeletons || !(cat in state.workflowSkeletons)) return;
+    const next = { ...state.workflowSkeletons };
+    delete next[cat];
+    state = { ...state, workflowSkeletons: next };
+    emit();
+  },
+
+  /**
+   * 讓一個專案的流程**回到未落地狀態**，下次送審重新照範本解析。
+   *
+   * 只清 `project.workflowStages` —— **不動個案的 stages**。個案那一份要不要
+   * 重建是 `submitForReview` 的 `touched` 判斷要處理的事（`caseHasRun`）；
+   * 在這裡順手砍掉的話，一個跑到一半的案子會連同已經簽過的關卡與 agent 分析
+   * 一起消失，而那正是簽核紀錄的全部價值。
+   *
+   * 鎖定與抽單的案子拒絕：前者的流程已經是歷史紀錄，後者要走 `reopenCase`。
+   */
+  reapplyWorkflow(projectId: string): { ok: boolean; reason?: string } {
+    if (state.currentUser.accessRole !== "admin") {
+      return { ok: false, reason: "僅管理員可重新套用範本流程" };
+    }
+    const p = state.projects.find((x) => x.id === projectId);
+    if (!p) return { ok: false, reason: "找不到這個專案" };
+    const c = state.cases[projectId];
+    if (c?.locked) {
+      return { ok: false, reason: "此案已結案鎖定 —— 已鎖定的流程是紀錄，不能重套" };
+    }
+    if (c?.withdrawn || p.status === "withdrawn") {
+      return { ok: false, reason: "已抽單的案子請先「重開案件」" };
+    }
+    state = {
+      ...state,
+      projects: state.projects.map((x) => {
+        if (x.id !== projectId) return x;
+        // 真的把 key 拿掉。給 `undefined` 也行（JSON 會丟掉），但留著一個
+        // 值是 undefined 的 key 會讓 `p.workflowStages ?? landed` 之外的
+        // 判斷（`'workflowStages' in p`）讀到相反的答案
+        const { workflowStages: _dropped, ...rest } = x;
+        return rest as Project;
+      }),
+    };
+    // 刻意不寫 event log：`EventKind` 沒有對應的種類，而為了這一個動作硬借
+    // 一個現有的 kind（`review.withdraw`？`decision.record`？）會讓任何依 kind
+    // 聚合的治理統計把它算成別的東西。要留紀錄就該新增一個 kind，那不屬於這一批
+    emit();
+    return { ok: true };
   },
 
   /* ─── 管理中心：個案調整 ─── */

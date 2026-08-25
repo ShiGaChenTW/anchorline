@@ -15308,3 +15308,118 @@ p.gd-warn {
   font-size: var(--fs-2);
   text-decoration: line-through;
 }
+
+/* ── W2-C 管理中心：關卡編輯器欄位 + 骨架／落地流程 ────────────────
+   `.st-field-label` 取代原本每個 label 上抄一份的行內樣式。抄一份的問題不只是
+   重複：`background` 簡寫會把 select 的自繪箭頭一起洗掉（admin.html 檔頭那段
+   註解記的就是同一個坑），而每加一個欄位就要再抄一次。 */
+.st-field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.st-field-label > input:not([type="checkbox"]),
+.st-field-label > select {
+  width: 100%;
+}
+/* 必簽是 checkbox，跟上面那幾個「標題在上、控制項在下」的排法不同 */
+.st-field-label.st-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  align-self: end;
+  padding-bottom: 6px;
+}
+
+.skeleton-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+.skeleton-block > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  cursor: pointer;
+  list-style: none;
+}
+.skeleton-block > summary::-webkit-details-marker { display: none; }
+.skeleton-block > summary::before {
+  content: "▸";
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+.skeleton-block[open] > summary::before { content: "▾"; }
+.sk-title {
+  font-weight: var(--weight-em);
+  color: var(--fg);
+  font-size: var(--fs-3);
+}
+/* 「目前有 N 個專案落地了這一份」—— D2 那句話的證據，不是裝飾 */
+.sk-count {
+  margin-left: auto;
+  font-size: var(--fs-2);
+  color: var(--muted);
+}
+/* D2 的警語。使用者改完骨架回頭看現有專案沒變，會以為是 bug 然後去別的地方
+   改 —— 這一行是唯一攔得住那條路的東西，所以要看得見，不能是灰字小抄。 */
+.sk-notice {
+  margin: 10px 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--warn);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+.sk-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.lf-block > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  cursor: pointer;
+  list-style: none;
+}
+.lf-block > summary::-webkit-details-marker { display: none; }
+.lf-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.lf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.lf-name { color: var(--fg); font-size: var(--fs-2); }
+.lf-sub { color: var(--muted); font-size: var(--fs-2); }
+.lf-warn { color: var(--warn); font-size: var(--fs-2); }
+/* 「重新套用範本」對跑過的案子不生效時的說明。停用的鈕旁邊要講得出原因 ——
+   否則管理員只看到一顆灰掉的鈕，會以為是權限問題。 */
+.lf-note {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--muted);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
