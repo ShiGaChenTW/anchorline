@@ -421,7 +421,9 @@ function renderApprovals() {
     ? { ok: false, reason: "此案已抽單，請至管理中心重開" }
     : project
       ? (() => {
-          const a = canSignAnyStage(user, project, caseRec);
+          // 員工清單傳進去，「這一關派給同族系 agent」才判得到 ——
+          // 少了它，按鈕的 enable 條件會跟 approveAndLock 的迴圈分岔
+          const a = canSignAnyStage(user, project, caseRec, store.get().employees);
           return a.can ? { ok: true } : { ok: false, reason: a.reason };
         })()
       : { ok: false, reason: "找不到專案" };

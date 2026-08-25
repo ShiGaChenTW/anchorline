@@ -54,6 +54,23 @@ export type AgentJob = {
   landed?: "pending" | "saved" | "discarded";
 };
 
+/**
+ * 這張工作單的落地狀態 —— **舊工作單一律當成已落地**。
+ *
+ * 上面那段註解本來就這樣寫，但沒有任何程式碼實作它：`saveAgentResult` 只擋
+ * `landed === "saved"`，`undefined` 一路放行。後果是升級前跑完的工作單
+ * （副作用當年已經由 `invokeAgent` 直接寫進文件）會被**第二次**落地 ——
+ * 同一則留言貼兩遍，而紀錄上那兩筆看起來像兩次獨立的審查。
+ *
+ * 還沒跑完的沒有 `landed` 是另一回事：那是還沒開始，不是做完了，所以退 `pending`。
+ */
+export function jobLanded(
+  j: Pick<AgentJob, "landed" | "status">,
+): "pending" | "saved" | "discarded" {
+  if (j.landed) return j.landed;
+  return j.status === "done" ? "saved" : "pending";
+}
+
 /** 匯入掃描摘要（存於專案，供側欄／列表顯示） */
 export type ProjectImportSummary = {
   folderName: string;
@@ -276,8 +293,21 @@ export type CaseStage = {
   decidedAt?: string;
   decidedById?: string;
   decidedByName?: string;
-  /** 簽核意見。核准時可留一句話，會進簽核紀錄 */
+  /**
+   * **簽核意見** —— 核准／要求修改／略過時人留的那一句話，會進簽核紀錄。
+   *
+   * 只有簽核路徑寫得到這裡。Agent 的分析全文請寫 `agentResult`：兩者共用一個
+   * 欄位時會互相覆寫，而 `stageReasons` 與舊個案的反推路徑讀的都是這一欄 ——
+   * 症狀是簽核紀錄把 agent 的四千字分析當成「簽核者留的話」掛在人名下。
+   */
   comment?: string;
+  /**
+   * 這一關的 Agent 分析全文（使用者按過存檔才有）。
+   *
+   * 跟 `comment` 分開放不是為了整齊，是因為兩者的**作者不同**：一個是機器的
+   * 意見，一個是人的決定。混在一起之後，畫面沒有任何辦法分辨那段字是誰寫的。
+   */
+  agentResult?: string;
   /** 這個關卡實例的順序模式。舊資料沒有就當 `parallel`（＝現行行為） */
   mode?: StageMode;
   /** 非必簽的關卡不擋結案。舊資料沒有就當必簽（＝現行行為） */

@@ -18,7 +18,40 @@
  *
  * 純函式，零 I/O、零 DOM。
  */
-import type { FieldDef, Section } from "../data/types";
+import { templateKind } from "../data/types";
+import type { FieldDef, FullCat, Section, Template, WorkflowStageDef } from "../data/types";
+
+// ── 套範本時要一起帶過去的簽核骨架 ────────────────────────────
+
+/**
+ * 套用整份範本時要傳給 `store.applyFullTemplate()` 的第 4 個參數。
+ *
+ * ## 為什麼這件事值得一支具名函式
+ *
+ * 它本來是呼叫端的一個行內物件 —— 而那正是 F0 的根因。`templates.ts` 是全 repo
+ * **唯一**的生產呼叫端，它少傳了這個參數，於是 `Project.templateCat` 從來沒有
+ * 被任何生產路徑寫入過：五類簽核骨架在跑起來的 App 裡整個是零，不管使用者套的
+ * 是十份整份範本裡的哪一份，落地的都是 lean 那兩關。
+ *
+ * Wave 1 的測試全綠，因為測試自己傳了四個參數 —— 它驗的是一條生產程式碼走不到
+ * 的路徑。抽成具名函式之後，「頁面到底有沒有把骨架帶過去」才有東西可以測。
+ *
+ * ## 為什麼章節範本回 undefined
+ *
+ * `Template.cat` 是 `SectionCat | FullCat`。章節範本的 `core` / `security` 是
+ * 合法的分類，只是不對應任何整份骨架 —— 傳進去只會讓專案記著一個查不到表的值。
+ * `undefined` 的語意是「這次套用不改簽核流程」，而那是對的：插一段章節不該
+ * 重設整套關卡。
+ */
+export function templateWorkflowArg(
+  t: Template,
+): { cat?: FullCat; stages?: WorkflowStageDef[] } | undefined {
+  if (templateKind(t) !== "full") return undefined;
+  return {
+    cat: t.cat as FullCat,
+    ...(t.stages?.length ? { stages: t.stages } : {}),
+  };
+}
 
 /** `## 1. 問題` / `### 2.1 邊界` / `## 問題` 都要吃 */
 const HEADING_RE = /^(#{1,6})\s+(.*)$/;

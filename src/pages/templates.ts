@@ -1,5 +1,5 @@
 import { store } from "../data/store";
-import { planApply, seedValuesFromTemplate, sectionsFromTemplate, splitTemplate } from "../lib/prd-template";
+import { planApply, seedValuesFromTemplate, sectionsFromTemplate, splitTemplate, templateWorkflowArg } from "../lib/prd-template";
 import { templateKind } from "../data/types";
 import type { Section, Template, TemplateCat, TemplateKind } from "../data/types";
 import { askConfirm, askText } from "../lib/ask";
@@ -532,7 +532,15 @@ apEl("ap-go")?.addEventListener("click", () => {
     toast("先選一個要套用的專案");
     return;
   }
-  const r = store.applyFullTemplate(pid, applySecs, seedValuesFromTemplate(current.body));
+  // 第 4 個參數是**簽核骨架**。少傳它的話 `Project.templateCat` 永遠不會被寫入，
+  // 於是每個專案都退回 lean 兩關 —— 五類 PRD 各有自己的流程這件事在 App 裡是零。
+  // 這裡是全 repo 唯一的生產呼叫端，漏掉沒有任何症狀，只是流程默默變成別的。
+  const r = store.applyFullTemplate(
+    pid,
+    applySecs,
+    seedValuesFromTemplate(current.body),
+    templateWorkflowArg(current),
+  );
   if (!r.ok) {
     toast(r.reason ?? "套用失敗");
     return;

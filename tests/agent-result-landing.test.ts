@@ -310,7 +310,11 @@ describe("關卡落地：review 釘在關卡上、edit 寫進指定欄位", () =
     expect(store.saveAgentResult(r.jobId!)).toEqual({ ok: true });
 
     const after = store.get().cases[pid]!.stages.find((s) => s.id === stage.id)!;
-    expect(after.comment).toBe(AGENT_OUTPUT);
+    // 釘在 `agentResult`，不是 `comment`。後者是**簽核意見**（`sign()` /
+    // `requestChanges` / `skipStage` 都寫它）—— 共用一個欄位會互相覆寫，
+    // 而簽核紀錄會把 agent 的分析全文當成簽核者留的話掛在人名下
+    expect(after.agentResult).toBe(AGENT_OUTPUT);
+    expect(after.comment).toBeUndefined();
     // 存下分析 ≠ 簽了它
     expect(after.state).not.toBe("approved");
     expect(JSON.stringify(store.get().sectionValues)).toBe(beforeDocs);

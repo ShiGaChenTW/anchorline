@@ -25,6 +25,7 @@ import type {
   PrdVersion,
   Project,
 } from "../data/types";
+import { stageKind } from "../data/types";
 import { hasPermission } from "./permissions";
 import { stageBlockedBy } from "./prd-versions";
 
@@ -44,15 +45,55 @@ export type SignAbility =
  * 共用同一組盲點。所以族系隔離在這裡是**主要守門**，不是自審規則的補充條款，
  * 判定順序也照這個優先級排：先講族系，再講本人。
  *
- * 不導出：唯一的入口是 `canSignStage`。這條規則以前散在
- * `permissions.canApproveProject`、`signoff.canSignStage`、`store.approveAndLock`
- * 三處各判一次，而那三份判斷已經開始分岔了。
+ * ## 族系比對的主體是「這一關派給誰」，不是「誰按下按鈕」
+ *
+ * 這條規則原本只看 `user.kind === "agent"`，而那在真實流程裡**永遠不會觸發**：
+ * agent 只跑 `invokeAgent` 產出分析，簽核的一律是人（`approveAndLock` 的
+ * `currentUser` 是 human admin）。於是「同一家模型審自己家寫的文件」全程零攔阻，
+ * 而 D3 明寫族系隔離是主要守門。
+ *
+ * 會不會發生同族系審查，取決於**這一關派給了哪個執行者**。所以主要判斷是
+ * `stage.assigneeId` 指向的那個人；`user` 那一條保留下來當第二層 —— agent 直接
+ * 當簽核者的路徑目前走不到，但走得到的時候它仍然該擋。
+ *
+ * ## 只擋 review 關卡
+ *
+ * 族系隔離守的是**審查**，不是撰寫。`edit` 關卡（「文件補完」）是 agent 在
+ * 產出內文，而 agent 寫 PRD 正是這個產品在做的事 —— 擋掉 claude 幫 claude 寫的
+ * 文件補完保護不了任何東西，只會讓人困惑。那一關的把關發生在人看過前後對照
+ * 才按存檔的那一刻。
+ *
+ * 導出是給 `store.resolveComment` 用的：留言覆核要的是**專案層級**的職責分立
+ * （不帶 stage 呼叫即可）。收斂時那裡被換成純角色的 `canApprove`，等於讓同族系
+ * agent 可以把自己家族寫的文件上的所有審查留言標記為已解決。
  */
-function separationOfDuties(user: Employee, project: Project | null | undefined): SignAbility {
+export function separationOfDuties(
+  user: Employee,
+  project: Project | null | undefined,
+  /** 這一關與員工清單。省略時只做專案層級的判斷（留言覆核就是這樣用） */
+  stage?: CaseStage,
+  employees?: readonly Employee[],
+): SignAbility {
   if (!project) return { can: true };
 
-  // 同一種 Agent 撰寫 → 同 family Agent 不可核准。**沒有 admin 例外**：
+  // 這一關的**執行者**與作者同族系 → 擋。**沒有 admin 例外**：
   // 代簽可以繞過「這一關不是你的」，繞不過「審查者跟作者是同一顆腦袋」。
+  if (stage && employees && stage.assigneeId && stageKind(stage) === "review") {
+    const executor = employees.find((e) => e.id === stage.assigneeId);
+    if (
+      executor?.kind === "agent" &&
+      executor.agentFamily &&
+      project.authorAgentFamily === executor.agentFamily
+    ) {
+      return {
+        can: false,
+        reason: `這一關派給了 ${executor.agentFamily} 家族的 Agent，而本文件正是 ${project.authorAgentFamily} 家族撰寫 —— 請改派其他族系的執行者`,
+      };
+    }
+  }
+
+  // 簽核者本身是同族系 agent。真實流程裡簽的是人，所以這一條走不到 ——
+  // 留著是因為它一旦走得到就一定要擋，而規則本身沒有錯，錯的是只有它。
   if (
     user.kind === "agent" &&
     project.authorAgentFamily &&
@@ -72,6 +113,39 @@ function separationOfDuties(user: Employee, project: Project | null | undefined)
   }
 
   return { can: true };
+}
+
+/**
+ * 這個案子**跑過簽核流程**了嗎。
+ *
+ * ## 為什麼這個判斷這麼要緊
+ *
+ * 建專案時就會先開一個個案（走建立當下的全域預設流程），所以「有個案」不等於
+ * 「跑過」。送審靠這個判斷決定要不要照專案自己那份流程重建個案，而**判成 true
+ * 就會把舊個案的關卡永久寫進 `project.workflowStages`** —— `p.workflowStages ?? landed`
+ * 落地過就不再覆寫，之後重新套範本也救不回來。
+ *
+ * 所以這裡問的必須是「流程狀態上有沒有進展」，不是「有沒有人在上面留下字」。
+ * `kind: "comment"`（保留意見）不改變任何關卡的狀態：把它算成跑過，等於送審前
+ * 隨手加註一句，這個專案就永久沿用建專案當下那套全域關卡 —— 範本骨架與領域包
+ * 的合規關卡從此不會出現，而且畫面上沒有任何提示。
+ */
+export function caseHasRun(c: CaseRecord | null | undefined): boolean {
+  if (!c) return false;
+  if (c.reviewCommitId) return true;
+  // 決策裡只有「保留意見」不算；其餘（核准／要求修改／略過／代簽）都改變流程狀態
+  if (c.log?.some((d) => d.kind !== "comment")) return true;
+  return c.stages.some(
+    (s) =>
+      s.state === "approved" ||
+      s.state === "changes_requested" ||
+      // 略過是結案的一種。漏掉它時剛好被上面的 log 判斷蓋住 —— 兩個判準
+      // 互相補償是巧合不是設計，把 log 收緊之後就會真的漏
+      s.state === "skipped" ||
+      // 存過的 agent 分析也是痕跡：重建個案會讓它靜默消失，而工作單已標
+      // `saved`、`discardAgentResult` 也拒絕重來，那份分析救不回來
+      Boolean(s.agentResult?.trim()),
+  );
 }
 
 /**
@@ -100,6 +174,13 @@ export function canSignStage(
      * 不是讓他變成任何人。
      */
     override?: boolean;
+    /**
+     * 員工清單 —— 用來查**這一關的執行者**是誰家的模型。
+     *
+     * 沒給就只做得到「按按鈕的人」那一層族系判斷，而那一層在真實流程裡從來
+     * 不會觸發（簽的永遠是人）。呼叫端拿得到員工清單時務必傳進來。
+     */
+    employees?: readonly Employee[];
   } = {},
 ): SignAbility {
   if (!c) return { can: false, reason: "這個專案還沒有簽核個案" };
@@ -111,7 +192,7 @@ export function canSignStage(
     return { can: false, reason: "目前角色無簽核權限（需核准人員或管理員）" };
   }
 
-  const duties = separationOfDuties(user, project);
+  const duties = separationOfDuties(user, project, stage, opts.employees);
   if (!duties.can) return duties;
 
   if (opts.override) {
@@ -147,10 +228,12 @@ export function canSignAnyStage(
   user: Employee,
   project: Project,
   c: CaseRecord | undefined,
+  /** 員工清單。傳進去才判得到「這一關的執行者跟作者同族系」 */
+  employees?: readonly Employee[],
 ): SignAbility {
   if (!c) return { can: false, reason: "這個專案還沒有簽核個案" };
   if (!c.stages.length) return { can: false, reason: "這個流程還沒有關卡" };
-  const abilities = c.stages.map((s) => canSignStage(user, project, s, c));
+  const abilities = c.stages.map((s) => canSignStage(user, project, s, c, { employees }));
   if (abilities.some((a) => a.can)) return { can: true };
   const open = c.stages.filter((s) => s.state !== "approved" && s.state !== "skipped");
   if (!open.length) return { can: false, reason: "所有關卡都已結案" };

@@ -44,7 +44,7 @@ import type {
   Template,
   WorkflowStageDef,
 } from "./types";
-import { stageKind } from "./types";
+import { jobLanded, stageKind } from "./types";
 import { buildProjectProfile, emptySectionValues } from "../lib/export";
 import {
   allStagesSettled,
@@ -88,7 +88,7 @@ import {
   normalizeAgentFamily,
   validateEmployeeRole,
 } from "../lib/permissions";
-import { canSignStage } from "../lib/signoff";
+import { canSignStage, caseHasRun, separationOfDuties } from "../lib/signoff";
 import { resolveWorkflow } from "../lib/workflow-resolve";
 import { nowIso } from "../lib/time-format";
 
@@ -137,6 +137,16 @@ function domainGates(domain: string): GateSpec {
     return BASE_GATE_SPEC;
   }
 }
+
+/**
+ * 「這個案子還沒送出審閱」—— 簽核類動作共用的擋詞。
+ *
+ * 建專案時就會先開一個個案（走建立當下的**全域**流程），所以草稿專案也有關卡
+ * 可以按。在那上面留下痕跡的代價不是白做工，是**永久的**：送審看到痕跡就不重建
+ * 個案，那套全域關卡於是被寫進 `project.workflowStages`，而 `p.workflowStages ?? landed`
+ * 落地過就不再覆寫 —— 範本骨架與領域包的合規關卡從此不會出現，重新套範本也救不回來。
+ */
+const NOT_SUBMITTED = "這個案子還沒送出審閱";
 
 /** 領域包宣告的追加關卡。領域包壞掉時退回「不追加」，不讓整條送審路徑爆掉 */
 function domainStages(domain: string): WorkflowStageDef[] {
@@ -729,7 +739,12 @@ function load(): AppState {
         aiWriting: migrateAiWriting((parsed.settings as AISettings | undefined)?.aiWriting),
       },
       showSamples: APP_VARIANT === "prod" ? false : parsed.showSamples !== false,
-      agentJobs: Array.isArray(parsed.agentJobs) ? (parsed.agentJobs as AgentJob[]) : [],
+      // 舊工作單補 `landed`。跑完卻沒有這個欄位的，副作用在升級前就已經由
+      // `invokeAgent` 直接寫進文件了 —— 不補的話 Wave 2 的「待確認」清單會把
+      // 它們整批翻出來，而按下去是**第二次**落地（同一則留言貼兩遍）
+      agentJobs: Array.isArray(parsed.agentJobs)
+        ? (parsed.agentJobs as AgentJob[]).map((j) => ({ ...j, landed: jobLanded(j) }))
+        : [],
       releases: Array.isArray(parsed.releases) ? (parsed.releases as Release[]) : [],
       onboardingComplete,
     };
@@ -2201,10 +2216,15 @@ export const store = {
       user: state.currentUser,
       project,
       hasPeerReview: canPeerReview(state.currentUser, project).ok,
-      // 這裡要的是「有沒有簽核這件能力」，不是「能不能簽某一關」——
-      // 自審的判斷 canResolveComment 自己有一份（而且規則不一樣：它擋的是
-      // 編輯人員覆核自己的檔案）。傳關卡層級的判斷進去會擋掉合法的覆核。
-      hasApprove: canApprove(state.currentUser),
+      // 「有沒有簽核這件能力」**加上專案層級的職責分立**。
+      //
+      // 傳關卡層級的 `canSignStage` 進去會擋掉合法的覆核（留言不屬於任何一關），
+      // 但退回純角色的 `canApprove` 是另一個極端：`canResolveComment` 自己那份
+      // 自審規則只擋「editor 覆核自己的檔案」，完全沒有 agent 族系那一條。
+      // 於是同族系 agent 可以把自己家族寫的文件上的**所有**審查留言標記為已解決。
+      // `separationOfDuties` 正好是專案層級、不看關卡的那一份判斷。
+      hasApprove:
+        canApprove(state.currentUser) && separationOfDuties(state.currentUser, project).can,
     });
     if (!check.ok) return check;
     state = {
@@ -2304,6 +2324,10 @@ export const store = {
     if (!project) return { ok: false, reason: "找不到專案" };
     const c = state.cases[project.id];
     if (c?.withdrawn) return { ok: false, reason: "此案已抽單，無法簽核" };
+    // 還沒送審的個案是建專案時順手開的（走建立當下的全域流程），它的關卡不是
+    // 這個專案要跑的那一套。在上面簽字會讓送審誤判成「這案子跑過了」，
+    // 於是那套全域流程被永久寫進專案，範本骨架再也不會出現
+    if (project.status === "draft") return { ok: false, reason: NOT_SUBMITTED };
 
     const u = state.currentUser;
     if (opts.override && u.accessRole !== "admin") {
@@ -2355,7 +2379,12 @@ export const store = {
     const stages = (c?.stages ?? []).map((s) => {
       if (only && !only.has(s.id)) return s;
       if (!open(s)) return s;
-      const ability = canSignStage(u, project, s, c, { override: Boolean(opts.override) });
+      const ability = canSignStage(u, project, s, c, {
+        override: Boolean(opts.override),
+        // 員工清單傳進去，族系隔離才判得到「這一關派給了誰」——
+        // 不傳的話只剩「按按鈕的人是不是 agent」，而簽的永遠是人
+        employees: state.employees,
+      });
       if (!ability.can) {
         // 指名單關被擋下時，那個理由就是要顯示給使用者的解釋
         if (only) blockedReason ??= ability.reason;
@@ -2419,13 +2448,14 @@ export const store = {
     const c = state.cases[project.id];
     if (!c) return { ok: false, reason: "這個專案還沒有簽核個案" };
     if (c.withdrawn) return { ok: false, reason: "此案已抽單" };
+    if (project.status === "draft") return { ok: false, reason: NOT_SUBMITTED };
     const body = comment.trim();
     if (!body) return { ok: false, reason: "要求修改一定要寫理由 —— 作者要靠它知道改什麼" };
 
     const u = state.currentUser;
     const stage = c.stages.find((x) => x.id === stageId);
     if (!stage) return { ok: false, reason: "找不到這一關" };
-    const ability = canSignStage(u, project, stage, c);
+    const ability = canSignStage(u, project, stage, c, { employees: state.employees });
     if (!ability.can) return { ok: false, reason: ability.reason };
 
     const at = new Date().toISOString();
@@ -2482,6 +2512,10 @@ export const store = {
     if (!project) return { ok: false, reason: "找不到專案" };
     const c = state.cases[project.id];
     if (!c) return { ok: false, reason: "這個專案還沒有簽核個案" };
+    if (c.withdrawn) return { ok: false, reason: "此案已抽單" };
+    // 送審會依專案落地的流程**重建個案**，重建時 `log` 從空的開始 ——
+    // 現在留下的意見會靜默消失。擋在這裡比讓人白打一段字好
+    if (project.status === "draft") return { ok: false, reason: NOT_SUBMITTED };
     const body = comment.trim();
     if (!body) return { ok: false, reason: "意見是空的" };
     const stage = c.stages.find((x) => x.id === stageId);
@@ -2519,13 +2553,17 @@ export const store = {
     if (!project) return { ok: false, reason: "找不到專案" };
     const c = state.cases[project.id];
     if (!c) return { ok: false, reason: "這個專案還沒有簽核個案" };
+    if (project.status === "draft") return { ok: false, reason: NOT_SUBMITTED };
     const stage = c.stages.find((x) => x.id === stageId);
     if (!stage) return { ok: false, reason: "找不到這一關" };
     if (stage.required !== false) return { ok: false, reason: "必簽關卡不能略過" };
     const u = state.currentUser;
-    if (u.accessRole !== "admin" && stage.assigneeId !== u.id) {
-      return { ok: false, reason: "只有這一關的負責人或管理員可以略過" };
-    }
+    // 略過**就是一種結案決策**，所以走跟核准同一支判斷。原本這裡是行內條件
+    // （admin 或本關負責人），繞過了 `hasPermission(approve)`、職責分立、
+    // 以及 `withdrawn`／`locked` —— 於是「唯一入口」那句註解不成立，而且
+    // 同族系 agent 可以把自己家族寫的文件上的非必簽關卡直接結案。
+    const ability = canSignStage(u, project, stage, c, { employees: state.employees });
+    if (!ability.can) return { ok: false, reason: ability.reason };
 
     const at = new Date().toISOString();
     const body = comment.trim();
@@ -2581,14 +2619,10 @@ export const store = {
     const live = existing && !existing.withdrawn ? existing : undefined;
 
     // 建專案時就會先開一個個案（走全域預設流程），所以「有個案」不等於
-    // 「這個案子跑過」。真正不能動的是**已經留下痕跡**的個案：綁過快照、
-    // 有決策紀錄、或任何一關已經簽掉／被退回。
-    const touched = Boolean(
-      live &&
-        (live.reviewCommitId ||
-          live.log?.length ||
-          live.stages.some((x) => x.state === "approved" || x.state === "changes_requested")),
-    );
+    // 「這個案子跑過」。判準收在 `caseHasRun` —— 它問的是流程狀態上有沒有進展，
+    // 不是「有沒有人在上面留下字」。差別很要緊：判成 true 就會把舊個案的關卡
+    // 永久寫進 `project.workflowStages`，之後重新套範本也救不回來。
+    const touched = caseHasRun(live);
 
     const landed = project?.workflowStages
       ? // 落地過的一律沿用自己那一份 —— 連「範本換了類別」都不重算。
@@ -3224,16 +3258,30 @@ export const store = {
       state.projects[0];
     if (!project) return { ok: false, reason: "找不到專案" };
 
-    // 同 family 不可核准自己寫的文件
+    // 綁關卡的任務只在案子真的送審之後才成立。草稿專案的個案是建立當下順手開的，
+    // 送審會照落地流程整個重建 —— 現在跑出來的分析存下去也會靜默消失，而工作單
+    // 已標 `saved`、`discardAgentResult` 也拒絕重來，那份分析救不回來
+    if (opts.stageId && project.status === "draft") {
+      return { ok: false, reason: NOT_SUBMITTED };
+    }
+
+    // 同 family 不可**審查**自己家族寫的文件。
+    //
+    // 判準是「這次任務是不是在審」，不是「有沒有綁關卡」：族系隔離守的是審查，
+    // 不是撰寫。`edit`／`coach` 是 agent 在產出內文，而 agent 寫 PRD 正是這個
+    // 產品在做的事 —— 擋掉 claude 幫 claude 寫的「文件補完」保護不了任何東西。
+    //
+    // 原本這裡只擋 `approve`，而簽核頁的審查關卡送的是 `task: "review"`
+    // （`pages/signoff.ts`），所以真實的 agent 審查路徑全程沒有族系檢查。
     if (
-      opts.task === "approve" &&
+      (opts.task === "approve" || opts.task === "review") &&
       project.authorAgentFamily &&
       agent.agentFamily &&
       project.authorAgentFamily === agent.agentFamily
     ) {
       return {
         ok: false,
-        reason: `同一種 Agent（${agent.agentFamily}）已撰寫此文件，不可再擔任核准`,
+        reason: `同一種 Agent（${agent.agentFamily}）已撰寫此文件，不可再擔任審查`,
       };
     }
 
@@ -3361,12 +3409,33 @@ export const store = {
     if (job.status !== "done") return { ok: false, reason: "這張工作單還沒跑完" };
     if (!job.result.trim()) return { ok: false, reason: "這張工作單沒有結果可以存" };
     // 已經落地過的不再落地一次。重複按下去會把同一份意見貼兩遍，
-    // 而簽核紀錄上那兩筆看起來像兩次獨立的審查
-    if (job.landed === "saved") return { ok: false, reason: "這份結果已經存過了" };
+    // 而簽核紀錄上那兩筆看起來像兩次獨立的審查。
+    // 沒有 `landed` 的是升級前的舊工作單 —— 它們的副作用當年已經寫進文件了
+    if (jobLanded(job) === "saved") return { ok: false, reason: "這份結果已經存過了" };
 
     const at = nowIso();
     const c = state.cases[job.projectId];
     const stage = job.stageId ? c?.stages.find((s) => s.id === job.stageId) : undefined;
+
+    // 綁關卡的落地會改**文件或簽核個案**，所以要有閘門。原本這支完全沒有：
+    // 沒有權限、沒有 `locked`、沒有 `withdrawn`、沒有 `project.status`。
+    // 舊版把這個寫入藏在 `invokeAgent` 裡時同樣沒閘門，但這批把它拉出來變成
+    // 一支公開的 store API —— 等於把只有背景流程走得到的寫入變成 Wave 2
+    // 隨時可按的按鈕。趕在 UI 接上之前補，成本最低。
+    if (job.stageId) {
+      const project = state.projects.find((p) => p.id === job.projectId);
+      if (!project) return { ok: false, reason: "找不到專案" };
+      if (!stage) return { ok: false, reason: "找不到這一關" };
+      if (!c || c.withdrawn) return { ok: false, reason: "此案已抽單" };
+      if (c.locked) return { ok: false, reason: "此案已結案鎖定" };
+      if (project.status !== "review") {
+        return { ok: false, reason: "這個案子目前不在審閱中，無法落地" };
+      }
+      // `edit` 關卡真的會覆寫 PRD 內文，所以要的是編輯權限而不是簽核權限
+      if (stageKind(stage) === "edit" && !canEditContent(state.currentUser)) {
+        return { ok: false, reason: "目前身分無法編輯內文" };
+      }
+    }
 
     if (stage && stageKind(stage) === "edit") {
       const target = stage.editTarget ?? { sectionId: "open", fieldKey: "oq" };
@@ -3396,8 +3465,11 @@ export const store = {
           : {}),
       };
     } else if (stage) {
-      // review 關卡：意見釘在關卡上。不動 `state` —— 那一關的狀態由簽核決定，
-      // 存下分析不等於簽了它
+      // review 關卡：分析釘在關卡上。寫 `agentResult` 而不是 `comment` ——
+      // 後者是**簽核意見**（`sign()` / `requestChanges` / `skipStage` 都寫它），
+      // 兩邊共用一個欄位會互相覆寫：簽核者留的那句話會被四千字分析吃掉，
+      // 而 `stageReasons` 與舊個案的反推路徑會把 agent 的分析當成簽核者說的話
+      // 掛在人名下。不動關卡狀態 —— 存下分析不等於簽了它。
       state = {
         ...state,
         cases: {
@@ -3405,7 +3477,7 @@ export const store = {
           [job.projectId]: {
             ...c!,
             stages: c!.stages.map((s) =>
-              s.id === stage.id ? { ...s, comment: job.result.slice(0, 4000) } : s,
+              s.id === stage.id ? { ...s, agentResult: job.result.slice(0, 4000) } : s,
             ),
           },
         },
@@ -3455,7 +3527,9 @@ export const store = {
   discardAgentResult(jobId: string): { ok: boolean; reason?: string } {
     const job = state.agentJobs.find((j) => j.id === jobId);
     if (!job) return { ok: false, reason: "找不到這張工作單" };
-    if (job.landed === "saved") return { ok: false, reason: "這份結果已經存進文件了，不能改成不採用" };
+    if (jobLanded(job) === "saved") {
+      return { ok: false, reason: "這份結果已經存進文件了，不能改成不採用" };
+    }
     state = {
       ...state,
       agentJobs: state.agentJobs.map((j) =>
