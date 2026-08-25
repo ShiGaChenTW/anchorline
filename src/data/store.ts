@@ -44,7 +44,7 @@ import type {
   Template,
   WorkflowStageDef,
 } from "./types";
-import { jobLanded, stageKind } from "./types";
+import { jobLanded, pendingAgentJobsOf, resolveEditTarget, stageKind } from "./types";
 import { buildProjectProfile, emptySectionValues } from "../lib/export";
 import {
   allStagesSettled,
@@ -787,6 +787,17 @@ function load(): AppState {
   } catch {
     return seedState();
   }
+}
+
+/**
+ * 這個專案還有幾份「跑完了、但人還沒拍板」的 Agent 分析。
+ *
+ * 篩選條件本身住在 `types.pendingAgentJobsOf`（純函式，headless 測得到每一條
+ * 分支）。這裡只負責把 state 交給它 —— 條件寫在這支裡的話，簽核頁的攔截
+ * 對話框就得再寫一份，而兩份分岔的症狀是「對話框說沒有待辦，按下去卻還是被擋」。
+ */
+function pendingJobsFor(projectId: string): AgentJob[] {
+  return pendingAgentJobsOf(state.agentJobs, projectId);
 }
 
 function syncApprovalsFromActiveCase() {
@@ -2352,6 +2363,8 @@ export const store = {
     reason?: string;
     allDone?: boolean;
     signed?: number;
+    /** S1 閘門擋下時，還有幾份分析等著拍板。UI 靠這個數字決定要不要開攔截對話框 */
+    pendingJobs?: number;
   } {
     const project =
       state.projects.find((p) => p.id === state.activeProjectId) ??
@@ -2437,6 +2450,29 @@ export const store = {
     if (only && signed === 0) return { ok: false, reason: blockedReason ?? "這一關現在不是你可以簽的" };
     if (!only && signed === 0) return { ok: false, reason: "現在沒有你可以簽的關卡" };
     const allDone = allStagesSettled(nextStages);
+    // ── S1 結案閘門 ──────────────────────────────────────────────
+    //
+    // 結案會 `locked: true`，而 `saveAgentResult` 對鎖定的案子一律回
+    // 「此案已結案鎖定」。所以案子一鎖，所有還沒拍板的分析就**永遠**落不了地：
+    // 一份跑了三十秒、使用者還沒讀的分析，會因為他按了最後一關的核准而消失在
+    // 一顆按不動的灰鈕後面。
+    //
+    // Scott 拍板擋在這一端（S1）：不是等鎖定之後解釋那顆灰鈕，而是不讓案子鎖定。
+    // 位置是硬的 —— 在 `nextStages` 與 `allDone` 都算完之後、寫進 state 之前。
+    // 提前到迴圈之前的話擋不掉「這一簽剛好讓案子結案」的那一次；放到寫入之後
+    // 就得再回滾一次已經改掉的 state。
+    //
+    // **中途簽一關不受影響**：只有 `allDone` 才進這個分支。
+    if (allDone) {
+      const pending = pendingJobsFor(project.id);
+      if (pending.length) {
+        return {
+          ok: false,
+          reason: `還有 ${pending.length} 份 Agent 分析沒拍板 —— 結案後就永遠落不了地了`,
+          pendingJobs: pending.length,
+        };
+      }
+    }
     const base0 = c ?? caseForProject(project.id);
     const nextCase: CaseRecord = {
       ...base0,
@@ -2584,7 +2620,10 @@ export const store = {
    * 所以「非必簽」等於沒有出口。這支就是那個出口。必簽關卡不給略過 ——
    * 那會讓 required 這個設定變成裝飾。
    */
-  skipStage(stageId: string, comment: string): { ok: boolean; reason?: string } {
+  skipStage(
+    stageId: string,
+    comment: string,
+  ): { ok: boolean; reason?: string; pendingJobs?: number } {
     const project = state.projects.find((p) => p.id === state.activeProjectId);
     if (!project) return { ok: false, reason: "找不到專案" };
     const c = state.cases[project.id];
@@ -2609,6 +2648,19 @@ export const store = {
         : x,
     );
     const allDone = allStagesSettled(nextStages);
+    // S1 閘門的第二條路。`skipStage` 跟 `approveAndLock` 都會 `locked: allDone`，
+    // 所以閘門只放在 UI 或只放在其中一支的話，另一支會靜默走過去 —— 略過最後一個
+    // 非必簽關卡照樣把案子鎖上，那幾份分析照樣落不了地，而且完全沒有症狀。
+    if (allDone) {
+      const pending = pendingJobsFor(project.id);
+      if (pending.length) {
+        return {
+          ok: false,
+          reason: `還有 ${pending.length} 份 Agent 分析沒拍板 —— 結案後就永遠落不了地了`,
+          pendingJobs: pending.length,
+        };
+      }
+    }
     state = {
       ...state,
       cases: {
@@ -3424,6 +3476,17 @@ export const store = {
   },
 
   /**
+   * 這個專案還有哪幾份 Agent 分析在等人拍板（新到舊）。純讀，不動 state。
+   *
+   * 兩個用途共用同一份判斷，這是重點：結案閘門用它決定「擋不擋」，簽核頁的
+   * 攔截對話框用它列出「要處理哪幾張」。UI 自己再篩一次的話，兩份條件會分岔，
+   * 而症狀是「對話框說沒有待辦，按下去卻還是被擋」—— 一個沒有出口的迴圈。
+   */
+  pendingAgentJobs(projectId: string): AgentJob[] {
+    return pendingJobsFor(projectId);
+  },
+
+  /**
    * 把一份跑完的 Agent 結果**落地**。
    *
    * 這是 `invokeAgent` 拿掉自動副作用之後的另一半：跑完只是有了結果，要不要
@@ -3474,7 +3537,10 @@ export const store = {
     }
 
     if (stage && stageKind(stage) === "edit") {
-      const target = stage.editTarget ?? { sectionId: "open", fieldKey: "oq" };
+      // 退路走共用的 `resolveEditTarget`：pop-up 的「現值」左欄、指派時的警語、
+      // 以及這裡真正的寫入，三者必須指向同一個欄位。分岔的話三個畫面各自都對，
+      // 只有文件是錯的。
+      const target = resolveEditTarget(stage.editTarget);
       const bag = state.projectSectionValues[job.projectId] ?? {};
       const section = bag[target.sectionId] ?? {};
       state = {

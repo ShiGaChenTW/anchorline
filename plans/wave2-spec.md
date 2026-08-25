@@ -244,11 +244,15 @@ resetWorkflowSkeleton(cat: FullCat): void                   // 還原成 seed
 - [~] W2-0 共用地基
   - [x] `askCustom`（2026-08-26 · W2-A agent）—— `openDialog` 加 `"custom"` kind，
         沿用同一個 dialog lock／focus trap／Escape／熱鍵隔離
-  - [ ] `pendingAgentJobs` + 結案閘門（不歸 W2-A agent）
+  - [x] `pendingAgentJobs` + 結案閘門（2026-08-26 · W2-B agent）—— 篩選條件抽成
+        `types.pendingAgentJobsOf` 純函式，store 與簽核頁共用；閘門放在
+        `approveAndLock` **與** `skipStage` 兩條路上
 - [x] W2-A 送審指派對話框（2026-08-26；`bunx tsc --noEmit` exit 0、
       `bun test` 1651 pass / 0 fail / 83 files，基準 1612/82 → +39 測試、零退步、
       `bunx vite build` 成功。**未 commit**，交 PM 驗）
-- [ ] W2-B Agent 結果 pop-up
+- [x] W2-B Agent 結果 pop-up（2026-08-26；`bunx tsc --noEmit` exit 0、
+      `bun test` **1695 pass / 0 fail / 85 files**，基準 1651/83 → +44 測試、零退步、
+      `bunx vite build` 成功。**未 commit**，交 PM 驗）
 - [ ] W2-C 管理中心流程檢視／編輯
 - [ ] 跨 context 審查（Cato / Forge）
 - [ ] 實機 UAT 出題
@@ -330,3 +334,145 @@ resetWorkflowSkeleton(cat: FullCat): void                   // 還原成 seed
 
 `src/pages/signoff.ts`、`src/pages/admin.ts`、`pendingAgentJobs`、
 `saveAgentResult`、`discardAgentResult`、`approveAndLock`、`skipStage` 全部未動。
+
+---
+
+## W2-B 實作筆記
+
+> 2026-08-26 · 實作者：Engineer（子代理）。記下**補的決定**與**與規格的落差**。
+> 未 commit、未 push，交 PM 驗。
+
+### 交付前實跑的輸出
+
+```
+bunx tsc --noEmit   → exit 0
+bun test            → 1695 pass / 0 fail / 3953 expect / 85 files（基準 1651/83）
+bunx vite build     → ✓ built in 899ms
+git diff --stat     → 7 檔 +423/-36，另新增 3 個未追蹤檔
+                      （src/lib/agent-result.ts、tests/agent-popup.test.ts、
+                        tests/pending-gate.test.ts）
+```
+
+### 規格沒講、實作時補的決定
+
+1. **`pendingAgentJobs` 的篩選條件抽成純函式住在 `types.ts`。**
+   規格說「store 新增查詢」。照字面做的話，`landed` 欄位缺失（升級前的舊工作單）
+   與空結果這兩條分支**用公開 API 造不出來** —— store hydrate 時的移轉就會把舊單
+   補成 `saved`，而 `invokeAgent` 的模型輸出是 mock 給的固定字串。那兩條分支會
+   變成只有註解、沒有測試。改成 `types.isPendingAgentJob` / `pendingAgentJobsOf`
+   純函式，store 只負責把 state 交給它。放 `types.ts` 而不是新 lib 是因為它是
+   `jobLanded` 的鄰居而且零依賴 —— 放 `lib/agent-result.ts` 會把 `ui.ts`
+   拉進 store 的相依圖。
+
+2. **`jobLanded(j) === "pending"`，不是 `j.landed === "pending"`。**
+   這是整批最容易寫錯的一行，測試單獨釘了一次。舊工作單沒有 `landed`，
+   `jobLanded` 算它們 `saved`。直接比欄位的話那批舊單全變成擋門的幽靈，而且
+   **永遠拍不掉**（`saveAgentResult` 對它們回「已經存過了」），案子再也結不了。
+
+3. **閘門擋下時「完全沒發生」。** 規格說「不簽、不鎖」。實作把閘門放在
+   `nextStages`／`allDone` 都算完之後、寫進 state 之前，所以連「簽了一半」都
+   不會留下。測試對 `cases[pid]` 做**逐字**比對，不是只看 `locked`。
+   代價：`approveAndLock({})`（不帶 stageIds、一次簽掉所有簽得動的）被擋時，
+   那幾關的簽章一起退掉。這是對的 —— 部分寫入會讓使用者下一次按下去時面對
+   一個他沒印象簽過的狀態。
+
+4. **`skipStage` 的閘門在內建骨架裡打不到，但還是要放。**
+   `allStagesSettled` 只看必簽關卡，所以略過一個非必簽關卡**永遠**不會把
+   `allDone` 從 false 翻成 true。真正打得到的形狀是「整份流程都是非必簽」——
+   那時 `allStagesSettled` 回 `stages.length > 0`，略過就結案。
+   prod 種子的「法務」正是 `required:false`，不是假想形狀。測試用
+   `setWorkflowStages` 組了這份流程來實測，並在 `afterAll` 還原全域流程
+   （store 是跨檔共用的單例，不還原會污染別的測試檔）。
+
+5. **`edit` 關卡的退路收斂成 `types.resolveEditTarget`。**
+   `editTarget` 省略時退回「開放問題」原本在 `store.saveAgentResult` 寫死一份、
+   `submit-assign` 的警語寫死一份，而 W2-B 的前後對照會是第三份。三份分岔的
+   症狀是最惡劣的一種：指派時的警語說會覆寫 A 欄、pop-up 左欄顯示 A 欄的現值、
+   而存檔寫進 B 欄 —— 三個畫面各自都「對」，只有文件是錯的。
+
+6. **pop-up 左欄的現值讀 `projectSectionValues[pid]`，不是 active 的 `sectionValues`。**
+   簽核頁看的專案不一定是編輯台當下開著的那個。拿 active 那份會顯示**別的專案**
+   的內容當「現值」，而使用者要據此決定要不要覆寫。
+
+7. **關卡名用 `store.sectionsFor(p.id)` 查，不是 `st.sections`。** 同上理由：
+   不同專案的骨架不一樣，欄位中文名會查到另一份骨架的。
+
+8. **「查看結果」鈕帶 jobId 而不是 stageId。** 同一關重跑過好幾次，待拍板的是
+   **某一張工作單**，不是那一關。
+
+9. **`cancelled` 的工作單多一句「這次分析已取消」。** 改版前的 `else` 分支會把
+   取消的工作單當成完成的來攤全文。
+
+10. **自動跳窗掛在 `render()` 最後，用 `Set<jobId>` 去重。** 工作單完成時 store
+    會 emit → subscribe → render，所以那裡就是「分析剛跑完」那一刻。去重集合
+    少了的話，`render()` 每跑一次（改派、簽核、別的分頁存檔都會觸發）就把窗
+    推回使用者臉上。`isDialogOpen()` 擋下的那次**不標記**，所以窗關掉之後的
+    下一次 render 會補跳。
+
+11. **S1 攔截對話框的「查看」鈕借確認鈕那條路把 jobId 交出去。**
+    `askCustom` 的對話框只能從內部關閉，而按下查看的意思本來就是「這個窗的
+    任務結束了，換下一個窗」。`onMount` 綁 click → 設 `picked` → 觸發
+    `[data-dlg="ok"]`，`read` 回傳 `picked`。**這是第一次真的走 `onMount` /
+    `extraLabel` / `extraDanger` 這三條路**（W2-A 只實作沒使用），三個欄位
+    都照 W2-A 定下的語意運作，沒有需要改 `ask.ts`。
+
+### 自己抓到的一個 bug（既有測試抓到的）
+
+`tests/wave1-review-fixes.test.ts` 的 F3-2「已核准鎖定的專案，落地不了」原本紅了。
+**不是我的閘門寫錯 —— 是那支測試的前置正好是 S1 要拆掉的那個陷阱**：它先跑
+agent（留一張 pending）、再把案子全簽掉鎖定，而 S1 的整個用意就是不讓這件事發生。
+
+處理方式：**只改前置順序，零個斷言被改動。** 改成先簽核鎖定、再跑 agent
+（`invokeAgent` 沒有 locked 守衛，所以這個狀態仍然到得了）。
+`saveAgentResult` 的閘門本身完全沒動 —— 它是最後一道防線，S1 只是讓人比較不會
+撞上它。逐條說明：
+
+| 檔案 | 改了什麼 | 為什麼 |
+|------|---------|--------|
+| `tests/wave1-review-fixes.test.ts:373-390` | 把 `invokeAgent` + `waitForJob` 兩段從 `approveAndLock` 迴圈**之前**移到**之後**；補一段註解說明原因 | S1 讓「有 pending 分析時鎖定案子」不再可達。斷言（`save.ok === false`、內文逐字不變）與 `expect(proj(id).status).toBe("approved")` **一字未改** |
+
+**沒有任何斷言被刪除或弱化。**
+
+### 與規格的落差 / 順手修掉的一處
+
+- **規格沒提 `review.ts`，但它是 `approveAndLock` 的另一個呼叫端。**
+  那裡對「失敗 + 我是 admin」的既有反應是問「要不要以管理員身分代簽」——
+  S1 的拒絕會誤觸這條路：使用者白寫一段代簽理由，送出後被同一個閘門再擋一次，
+  而理由那一欄會讓他以為問題出在權限。加了 `!r.pendingJobs` 一個條件排除，
+  並補了一條 source-grep 測試。**只動這一行**，`review.ts` 其餘未碰。
+- **S1 攔截對話框的確認鈕預設處理「第一份」**，規格只說「每張一顆查看」。
+  沒有預設動作的話，那個窗的確認鈕沒有意義（只剩取消）。
+- **`skipStage` 被擋下時 UI 走的是同一個攔截對話框**（`signoff.ts` 的 `r.pendingJobs`
+  分支涵蓋四種動作），規格只講了核准那一路。
+
+### 沒碰的東西（W2-C 的地盤）
+
+`src/pages/admin.ts`、`src/pages/editor.ts`、`src/lib/submit-assign.ts` 的行為
+（只把寫死的 `FALLBACK_EDIT_TARGET` 換成共用函式，`editTargetLabel` 的回傳值
+逐字不變，既有測試全綠）、`store.submitPlan` / `submitForReview`、
+全域 `workflowStages` 的 CRUD —— 全部未動。
+`tests/pending-gate.test.ts` 有呼叫 `setWorkflowStages` 來組測試用流程，
+但**只是呼叫既有 API**，且 `afterAll` 還原。
+
+### 建議的 UAT 題目
+
+DOM 行為（焦點、Escape、Tab trap、自動跳窗時機）零自動化覆蓋，全部要靠實機：
+
+1. 指派一個 agent 到某一關 → 按「執行分析」→ 跑完**自動跳窗**，不必手動點
+2. 那個窗按「稍後再決定」→ 關掉；**不會**自己再跳回來（改派別的關卡、
+   切分頁回來都不該重跳）
+3. 關卡列上出現「待拍板」徽章與「查看結果」鈕，而且**列上看不到全文**
+4. 按「查看結果」→ 同一個窗重開
+5. enterprise 專案的「文件補完」（`edit` 關卡）→ 窗內是**兩欄**，左欄是
+   PRD 現在的「開放問題」內容、右欄是 agent 產出，中間那句紅字看得到
+6. 先在編輯台把「開放問題」打幾行字 → 跑 `edit` 關卡的分析 → pop-up 左欄
+   要顯示**那幾行字**（不是空的、不是別的專案的）
+7. 按「存進文件」→ 回編輯台確認那一段**整段被換掉**（不是被追加）
+8. `review` 關卡按「存到這一關」→ 關卡列顯示分析全文，PRD 內文**不變**
+9. 按「不採用」→ 關卡列一行灰字「這份分析未採用」，**展開仍看得到全文**
+10. **S1 主戲**：跑一份分析不拍板 → 去簽最後一關 → 出現攔截對話框，
+    列出那一份、按「查看」直接開結果窗；處理完再簽一次才過得去
+11. 攔截對話框按「稍後再說」→ 案子**沒有**被鎖定（去看關卡狀態）
+12. pop-up 內按 Enter → **不得**送出（`askCustom` 一律不讓 Enter 確認）
+13. pop-up 內 Tab 循環、Escape 關閉且不觸動背後簽核頁的熱鍵
+14. 分析全文很長時，`<pre>` 自己捲，整個 modal 不捲（按鈕要一直看得到）

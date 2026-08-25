@@ -26,6 +26,7 @@ import type {
   StageEditTarget,
   WorkflowStageDef,
 } from "../data/types";
+import { resolveEditTarget } from "../data/types";
 import { escapeHtml } from "./ui";
 
 /** `stageDefId → 執行者 id`。`null` = 這一關明確不派人 */
@@ -43,8 +44,8 @@ export const FULL_CAT_LABEL: Record<FullCat, string> = {
 const KIND_LABEL = { review: "審閱", edit: "改稿" } as const;
 const MODE_LABEL = { sequential: "串行", parallel: "並行" } as const;
 
-/** `editTarget` 省略時 `saveAgentResult` 的落地目標。兩邊要講同一個欄位 */
-const FALLBACK_EDIT_TARGET: StageEditTarget = { sectionId: "open", fieldKey: "oq" };
+// `editTarget` 省略時的落地目標本來在這裡寫死一份、`store.saveAgentResult` 寫死
+// 一份。W2-B 的前後對照會是第三份 —— 已改為共用 `types.resolveEditTarget`。
 
 /** 這個帳號能不能被指派：停用的不列（`active` 省略視為啟用，那是既有資料的形狀） */
 function assignable(e: Employee): boolean {
@@ -61,7 +62,7 @@ export function editTargetLabel(
   target: StageEditTarget | undefined,
   sections: readonly Section[],
 ): string {
-  const t = target ?? FALLBACK_EDIT_TARGET;
+  const t = resolveEditTarget(target);
   const field = sections.find((s) => s.id === t.sectionId)?.fields.find((f) => f.key === t.fieldKey);
   if (field) return field.label;
   // 退回目標查不到時（章節被刪掉／改名）仍要講得出人話

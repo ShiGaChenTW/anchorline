@@ -14,14 +14,21 @@
  * 紀錄收在下面。跟 PRD 審閱監控同一套視覺語言，不另做一種。
  */
 import { store } from "../data/store";
-import { projectDisplayName, type Project } from "../data/types";
-import { askConfirm } from "../lib/ask";
+import { jobLanded, projectDisplayName, resolveEditTarget, stageKind, type AgentJob, type CaseStage, type Project } from "../data/types";
+import { askConfirm, askCustom, isDialogOpen } from "../lib/ask";
+import {
+  agentResultDialogHtml,
+  pendingGateHtml,
+  pendingGateItems,
+  resultConfirmLabel,
+  resultDialogTitle,
+  stageAnalysisRowHtml,
+} from "../lib/agent-result";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import { syncRailContext } from "../lib/rail-projects";
 import {
-  analysisVerdict,
   groupTimelineByRound,
   signoffSummary,
   signoffTimeline,
@@ -133,6 +140,9 @@ if (!requireAuth()) {
     const rows = stageRows(st.currentUser, p, c);
     const isAdmin = st.currentUser.accessRole === "admin";
     const people = st.employees.filter((e) => e.active !== false);
+    // `edit` 關卡要講得出「會覆寫哪個欄位」的中文名，而那份章節定義是**專案的**：
+    // 拿 active 的 `st.sections` 去查別的專案會查到另一份骨架的欄位名。
+    const sections = store.sectionsFor(p.id);
 
     if (!rows.length) {
       return `<section class="card aiw-card" data-od-id="sg-stages">
@@ -164,24 +174,16 @@ if (!requireAuth()) {
                  data-sg-agent="${escapeHtml(assignee!.id)}"${busy ? " disabled" : ""}>
                  ${busy ? "分析中…" : job ? "重新分析" : "執行分析"}</button>`
             : "";
-        const verdict = job?.status === "done" ? analysisVerdict(job.result) : null;
-        const analysisHtml = !job
-          ? ""
-          : busy
-            ? `<p class="sg-analysis sg-analysis--busy">⏳ ${escapeHtml(job.agentName)} 分析中 —— 完成後結果會出現在這裡。</p>`
-            : job.status === "failed"
-              ? `<p class="sg-analysis sg-analysis--failed">分析失敗：${escapeHtml(job.result || "沒有留下原因")}　—— 可按「重新分析」再試。</p>`
-              : `<details class="sg-analysis sg-analysis--done">
-                   <summary>
-                     <span class="sg-verdict sg-verdict--${verdict ?? "none"}">${
-                       verdict === "approve" ? "建議核准" : verdict === "fix" ? "建議修改" : "無明確結論"
-                     }</span>
-                     ${escapeHtml(job.agentName)} · ${escapeHtml(job.finishedAt ? sinceLabel(job.finishedAt, Date.now()) : "")}
-                     <span class="aiw-fold-meta">看全文</span>
-                   </summary>
-                   <pre class="sg-analysis-body">${escapeHtml(job.result)}</pre>
-                   <p class="aiw-note">這是 Agent 的建議，不是簽章 —— 核准仍然要人按。</p>
-                 </details>`;
+        // 顯示規則整批搬進 `agent-result.ts`：待拍板的**不**在列上攤開全文
+        // （攤開的話，一份還沒有人同意的分析看起來就跟已經生效的內容一樣），
+        // 已採用的講「存到哪了」，未採用的留一行灰字加可展開的全文。
+        const analysisHtml = stageAnalysisRowHtml({
+          job,
+          stage: s,
+          sections,
+          landed: job ? jobLanded(job) : "pending",
+          now: Date.now(),
+        });
 
         // 三顆動作等重。以前只有「核准」，發現問題時唯一能做的是不按 ——
         // 而那在畫面上跟「還沒輪到他」一模一樣。
@@ -330,6 +332,144 @@ if (!requireAuth()) {
     </details>`;
   }
 
+  // ── Agent 結果 pop-up ───────────────────────────────────────
+  //
+  // Wave 1 把「agent 跑完不再靜默改文件」做完了，但 `saveAgentResult` /
+  // `discardAgentResult` 在 `src/pages/` 是**零呼叫端** —— 那個功能在 App 裡
+  // 按不到。以下是把它按得到的那一段。
+
+  /**
+   * 已經自動跳過窗的工作單 id。
+   *
+   * 沒有這個集合的話，`render()` 每跑一次就重開一次窗 —— 而 `render()` 掛在
+   * `store.subscribe` 上，改派、簽核、別的分頁存檔都會觸發它。使用者按下
+   * 「稍後再決定」之後，那個窗會在下一次任何狀態變動時再彈回他臉上。
+   */
+  const autoShown = new Set<string>();
+
+  function jobById(id: string): AgentJob | null {
+    return store.get().agentJobs.find((j) => j.id === id) ?? null;
+  }
+
+  function stageOfJob(job: AgentJob): CaseStage | undefined {
+    if (!job.stageId) return undefined;
+    return store.get().cases[job.projectId]?.stages.find((s) => s.id === job.stageId);
+  }
+
+  /**
+   * `edit` 關卡 pop-up 左欄的現值。
+   *
+   * 讀 `projectSectionValues[pid]` 而不是 active 的 `sectionValues`：在簽核頁
+   * 看的專案不一定是編輯台當下開著的那個，拿 active 那份會顯示**別的專案**的
+   * 內容當「現值」—— 而使用者要據此決定要不要覆寫。
+   */
+  function currentValueFor(job: AgentJob, stage: CaseStage | undefined): string {
+    if (!stage || stageKind(stage) !== "edit") return "";
+    const t = resolveEditTarget(stage.editTarget);
+    return store.get().projectSectionValues[job.projectId]?.[t.sectionId]?.[t.fieldKey] ?? "";
+  }
+
+  /**
+   * 開一張工作單的結果 pop-up，並把三顆按鈕接回 store。
+   *
+   * 三態各自不同（`askCustom` 的回傳刻意沒有塌成 boolean）：
+   * - 確認 → `saveAgentResult`：`edit` 覆寫欄位、`review` 釘在關卡上
+   * - 不採用 → `discardAgentResult`：全文留著，只標成未採用
+   * - 取消 → **什麼都不做**，工作單留在 pending，之後還能從「查看結果」再開
+   */
+  async function showAgentResult(jobId: string): Promise<void> {
+    const job = jobById(jobId);
+    if (!job) return void toast("找不到這張工作單");
+    const stage = stageOfJob(job);
+    const kind = stage ? stageKind(stage) : "review";
+
+    const res = await askCustom({
+      title: resultDialogTitle(job.agentName, stage?.name ?? "未綁定關卡"),
+      confirmLabel: resultConfirmLabel(kind),
+      cancelLabel: "稍後再決定",
+      extraLabel: "不採用",
+      extraDanger: true,
+      bodyHtml: agentResultDialogHtml({
+        job,
+        stage,
+        sections: store.sectionsFor(job.projectId),
+        currentValue: currentValueFor(job, stage),
+        now: Date.now(),
+      }),
+    });
+
+    // 取消＝還沒決定。不動 state，也不 toast —— 這裡沒有發生任何事
+    if (res.action === "cancel") return;
+
+    const r =
+      res.action === "confirm" ? store.saveAgentResult(job.id) : store.discardAgentResult(job.id);
+    if (!r.ok) {
+      toast(r.reason ?? "動作失敗");
+      render();
+      return;
+    }
+    toast(
+      res.action === "extra"
+        ? "已標為不採用 —— 全文留在紀錄裡"
+        : kind === "edit"
+          ? "已存進文件"
+          : "已存到這一關",
+    );
+    render();
+  }
+
+  /**
+   * 跑完自動跳窗。
+   *
+   * 硬條件：**不得在已有對話框開著時觸發** —— `askCustom` 遇到 dialog lock 會
+   * throw「已有對話框開啟」，而這一支跑在 `render()` 裡，沒有人接得住那個 throw。
+   * 這裡 return 而不標記 `autoShown`，所以窗關掉之後的下一次 render 會補跳。
+   */
+  function maybeAutoShow(p: Project): void {
+    if (isDialogOpen()) return;
+    const next = store.pendingAgentJobs(p.id).find((j) => !autoShown.has(j.id));
+    if (!next) return;
+    autoShown.add(next.id);
+    void showAgentResult(next.id);
+  }
+
+  /**
+   * S1 結案攔截。
+   *
+   * store 擋下結案之後，UI 這一層的責任是把那個 reason 變成**現在就處理得掉**的
+   * 東西。只 toast 一句的話，使用者唯一能做的是再按一次簽核鈕、再被擋一次。
+   *
+   * 「查看」鈕借確認鈕那條路把 jobId 交出去：`askCustom` 的對話框只能從內部關閉，
+   * 而按下查看的意思本來就是「這個窗的任務結束了，換下一個窗」。
+   */
+  async function handlePendingGate(p: Project): Promise<void> {
+    const jobs = store.pendingAgentJobs(p.id);
+    // 閘門與這裡問的是同一支 `pendingAgentJobs`，理論上不會落空；真的落空時
+    // 讓使用者再按一次比開一個空清單好
+    if (!jobs.length) return void toast("待拍板的分析已經處理完了，請再按一次");
+    const stages = store.get().cases[p.id]?.stages ?? [];
+    let picked: string | null = jobs[0]!.id;
+
+    const res = await askCustom({
+      title: `還有 ${jobs.length} 份分析沒拍板，結案後就存不進去了`,
+      confirmLabel: "現在處理第一份",
+      cancelLabel: "稍後再說",
+      bodyHtml: pendingGateHtml(pendingGateItems(jobs, stages)),
+      onMount: (root) => {
+        root.querySelectorAll<HTMLElement>("[data-gate-view]").forEach((b) => {
+          b.addEventListener("click", () => {
+            picked = b.dataset.gateView ?? null;
+            root.querySelector<HTMLElement>('[data-dlg="ok"]')?.click();
+          });
+        });
+      },
+      read: () => picked,
+    });
+    if (res.action !== "confirm") return;
+    const id = res.value as string | null;
+    if (id) await showAgentResult(id);
+  }
+
   // ── Render ──────────────────────────────────────────────────
 
   function render() {
@@ -348,6 +488,9 @@ if (!requireAuth()) {
     root.innerHTML = `${heroHtml(p)}${stageListHtml(p)}<div class="aiw-folds">${timelineHtml(p)}${caseOpsHtml(p)}</div>`;
     bind(p);
     if (pending) document.getElementById("sg-comment")?.focus();
+    // 跑完自動跳窗掛在 render 的最後：工作單完成時 store 會 emit → subscribe →
+    // render，所以這裡就是「分析剛跑完」那一刻。自己記 jobId 去重，不是每次都開。
+    maybeAutoShow(p);
   }
 
   function bind(p: Project) {
@@ -364,6 +507,15 @@ if (!requireAuth()) {
         });
         if (!r.ok) toast(r.reason ?? "無法呼叫 Agent");
         // 成功不用 toast：關卡上會立刻出現「分析中…」，那就是回饋
+      });
+    });
+    // 未拍板的工作單在關卡列上留一顆「查看結果」—— 自動跳窗按過取消之後，
+    // 這是唯一回得去的路
+    document.querySelectorAll<HTMLElement>("[data-sg-view]").forEach((b) => {
+      b.addEventListener("click", () => {
+        // 已經有窗開著時什麼都不做：askCustom 會 throw，而點擊處理器沒人接
+        if (isDialogOpen()) return;
+        void showAgentResult(b.dataset.sgView!);
       });
     });
     document.querySelectorAll<HTMLElement>("[data-sg-act]").forEach((b) => {
@@ -389,7 +541,7 @@ if (!requireAuth()) {
           return;
         }
 
-        let r: { ok: boolean; reason?: string; allDone?: boolean };
+        let r: { ok: boolean; reason?: string; allDone?: boolean; pendingJobs?: number };
         if (act.kind === "approved") r = store.approveAndLock({ comment, stageIds: [act.stageId] });
         else if (act.kind === "changes_requested") r = store.requestChanges(act.stageId, comment);
         else if (act.kind === "skipped") r = store.skipStage(act.stageId, comment);
@@ -397,6 +549,14 @@ if (!requireAuth()) {
 
         pending = null;
         if (!r.ok) {
+          // S1：被結案閘門擋下時開攔截對話框，不是只 toast 一句。
+          // `pendingJobs` 是 store 交出來的數字，UI 不自己算 —— 兩份判斷會分岔，
+          // 而症狀是「對話框說沒有待辦，按下去卻還是被擋」。
+          if (r.pendingJobs) {
+            render();
+            void handlePendingGate(p);
+            return;
+          }
           toast(r.reason ?? "動作失敗");
           render();
           return;

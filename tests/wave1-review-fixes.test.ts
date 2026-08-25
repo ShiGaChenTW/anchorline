@@ -374,6 +374,20 @@ describe("F3-2：saveAgentResult 有權限與狀態閘門", () => {
     store.submitForReview(id, "c1");
     const editStage = store.get().cases[id]!.stages.find((s) => s.kind === "edit")!;
 
+    // 全部簽掉 → 案子鎖定、專案 approved。
+    // 要按好幾次：一次 `approveAndLock` 只簽得掉「當下沒有被順序閘門擋住」的那些，
+    // 而「我核准」串行殿後，得等前面幾關先過
+    //
+    // **順序在 W2-B 之後被迫改過**（2026-08-26）：原本是先跑 agent、再簽核，
+    // 但 W2-B 的 S1 閘門就是為了讓那個順序**走不通** —— 有待拍板的分析時
+    // 不讓案子鎖定。Scott 拍板「拆掉陷阱，不是解釋陷阱」，而這支測的正是那個
+    // 陷阱本身。改成先鎖定、再跑分析：`invokeAgent` 沒有 locked 守衛，所以
+    // 這個狀態仍然到得了，而這支要驗的 `saveAgentResult` 閘門一個字都沒變 ——
+    // 它是最後一道防線，S1 只是讓人比較不會撞上它。
+    for (let i = 0; i < 6 && proj(id).status !== "approved"; i++) store.approveAndLock({});
+    expect(proj(id).status).toBe("approved");
+    const before = JSON.stringify(store.get().projectSectionValues[id] ?? {});
+
     const r = store.invokeAgent({
       agentId: AGENT_CODEX_EDIT,
       projectId: id,
@@ -382,13 +396,6 @@ describe("F3-2：saveAgentResult 有權限與狀態閘門", () => {
     });
     expect(r.ok).toBe(true);
     await waitForJob(r.jobId!);
-
-    // 全部簽掉 → 案子鎖定、專案 approved。
-    // 要按好幾次：一次 `approveAndLock` 只簽得掉「當下沒有被順序閘門擋住」的那些，
-    // 而「我核准」串行殿後，得等前面幾關先過
-    for (let i = 0; i < 6 && proj(id).status !== "approved"; i++) store.approveAndLock({});
-    expect(proj(id).status).toBe("approved");
-    const before = JSON.stringify(store.get().projectSectionValues[id] ?? {});
 
     const save = store.saveAgentResult(r.jobId!);
     expect(save.ok).toBe(false);

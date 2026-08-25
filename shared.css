@@ -15206,3 +15206,105 @@ p.gd-warn {
 .assign-row select {
   width: 100%;
 }
+
+/* ── Agent 分析結果 pop-up 與關卡列（W2-B）──────────────────────
+   `edit` 關卡的兩欄前後對照。母規格明講這一輪不做逐條勾選的 diff UI，
+   落地是**整段替換** —— 所以按下「存進文件」的瞬間，使用者手寫的那一整段
+   會消失。兩欄加上那句紅字是這個階段唯一講得清楚又不會騙人的做法。 */
+.agr-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+.agr-full,
+.agr-col-body {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 38vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* 兩欄並排，窄螢幕改上下堆疊 —— 並排到 320px 寬時兩邊都讀不了，
+   而「讀得懂左右差在哪」正是這個畫面存在的唯一理由 */
+.agr-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 720px) {
+  .agr-diff {
+    grid-template-columns: 1fr;
+  }
+}
+.agr-col-head {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+/* 右欄是「即將寫進去的東西」，給它一條邊界色 —— 兩欄長得一模一樣時，
+   捲動之後就分不出自己在看哪一邊了 */
+.agr-col-body--new {
+  border-color: var(--accent, var(--fg));
+}
+.agr-warn {
+  margin: 10px 0 0;
+  color: var(--warn);
+  font-size: var(--fs-2);
+  font-weight: 600;
+  line-height: 1.5;
+}
+/* S1 攔截對話框 */
+.agr-gate-lead {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: var(--fs-2);
+  line-height: 1.6;
+}
+.agr-gate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.agr-gate-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.agr-gate-name {
+  flex: 1 1 auto;
+  color: var(--fg);
+  font-size: var(--fs-2);
+}
+/* 關卡列上的待拍板／未採用 */
+.sg-analysis--pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sg-analysis--saved {
+  color: var(--muted);
+  font-size: var(--fs-2);
+}
+.sg-discarded {
+  color: var(--muted);
+  font-size: var(--fs-2);
+  text-decoration: line-through;
+}

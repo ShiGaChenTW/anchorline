@@ -71,6 +71,38 @@ export function jobLanded(
   return j.status === "done" ? "saved" : "pending";
 }
 
+/**
+ * 這張工作單是不是「跑完了、但人還沒拍板」。
+ *
+ * 四個條件缺一不可：
+ * - **綁了關卡**（`stageId`）—— 沒綁關卡的一般進場（Agent 管理頁）落地目標是
+ *   留言，跟簽核結案無關。拿它擋結案會讓使用者在簽核頁上看到一份根本不屬於
+ *   這個流程的東西，而且那一頁沒有地方可以處理它
+ * - `status === "done"` —— 失敗／取消／還在跑的都不是「等人決定」
+ * - `jobLanded(j) === "pending"` —— **不能寫成 `j.landed === "pending"`**。
+ *   升級前的舊工作單沒有 `landed` 欄位，`jobLanded` 把它們算成 `saved`
+ *   （副作用當年已經寫進文件了）。直接比欄位的話那批舊單會全部變成擋門的幽靈，
+ *   而且永遠拍不掉 —— `saveAgentResult` 對它們回「這份結果已經存過了」
+ * - **結果非空** —— 空字串存不進去（`saveAgentResult` 自己也擋）。拿一份存不了的
+ *   東西擋著結案，使用者會卡在一個沒有出口的迴圈裡
+ */
+export function isPendingAgentJob(j: AgentJob): boolean {
+  return (
+    !!j.stageId && j.status === "done" && jobLanded(j) === "pending" && j.result.trim() !== ""
+  );
+}
+
+/**
+ * 某個專案還在等人拍板的工作單，新到舊。
+ *
+ * `invokeAgent` 是 `[job, ...prev]`，`filter` 保序，所以不用再排一次。
+ * 純函式：store 的結案閘門與簽核頁的攔截對話框共用這一支 —— 兩邊各篩一次的話
+ * 條件會分岔，而症狀是「對話框說沒有待辦，按下去卻還是被擋」。
+ */
+export function pendingAgentJobsOf(jobs: readonly AgentJob[], projectId: string): AgentJob[] {
+  return jobs.filter((j) => j.projectId === projectId && isPendingAgentJob(j));
+}
+
 /** 匯入掃描摘要（存於專案，供側欄／列表顯示） */
 export type ProjectImportSummary = {
   folderName: string;
@@ -324,6 +356,21 @@ export type CaseStage = {
 /** 舊個案的關卡沒有 kind 欄位，一律當 review（＝這個欄位出現之前的行為） */
 export function stageKind(s: Pick<CaseStage, "kind">): StageKind {
   return s.kind ?? "review";
+}
+
+/**
+ * `edit` 關卡真正會被覆寫的那個欄位。
+ *
+ * `editTarget` 省略時退回「開放問題」—— 那是舊版 `invokeAgent` 靜默追加摘要的
+ * 地方，落地目標不變，變的是這次會先問過人。
+ *
+ * **為什麼要有這一支**：這個退路原本是三份各自寫死的物件字面值
+ * （`store.saveAgentResult`、`submit-assign` 的警語、W2-B 的前後對照）。
+ * 三份分岔的症狀是最惡劣的一種：指派時的警語說會覆寫 A 欄、pop-up 的左欄顯示
+ * A 欄的現值、而存檔寫進 B 欄 —— 三個畫面各自都「對」，只有文件是錯的。
+ */
+export function resolveEditTarget(target: StageEditTarget | undefined): StageEditTarget {
+  return target ?? { sectionId: "open", fieldKey: "oq" };
 }
 
 /** 個案簽核狀態（含抽單） */
