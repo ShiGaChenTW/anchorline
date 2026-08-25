@@ -10,7 +10,7 @@
 **Wave 2 三塊 UI + 審查修復 + D-3 全部完成，已 push，正式版已換裝。
 唯一未完成的是 Scott 的實機 UAT（28 題，報告已在 App 裡）。**
 
-`main` 與 `origin/main` 同步於 `98392dd`。
+`main` 與 `origin/main` 同步於 `c4f7ddb`。已換裝（sha256 `700be4d80b9d`）。
 
 ## 做完了什麼
 
@@ -23,10 +23,11 @@
 | `da20aab` | 審查修復 C-1/C-2/C-3/C-4 + `dialog-flow.ts` |
 | `019c5db` | D-3：`reapplyWorkflow` 連個案一起重建 |
 | `98392dd` | UAT 出題 28 題 |
+| `c4f7ddb` | 送審前流程預覽 —— Scott 實測回報「畫面沒有改」的修復 |
 
-驗證：`tsc --noEmit` exit 0、`bun test` **1773 pass / 0 fail / 87 files**
-（Wave 2 起點 1612/82，+161 零退步）、`vite build` 成功。
-`/Applications/Anchorline.app` 已換裝（sha256 `e44ac90f6e70`、commit `98392dd`）。
+驗證：`tsc --noEmit` exit 0、`bun test` **1789 pass / 0 fail / 88 files**
+（Wave 2 起點 1612/82，+177 零退步）、`vite build` 成功。
+`/Applications/Anchorline.app` 已換裝（sha256 `700be4d80b9d`、commit `c4f7ddb`）。
 
 ## Scott 已拍板的決定
 
@@ -39,6 +40,17 @@
 | D-2 | `setWorkflowSkeleton` 無角色閘門 —— **維持現狀，不補** |
 | D-3 | `reapplyWorkflow` **要**連個案一起重建（簽章與 log 都清掉） |
 
+## Scott 實測回報過、已修的一條
+
+**「畫面沒有改」** —— `addProject` 建專案時就先開一個個案（走全域預設流程
+工程／設計／資安／法務），新骨架要到第一次送審才落地。所以送審前簽核頁顯示的
+是一套送出那一刻就會被整批換掉的關卡，還附了三顆按下去會被 `NOT_SUBMITTED`
+擋掉的按鈕。`c4f7ddb` 改成依 `submitPlan()` 畫預覽。
+
+**這條是自動測試看不見、而使用者第一眼就撞到的。** 當時 tsc、1773 個測試、
+跨 context 審查、實機安裝全綠。沒有任何一條測試同時持有「畫面顯示什麼」與
+「送審會建立什麼」兩邊 —— 修復補的正是那種合約測試。
+
 ## 下一步
 
 **讀 `plans/uat-簽核流程重新設計-wave-2-實測.md`**（28 題）。
@@ -48,6 +60,10 @@ Scott 測完後那份檔案裡會有 `**結果：**` 與 `**說明：**`，失�
 題目分區：1-6 送審指派 · 7-13 Agent 結果拍板 · 14-16 S1 閘門的擋下與出口 ·
 17-20 管理中心 · 21-25 審查修復的重現路徑 · 26-28 D-3。
 
+⚠️ **`plans/wave2-spec.md` 檔尾還有六題 P-1～P-6（送審前預覽）尚未併進報告。**
+Scott 說要就用 `Uat` skill 重出一次（P-1 是「一開簽核頁就看得出新舊差別」，
+P-4 是「送出審閱之後那幾關逐字沒變」）。
+
 ## 還沒收的線頭
 
 - **舊帳**：對話框遷移的實機 UAT、W3 的 11 題視覺驗收、wave1+2 的 10 題（見 `PROJECTS.md`）
@@ -56,6 +72,9 @@ Scott 測完後那份檔案裡會有 `**結果：**` 與 `**說明：**`，失�
 - **關卡已被移除的 pending 工作單**只在 S1 攔截對話框裡找得到，關卡列上畫不出來。
   要不要在關卡列下方補一區「不屬於任何現有關卡的待拍板分析」，未決
 - ElevenLabs 額度用盡（`quota_exceeded`），語音通知發不出去
+- **送審前預覽的版面沒有人用真 Chrome 看過**（`interceptor open` 回
+  `no extensions connected`）。關卡列多了兩段長句與每列一顆「預覽」徽章，
+  窄視窗下會不會破版是未知數 —— UAT P-3
 
 ## 這輪學到、值得帶走的三件事
 
