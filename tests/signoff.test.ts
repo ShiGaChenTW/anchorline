@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  canSignAnyStage,
   canSignStage,
   groupTimelineByRound,
   signoffSummary,
@@ -440,5 +441,106 @@ describe("analysisVerdict", () => {
   test("結論不在前幾行就當沒有 —— 埋在文末的結論人也看不到", () => {
     const buried = ["a", "b", "c", "d", "e", "f", "建議核准"].join("\n");
     expect(analysisVerdict(buried)).toBeNull();
+  });
+});
+
+// ── 權限收斂（D3）────────────────────────────────────────────
+
+describe("canSignStage 是唯一入口", () => {
+  const agentClaude = emp({
+    id: "a-claude",
+    name: "Claude 核准",
+    kind: "agent",
+    accessRole: "approver",
+    agentFamily: "claude",
+  });
+
+  test("同族系 agent 不得核准自己族系寫的文件 —— 這是主要守門", () => {
+    const p = proj({ authorId: "claude-edit", authorAgentFamily: "claude" });
+    const st = stage({ assigneeId: "a-claude" });
+    const r = canSignStage(agentClaude, p, st, kase({ stages: [st] }));
+    expect(r.can).toBe(false);
+    expect((r as { reason: string }).reason).toContain("同一種 Agent");
+  });
+
+  test("族系隔離排在關卡歸屬之前 —— 講得出真正的原因", () => {
+    const p = proj({ authorId: "claude-edit", authorAgentFamily: "claude" });
+    // 這一關指派給別人，族系也撞號。兩個理由都成立，要講族系那個
+    const st = stage({ assigneeId: "someone-else", assigneeName: "別人" });
+    const r = canSignStage(agentClaude, p, st, kase({ stages: [st] }));
+    expect((r as { reason: string }).reason).toContain("同一種 Agent");
+  });
+
+  test("代簽繞得過關卡歸屬，繞不過族系隔離", () => {
+    const p = proj({ authorId: "claude-edit", authorAgentFamily: "claude" });
+    const st = stage({ assigneeId: "someone-else" });
+    const c = kase({ stages: [st] });
+
+    // 一般人代簽：admin 放行
+    const admin = emp({ id: "u-admin", accessRole: "admin" });
+    expect(canSignStage(admin, p, st, c, { override: true }).can).toBe(true);
+    // 非 admin 不得代簽
+    expect(canSignStage(emp({ accessRole: "approver" }), p, st, c, { override: true }).can).toBe(false);
+    // agent 撞族系：連代簽都不放行（agent 不可能是 admin，這裡驗的是規則本身）
+    const r = canSignStage(agentClaude, p, st, c, { override: true });
+    expect(r.can).toBe(false);
+    expect((r as { reason: string }).reason).toContain("同一種 Agent");
+  });
+
+  test("不同族系的 agent 簽得動", () => {
+    const p = proj({ authorId: "claude-edit", authorAgentFamily: "claude" });
+    const st = stage({ assigneeId: "a-codex" });
+    const codex = emp({
+      id: "a-codex",
+      kind: "agent",
+      accessRole: "approver",
+      agentFamily: "codex",
+    });
+    expect(canSignStage(codex, p, st, kase({ stages: [st] })).can).toBe(true);
+  });
+
+  test("沒有簽核權限的角色講得出是角色問題", () => {
+    const editor = emp({ id: "u-ed", accessRole: "editor" });
+    const st = stage({ assigneeId: "u-ed" });
+    const r = canSignStage(editor, proj(), st, kase({ stages: [st] }));
+    expect(r.can).toBe(false);
+    expect((r as { reason: string }).reason).toContain("無簽核權限");
+  });
+
+  test("人不可核准自己寫的（admin 例外）", () => {
+    const me = emp({ id: "u1", accessRole: "approver" });
+    const p = proj({ authorId: "u1" });
+    const st = stage({ assigneeId: "u1" });
+    expect(canSignStage(me, p, st, kase({ stages: [st] })).can).toBe(false);
+    const admin = emp({ id: "u1", accessRole: "admin" });
+    expect(canSignStage(admin, p, st, kase({ stages: [st] })).can).toBe(true);
+  });
+});
+
+describe("canSignAnyStage", () => {
+  test("有一關簽得動就是 true", () => {
+    const mine = stage({ id: "s1", assigneeId: "u1" });
+    const theirs = stage({ id: "s2", order: 2, assigneeId: "u9", assigneeName: "別人" });
+    const c = kase({ stages: [mine, theirs] });
+    expect(canSignAnyStage(emp(), proj(), c).can).toBe(true);
+  });
+
+  test("一關都簽不動時，講得出第一個理由而不是含糊的「無法簽核」", () => {
+    const theirs = stage({ id: "s2", assigneeId: "u9", assigneeName: "別人" });
+    const r = canSignAnyStage(emp(), proj(), kase({ stages: [theirs] }));
+    expect(r.can).toBe(false);
+    expect((r as { reason: string }).reason).toContain("別人");
+  });
+
+  test("全部結案講的是「都已結案」，不是「沒有權限」", () => {
+    const done = stage({ state: "approved" });
+    const r = canSignAnyStage(emp(), proj(), kase({ stages: [done] }));
+    expect(r.can).toBe(false);
+    expect((r as { reason: string }).reason).toContain("已結案");
+  });
+
+  test("沒有個案／沒有關卡各有各的說法", () => {
+    expect((canSignAnyStage(emp(), proj(), undefined) as { reason: string }).reason).toContain("還沒有簽核個案");
+    expect((canSignAnyStage(emp(), proj(), kase({ stages: [] })) as { reason: string }).reason).toContain("還沒有關卡");
   });
 });

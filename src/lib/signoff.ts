@@ -25,7 +25,7 @@ import type {
   PrdVersion,
   Project,
 } from "../data/types";
-import { canApproveProject } from "./permissions";
+import { hasPermission } from "./permissions";
 import { stageBlockedBy } from "./prd-versions";
 
 export type SignAbility =
@@ -34,29 +34,95 @@ export type SignAbility =
   | { can: false; reason: string };
 
 /**
- * 這個人現在能不能簽這一關。
+ * 職責分立 —— 誰**永遠**不能簽這份文件，跟關卡是哪一關無關。
  *
- * 順序是刻意的：先講案子層級的阻擋（抽單／鎖定／職責分立），再講關卡層級的
- * 歸屬。反過來的話，一個被抽單的案子會顯示「這關不是你的」，而真正的原因
- * 是整個案子都停了。
+ * ## 為什麼族系隔離排在自審之前
+ *
+ * 這套工具原本假設「公司有很多人」：擋自審靠的是總會有第二個人來簽。個人
+ * 工作台沒有那個第二個人 —— 實際上場的是一排 agent，而使用者很自然會拿同一家
+ * 模型去審它自己寫的東西。那條路上沒有任何人會發現問題，因為審查者跟作者
+ * 共用同一組盲點。所以族系隔離在這裡是**主要守門**，不是自審規則的補充條款，
+ * 判定順序也照這個優先級排：先講族系，再講本人。
+ *
+ * 不導出：唯一的入口是 `canSignStage`。這條規則以前散在
+ * `permissions.canApproveProject`、`signoff.canSignStage`、`store.approveAndLock`
+ * 三處各判一次，而那三份判斷已經開始分岔了。
+ */
+function separationOfDuties(user: Employee, project: Project | null | undefined): SignAbility {
+  if (!project) return { can: true };
+
+  // 同一種 Agent 撰寫 → 同 family Agent 不可核准。**沒有 admin 例外**：
+  // 代簽可以繞過「這一關不是你的」，繞不過「審查者跟作者是同一顆腦袋」。
+  if (
+    user.kind === "agent" &&
+    project.authorAgentFamily &&
+    user.agentFamily &&
+    project.authorAgentFamily === user.agentFamily
+  ) {
+    return {
+      can: false,
+      reason: `同一種 Agent（${project.authorAgentFamily}）已撰寫此文件，不可再擔任核准角色`,
+    };
+  }
+
+  // 人的自審：admin 例外照舊 —— 那是既有行為，而且 admin 代簽會另外留一筆
+  // `override` 決策，紀錄上看得見「一個人簽完全部」這件事
+  if (user.accessRole !== "admin" && project.authorId === user.id) {
+    return { can: false, reason: "不可核准自己撰寫的文件" };
+  }
+
+  return { can: true };
+}
+
+/**
+ * 這個人現在能不能簽這一關 —— **簽核權限的唯一入口**。
+ *
+ * 以前這件事散在三個地方各判一次：`permissions.canApproveProject`（專案層級的
+ * 職責分立）、這支（關卡層級的歸屬）、以及 `store.approveAndLock` 迴圈裡的
+ * 行內條件。三份判斷慢慢分岔，而畫面要解釋「為什麼這顆按鈕不能按」的時候，
+ * 第三份根本沒有東西可以呼叫，只能再抄一次。
+ *
+ * 順序是刻意的：先講案子層級的阻擋（抽單／已結案），再講順序閘門，再講職責
+ * 分立，最後才是關卡歸屬。反過來的話，一個被抽單的案子會顯示「這關不是你的」，
+ * 而真正的原因是整個案子都停了。
+ *
+ * `reason` 是**使用者會讀到的解釋**，不是除錯訊息。「按鈕是灰的」不是解釋。
  */
 export function canSignStage(
   user: Employee,
   project: Project,
   stage: CaseStage,
   c: CaseRecord | undefined,
+  opts: {
+    /**
+     * 管理員代簽。放行的只有「這一關不是你的」與順序閘門 —— 那正是代簽的定義。
+     * 職責分立擋下來的一律照擋：代簽的用意是讓一個人走完流程**而且看得見**，
+     * 不是讓他變成任何人。
+     */
+    override?: boolean;
+  } = {},
 ): SignAbility {
   if (!c) return { can: false, reason: "這個專案還沒有簽核個案" };
   if (c.withdrawn) return { can: false, reason: "此案已抽單" };
   if (stage.state === "approved") return { can: false, reason: "這一關已核准" };
   if (stage.state === "skipped") return { can: false, reason: "這一關已略過" };
 
-  // 順序閘門先講：串行的關卡被前面擋住時，說「這一關不是你的」是錯的診斷
+  if (!hasPermission(user, "approve")) {
+    return { can: false, reason: "目前角色無簽核權限（需核准人員或管理員）" };
+  }
+
+  const duties = separationOfDuties(user, project);
+  if (!duties.can) return duties;
+
+  if (opts.override) {
+    return user.accessRole === "admin"
+      ? { can: true }
+      : { can: false, reason: "只有管理員可以代簽" };
+  }
+
+  // 順序閘門：串行的關卡被前面擋住時，說「這一關不是你的」是錯的診斷
   const blocker = stageBlockedBy(stage, c.stages);
   if (blocker) return { can: false, reason: `等「${blocker}」先過` };
-
-  const project_ = canApproveProject(user, project);
-  if (!project_.ok) return { can: false, reason: project_.reason ?? "沒有簽核權限" };
 
   if (user.accessRole === "admin") return { can: true };
   if (stage.assigneeId === user.id) return { can: true };
@@ -65,6 +131,31 @@ export function canSignStage(
     can: false,
     reason: stage.assigneeId ? `這一關指派給 ${stage.assigneeName || "其他人"}` : "這一關未指派",
   };
+}
+
+/**
+ * 這個人在這個案子上簽得動任何一關嗎。
+ *
+ * 給「核准並鎖定」那顆按鈕用 —— 它按下去是 `approveAndLock()` 不帶
+ * `stageIds`，語意就是「把我簽得動的都簽掉」。所以它的 enable 條件必須跟
+ * 那個迴圈用同一個判斷，否則會出現按得下去卻回「現在沒有你可以簽的關卡」。
+ *
+ * 沒有任何一關可簽時要講得出**第一個**理由，不是含糊的「無法簽核」；
+ * 全部關卡都簽完的情況另外講，那不是「沒有權限」。
+ */
+export function canSignAnyStage(
+  user: Employee,
+  project: Project,
+  c: CaseRecord | undefined,
+): SignAbility {
+  if (!c) return { can: false, reason: "這個專案還沒有簽核個案" };
+  if (!c.stages.length) return { can: false, reason: "這個流程還沒有關卡" };
+  const abilities = c.stages.map((s) => canSignStage(user, project, s, c));
+  if (abilities.some((a) => a.can)) return { can: true };
+  const open = c.stages.filter((s) => s.state !== "approved" && s.state !== "skipped");
+  if (!open.length) return { can: false, reason: "所有關卡都已結案" };
+  const first = abilities.find((a) => !a.can) as { can: false; reason: string };
+  return { can: false, reason: first.reason };
 }
 
 export type StageRow = {

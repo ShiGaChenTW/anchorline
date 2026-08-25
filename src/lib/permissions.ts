@@ -80,36 +80,19 @@ export function canExport(user: Employee | null | undefined): boolean {
   return hasPermission(user, "export");
 }
 
-/** 正式簽核（核准並鎖定） */
-export function canApproveProject(
-  user: Employee | null | undefined,
-  project: Project | null | undefined,
-): { ok: boolean; reason?: string } {
-  if (!user) return { ok: false, reason: "尚未登入" };
-  if (!hasPermission(user, "approve")) {
-    return { ok: false, reason: "目前角色無簽核權限（需核准人員或管理員）" };
-  }
-  if (!project) return { ok: true };
-
-  // 編輯不可簽核自己寫的（admin 例外）
-  if (user.accessRole !== "admin" && project.authorId === user.id) {
-    return { ok: false, reason: "不可核准自己撰寫的文件" };
-  }
-
-  // 同一種 Agent 撰寫 → 同 family Agent 不可核准
-  if (
-    user.kind === "agent" &&
-    project.authorAgentFamily &&
-    user.agentFamily &&
-    project.authorAgentFamily === user.agentFamily
-  ) {
-    return {
-      ok: false,
-      reason: `同一種 Agent（${project.authorAgentFamily}）已撰寫此文件，不可再擔任核准角色`,
-    };
-  }
-
-  return { ok: true };
+/**
+ * 簽核能力（角色層級）。**這不是「能不能簽這一關」**。
+ *
+ * 這個檔只回答「這個角色有沒有簽核這件能力」；職責分立（不可自審、同族系
+ * agent 不可核准）與關卡歸屬全部收在 `lib/signoff.ts` 的 `canSignStage`，
+ * 那裡是簽核權限的唯一入口。
+ *
+ * 原本這裡有一支 `canApproveProject` 同時扛兩件事，於是
+ * `permissions.canApproveProject` → `signoff.canSignStage` → `store.approveAndLock`
+ * 三處各判一次，而三份判斷已經開始分岔。要判「能不能簽」請呼叫 `canSignStage`。
+ */
+export function canApprove(user: Employee | null | undefined): boolean {
+  return hasPermission(user, "approve");
 }
 
 /**
