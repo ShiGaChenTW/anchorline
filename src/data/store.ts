@@ -598,13 +598,11 @@ export function migrateProject(raw: Record<string, unknown>, employees: Employee
     // 漏了 workflowStages，跑到一半的案子重新載入就退回全域流程，關卡 id 跟著
     // 變，第一輪的簽核意見在紀錄上變成「（已移除的關卡）」—— 而簽核紀錄
     // 正是這整套東西的賣點。漏了 templateCat 則是每次重載都退回 lean 骨架。
-    workflowStages: Array.isArray(raw.workflowStages)
-      ? (raw.workflowStages as WorkflowStageDef[])
-      : undefined,
+    // cast 換成 `sanitizeStageDefs`：這兩份都會被畫成 HTML（管理中心的落地流程
+    // 檢視、送審指派對話框），而缺 `kind` 的元素會讓那一整頁停止 render
+    workflowStages: sanitizeStageDefs(raw.workflowStages),
     templateCat: raw.templateCat ? (raw.templateCat as FullCat) : undefined,
-    templateStages: Array.isArray(raw.templateStages)
-      ? (raw.templateStages as WorkflowStageDef[])
-      : undefined,
+    templateStages: sanitizeStageDefs(raw.templateStages),
   };
 }
 
@@ -635,6 +633,54 @@ function blankDocsForSections(sections: Section[]): Record<string, Record<string
 }
 
 /**
+ * 收斂一份關卡定義的**形狀**（不是內容）。
+ *
+ * ## 為什麼需要這一支
+ *
+ * `WorkflowStageDef` 的 `kind` / `defaultActor` / `mode` 是聯合型別，而畫面上到處
+ * 是 `STAGE_KIND_LABEL[s.kind]` 這種查表。缺值時查表回 `undefined`，下一步
+ * `escapeHtml(undefined)` 就是 `undefined.replace` → TypeError → `renderLandedFlows`
+ * 整支炸掉 → `render()` 中斷 → 掛在 `store.subscribe` 上的 `renderCases()` 從此
+ * 每次狀態變動都再炸一次。**管理中心半殘，而且沒有任何錯誤訊息指向資料。**
+ *
+ * 型別謊報的來源有兩條，吃的是同一份資料：
+ * - `load()`——localStorage 使用者改得到
+ * - `importState()`——設定頁的「匯入工作區 JSON」。這一條**原本完全沒有收斂**，
+ *   而 Wave 1 之前的匯出檔根本沒有 `kind` / `defaultActor` 這兩個欄位
+ *
+ * ## 為什麼是 spread 而不是逐欄位重建
+ *
+ * `migrateProject` 上面那串「第三、五、六、七次踩同一個坑」的註解講的就是逐欄位
+ * 重建的代價：忘了列的欄位在重新載入時無聲消失。這裡只**覆寫**查表會用到的那幾個，
+ * 其餘一律原樣帶過 —— 不認得的欄位不是我們的敵人，`undefined.replace` 才是。
+ */
+export function sanitizeStageDef(raw: unknown, index: number): WorkflowStageDef {
+  const s = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const order = Number(s.order);
+  return {
+    ...(s as unknown as WorkflowStageDef),
+    id: String(s.id ?? `w_import_${index + 1}`),
+    name: String(s.name ?? `關卡 ${index + 1}`),
+    order: Number.isFinite(order) ? order : index + 1,
+    // 退路選 review：假設「只出意見」比假設「會覆寫 PRD 內文」安全
+    kind: s.kind === "edit" ? "edit" : "review",
+    // 退路選 human：假設「要人做」比假設「機器會自己跑」安全
+    defaultActor: s.defaultActor === "agent" ? "agent" : "human",
+    // 退路選 parallel。`sequential` 會讓升級後跑到一半的案子突然多出順序閘門，
+    // 第二關的人按不下去卻不知道為什麼（load() 的移轉註解已經寫過一次）
+    mode: s.mode === "sequential" ? "sequential" : "parallel",
+    required: s.required === false ? false : true,
+    defaultAssigneeId: typeof s.defaultAssigneeId === "string" ? s.defaultAssigneeId : null,
+  };
+}
+
+/** 見 `sanitizeStageDef`。空陣列回 `undefined` —— 對齊 `migrateProject` 的既有語意 */
+export function sanitizeStageDefs(raw: unknown): WorkflowStageDef[] | undefined {
+  if (!Array.isArray(raw) || !raw.length) return undefined;
+  return raw.map((s, i) => sanitizeStageDef(s, i));
+}
+
+/**
  * 收斂存檔裡的骨架覆寫。回傳 `undefined` 代表「沒有任何覆寫」。
  *
  * 為什麼要驗：localStorage 是使用者改得到的，而這份資料直接決定送審會落地
@@ -649,9 +695,42 @@ function sanitizeSkeletons(
   const out: Partial<Record<FullCat, WorkflowStageDef[]>> = {};
   for (const cat of FULL_CATS) {
     const v = src[cat];
-    if (Array.isArray(v) && v.length) out[cat] = v as WorkflowStageDef[];
+    // 骨架吃的是同一種元素，收斂也要同一套 —— 兩條路各自 cast 的話，
+    // 「管理中心炸掉」這條會從骨架編輯器那一邊原封不動地回來
+    const stages = sanitizeStageDefs(v);
+    if (stages) out[cat] = stages;
   }
   return Object.keys(out).length ? out : undefined;
+}
+
+/**
+ * 補齊個案：round 從 1 起算、log 給空陣列、關卡補 mode 與 required。
+ * 舊個案沒有決策紀錄可以還原，紀錄從這一版之後才開始長。
+ *
+ * 抽成共用函式的理由跟 `sanitizeStageDefs` 同一條：`load()` 與 `importState()`
+ * 吃的是同一份資料，而只有 `load()` 這一條補過。匯入一份舊備份之後
+ * `st.required` 是 `undefined`，`allStagesSettled` 那一類判斷就跟著換一個答案。
+ */
+function normalizeCases(
+  raw: unknown,
+  workflowStages: readonly WorkflowStageDef[],
+): Record<string, CaseRecord> {
+  const defByStageId = Object.fromEntries(workflowStages.map((w) => [w.id, w]));
+  return Object.fromEntries(
+    Object.entries((raw ?? {}) as Record<string, CaseRecord>).map(([k, c]) => [
+      k,
+      {
+        ...c,
+        round: c.round ?? 1,
+        log: Array.isArray(c.log) ? c.log : [],
+        stages: (c.stages ?? []).map((st) => ({
+          ...st,
+          mode: st.mode ?? defByStageId[st.stageDefId]?.mode ?? "parallel",
+          required: st.required ?? defByStageId[st.stageDefId]?.required ?? true,
+        })),
+      },
+    ]),
+  );
 }
 
 function load(): AppState {
@@ -703,26 +782,7 @@ function load(): AppState {
         : base.workflowStages
     ).map((w) => ({ ...w, mode: w.mode ?? ("parallel" as const) }));
 
-    // 個案同樣補：round 從 1 起算、log 給空陣列、關卡補 mode 與 required。
-    // 舊個案沒有決策紀錄可以還原，紀錄從這一版之後才開始長。
-    const cases: Record<string, CaseRecord> = Object.fromEntries(
-      Object.entries((parsed.cases ?? {}) as Record<string, CaseRecord>).map(([k, c]) => {
-        const defByStageId = Object.fromEntries(workflowStages.map((w) => [w.id, w]));
-        return [
-          k,
-          {
-            ...c,
-            round: c.round ?? 1,
-            log: Array.isArray(c.log) ? c.log : [],
-            stages: (c.stages ?? []).map((st) => ({
-              ...st,
-              mode: st.mode ?? defByStageId[st.stageDefId]?.mode ?? "parallel",
-              required: st.required ?? defByStageId[st.stageDefId]?.required ?? true,
-            })),
-          },
-        ];
-      }),
-    );
+    const cases = normalizeCases(parsed.cases, workflowStages);
     const activeProjectId =
       parsed.activeProjectId && projects.some((p) => p.id === parsed.activeProjectId)
         ? parsed.activeProjectId
@@ -3135,9 +3195,33 @@ export const store = {
     emit();
   },
 
+  /**
+   * 匯入一份工作區 JSON。
+   *
+   * ## 這一條路要跟 `load()` 收斂同一套
+   *
+   * 原本這裡只做淺合併：`projects[].workflowStages` 的元素形狀完全沒有驗過，
+   * 而 `load()` 那條路有 `migrateProject` / `sanitizeSkeletons`。**兩條吃的是同一份
+   * 資料，卻只有一條在把關。** 後果不是理論上的：一份缺 `kind` 的關卡定義會讓
+   * 管理中心的 `escapeHtml(STAGE_KIND_LABEL[s.kind])` 丟 TypeError，整頁停止
+   * render，而且它掛在 `store.subscribe` 上，之後每次狀態變動都再炸一次。
+   *
+   * 所以下面四行是**明寫在 spread 之後**的：`...newState` 會把未收斂的原值蓋回來，
+   * 順序反了等於什麼都沒做。
+   */
   importState(newState: Partial<AppState>) {
+    const base = seedState();
+    // migrateProject 要拿員工名單去補 ownerId／authorAgentFamily —— 跟 load() 一樣
+    // 優先用匯入檔自己的名單，沒有才回落種子
+    const employees: Employee[] =
+      Array.isArray(newState.employees) && newState.employees.length
+        ? (newState.employees as Employee[])
+        : base.employees;
+    const workflowStages = (
+      sanitizeStageDefs(newState.workflowStages) ?? base.workflowStages
+    ).map((w) => ({ ...w, mode: w.mode ?? ("parallel" as const) }));
     const merged = {
-      ...seedState(),
+      ...base,
       ...newState,
       // aiWriting 是後加的巢狀物件，淺合併會讓舊存檔拿到 undefined
       settings: {
@@ -3146,6 +3230,14 @@ export const store = {
         // 匯入的備份可能是任何一代格式 —— 走同一條遷移，不要兩條路徑各修各的
         aiWriting: migrateAiWriting(newState.settings?.aiWriting),
       },
+      projects: Array.isArray(newState.projects)
+        ? newState.projects.map((pr) =>
+            migrateProject(pr as unknown as Record<string, unknown>, employees),
+          )
+        : base.projects,
+      workflowStages,
+      workflowSkeletons: sanitizeSkeletons(newState.workflowSkeletons),
+      cases: normalizeCases(newState.cases, workflowStages),
     };
     // 匯入的備份可能是 Comment 還沒有 projectId 的年代產生的。
     // 載入路徑有跑 migration，匯入路徑原本沒有 —— 於是舊備份匯進來之後

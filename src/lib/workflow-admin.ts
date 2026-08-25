@@ -61,6 +61,32 @@ export const STAGE_ACTOR_LABEL: Record<ActorKind, string> = {
   human: "我",
 };
 
+/**
+ * 標籤查表**一律要有退路**。
+ *
+ * `STAGE_KIND_LABEL[s.kind]` 在 `kind` 缺值時回 `undefined`，而下一步是
+ * `escapeHtml(undefined)` → `undefined.replace` → TypeError。這不是在畫面上少一個
+ * 字而已：`renderLandedFlows` 整支炸掉 → `render()` 中斷 → `renderCases()` 不再執行，
+ * 而它掛在 `store.subscribe` 上，之後**每一次狀態變動都再炸一次**，管理中心從此半殘。
+ *
+ * 缺值從哪來：匯入工作區 JSON（Wave 1 之前的匯出檔沒有 `kind` / `defaultActor`）。
+ * 收斂在 `store.sanitizeStageDefs` 補上了，這兩支是第二道 —— 一份存進 localStorage
+ * 的舊資料不會因為我們今天加了收斂就自動變乾淨。
+ */
+export function stageKindLabel(kind: StageKind | undefined | null): string {
+  return STAGE_KIND_LABEL[kind as StageKind] ?? STAGE_KIND_LABEL.review;
+}
+
+/** 見 `stageKindLabel`。退路選 `human`：假設「要人做」比假設「機器會自己跑」安全 */
+export function stageActorLabel(actor: ActorKind | undefined | null): string {
+  return STAGE_ACTOR_LABEL[actor as ActorKind] ?? STAGE_ACTOR_LABEL.human;
+}
+
+/** 見 `stageKindLabel`。`mode` 省略在既有資料裡是合法的，一律當並行 */
+export function stageModeLabel(mode: StageMode | undefined | null): string {
+  return mode === "sequential" ? "串行" : "並行";
+}
+
 export const FULL_CAT_TITLE: Record<FullCat, string> = {
   lean: "精簡型（lean）",
   narrative: "敘事型（narrative）",

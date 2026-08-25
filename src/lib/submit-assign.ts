@@ -41,8 +41,11 @@ export const FULL_CAT_LABEL: Record<FullCat, string> = {
   technical: "技術型",
 };
 
-const KIND_LABEL = { review: "審閱", edit: "改稿" } as const;
-const MODE_LABEL = { sequential: "串行", parallel: "並行" } as const;
+// 查表一律走 `??` 退路：這兩份表吃的是 `WorkflowStageDef`，而匯入的工作區 JSON
+// 進得了 store（見 store.sanitizeStageDefs 的檔頭）。缺值時 `undefined` 會被塞進
+// HTML，型別謊報的值則會直接印在使用者臉上。
+const KIND_LABEL: Record<string, string> = { review: "審閱", edit: "改稿" };
+const MODE_LABEL: Record<string, string> = { sequential: "串行", parallel: "並行" };
 
 // `editTarget` 省略時的落地目標本來在這裡寫死一份、`store.saveAgentResult` 寫死
 // 一份。W2-B 的前後對照會是第三份 —— 已改為共用 `types.resolveEditTarget`。
@@ -155,9 +158,9 @@ export function assignDialogHtml(
   const rows = [...stages]
     .sort((a, b) => a.order - b.order)
     .map((s) => {
-      const tags = [`<span class="tag">${KIND_LABEL[s.kind]}</span>`];
+      const tags = [`<span class="tag">${KIND_LABEL[s.kind] ?? KIND_LABEL.review}</span>`];
       if (s.required === false) tags.push(`<span class="tag">非必簽</span>`);
-      tags.push(`<span class="sub">${MODE_LABEL[s.mode ?? "parallel"]}</span>`);
+      tags.push(`<span class="sub">${MODE_LABEL[s.mode ?? "parallel"] ?? MODE_LABEL.parallel}</span>`);
       // edit 關卡的警語不是裝飾：使用者在指派的**當下**就該知道哪一關會動內文，
       // 而不是在 agent 跑完、按下存檔之後才發現整段被換掉。
       const warn =
@@ -167,7 +170,7 @@ export function assignDialogHtml(
       return `
         <div class="assign-row" data-stage-row="${escapeHtml(s.id)}">
           <div class="assign-head">
-            <span class="assign-order">${s.order}</span>
+            <span class="assign-order">${escapeHtml(String(s.order))}</span>
             <span class="assign-name">${escapeHtml(s.name)}</span>
             ${tags.join("")}
           </div>

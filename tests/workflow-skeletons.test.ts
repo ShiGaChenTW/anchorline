@@ -590,9 +590,14 @@ describe("admin.ts 真的把三個欄位交給了 store", () => {
   const ADMIN_SRC = readFileSync(new URL("../src/pages/admin.ts", import.meta.url), "utf8");
   const STORE_SRC = readFileSync(new URL("../src/data/store.ts", import.meta.url), "utf8");
 
-  test("儲存關卡走共用的 readStageForm + stagePatchFrom", () => {
-    // 頁面自己刻一份讀回邏輯的話，測試驗的規則跟畫面上跑的規則會分岔
-    expect(ADMIN_SRC).toContain("stagePatchFrom(readStageForm(el))");
+  test("儲存關卡走共用的 readStageForm + stagePatchFrom（兩個儲存點都要）", () => {
+    // 頁面自己刻一份讀回邏輯的話，測試驗的規則跟畫面上跑的規則會分岔。
+    //
+    // 2026-08-26 改成計數（Cato 審查報告 §E 的具體建議）：原本是
+    // `toContain(...)`，只要求這個字串**出現一次**。但 admin.ts 有**兩個**
+    // 儲存點（全域關卡編輯器與骨架編輯器），其中一處退回舊寫法，
+    // 這條照樣綠 —— 而那正是它要防的東西。斷言只變嚴，沒有放寬。
+    expect((ADMIN_SRC.match(/stagePatchFrom\(readStageForm\(/g) ?? []).length).toBe(2);
   });
 
   test("updateWorkflowStage 收到的是完整 patch，不是四個欄位的字面值", () => {

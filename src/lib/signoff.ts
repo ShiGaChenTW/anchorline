@@ -25,7 +25,7 @@ import type {
   PrdVersion,
   Project,
 } from "../data/types";
-import { stageKind } from "../data/types";
+import { isPendingAgentJob, stageKind } from "../data/types";
 import { hasPermission } from "./permissions";
 import { stageBlockedBy } from "./prd-versions";
 
@@ -411,6 +411,48 @@ export function stageAnalysis(
 ): AgentJob | null {
   // agentJobs 新的在前（invokeAgent 是 [job, ...prev]），順序掃第一筆就是最新
   return jobs.find((j) => j.projectId === projectId && j.stageId === stageId) ?? null;
+}
+
+/**
+ * 這一關在關卡列上要畫出來的工作單，**由新到舊**。
+ *
+ * ## 這一支存在的理由是一條 major 缺陷
+ *
+ * 畫面用兩個窄化決定「畫哪一張」，而擋結案的 `isPendingAgentJob` 兩個都不看：
+ *
+ * - `stageAnalysis` 只回**最新一筆** → 按過「重新分析」之後，前一份仍然 pending
+ *   卻在畫面上消失
+ * - 呼叫端的 `isAgent` 看的是**當下的**指派對象 → 把關卡改派給人，整行分析
+ *   連「查看結果」鈕一起消失
+ *
+ * 兩條的症狀一樣：**結案被擋下「還有 N 份沒拍板」，而使用者盯著關卡列
+ * 找不到那 N 份在哪。** 唯一還看得到它們的地方是 S1 攔截對話框。
+ *
+ * 所以這一支的合約只有一句：**只要一張工作單擋得住結案，它就一定在回傳的
+ * 陣列裡。** 修法刻意不是「放寬閘門」或「把它藏起來」—— 那兩條都是讓畫面
+ * 說謊來換一時的一致，而這整套東西的賣點就是簽核紀錄講的是實話。
+ *
+ * 顯示用的那一張（有沒有在跑、「重新分析」鈕要不要 disabled）仍然是 `[0]`，
+ * 語意跟改動前一致。
+ */
+export function stageAnalysisJobs(opts: {
+  jobs: readonly AgentJob[];
+  projectId: string;
+  stageId: string;
+  /** 這一關**現在**指派給 agent 嗎。false 時只畫擋得住結案的那些 */
+  isAgent: boolean;
+}): AgentJob[] {
+  const { jobs, projectId, stageId, isAgent } = opts;
+  const out: AgentJob[] = [];
+  const latest = stageAnalysis(jobs, projectId, stageId);
+  if (isAgent && latest) out.push(latest);
+  for (const j of jobs) {
+    if (j.projectId !== projectId || j.stageId !== stageId) continue;
+    if (!isPendingAgentJob(j)) continue;
+    if (out.some((k) => k.id === j.id)) continue;
+    out.push(j);
+  }
+  return out;
 }
 
 export type AnalysisVerdict = "approve" | "fix" | null;

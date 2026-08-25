@@ -714,3 +714,182 @@ bunx vite build     → ✓ built in 1.14s
 ```
 
 既有測試仍然**零改動、零刪除、零弱化**。`reapplyWorkflow` 的實作一行未動。
+
+---
+
+## 審查修復（C-1／C-2／C-3／C-4）
+
+> 2026-08-26 · 對 `plans/review-wave2-cato.md` 的四條缺陷。
+> **D-1（`discardAgentResult` 的閘門）與 D-2（`setWorkflowSkeleton` 的角色閘門）
+> 一行未動** —— 已上呈 Scott 拍板。`reapplyWorkflow` 的行為與 S1 閘門本身也未動。
+
+### C-1（major）自動跳窗吃掉 dialog lock，S1 攔截對話框整個不出現
+
+**根因一句話**：`askCustom` 的 `rejectIfBusy()` 跑在第一個 `await` 之前，所以
+`render()` 尾端的 `maybeAutoShow` 會**同步**把鎖拿走，緊接著的
+`void handlePendingGate(p)` 直接 throw，而它是裸 `void`、沒有人接
+（`loading-overlay.ts:103` 明講這個 repo 刻意不攔 `unhandledrejection`）。
+
+**怎麼修**
+
+| 動作 | 內容 |
+|------|------|
+| 新增 `src/lib/dialog-flow.ts` | `createDialogFlows({ isDialogOpen, onError })` → `{ runUser, tryAuto, isBusy }`。**零 DOM、零 store**，只管「誰先拿到那把鎖」 |
+| 規則 | **使用者的動作優先。** `runUser` 期間 `tryAuto` 一律回 `false` 並且**完全不執行** flow；自動跳窗只是提醒，它把鎖搶走的代價是使用者剛按下的動作整個沒有回應 |
+| 錯誤一律收在一處 | `askCustom` 因鎖被占而 throw 的每一條路徑都走 `runUser`／`tryAuto`，錯誤進 `onError` → `toast`。`signoff.ts` 現在**零裸 `void` 對話框呼叫** |
+| `render(opts?: { skipAutoShow?: boolean })` | 閘門被擋下那條路改成 `render({ skipAutoShow: true }); flows.runUser(() => handlePendingGate(p));`。順序與旗標**缺一不可** |
+| 自動跳窗的去重 | `autoShown.add()` 搬進 flow **裡面** —— 讓位的那一次 flow 不執行，所以「沒開成」永遠不會被記成「已經自動開過」；真的開失敗則在 `catch` 裡 `delete` 回去 |
+| 兩顆 `askConfirm`（重開案件／套用目前流程） | `async` 的 click handler 沒有人接它的 rejection，而 `askConfirm` 跟 `askCustom` 共用同一把鎖 —— 也改走 `runUser` |
+
+**為什麼抽成獨立模組**：缺陷**不在任何一支函式體內，在兩支之間**。`signoff.ts` 是有
+DOM 副作用的頁面腳本，headless 匯入不了；source-grep 的解析度到「函式」為止，
+而既有的 `test("自動跳窗有 isDialogOpen 守門…")` 兩個字串都驗到了、測試綠、缺陷還在。
+把「順序」搬進純函式，它才變成餵得了替身的東西。
+
+**哪條測試釘住它**（`tests/wave2-review-fixes.test.ts`）
+
+- `閘門擋下時 S1 對話框真的被呼叫到，期間來的 render 讓位` —— **主測**。
+  替身唯一必須忠實的地方是「鎖是同步拿的」；斷言 `calls` 逐字等於
+  `["open:gate", "close:gate"]`，而且期間插進來的一次 `render()`（模擬別的分頁
+  改狀態 → `store.subscribe`）沒有開出第二個窗
+- `反例：自動跳窗先跑就吃掉鎖，而那個 throw 一定要有人接` —— 這條**證明機制是真的**，
+  同時釘住「即使順序錯了，錯誤也被 `onError` 接住，不會沉到 console」
+- `使用者的流程在跑時，自動跳窗一律讓位而且 flow 完全不執行`
+- `同步 throw 的流程也接得住，而且鎖的計數要放掉`（計數沒放掉的症狀是
+  「跑完分析再也不會跳窗」）
+- 生產接線三條：`render({ skipAutoShow: true })` + `flows.runUser(() => handlePendingGate(p))`
+  在閘門那個分支裡、全檔 `not.toContain("void showAgentResult(")` /
+  `not.toContain("void handlePendingGate(")`、`flows.runUser(` **計數 === 4**
+
+**建議的 UAT 題目**
+
+1. 專案留兩份待拍板分析 → 重開簽核頁 → 自動跳出第一份 → 按「稍後再決定」→
+   去簽最後一關。**預期**：跳出「還有 2 份分析沒拍板」的清單對話框（不是另一張
+   工作單的結果窗），清單裡兩份都在。
+2. 承上，在攔截對話框裡按其中一份的「查看」→ 預期直接換成那份的結果窗，
+   拍板後回到簽核頁，關卡列上該份的狀態已更新。
+3. 攔截對話框按「稍後再說」→ 預期回到簽核頁、沒有任何窗自動彈出來搶焦點；
+   再按一次核准仍然擋得下來、對話框仍然開得出來。
+
+### C-3（major）待拍板的工作單會從關卡列消失，而閘門照樣擋
+
+**根因一句話**：畫面用兩個窄化決定畫哪一張（`stageAnalysis` 只回**最新一筆**、
+`isAgent` 看**當下的**指派對象），而擋結案的 `isPendingAgentJob` 兩個都不看。
+
+**怎麼修**：新增 `stageAnalysisJobs({ jobs, projectId, stageId, isAgent })`
+（`src/lib/signoff.ts`，純函式），合約只有一句 ——
+**只要一張工作單擋得住結案，它就一定在回傳的陣列裡**。
+`signoff.ts` 改成 `analysisJobs.map(stageAnalysisRowHtml).join("")`，
+每一張 pending 的都有自己的「查看結果」鈕。
+
+顯示用的那一張（「重新分析」鈕的 disabled 狀態）仍然是 `[0]`，語意跟改動前一致；
+`isAgent === false` 且沒有任何 pending 時照舊什麼都不畫 —— **不是改成永遠都畫**。
+
+**刻意沒做的兩件事**：不放寬閘門、不把工作單藏起來。兩條都是讓畫面說謊來換
+一時的一致，而簽核紀錄講實話正是這整套東西的賣點。
+另外「重新分析」鈕**沒有**因為前一份未拍板而停用 —— 停用會把使用者關在門外，
+而現在前一份看得到也按得到，問題已經沒了。要不要停用是產品決定，留給 Scott。
+
+**哪條測試釘住它**
+
+- `合約：擋得住結案的每一張，關卡列產出的 HTML 裡都有拍板入口` ——
+  **這條同時持有兩邊**：對每一個 `isPendingAgentJob(j)` 為真的 job，
+  斷言產出 HTML 含 `data-sg-view="<jobId>"`。舊的分工是兩邊各有完整測試、
+  卻沒有一條測試問「擋得住的那些，畫得出來嗎」
+- `(a) 按過「重新分析」之後，前一張仍然畫得出來`
+- `(b) 把關卡改派給人之後，pending 的那張不得跟著消失`
+- `改派給人且沒有任何 pending 時仍然什麼都不畫`（防過度修正）
+- `指派 agent 時，最新那張非 pending 的照舊要畫`
+- 生產接線：`not.toContain("isAgent ? stageAnalysis(")`
+
+**建議的 UAT 題目**
+
+4. 關卡指派給 Agent → 執行分析 → **不要拍板**，直接按「重新分析」→ 跑完。
+   **預期**：關卡列上**兩列**分析都在，各自有「查看結果」；結案被擋時說的
+   「2 份」跟畫面上看得到的份數一致。
+5. 承上，把那一關**改派給人**。**預期**：待拍板的那幾列仍然在、仍然按得到拍板
+   （不是整行消失）。
+6. 兩份都拍板（採用或不採用）之後再簽最後一關 → 預期順利結案。
+
+### C-4（minor）匯入的工作區 JSON 會讓管理中心整頁停止 render
+
+**根因一句話**：`importState` 完全沒有收斂，而 `load()` 那條路有
+`migrateProject` / `sanitizeSkeletons` —— **兩條吃同一份資料，只有一條在把關**；
+缺 `kind` 的關卡定義會讓 `escapeHtml(STAGE_KIND_LABEL[s.kind])` 丟 TypeError，
+`renderLandedFlows` 炸掉 → `render()` 中斷 → `renderCases()` 不再執行，
+而它掛在 `store.subscribe` 上，之後**每次狀態變動都再炸一次**。
+
+**怎麼修**（兩道，缺一不可）
+
+1. **收斂**：新增 `sanitizeStageDef` / `sanitizeStageDefs`（`store.ts`，已匯出）。
+   `kind` 退回 `review`（假設「只出意見」比假設「會覆寫內文」安全）、
+   `defaultActor` 退回 `human`、`mode` 退回 `parallel`（`sequential` 會讓升級後
+   跑到一半的案子突然多出順序閘門）、`order` 非數字時用索引。
+   **用 spread 覆寫而不是逐欄位重建** —— `migrateProject` 上面那串
+   「第三、五、六、七次踩同一個坑」講的就是逐欄位重建會讓沒列到的欄位無聲消失。
+   接上 `migrateProject`（`workflowStages` / `templateStages`）、`sanitizeSkeletons`、
+   以及 `importState`。順帶把 `load()` 的個案補值抽成 `normalizeCases`，
+   兩條路共用同一支。
+2. **查表退路**：`stageKindLabel` / `stageActorLabel` / `stageModeLabel`
+   （`workflow-admin.ts`），`admin.ts` 全面改用。
+   一份已經躺在 localStorage 裡的舊資料不會因為我們今天加了收斂就自動變乾淨，
+   所以第二道不是多餘的。
+
+**哪條測試釘住它**
+
+- `缺 kind / defaultActor 的舊匯出檔補得回合法值`
+- `查表一律有退路 —— 缺值不得變成 undefined.replace`
+- `order 是一段 HTML 時收斂成數字`
+- `不認得的欄位原樣帶過`（防「修 A 壞 B」：逐欄位重建會讓未來欄位消失）
+- `migrateProject 的 workflowStages / templateStages 都走收斂`
+- `importState 真的接上了三支收斂函式` —— F0 形狀防護，而且斷言收斂寫在
+  `...newState` **之後**（順序反了等於什麼都沒做）
+- `normalizeCases 是 load 與 importState 共用的同一支`（計數 === 3）
+
+### C-2（minor）`submit-assign.ts` 的 `${s.order}` 沒 escape
+
+**根因一句話**：這批新增的 `bodyHtml` 路徑上唯一一處沒有 escape 的插值，
+而型別謊報的值從匯入那條路進得來。
+
+**怎麼修**：`escapeHtml(String(s.order))`。順手把 `admin.ts` 的三處序號
+（`padStart` 兩處 + 個案關卡列一處）與 `submit-assign.ts` 的
+`KIND_LABEL` / `MODE_LABEL` 查表也補上退路。
+
+**哪條測試釘住它**：`型別謊報的 order 不得原樣進到 bodyHtml`
+（斷言 `not.toContain("<img src=x")` 且 `toContain("&lt;img src=x")`）＋
+`正常的數字序號照樣印得出來`（防過度 escape）。
+
+**建議的 UAT 題目**
+
+7. 設定 → 匯入一份**缺 `kind` / `defaultActor` 的舊工作區 JSON**（或手改一份，
+   把某關的 `order` 換成 `"><img src=x onerror=alert(1)>`）→ 開管理中心。
+   **預期**：落地流程與個案兩個區塊都畫得出來、切換分頁與改任何狀態都不會白頁；
+   該關卡顯示「審閱（只出意見）／我」。
+8. 承上，對那個專案按「送出審閱」→ **預期**：指派對話框正常開啟，序號欄位
+   顯示的是那串字的**文字**，沒有任何彈窗或版面破圖。
+
+### 測試守門的補強（報告 §E）
+
+補的**不是更多 grep**：
+
+- **時序替身**取代「兩支函式各自都有那個字串」的 grep（C-1）
+- **同時持有兩邊的合約測試**取代「兩邊各有完整測試」（C-3）
+- **型別謊報的輸入**取代「所有測試餵型別正確的物件」（C-4）
+
+**唯一改動的既有測試**：`tests/workflow-skeletons.test.ts:593`
+`expect(ADMIN_SRC).toContain("stagePatchFrom(readStageForm(el))")`
+→ `expect((ADMIN_SRC.match(/stagePatchFrom\(readStageForm\(/g) ?? []).length).toBe(2)`。
+理由是報告 §E 點名的具體弱點：`admin.ts` 有**兩個**儲存點，只要求出現一次的話，
+其中一處退回舊寫法照樣綠。**斷言只變嚴，沒有放寬**；測試名稱同步加註「兩個儲存點都要」。
+其餘既有測試零改動、零刪除。
+
+### 三個閘門（實跑輸出）
+
+```
+bunx tsc --noEmit   → exit 0
+bun test            → 1769 pass / 0 fail / 4131 expect / 87 files
+                      （修復前 1745 / 86；+24 條、+1 檔，測試檔數與斷言數皆未減少）
+bunx vite build     → ✓ built in 1.00s
+```
+
+未 commit、未 push。`plans/review-wave2-cato.md` 的 D-1／D-2／D-3／D-4 一行未動。

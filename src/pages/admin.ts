@@ -25,10 +25,11 @@ import {
   REAPPLY_COPY,
   skeletonLandedCounts,
   SKELETON_D2_NOTICE,
+  stageActorLabel,
+  stageKindLabel,
+  stageModeLabel,
   stagePatchFrom,
-  STAGE_ACTOR_LABEL,
   STAGE_FIELD_SEL,
-  STAGE_KIND_LABEL,
   stageRowFieldsHtml,
 } from "../lib/workflow-admin";
 
@@ -264,7 +265,7 @@ if (__authed) {
    */
   function stageRowHtml(s: WorkflowStageDef, all: Employee[], sections: Section[]): string {
     return `<div class="stage-item" data-id="${escapeHtml(s.id)}">
-      <div class="ord">${String(s.order).padStart(2, "0")}</div>
+      <div class="ord">${escapeHtml(String(s.order).padStart(2, "0"))}</div>
       <div class="fields">
         <label class="st-field-label">關卡名稱
           <input class="${STAGE_FIELD_SEL.name.slice(1)}" value="${escapeHtml(s.name)}" />
@@ -540,17 +541,17 @@ if (__authed) {
         const rows = [...(p.workflowStages ?? [])]
           .sort((a, b) => a.order - b.order)
           .map((s) => {
-            const tags = [`<span class="pill" style="font-size:10px">${escapeHtml(STAGE_KIND_LABEL[s.kind])}</span>`];
+            const tags = [`<span class="pill" style="font-size:10px">${escapeHtml(stageKindLabel(s.kind))}</span>`];
             if (s.required === false) tags.push('<span class="pill pill-draft" style="font-size:10px">非必簽</span>');
             const warn =
               s.kind === "edit"
                 ? `<span class="lf-warn">存檔覆寫「${escapeHtml(editTargetLabel(s.editTarget, sections))}」</span>`
                 : "";
             return `<div class="lf-row">
-              <span class="mono" style="color:var(--muted)">${String(s.order).padStart(2, "0")}</span>
+              <span class="mono" style="color:var(--muted)">${escapeHtml(String(s.order).padStart(2, "0"))}</span>
               <span class="lf-name">${escapeHtml(s.name)}</span>
               ${tags.join("")}
-              <span class="lf-sub">${escapeHtml(STAGE_ACTOR_LABEL[s.defaultActor])}／${s.mode === "sequential" ? "串行" : "並行"}</span>
+              <span class="lf-sub">${escapeHtml(stageActorLabel(s.defaultActor))}／${escapeHtml(stageModeLabel(s.mode))}</span>
               ${warn}
             </div>`;
           })
@@ -630,7 +631,7 @@ if (__authed) {
                   ? "pill-review"
                   : "pill-draft";
             return `<div class="case-stage-row">
-              <span class="mono" style="color:var(--muted)">${s.order}</span>
+              <span class="mono" style="color:var(--muted)">${escapeHtml(String(s.order))}</span>
               <span>${escapeHtml(s.name)}</span>
               <select class="case-reassign" data-pid="${p.id}" data-sid="${s.id}" ${withdrawn || c?.locked ? "disabled" : ""} style="background:var(--bg);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:4px 8px;font-size:12px">${opts}</select>
               <span class="pill ${st}" style="font-size:10px">${s.state}</span>

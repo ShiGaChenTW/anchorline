@@ -16,6 +16,7 @@
 import { store } from "../data/store";
 import { jobLanded, projectDisplayName, resolveEditTarget, stageKind, type AgentJob, type CaseStage, type Project } from "../data/types";
 import { askConfirm, askCustom, isDialogOpen } from "../lib/ask";
+import { createDialogFlows } from "../lib/dialog-flow";
 import {
   agentResultDialogHtml,
   pendingGateHtml,
@@ -32,7 +33,7 @@ import {
   groupTimelineByRound,
   signoffSummary,
   signoffTimeline,
-  stageAnalysis,
+  stageAnalysisJobs,
   stageRows,
 } from "../lib/signoff";
 import { initTheme } from "../lib/theme";
@@ -166,7 +167,17 @@ if (!requireAuth()) {
         // 執行是手動的（Scott 2026-08-12）：何時燒 API 是使用者的決定。
         const assignee = st.employees.find((e) => e.id === s.assigneeId);
         const isAgent = assignee?.kind === "agent";
-        const job = isAgent ? stageAnalysis(st.agentJobs, p.id, s.id) : null;
+        // 一關可能有不只一張工作單要畫：按過「重新分析」之後前一份仍然 pending，
+        // 改派給人之後那些 pending 也還在擋結案。合約住在 `stageAnalysisJobs`：
+        // **擋得住結案的，一定在這個陣列裡。**
+        const analysisJobs = stageAnalysisJobs({
+          jobs: st.agentJobs,
+          projectId: p.id,
+          stageId: s.id,
+          isAgent,
+        });
+        // 「重新分析」鈕看的是最新那一張，語意跟改動前一致
+        const job = analysisJobs[0] ?? null;
         const busy = job?.status === "queued" || job?.status === "running";
         const analyzeBtn =
           isAgent && !settled && !c?.withdrawn && !c?.locked
@@ -177,13 +188,17 @@ if (!requireAuth()) {
         // 顯示規則整批搬進 `agent-result.ts`：待拍板的**不**在列上攤開全文
         // （攤開的話，一份還沒有人同意的分析看起來就跟已經生效的內容一樣），
         // 已採用的講「存到哪了」，未採用的留一行灰字加可展開的全文。
-        const analysisHtml = stageAnalysisRowHtml({
-          job,
-          stage: s,
-          sections,
-          landed: job ? jobLanded(job) : "pending",
-          now: Date.now(),
-        });
+        const analysisHtml = analysisJobs
+          .map((j) =>
+            stageAnalysisRowHtml({
+              job: j,
+              stage: s,
+              sections,
+              landed: jobLanded(j),
+              now: Date.now(),
+            }),
+          )
+          .join("");
 
         // 三顆動作等重。以前只有「核准」，發現問題時唯一能做的是不按 ——
         // 而那在畫面上跟「還沒輪到他」一模一樣。
@@ -419,18 +434,43 @@ if (!requireAuth()) {
   }
 
   /**
+   * 對話框的排隊。**每一條會呼叫 `askCustom` / `askConfirm` 的路徑都要走它。**
+   *
+   * 規則見 `lib/dialog-flow.ts`：使用者主動觸發的流程優先，自動跳窗讓位；
+   * 而 `askCustom` 因鎖被占而 throw 的錯誤在這裡被接住，不再變成沒人接的
+   * `void`（這個 repo 刻意不攔 `unhandledrejection`）。
+   */
+  const flows = createDialogFlows({ isDialogOpen, onError: (err) => toast(errText(err)) });
+
+  function errText(err: unknown): string {
+    return err instanceof Error && err.message ? err.message : "對話框開啟失敗";
+  }
+
+  /**
    * 跑完自動跳窗。
    *
    * 硬條件：**不得在已有對話框開著時觸發** —— `askCustom` 遇到 dialog lock 會
-   * throw「已有對話框開啟」，而這一支跑在 `render()` 裡，沒有人接得住那個 throw。
+   * throw「已有對話框開啟」，而這一支跑在 `render()` 裡。
    * 這裡 return 而不標記 `autoShown`，所以窗關掉之後的下一次 render 會補跳。
+   *
+   * 第二個硬條件由 `flows.tryAuto` 把關：**使用者主動開的流程正在跑時也要讓位。**
+   * 這一條不在這支函式體內是刻意的 —— 缺陷本來就在兩支函式之間，
+   * 而在這裡再刻一份旗標只會變成第三個各自為政的判斷。
    */
   function maybeAutoShow(p: Project): void {
     if (isDialogOpen()) return;
     const next = store.pendingAgentJobs(p.id).find((j) => !autoShown.has(j.id));
     if (!next) return;
-    autoShown.add(next.id);
-    void showAgentResult(next.id);
+    // `autoShown.add` 刻意寫在 flow **裡面**：讓位的那一次 flow 根本不執行，
+    // 所以「沒開成」永遠不會被記成「已經自動開過」—— 記了的話這一份從此
+    // 不再自動跳，而使用者根本沒看到過它
+    flows.tryAuto(() => {
+      autoShown.add(next.id);
+      return showAgentResult(next.id).catch((err) => {
+        autoShown.delete(next.id);
+        throw err;
+      });
+    });
   }
 
   /**
@@ -472,7 +512,13 @@ if (!requireAuth()) {
 
   // ── Render ──────────────────────────────────────────────────
 
-  function render() {
+  /**
+   * @param opts.skipAutoShow 這一次 render **不得**觸發自動跳窗。
+   *   給的是「使用者剛按下一個動作、而那個動作馬上要開自己的窗」那條路：
+   *   讓自動跳窗跑完，鎖就被它同步拿走了（`askCustom` 的 `rejectIfBusy`
+   *   在第一個 await 之前），使用者的窗再也開不出來。
+   */
+  function render(opts?: { skipAutoShow?: boolean }) {
     if (!root) return;
     const p = activeProject();
     syncChrome(p);
@@ -490,7 +536,7 @@ if (!requireAuth()) {
     if (pending) document.getElementById("sg-comment")?.focus();
     // 跑完自動跳窗掛在 render 的最後：工作單完成時 store 會 emit → subscribe →
     // render，所以這裡就是「分析剛跑完」那一刻。自己記 jobId 去重，不是每次都開。
-    maybeAutoShow(p);
+    if (!opts?.skipAutoShow) maybeAutoShow(p);
   }
 
   function bind(p: Project) {
@@ -515,7 +561,7 @@ if (!requireAuth()) {
       b.addEventListener("click", () => {
         // 已經有窗開著時什麼都不做：askCustom 會 throw，而點擊處理器沒人接
         if (isDialogOpen()) return;
-        void showAgentResult(b.dataset.sgView!);
+        flows.runUser(() => showAgentResult(b.dataset.sgView!));
       });
     });
     document.querySelectorAll<HTMLElement>("[data-sg-act]").forEach((b) => {
@@ -553,8 +599,13 @@ if (!requireAuth()) {
           // `pendingJobs` 是 store 交出來的數字，UI 不自己算 —— 兩份判斷會分岔，
           // 而症狀是「對話框說沒有待辦，按下去卻還是被擋」。
           if (r.pendingJobs) {
-            render();
-            void handlePendingGate(p);
+            // 順序與 `skipAutoShow` 兩者缺一不可：
+            // `render()` 尾端的自動跳窗會**同步**拿走 `askCustom` 的鎖
+            // （`rejectIfBusy` 跑在第一個 await 之前），於是使用者看到的是
+            // 另一張工作單的結果窗，而他剛才被擋下的簽核**一句話都沒有**。
+            // S1 攔截對話框是這個功能的主要出口，它一定要出現。
+            render({ skipAutoShow: true });
+            flows.runUser(() => handlePendingGate(p));
             return;
           }
           toast(r.reason ?? "動作失敗");
@@ -595,17 +646,23 @@ if (!requireAuth()) {
       toast(r.ok ? "已抽單" : (r.reason ?? "抽單失敗"));
       render();
     });
-    document.getElementById("btn-sg-reopen")?.addEventListener("click", async () => {
-      if (!(await askConfirm({ title: "重開案件會清掉所有既有簽章，確定？", danger: true }))) return;
-      const r = store.reopenCase(p.id);
-      toast(r.ok ? "已重開，所有關卡回到未簽" : (r.reason ?? "重開失敗"));
-      render();
+    // 這兩顆也走 `flows.runUser`：`async` 的 click handler 沒有人接它的 rejection，
+    // 而 `askConfirm` 跟 `askCustom` 共用同一把鎖、同一條 throw
+    document.getElementById("btn-sg-reopen")?.addEventListener("click", () => {
+      flows.runUser(async () => {
+        if (!(await askConfirm({ title: "重開案件會清掉所有既有簽章，確定？", danger: true }))) return;
+        const r = store.reopenCase(p.id);
+        toast(r.ok ? "已重開，所有關卡回到未簽" : (r.reason ?? "重開失敗"));
+        render();
+      });
     });
-    document.getElementById("btn-sg-apply")?.addEventListener("click", async () => {
-      if (!(await askConfirm({ title: "套用目前流程會依最新關卡設定重建案件，既有簽章會清掉，確定？", danger: true }))) return;
-      const r = store.applyWorkflowToCase(p.id);
-      toast(r.ok ? "已套用目前流程" : (r.reason ?? "套用失敗"));
-      render();
+    document.getElementById("btn-sg-apply")?.addEventListener("click", () => {
+      flows.runUser(async () => {
+        if (!(await askConfirm({ title: "套用目前流程會依最新關卡設定重建案件，既有簽章會清掉，確定？", danger: true }))) return;
+        const r = store.applyWorkflowToCase(p.id);
+        toast(r.ok ? "已套用目前流程" : (r.reason ?? "套用失敗"));
+        render();
+      });
     });
   }
 
