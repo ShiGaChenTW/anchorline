@@ -24,6 +24,7 @@ import type {
   Employee,
   PrdVersion,
   Project,
+  WorkflowStageDef,
 } from "../data/types";
 import { isPendingAgentJob, stageKind } from "../data/types";
 import { hasPermission } from "./permissions";
@@ -146,6 +147,109 @@ export function caseHasRun(c: CaseRecord | null | undefined): boolean {
       // `saved`、`discardAgentResult` 也拒絕重來，那份分析救不回來
       Boolean(s.agentResult?.trim()),
   );
+}
+
+/**
+ * 從流程定義長出個案關卡 —— **建立關卡的唯一原語**。
+ *
+ * 原本是 `store.caseFromWorkflow` 的函式體。搬出來的理由只有一個：簽核頁在
+ * 送審前要畫「送審時**真的會建立**的那一份流程」，而 UI 照著 `WorkflowStageDef`
+ * 自己再刻一份的話，兩份會分岔 —— 分岔的症狀正是這一輪要修的缺陷：
+ * 畫面顯示的關卡 ≠ 送審會建立的關卡，沒有錯誤訊息，看起來完全正常。
+ *
+ * 所以預覽與真的送審現在跑的是**同一支函式、同一份輸入**。要讓它們講不同的話，
+ * 得先讓這支函式對同樣的輸入回不同的答案。
+ *
+ * `assignments` 見 `caseFromWorkflow` 原註解：`w.id in assignments` 判斷「有沒有
+ * 提到這一關」，`null` 是明確的「這一關不派人」，跟沒提到不同。
+ */
+export function stagesFromWorkflow(
+  projectId: string,
+  workflow: readonly WorkflowStageDef[],
+  employees: readonly Employee[],
+  assignments?: Record<string, string | null>,
+): CaseStage[] {
+  const byId = Object.fromEntries(employees.map((e) => [e.id, e]));
+  return [...workflow]
+    .sort((a, b) => a.order - b.order)
+    .map((w) => {
+      // 逐關指派蓋過範本的預設執行者。`null` 是明確的「這一關不派人」，
+      // 跟「沒有提到這一關」不同 —— 後者才退回 defaultAssigneeId
+      const picked = assignments && w.id in assignments ? assignments[w.id] : w.defaultAssigneeId;
+      const emp = picked ? byId[picked] : null;
+      return {
+        id: `cs-${w.id}-${projectId}`,
+        stageDefId: w.id,
+        order: w.order,
+        name: w.name,
+        assigneeId: emp?.id ?? null,
+        assigneeName: emp ? emp.name : "待指派",
+        state: emp ? ("pending" as const) : ("empty" as const),
+        mode: w.mode ?? "parallel",
+        required: w.required,
+        // kind 與 editTarget 從流程定義複製到個案上。不複製的話，簽核頁要靠
+        // stageDefId 回頭查流程定義 —— 而流程可能已經被改過，那時查到的
+        // 是「現在的定義」，不是這個案子當初依據的那一份
+        kind: w.kind,
+        ...(w.editTarget ? { editTarget: { ...w.editTarget } } : {}),
+      };
+    });
+}
+
+/**
+ * 簽核頁該畫哪一份關卡 —— **送審前的那份個案關卡是假的**。
+ *
+ * ## 缺陷長什麼樣
+ *
+ * `addProject` 建專案時就先開了一個個案，走的是**建立當下的全域**流程
+ * （`seed.ts` 的四關：工程／設計／資安／法務）。而這個專案真正要跑的骨架
+ * 要到第一次送審才落地。於是簽核頁在送審前顯示的，是一套送出那一刻就會被
+ * 整批換掉的關卡 —— 而頭條還寫著「流程有 4 關，按送出審閱之後才會開始跑」，
+ * 暗示這 4 關就是要跑的那一份。
+ *
+ * ## 判斷一律問 `store.submitPlan()`
+ *
+ * 這裡**不重寫一份 `caseHasRun`**。那正是 W2-A 把判斷抽進 `submitPlan` 要防的
+ * 分岔，而分岔的症狀就是這次這種「畫面說的跟實際跑的不是同一件事」。
+ *
+ * `view` 是餵給 `signoffSummary` / `stageRows` 的那一份個案：預覽時是照送審
+ * 計畫算出來的替身，其餘欄位（`withdrawn`、`locked`、`reviewCommitId`）原封
+ * 沿用真的那一份 —— 抽單的案子仍然要講「此案已抽單」，不能被預覽蓋掉。
+ */
+export type SignoffStageView = {
+  /** true = 眼前這份關卡是送審時就會被整批換掉的，畫面上必須標明是預覽 */
+  preview: boolean;
+  /** 要畫在畫面上的關卡 */
+  stages: CaseStage[];
+  /** 餵給 `signoffSummary` / `stageRows` 的個案（預覽時是替身） */
+  view: CaseRecord | undefined;
+};
+
+export function signoffStageView(opts: {
+  projectId: string;
+  /** `store.submitPlan(projectId)` 的回傳，原封不動 */
+  plan: { landsNow: boolean; stages: readonly WorkflowStageDef[] };
+  c: CaseRecord | undefined;
+  employees: readonly Employee[];
+}): SignoffStageView {
+  const { projectId, plan, c, employees } = opts;
+  if (!plan.landsNow) return { preview: false, stages: c?.stages ?? [], view: c };
+  const stages = stagesFromWorkflow(projectId, plan.stages, employees);
+  const view: CaseRecord = c
+    ? { ...c, stages }
+    : {
+        projectId,
+        stages,
+        round: 1,
+        log: [],
+        reviewCommitId: null,
+        withdrawn: false,
+        withdrawnAt: null,
+        withdrawnBy: null,
+        withdrawReason: null,
+        locked: false,
+      };
+  return { preview: true, stages, view };
 }
 
 /**
@@ -279,10 +383,29 @@ export type SignoffSummary = {
   changesRequested: CaseStage[];
 };
 
+/**
+ * 送審前那句頭條的兩種講法。
+ *
+ * 舊的那句「流程有 N 關。到編輯台按『送出審閱』之後才會開始跑」在預覽狀態下
+ * 是假的 —— 它暗示眼前這 N 關就是要跑的那一份，而那份個案關卡送出那一刻就會
+ * 被整批換掉。文案與行為對不上，不管往哪個方向錯都是同一個缺陷。
+ *
+ * 預覽那句敢說「送出審閱時才會照現在的範本建立」，是因為
+ * `signoffStageView` 畫的就是 `store.submitPlan()` 交出來的那一份。
+ * 測試 `送審前的頭條講的話，跟 submitPlan 真的會建立的那份逐字對得上` 釘住這件事。
+ */
+export const PREVIEW_DETAIL = (n: number) =>
+  `這是預覽 —— 送出審閱時才會照現在的範本建立這 ${n} 關，屆時會逐關問你派給誰。`;
+
 export function signoffSummary(
   user: Employee,
   project: Project,
   c: CaseRecord | undefined,
+  /**
+   * `preview: true` = `c` 是 `signoffStageView` 算出來的替身，關卡還沒建立。
+   * 選填是刻意的：既有呼叫端（畫唯讀卡片的那幾處）不需要知道這件事。
+   */
+  opts?: { preview?: boolean },
 ): SignoffSummary {
   const rows = stageRows(user, project, c);
   const approved = rows.filter((r) => r.stage.state === "approved").length;
@@ -331,7 +454,9 @@ export function signoffSummary(
       changesRequested,
       state: "draft",
       headline: "尚未送審",
-      detail: `流程有 ${total} 關。到編輯台按「送出審閱」之後才會開始跑。`,
+      detail: opts?.preview
+        ? PREVIEW_DETAIL(total)
+        : `流程有 ${total} 關。到編輯台按「送出審閱」之後才會開始跑。`,
     };
   }
   // 有人要求修改 → 球在作者身上，這比「還有幾關沒簽」重要得多
@@ -390,6 +515,38 @@ export function signoffSummary(
         : "審閱中",
     detail: waiting.length > 1 ? `後面還有 ${waiting.length - 1} 關。` : "簽完這一關就可以合併。",
   };
+}
+
+/**
+ * 頭條那顆主要按鈕 —— **只給走得通的下一步**。
+ *
+ * 從 `pages/signoff.ts` 抽出來，因為這一輪的缺陷有一半長在這裡：Scott 的截圖上
+ * 是「核准『工程』→」，而那顆鈕按下去必被 `approveAndLock` 的
+ * 「這個案子還沒送出審閱」擋回來 —— 順帶一提，「工程」那一關送出審閱時
+ * 根本就會被換掉。一顆註定失敗的主要按鈕比沒有按鈕更糟。
+ *
+ * 兩處改動：
+ * 1. `draft` 排到 `mine` 之前。還沒送審時唯一走得通的下一步是去送審，
+ *    不是去簽一關簽不動的關卡
+ * 2. `preview` 時一律不給簽核鈕 —— 那些關卡的 id 還不存在於 `state.cases`
+ *
+ * 回傳的是**資料不是 HTML**：頁面只負責畫。這樣「預覽狀態下不得出現核准鈕」
+ * 才驗得到，而不是去 grep 頁面原始碼。
+ */
+export type SignoffCta =
+  | { kind: "link"; href: string; label: string }
+  | { kind: "approve"; stage: CaseStage }
+  | null;
+
+export function signoffCta(sum: SignoffSummary, opts?: { preview?: boolean }): SignoffCta {
+  // 被退回時球在作者身上，主要動作是「去改」而不是「去簽」
+  if (sum.state === "needs_fix") return { kind: "link", href: "editor.html", label: "去編輯台修改 →" };
+  // 全過之後路不能斷在句號上 —— 下一步是拿這份簽核紀錄去取版號
+  if (sum.state === "approved") return { kind: "link", href: "releases.html", label: "前往版本取號 →" };
+  if (sum.state === "draft") return { kind: "link", href: "editor.html", label: "去編輯台送審 →" };
+  if (opts?.preview) return null;
+  const mine = sum.mine[0];
+  return mine ? { kind: "approve", stage: mine } : null;
 }
 
 // ── 關卡上的 Agent 分析 ─────────────────────────────────────────

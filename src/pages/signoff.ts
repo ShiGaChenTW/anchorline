@@ -14,7 +14,7 @@
  * 紀錄收在下面。跟 PRD 審閱監控同一套視覺語言，不另做一種。
  */
 import { store } from "../data/store";
-import { jobLanded, projectDisplayName, resolveEditTarget, stageKind, type AgentJob, type CaseStage, type Project } from "../data/types";
+import { projectDisplayName, resolveEditTarget, stageKind, type AgentJob, type CaseStage, type Project } from "../data/types";
 import { askConfirm, askCustom, isDialogOpen } from "../lib/ask";
 import { createDialogFlows } from "../lib/dialog-flow";
 import {
@@ -23,7 +23,6 @@ import {
   pendingGateItems,
   resultConfirmLabel,
   resultDialogTitle,
-  stageAnalysisRowHtml,
 } from "../lib/agent-result";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
@@ -31,11 +30,18 @@ import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loadin
 import { syncRailContext } from "../lib/rail-projects";
 import {
   groupTimelineByRound,
+  signoffCta,
+  signoffStageView,
   signoffSummary,
   signoffTimeline,
-  stageAnalysisJobs,
-  stageRows,
+  type SignoffStageView,
 } from "../lib/signoff";
+import {
+  ACT_LABEL,
+  NEEDS_REASON,
+  stageListHtml as stageListHtmlOf,
+  type StagePending,
+} from "../lib/signoff-stages";
 import { initTheme } from "../lib/theme";
 import { sinceLabel } from "../lib/time-format";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
@@ -53,9 +59,7 @@ if (!requireAuth()) {
   initHelpOverlay();
 
   const root = document.getElementById("sg-root");
-  /** 展開中的決策面板：哪一關、哪一種動作。null = 沒有展開 */
-  type Pending = { stageId: string; kind: "approved" | "changes_requested" | "comment" | "skipped" };
-  let pending: Pending | null = null;
+  let pending: StagePending | null = null;
 
   function activeProject(): Project | null {
     const st = store.get();
@@ -65,14 +69,23 @@ if (!requireAuth()) {
     return picked;
   }
 
-  function syncChrome(p: Project | null) {
+  function syncChrome(p: Project | null, view: SignoffStageView | null) {
     updateUserRailFooter(toRailUser(store.get().currentUser));
     const name = p ? projectDisplayName(p) : "未選擇專案";
     const sub = document.querySelector<HTMLElement>('[data-od-id="page-sub"]');
-    const c = p ? store.get().cases[p.id] : undefined;
+    // 副標的數字也要照 `view` 算。讀真的那份個案的話，送審前會顯示
+    // 「0/4 關已核准」—— 而那 4 關送出那一刻就會被換成別的幾關，
+    // 數字本身就是這個缺陷的一部分，不只是關卡列在說謊
+    const stages = view?.stages ?? [];
     if (sub) {
       sub.textContent = p
-        ? `${name} · ${c?.stages.length ? `${c.stages.filter((s) => s.state === "approved").length}/${c.stages.length} 關已核准` : "尚未建立關卡"}`
+        ? `${name} · ${
+            !stages.length
+              ? "尚未建立關卡"
+              : view?.preview
+                ? `${stages.length} 關（送審後才建立）`
+                : `${stages.filter((s) => s.state === "approved").length}/${stages.length} 關已核准`
+          }`
         : "先建立或選擇一個專案";
     }
     syncRailContext({
@@ -86,9 +99,9 @@ if (!requireAuth()) {
 
   // ── 頭條 ────────────────────────────────────────────────────
 
-  function heroHtml(p: Project): string {
+  function heroHtml(p: Project, view: SignoffStageView): string {
     const st = store.get();
-    const sum = signoffSummary(st.currentUser, p, st.cases[p.id]);
+    const sum = signoffSummary(st.currentUser, p, view.view, { preview: view.preview });
     const pct = sum.total ? Math.round((sum.approved / sum.total) * 100) : 0;
     const tone =
       sum.state === "approved"
@@ -97,19 +110,14 @@ if (!requireAuth()) {
           ? "warn"
           : "go";
     // CTA 只在「真的輪到我」時出現。沒有我的關卡卻放一顆主要按鈕，
-    // 等於邀請人去按一個註定被擋下來的東西
-    // 被退回時球在作者身上，主要動作是「去改」而不是「去簽」
-    const cta =
-      sum.state === "needs_fix"
-        ? `<a class="btn btn-primary btn-lg" href="editor.html">去編輯台修改 →</a>`
-        : sum.state === "approved"
-          ? // 全過之後路不能斷在句號上 —— 下一步是拿這份簽核紀錄去取版號
-            `<a class="btn btn-primary btn-lg" href="releases.html">前往版本取號 →</a>`
-          : sum.mine.length
-            ? `<button type="button" class="btn btn-primary btn-lg" data-sg-act="approved" data-sg-stage="${escapeHtml(sum.mine[0]!.id)}">核准「${escapeHtml(sum.mine[0]!.name)}」→</button>`
-            : sum.state === "draft"
-              ? `<a class="btn btn-primary btn-lg" href="editor.html">去編輯台送審 →</a>`
-              : "";
+    // 等於邀請人去按一個註定被擋下來的東西 —— 選哪一顆的判斷住在
+    // `signoffCta`（純函式，驗得到「預覽狀態下不得出現核准鈕」），這裡只負責畫
+    const pick = signoffCta(sum, { preview: view.preview });
+    const cta = !pick
+      ? ""
+      : pick.kind === "link"
+        ? `<a class="btn btn-primary btn-lg" href="${escapeHtml(pick.href)}">${escapeHtml(pick.label)}</a>`
+        : `<button type="button" class="btn btn-primary btn-lg" data-sg-act="approved" data-sg-stage="${escapeHtml(pick.stage.id)}">核准「${escapeHtml(pick.stage.name)}」→</button>`;
 
     return `<section class="ov-hero aiw-hero" data-od-id="sg-hero">
       <p class="ov-hero-kicker">現在卡在誰身上</p>
@@ -124,162 +132,27 @@ if (!requireAuth()) {
   }
 
   // ── 關卡清單 ────────────────────────────────────────────────
+  //
+  // HTML 本身住在 `lib/signoff-stages.ts`。搬出去的理由寫在那個檔頭：
+  // 這一輪的缺陷是「畫面顯示的關卡 ≠ 送審會建立的關卡」，而那個形狀只有
+  // 同時持有兩邊的合約測試抓得住 —— 測試要呼叫得到產出 HTML 的那支函式，
+  // 它就不能埋在一個要先過 `requireAuth()` 的頁面裡。
 
-  const ACT_LABEL: Record<Pending["kind"], string> = {
-    approved: "核准",
-    changes_requested: "要求修改",
-    comment: "保留意見",
-    skipped: "略過",
-  };
-
-  /** 哪幾種動作必須寫理由 —— 少了理由，紀錄上就只剩一個結果 */
-  const NEEDS_REASON: Pending["kind"][] = ["changes_requested"];
-
-  function stageListHtml(p: Project): string {
+  function stageListHtml(p: Project, view: SignoffStageView): string {
     const st = store.get();
-    const c = st.cases[p.id];
-    const rows = stageRows(st.currentUser, p, c);
-    const isAdmin = st.currentUser.accessRole === "admin";
-    const people = st.employees.filter((e) => e.active !== false);
-    // `edit` 關卡要講得出「會覆寫哪個欄位」的中文名，而那份章節定義是**專案的**：
-    // 拿 active 的 `st.sections` 去查別的專案會查到另一份骨架的欄位名。
-    const sections = store.sectionsFor(p.id);
-
-    if (!rows.length) {
-      return `<section class="card aiw-card" data-od-id="sg-stages">
-        <p class="aiw-kicker">關卡</p>
-        <p class="aiw-card-sub">這個案子還沒有關卡。到<a href="admin.html">管理中心 → 簽核流程</a>設定，或直接送出審閱。</p>
-      </section>`;
-    }
-
-    const body = rows
-      .map(({ stage: s, label, ability }) => {
-        const open = pending?.stageId === s.id;
-        const mode = s.mode ?? "parallel";
-        const settled = s.state !== "pending" && s.state !== "empty";
-        const who = (settled && s.decidedByName) || s.assigneeName || "待指派";
-        const when = settled && s.decidedAt ? sinceLabel(s.decidedAt, Date.now()) : "";
-
-        // ── Agent 分析 ──────────────────────────────────────────
-        // 指派 Agent 原本只是寫個名字，沒有任何東西會因此執行 ——
-        // 這一關看起來「已安排」，實際上什麼都沒發生。這裡把兩套接起來：
-        // 指派了 Agent 的關卡有「執行分析」，結果貼回關卡上。
-        // 執行是手動的（Scott 2026-08-12）：何時燒 API 是使用者的決定。
-        const assignee = st.employees.find((e) => e.id === s.assigneeId);
-        const isAgent = assignee?.kind === "agent";
-        // 一關可能有不只一張工作單要畫：按過「重新分析」之後前一份仍然 pending，
-        // 改派給人之後那些 pending 也還在擋結案。合約住在 `stageAnalysisJobs`：
-        // **擋得住結案的，一定在這個陣列裡。**
-        const analysisJobs = stageAnalysisJobs({
-          jobs: st.agentJobs,
-          projectId: p.id,
-          stageId: s.id,
-          isAgent,
-        });
-        // 「重新分析」鈕看的是最新那一張，語意跟改動前一致
-        const job = analysisJobs[0] ?? null;
-        const busy = job?.status === "queued" || job?.status === "running";
-        const analyzeBtn =
-          isAgent && !settled && !c?.withdrawn && !c?.locked
-            ? `<button type="button" class="btn btn-sm" data-sg-analyze="${escapeHtml(s.id)}"
-                 data-sg-agent="${escapeHtml(assignee!.id)}"${busy ? " disabled" : ""}>
-                 ${busy ? "分析中…" : job ? "重新分析" : "執行分析"}</button>`
-            : "";
-        // 顯示規則整批搬進 `agent-result.ts`：待拍板的**不**在列上攤開全文
-        // （攤開的話，一份還沒有人同意的分析看起來就跟已經生效的內容一樣），
-        // 已採用的講「存到哪了」，未採用的留一行灰字加可展開的全文。
-        const analysisHtml = analysisJobs
-          .map((j) =>
-            stageAnalysisRowHtml({
-              job: j,
-              stage: s,
-              sections,
-              landed: jobLanded(j),
-              now: Date.now(),
-            }),
-          )
-          .join("");
-
-        // 三顆動作等重。以前只有「核准」，發現問題時唯一能做的是不按 ——
-        // 而那在畫面上跟「還沒輪到他」一模一樣。
-        const actions = ability.can
-          ? open
-            ? ""
-            : `<span class="sg-acts">
-                 <button type="button" class="btn btn-sm btn-primary" data-sg-act="approved" data-sg-stage="${escapeHtml(s.id)}">核准</button>
-                 <button type="button" class="btn btn-sm" data-sg-act="changes_requested" data-sg-stage="${escapeHtml(s.id)}">要求修改</button>
-                 <button type="button" class="btn btn-sm btn-ghost" data-sg-act="comment" data-sg-stage="${escapeHtml(s.id)}">保留意見</button>
-                 ${
-                   s.required === false && s.state !== "skipped"
-                     ? `<button type="button" class="btn btn-sm btn-ghost" data-sg-act="skipped" data-sg-stage="${escapeHtml(s.id)}">略過</button>`
-                     : ""
-                 }
-               </span>`
-          : `<span class="sg-why" title="${escapeHtml(ability.reason)}">${escapeHtml(ability.reason)}</span>`;
-
-        const reassign =
-          isAdmin && s.state !== "approved" && !c?.locked && !c?.withdrawn
-            ? `<select class="sg-assign" data-sg-assign="${escapeHtml(s.id)}" aria-label="改派 ${escapeHtml(s.name)}">
-                 <option value="">未指派</option>
-                 ${people
-                   .map(
-                     (e) =>
-                       `<option value="${escapeHtml(e.id)}"${e.id === s.assigneeId ? " selected" : ""}>${escapeHtml(e.name)}</option>`,
-                   )
-                   .join("")}
-               </select>`
-            : "";
-
-        const kind = pending?.kind ?? "approved";
-        return `<li class="sg-stage sg-stage--${s.state}${open ? " is-signing" : ""}">
-          <div class="sg-stage-main">
-            <span class="sg-stage-n mono">${s.order}</span>
-            <span class="sg-stage-name">${escapeHtml(s.name)}
-              <span class="sg-mode" title="${mode === "sequential" ? "要等前面的關卡結案" : "隨時可簽"}">${mode === "sequential" ? "串行" : "並行"}</span>
-              ${s.required === false ? `<span class="sg-mode">非必簽</span>` : ""}</span>
-            <span class="sg-stage-who">${escapeHtml(who)}${when ? ` · ${escapeHtml(when)}` : ""}</span>
-            <span class="sg-pill sg-pill--${s.state}">${escapeHtml(label)}</span>
-            ${reassign}
-            ${analyzeBtn}
-            ${actions}
-          </div>
-          ${analysisHtml}
-          ${
-            // **只在意見還代表現況時才貼在列上。** 重送之後關卡退回待簽核，
-            // 上一輪的意見卻還掛在那裡，看起來像「這一輪已經有人講過話了」——
-            // 它屬於上一輪，位置在下面的紀錄裡。
-            s.comment?.trim() && s.state !== "pending" && s.state !== "empty"
-              ? `<p class="sg-stage-comment">「${escapeHtml(s.comment.trim())}」</p>`
-              : ""
-          }
-          ${
-            open
-              ? `<div class="sg-sign-box">
-                   <p class="sg-sign-head">${escapeHtml(ACT_LABEL[kind])}${NEEDS_REASON.includes(kind) ? "　<b>理由必填</b>" : ""}</p>
-                   <textarea id="sg-comment" rows="3" placeholder="${
-                     NEEDS_REASON.includes(kind)
-                       ? "要改什麼？作者要靠這句話知道下一步"
-                       : "意見（可留白）—— 會進簽核紀錄"
-                   }"></textarea>
-                   <div class="sg-sign-actions">
-                     <button type="button" class="btn btn-sm btn-ghost" data-sg-cancel="1">取消</button>
-                     <button type="button" class="btn btn-sm btn-primary" data-sg-confirm="${escapeHtml(s.id)}">確認${escapeHtml(ACT_LABEL[kind])}</button>
-                   </div>
-                 </div>`
-              : ""
-          }
-        </li>`;
-      })
-      .join("");
-
-    const gating = rows.filter((r) => r.stage.required !== false);
-    return `<section class="card aiw-card aiw-card--wide" data-od-id="sg-stages">
-      <div class="aiw-stage-head">
-        <p class="aiw-kicker">關卡</p>
-        <span class="aiw-stage-count mono">${gating.filter((r) => r.stage.state === "approved" || r.stage.state === "skipped").length}/${gating.length} 必簽已結案</span>
-      </div>
-      <ul class="sg-stages">${body}</ul>
-    </section>`;
+    return stageListHtmlOf({
+      project: p,
+      user: st.currentUser,
+      c: st.cases[p.id],
+      view,
+      jobs: st.agentJobs,
+      // `edit` 關卡要講得出「會覆寫哪個欄位」的中文名，而那份章節定義是**專案的**：
+      // 拿 active 的 `st.sections` 去查別的專案會查到另一份骨架的欄位名。
+      sections: store.sectionsFor(p.id),
+      employees: st.employees,
+      pending,
+      now: Date.now(),
+    });
   }
 
   // ── 簽核紀錄 ────────────────────────────────────────────────
@@ -521,8 +394,20 @@ if (!requireAuth()) {
   function render(opts?: { skipAutoShow?: boolean }) {
     if (!root) return;
     const p = activeProject();
-    syncChrome(p);
-    if (!p) {
+    // 判斷一律問 `store.submitPlan()` —— 這裡**不重寫一份 `caseHasRun`**。
+    // 那正是 W2-A 把判斷抽進 `submitPlan` 要防的分岔，而分岔的症狀就是
+    // 這一輪要修的東西：畫面說的跟送審真的會做的不是同一件事。
+    const st0 = store.get();
+    const view = p
+      ? signoffStageView({
+          projectId: p.id,
+          plan: store.submitPlan(p.id),
+          c: st0.cases[p.id],
+          employees: st0.employees,
+        })
+      : null;
+    syncChrome(p, view);
+    if (!p || !view) {
       root.innerHTML = `<section class="card aiw-card aiw-card--wide">
         <p class="aiw-kicker">簽核管理</p>
         <h2 class="aiw-card-title">還沒有專案</h2>
@@ -531,7 +416,7 @@ if (!requireAuth()) {
       </section>`;
       return;
     }
-    root.innerHTML = `${heroHtml(p)}${stageListHtml(p)}<div class="aiw-folds">${timelineHtml(p)}${caseOpsHtml(p)}</div>`;
+    root.innerHTML = `${heroHtml(p, view)}${stageListHtml(p, view)}<div class="aiw-folds">${timelineHtml(p)}${caseOpsHtml(p)}</div>`;
     bind(p);
     if (pending) document.getElementById("sg-comment")?.focus();
     // 跑完自動跳窗掛在 render 的最後：工作單完成時 store 會 emit → subscribe →
@@ -568,7 +453,7 @@ if (!requireAuth()) {
       b.addEventListener("click", () => {
         pending = {
           stageId: b.dataset.sgStage!,
-          kind: b.dataset.sgAct as Pending["kind"],
+          kind: b.dataset.sgAct as StagePending["kind"],
         };
         render();
       });

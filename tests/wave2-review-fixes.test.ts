@@ -61,6 +61,15 @@ const mem = new Map<string, string>();
 const { migrateProject, sanitizeStageDef, sanitizeStageDefs } = await import("../src/data/store");
 
 const SIGNOFF_SRC = readFileSync(new URL("../src/pages/signoff.ts", import.meta.url), "utf8");
+/**
+ * 關卡列的 HTML 於 2026-08-26 從 `pages/signoff.ts` 搬到這裡（送審前流程預覽），
+ * 理由見該檔檔頭。C-3 那條 source-grep 跟著改讀這一份 —— 意圖沒變，
+ * 只是它要盯的那段程式碼換了檔案。
+ */
+const SIGNOFF_STAGES_SRC = readFileSync(
+  new URL("../src/lib/signoff-stages.ts", import.meta.url),
+  "utf8",
+);
 const STORE_SRC = readFileSync(new URL("../src/data/store.ts", import.meta.url), "utf8");
 
 /** 等到 microtask 與一輪 macrotask 都排空 */
@@ -290,11 +299,15 @@ describe("C-3 待拍板的工作單不得從關卡列消失", () => {
     expect(stageAnalysisJobs({ jobs, projectId: "w2r-p1", stageId: "st-1", isAgent: true })).toEqual([]);
   });
 
-  test("signoff.ts 真的把整批畫出來，不是只畫一張", () => {
-    expect(SIGNOFF_SRC).toContain("stageAnalysisJobs({");
-    expect(SIGNOFF_SRC).toContain("analysisJobs");
+  test("關卡列真的把整批畫出來，不是只畫一張", () => {
+    expect(SIGNOFF_STAGES_SRC).toContain("stageAnalysisJobs({");
+    expect(SIGNOFF_STAGES_SRC).toContain("analysisJobs");
     // 舊寫法：只挑最新一筆、而且被 isAgent 擋著
-    expect(SIGNOFF_SRC).not.toContain("isAgent ? stageAnalysis(");
+    expect(SIGNOFF_STAGES_SRC).not.toContain("isAgent ? stageAnalysis(");
+    // 搬家之後多這一條：頁面必須真的把關卡列交給那支函式。
+    // 少了它，上面三條可以在一個沒有人呼叫的模組上全綠 —— 那正是 F0 的形狀
+    expect(SIGNOFF_SRC).toContain("stageListHtmlOf({");
+    expect(SIGNOFF_SRC).not.toContain("stageAnalysisJobs({");
   });
 });
 

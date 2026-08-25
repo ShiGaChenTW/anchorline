@@ -89,7 +89,7 @@ import {
   normalizeAgentFamily,
   validateEmployeeRole,
 } from "../lib/permissions";
-import { canSignStage, caseHasRun, separationOfDuties } from "../lib/signoff";
+import { canSignStage, caseHasRun, separationOfDuties, stagesFromWorkflow } from "../lib/signoff";
 import { hasHumanApproval, resolveWorkflow } from "../lib/workflow-resolve";
 import { nowIso } from "../lib/time-format";
 
@@ -420,31 +420,10 @@ function caseFromWorkflow(
   /** 逐關指派：`stageDefId → 執行者 id`。送審對話框選的東西 */
   assignments?: Record<string, string | null>,
 ): CaseRecord {
-  const byId = Object.fromEntries(employees.map((e) => [e.id, e]));
-  const stages: CaseStage[] = [...workflow]
-    .sort((a, b) => a.order - b.order)
-    .map((w) => {
-      // 逐關指派蓋過範本的預設執行者。`null` 是明確的「這一關不派人」，
-      // 跟「沒有提到這一關」不同 —— 後者才退回 defaultAssigneeId
-      const picked = assignments && w.id in assignments ? assignments[w.id] : w.defaultAssigneeId;
-      const emp = picked ? byId[picked] : null;
-      return {
-        id: `cs-${w.id}-${projectId}`,
-        stageDefId: w.id,
-        order: w.order,
-        name: w.name,
-        assigneeId: emp?.id ?? null,
-        assigneeName: emp ? emp.name : "待指派",
-        state: emp ? ("pending" as const) : ("empty" as const),
-        mode: w.mode ?? "parallel",
-        required: w.required,
-        // kind 與 editTarget 從流程定義複製到個案上。不複製的話，簽核頁要靠
-        // stageDefId 回頭查流程定義 —— 而流程可能已經被改過，那時查到的
-        // 是「現在的定義」，不是這個案子當初依據的那一份
-        kind: w.kind,
-        ...(w.editTarget ? { editTarget: { ...w.editTarget } } : {}),
-      };
-    });
+  // 關卡本身怎麼長出來搬進了 `lib/signoff.ts` 的 `stagesFromWorkflow` ——
+  // 簽核頁送審前的預覽要畫「送審時真的會建立的那一份」，兩邊必須是同一支函式。
+  // 在這裡留一份自己的迴圈，就是把「畫面說的跟實際跑的不是同一件事」重新種一次。
+  const stages: CaseStage[] = stagesFromWorkflow(projectId, workflow, employees, assignments);
   return {
     projectId,
     stages,

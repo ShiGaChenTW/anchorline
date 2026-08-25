@@ -430,7 +430,16 @@ describe("signoff.ts 真的把拍板交給了 store", () => {
   });
 
   test("顯示與 pop-up 用共用函式，不是頁面自己刻一份 HTML", () => {
-    expect(SIGNOFF_SRC).toContain("stageAnalysisRowHtml(");
+    // `stageAnalysisRowHtml` 的呼叫端 2026-08-26 隨關卡列一起搬進
+    // `lib/signoff-stages.ts`（送審前流程預覽）。要求沒變也沒放鬆：
+    // 「關卡列上的分析用的是共用函式」—— 只是那一行現在住在別的檔案，
+    // 而頁面必須真的呼叫得到它（下一條斷言）
+    const STAGES_SRC = readFileSync(
+      new URL("../src/lib/signoff-stages.ts", import.meta.url),
+      "utf8",
+    );
+    expect(STAGES_SRC).toContain("stageAnalysisRowHtml(");
+    expect(SIGNOFF_SRC).toContain("stageListHtmlOf({");
     expect(SIGNOFF_SRC).toContain("agentResultDialogHtml(");
     expect(SIGNOFF_SRC).toContain("pendingGateHtml(");
   });
