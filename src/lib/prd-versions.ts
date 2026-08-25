@@ -94,22 +94,48 @@ export function changedFieldCount(before: Docs, after: Docs): number {
   return diffDocs(before, after).length;
 }
 
+/** 擋下來的原因，給程式判讀用。UI 要分辨是哪一種，靠這個，不要去比對 `reason` 字串。 */
+export type CommitBlockCode = "unsaved" | "no-diff";
+
 /**
  * 送審前的把關。
  *
  * 有未儲存的草稿一律擋下：送出一份「跟你螢幕上看到的不一樣」的版本，
  * 是最難察覺也最貴的錯誤 —— 審閱者核准的東西跟作者以為送出的東西不同，
  * 而兩邊都不會發現。
+ *
+ * ## 兩條規則以外還回傳一個 `code`
+ *
+ * 規則本身沒有變。多出來的 `code` 是給呼叫端分辨「是哪一種擋下」用的 ——
+ * 兩者在畫面上的意義完全不同：`unsaved` 是「再按一下儲存就好」（送審路徑
+ * 自己會問要不要先存），`no-diff` 才是「現在真的沒有東西可送」。少了它，
+ * UI 只能去比對 `reason` 的中文字串，而文案一改就靜默失效。
+ *
+ * ## `reason` 要講得出下一步
+ *
+ * 只講事實（「跟主線沒有差異」）是準確的，但使用者當下不知道該做什麼。
+ * 這裡的字串同時講**為什麼**與**下一步**，而下一步那句有測試釘住 ——
+ * 「改一點內容再送一次就會通過」必須真的會通過，見
+ * `tests/submit-precheck.test.ts` 的「文案講的下一步真的走得通」。
  */
 export function canCommit(opts: {
   hasUnsaved: boolean;
   changedFields: number;
-}): { ok: boolean; reason?: string } {
+}): { ok: boolean; code?: CommitBlockCode; reason?: string } {
   if (opts.hasUnsaved) {
-    return { ok: false, reason: "還有未儲存的變更 —— 先儲存，送審才會包含它們" };
+    return {
+      ok: false,
+      code: "unsaved",
+      reason: "還有未儲存的變更 —— 先儲存，送審才會包含它們",
+    };
   }
   if (opts.changedFields === 0) {
-    return { ok: false, reason: "跟主線沒有差異，沒有東西可以送審" };
+    return {
+      ok: false,
+      code: "no-diff",
+      reason:
+        "跟主線沒有差異，沒有東西可以送審 —— 現在的內容跟已核准的主線一字不差。改一點內容再送一次就會通過。",
+    };
   }
   return { ok: true };
 }

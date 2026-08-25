@@ -487,20 +487,56 @@ describe("editor.ts 真的把指派交給了 store", () => {
    * 順序：對話框在 commit **之前**。
    * 放在 commit 之後的話，使用者一按取消就留下一個沒人要的版本快照，
    * 而版本清單上看不出它是廢的。
+   *
+   * ## 2026-08-26：這兩條改讀 `submit-flow.ts`
+   *
+   * **意圖逐字沒變，盯的那段程式碼換了檔案。** 送審按鈕的那段順序
+   * （預檢 → 對話框 → commit → 送審）從 `editor.ts` 抽進
+   * `src/lib/submit-flow.ts`，理由是 Scott 實測回報的缺陷正好在
+   * 「兩個各自都正確的函式**之間**」——「檢查跑在對話框之後」。
+   * 那種形狀 source-grep 驗不到（Wave 2 的 C-1／C-3 已經證明過一次），
+   * 要抓得靠純函式 + 記錄呼叫的替身。
+   *
+   * 前例：C-3 那條 grep 也曾因為關卡列 HTML 從 `signoff.ts` 搬到
+   * `signoff-stages.ts` 而改讀另一個檔案（見 `wave2-review-fixes.test.ts`）。
+   *
+   * **變嚴還是變鬆：變嚴。** 這兩條 grep 只驗得到「字串的先後」，
+   * `tests/submit-precheck.test.ts` 的 Part B 現在**真的跑那段順序**，
+   * 斷言取消時 commit 一次都沒被呼叫、沒東西可送時對話框一次都沒被開啟。
+   * grep 留著是因為它還擋得住「有人把順序寫反」這種一眼可見的退步。
    */
-  test("指派對話框開在 commitForReview 之前", () => {
-    const iAsk = EDITOR_SRC.indexOf("await askStageAssignments()");
-    const iCommit = EDITOR_SRC.indexOf("store.commitForReview(");
+  const SUBMIT_FLOW_SRC = readFileSync(
+    new URL("../src/lib/submit-flow.ts", import.meta.url),
+    "utf8",
+  );
+
+  test("指派對話框開在 commit 之前", () => {
+    const iAsk = SUBMIT_FLOW_SRC.indexOf("await deps.ask()");
+    const iCommit = SUBMIT_FLOW_SRC.indexOf("deps.commit()");
     expect(iAsk).toBeGreaterThan(-1);
     expect(iCommit).toBeGreaterThan(-1);
     expect(iAsk).toBeLessThan(iCommit);
   });
 
-  test("取消時直接 return —— 不 commit、不送審", () => {
-    const handler = EDITOR_SRC.slice(EDITOR_SRC.indexOf("await askStageAssignments()"));
-    const cancelBlock = handler.slice(0, handler.indexOf("store.commitForReview("));
+  /** 新增的一條：預檢又在對話框之前 —— 這是 Scott 撞到的那條缺陷 */
+  test("預檢開在指派對話框之前", () => {
+    const iPre = SUBMIT_FLOW_SRC.indexOf("deps.precheck()");
+    const iAsk = SUBMIT_FLOW_SRC.indexOf("await deps.ask()");
+    expect(iPre).toBeGreaterThan(-1);
+    expect(iPre).toBeLessThan(iAsk);
+  });
+
+  test("取消時直接收工 —— 不 commit、不送審", () => {
+    const flow = SUBMIT_FLOW_SRC.slice(SUBMIT_FLOW_SRC.indexOf("await deps.ask()"));
+    const cancelBlock = flow.slice(0, flow.indexOf("deps.commit()"));
     expect(cancelBlock).toContain("CANCELLED");
-    expect(cancelBlock).toContain("return;");
+    expect(cancelBlock).toContain("return");
+  });
+
+  /** editor 仍然是唯一的接線點：flow 拿到的 `commit` 必須真的接 store */
+  test("editor 把 store.commitForReview 接進 flow 的 commit", () => {
+    expect(EDITOR_SRC).toContain("runSubmitFlow<Assignments>");
+    expect(EDITOR_SRC).toContain("store.commitForReview(");
   });
 });
 

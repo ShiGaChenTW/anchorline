@@ -50,6 +50,7 @@ import { buildProjectProfile, emptySectionValues } from "../lib/export";
 import {
   allStagesSettled,
   canCommit,
+  type CommitBlockCode,
   capVersions,
   changedFieldCount,
   pickBaseline,
@@ -1649,14 +1650,39 @@ export const store = {
   },
 
   /**
-   * 送審 = commit：對整份 PRD 拍快照。
+   * 送審前的**唯讀**預檢 —— 「現在按下去，送得出去嗎」。不寫任何 state。
    *
-   * 有未儲存的草稿就先擋下 —— 送出一份「跟你螢幕上看到的不一樣」的版本
-   * 是最難察覺也最貴的錯誤。
+   * ## 為什麼需要它
+   *
+   * 指派對話框開在 commit **之前**（放之後的話，使用者一按取消就留下一個
+   * 沒人要的版本快照）。於是「有沒有東西可送」若只留在 `commitForReview`，
+   * 使用者會**先逐關選完人、按下送出，才被告知根本沒東西可送** —— 整段白做。
+   * Scott 2026-08-26 實測撞到的就是這個。
+   *
+   * ## 這裡**不重寫規則**
+   *
+   * 跟 `commitForReview` 走同一支 `canCommit`、同一份 baseline、同一個
+   * `hasUnsaved`。這個 repo 已經因為「UI 自己再算一份」吃過兩次虧
+   * （`submitPlan` 抽出來就是為了防這件事）。兩份判斷分岔的症狀是
+   * 「預檢說可以、真的送出卻被擋」或反過來 —— 兩種都很難查，因為畫面上
+   * 兩邊各自都是對的。
+   *
+   * `commitForReview` 自己那道閘門**沒有被拿掉**：它直接呼叫這一支，
+   * 所以它仍然是最後一道防線，不是只有 UI 在擋。
+   *
+   * ## 成本注意
+   *
+   * `changedFieldCount` 會逐欄位跑行級 diff。`renderCoach()` 每個按鍵都跑一次，
+   * 所以呼叫端在有未儲存草稿時應該先用 `hasUnsaved()` 短路，不要每個按鍵都問。
+   * **那是呼叫端的節流，不是另一份規則** —— 答案不會因此不同。
    */
-  commitForReview(message: string): { ok: boolean; reason?: string; version?: PrdVersion } {
+  commitPrecheck(): {
+    ok: boolean;
+    code?: "no-project" | CommitBlockCode;
+    reason?: string;
+  } {
     const pid = state.activeProjectId;
-    if (!pid) return { ok: false, reason: "沒有選擇專案" };
+    if (!pid) return { ok: false, code: "no-project", reason: "沒有選擇專案" };
     // 用同一支 canCommit —— 它的規則有測試釘住，但先前沒有被執行路徑呼叫，
     // 於是「跟主線零差異不可送審」只存在於測試與文件裡，實際按下去照樣送出。
     const baseline = this.prdBaseline(pid);
@@ -1665,7 +1691,23 @@ export const store = {
       // 沒有主線代表這是第一版，一律視為有差異
       changedFields: baseline ? changedFieldCount(baseline.docs, state.sectionValues) : 1,
     });
+    return gate.ok ? { ok: true } : { ok: false, code: gate.code, reason: gate.reason };
+  },
+
+  /**
+   * 送審 = commit：對整份 PRD 拍快照。
+   *
+   * 有未儲存的草稿就先擋下 —— 送出一份「跟你螢幕上看到的不一樣」的版本
+   * 是最難察覺也最貴的錯誤。
+   */
+  commitForReview(message: string): { ok: boolean; reason?: string; version?: PrdVersion } {
+    // 閘門整段委派給 `commitPrecheck()`：UI 的預檢與這裡問的是**同一支**，
+    // 兩邊不可能給出不同答案。
+    const gate = this.commitPrecheck();
     if (!gate.ok) return { ok: false, reason: gate.reason };
+    const pid = state.activeProjectId;
+    // 型別收斂用 —— `commitPrecheck()` 的 `no-project` 已經擋過這一條
+    if (!pid) return { ok: false, reason: "沒有選擇專案" };
     const u = state.currentUser;
     const version: PrdVersion = {
       id: `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,

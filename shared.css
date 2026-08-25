@@ -6878,6 +6878,7 @@ html.adhd-calm .adhd-editor-hint {
 .adhd-coach-details .adhd-gate-score,
 .adhd-coach-details .adhd-gate-block,
 .adhd-coach-details .adhd-gate-ok,
+.adhd-coach-details .adhd-gate-nodiff,
 .adhd-coach-details .adhd-coach-link {
   padding: 0 12px 12px;
 }
@@ -6905,6 +6906,13 @@ html.adhd-calm .adhd-editor-hint {
   margin: 0;
   font-size: var(--fs-2);
   color: var(--success);
+}
+/* 結構過了但跟主線零差異：沒有東西壞掉，只是沒東西可送 —— 中性色，
+   不用 danger（那會讓使用者以為 gate 沒過），也不用 success（那是謊話）。 */
+.adhd-gate-nodiff {
+  margin: 0;
+  font-size: var(--fs-2);
+  color: var(--muted);
 }
 .adhd-coach-link {
   margin: 8px 0 0;

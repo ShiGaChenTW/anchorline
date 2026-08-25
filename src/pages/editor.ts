@@ -32,6 +32,7 @@ import {
   setBeginnerMode,
 } from "../lib/beginner-flow";
 import { exportMarkdownFile } from "../lib/export";
+import { CANCELLED, runSubmitFlow } from "../lib/submit-flow";
 import { fieldNo, numberedFieldLabel } from "../lib/field-number";
 import { bindMdField, mdFieldHtml, setAllMdModes, type MdPaneMode } from "../lib/markamd";
 import { canEditContent } from "../lib/permissions";
@@ -840,6 +841,33 @@ function renderEditor() {
   syncUser();
 }
 
+/**
+ * 「結構過了，但現在真的沒有東西可送」—— `store.commitPrecheck()` 的 `no-diff`。
+ *
+ * ## 為什麼要有這個判斷
+ *
+ * 缺陷三：`pulseSubmitWhenBecameReady` 看的是 `evaluatePrdGates`，**不含**
+ * 主線差異檢查。所以沒東西可送時，「送出審閱」那顆鈕仍然亮著、還會脈動 ——
+ * 畫面在邀請使用者按一顆註定失敗的鈕。
+ *
+ * ## 為什麼只看 `no-diff`，不看整個 `ok`
+ *
+ * `unsaved` **不是**「沒東西可送」：送審路徑自己會先問「要不要全部儲存再送審」，
+ * 存完就送得出去。把 `unsaved` 也算進來的話，使用者一開始打字鈕就熄掉 ——
+ * 那是正常路徑，不是死路。所以這裡認的是 `code`，不是 `ok`。
+ * （用 `code` 而不是比對 `reason` 中文字串：文案一改，字串比對會靜默失效。）
+ *
+ * ## 短路是節流，不是另一份規則
+ *
+ * 有未儲存草稿時直接回 false：`commitPrecheck` 會逐欄位跑行級 diff，而
+ * `renderCoach()` **每個按鍵都跑一次**。有草稿時 `canCommit` 本來就先在
+ * `hasUnsaved` 那條回傳，答案不會因為少問這一次而不同。
+ */
+function nothingToSubmit(): boolean {
+  if (store.hasUnsaved()) return false;
+  return store.commitPrecheck().code === "no-diff";
+}
+
 function renderCoach() {
   const s = sections()[idx];
   if (!s) return;
@@ -935,7 +963,12 @@ function renderCoach() {
       ${
         !gate.canSubmit
           ? `<p class="adhd-gate-block">有 BLOCK 項時無法送審${gateBlocks.length ? `（${gateBlocks.length}）` : ""}</p>`
-          : `<p class="adhd-gate-ok">可送審</p>`
+          : nothingToSubmit()
+            ? // 結構是過的，但內容跟主線一字不差 —— 按下去只會被擋。
+              // 純粹讓鈕不再脈動而不說原因，是 W2-C 已經犯過並被要求修掉的形狀，
+              // 所以原因寫在這裡（跟送審被擋時的 toast 講同一件事）。
+              `<p class="adhd-gate-nodiff">結構沒問題，但跟主線沒有差異 —— 改一點內容才有東西可送審</p>`
+            : `<p class="adhd-gate-ok">可送審</p>`
       }
       <p class="adhd-coach-link"><a href="tracking.html">開啟計劃追蹤 →</a></p>
     </details>
@@ -1281,7 +1314,17 @@ function render() {
 
   const gate = evaluatePrdGates(store.get(), store.activeGateSpec());
   const submitBtn = document.getElementById("btn-submit");
-  pulseSubmitWhenBecameReady(submitBtn, gate.canSubmit && editable());
+  // 缺陷三：脈動是一種邀請。沒東西可送時不要邀請使用者按一顆註定失敗的鈕。
+  // **鈕本身不 disable** —— 按下去會給出講得出下一步的訊息，比一顆灰掉、
+  // 不說原因的鈕有用。原因同時寫在 gate 卡片上（見 `nothingToSubmit`）。
+  const canSubmitNow = gate.canSubmit && editable() && !nothingToSubmit();
+  pulseSubmitWhenBecameReady(submitBtn, canSubmitNow);
+  if (submitBtn) {
+    submitBtn.title =
+      gate.canSubmit && !canSubmitNow && editable()
+        ? "跟主線沒有差異 —— 改一點內容才有東西可送審"
+        : "";
+  }
   syncMotionPreferenceClass();
 }
 
@@ -1342,9 +1385,6 @@ document.getElementById("btn-next")?.addEventListener("click", () => {
   }
 });
 
-/** 使用者按了取消。`undefined` 是「不必問」，兩者在送審路徑上是相反的決定 */
-const CANCELLED = Symbol("submit-cancelled");
-
 /**
  * 送審前逐關指派。
  *
@@ -1400,33 +1440,37 @@ document.getElementById("btn-submit")?.addEventListener("click", async () => {
     return;
   }
 
-  // 指派對話框放在 gate 之後、commit 之前。放在 commit 之後的話，
-  // 使用者一按取消就留下一個沒人要的版本快照 —— 而版本清單上看不出它是廢的。
-  const assignments = await askStageAssignments();
-  if (assignments === CANCELLED) {
-    toast("已取消送審");
-    return;
-  }
+  // 剩下的順序整段交給 `runSubmitFlow`：預檢 → 指派對話框 → commit → 送審。
+  //
+  // **預檢在對話框之前**，這是 Scott 2026-08-26 實測撞到的缺陷：他逐關選完人、
+  // 按下「送出審閱」，才被告知「跟主線沒有差異，沒有東西可以送審」—— 白做工。
+  // 訊息本身是對的，錯的是它出現的時機。
+  //
+  // 指派對話框仍然在 commit **之前**（W2-A 釘住的位置，別動）：放在 commit
+  // 之後的話，使用者一按取消就留下一個沒人要的版本快照。
+  const out = await runSubmitFlow<Assignments>({
+    // 一律問 `store.commitPrecheck()` —— 它跟 `commitForReview` 共用同一支
+    // `canCommit`。在這裡自己重算一份的話，症狀會是「預檢說可以、真的送出
+    // 卻被擋」，而畫面上兩邊各自都是對的。
+    precheck: () => store.commitPrecheck(),
+    ask: askStageAssignments,
+    commit: () => {
+      const c = store.commitForReview("");
+      return { ok: c.ok, reason: c.reason, versionId: c.version?.id, docs: c.version?.docs };
+    },
+    // 第三個參數是逐關指派：**只有這一行把對話框的結果交出去**，漏了它
+    // 整個對話框就變成一個問完就丟的問卷（Wave 1 F0 的形狀）。
+    submit: (versionId, assignments) => {
+      store.submitForReview(undefined, versionId, assignments);
+    },
+    changedFields: (docs) => {
+      const base = store.prdBaseline();
+      return base ? changedFieldCount(base.docs, docs) : null;
+    },
+  });
 
-  // 送審 = commit：對整份 PRD 拍快照。審閱者看的是這一份，
-  // 不是「送審之後又被改過的當下內容」。
-  const commit = store.commitForReview("");
-  if (!commit.ok) {
-    toast(commit.reason ?? "無法送審");
-    return;
-  }
-
-  // 把這一份 commit 綁進個案 —— 審閱者看的、核准合併的都必須是它。
-  // 第三個參數是逐關指派：**只有這一行把對話框的結果交出去**，漏了它
-  // 整個對話框就變成一個問完就丟的問卷（Wave 1 F0 的形狀）。
-  store.submitForReview(undefined, commit.version!.id, assignments);
-  const base = store.prdBaseline();
-  const changed = base ? changedFieldCount(base.docs, commit.version!.docs) : null;
-  toast(
-    changed === null
-      ? "已送出審閱 —— 這是第一個版本"
-      : `已送出審閱 —— 這一版改了 ${changed} 個欄位`,
-  );
+  toast(out.message);
+  if (out.status !== "submitted") return;
   window.setTimeout(() => {
     location.href = "review.html";
   }, 800);
