@@ -37,6 +37,21 @@ export type AgentJob = {
   result: string;
   createdAt: string;
   finishedAt: string | null;
+  /**
+   * 這份結果**落地了沒有**。
+   *
+   * 原本 `invokeAgent` 跑完直接改 state：`edit`/`coach` 把摘要追加進「開放問題」，
+   * `review`/`approve` 自動貼一則留言。使用者沒機會看完整內容再決定 —— 文件被
+   * 改了，而且沒有任何地方問過他。現在跑完停在 `pending`，等
+   * `saveAgentResult` / `discardAgentResult` 拍板。
+   *
+   * 為什麼存在工作單上而不是記憶體：重整頁面不該遺失待確認的結果。放記憶體的話
+   * 那份跑了三十秒的分析會在按 F5 的瞬間消失，而且看起來像從來沒跑過。
+   *
+   * 沒有這個欄位的是**舊工作單**（升級前跑完的）。它們的副作用早就寫進 state 了，
+   * 當成 `saved` 處理才不會讓歷史紀錄突然全部變成「待確認」。
+   */
+  landed?: "pending" | "saved" | "discarded";
 };
 
 /** 匯入掃描摘要（存於專案，供側欄／列表顯示） */
@@ -110,6 +125,32 @@ export type Project = {
    * 「寫到一半發現選錯領域」比「鎖死不給改」常見得多。
    */
   domain?: string;
+  /**
+   * 這個專案自己的簽核流程。**第一次送審時落地**，之後改範本不影響進行中的案子。
+   *
+   * 為什麼要複製一份而不是每輪重解析：`signoffTimeline` 靠 `stageId` 跨輪串接
+   * 決策，而重解析出來的關卡 id 會隨範本／領域包變動。id 一變，第一輪的意見
+   * 就會顯示「（已移除的關卡）」—— 那正是簽核紀錄最該講清楚的一段。
+   *
+   * 沒有這個欄位代表**還沒落地**（尚未送過審，或舊資料）。消費端不可以把
+   * 「空陣列」跟「沒有這個欄位」當成同一件事：前者是「這個專案的流程真的沒有
+   * 關卡」，後者要退回全域 `AppState.workflowStages`。
+   */
+  workflowStages?: WorkflowStageDef[];
+  /**
+   * 這個專案套的是哪一類整份 PRD 範本。決定簽核骨架（見 `lib/workflow-resolve.ts`）。
+   *
+   * 沒有這個欄位的專案（沒套過整份範本、或舊資料）走 `lean` —— 最精簡的那一套。
+   * 這裡刻意**不存範本 id**：範本會被改、被刪，而骨架只跟「哪一類」有關。
+   */
+  templateCat?: FullCat;
+  /**
+   * 自訂範本自帶的骨架，套用時從 `Template.stages` 複製下來。
+   *
+   * 有值就取代 `templateCat` 推出來的那一套。內建的十份範本都沒有這個欄位 ——
+   * 它留給「同一類但流程要不一樣」的自訂範本。
+   */
+  templateStages?: WorkflowStageDef[];
 };
 
 /** 側欄／列表顯示名稱：自訂名 → 標題 → 資料夾名 */
@@ -123,12 +164,47 @@ export function projectDisplayName(p: Project): string {
   return "未命名專案";
 }
 
+/**
+ * 關卡要 agent 做哪一種事。
+ *
+ * `review` = 只出意見，不碰 PRD 內文；`edit` = 提議內文修改。
+ *
+ * 為什麼要分：這兩種結果的「存檔」意義完全不同 —— review 存下來是把意見釘在
+ * 關卡上（可逆、不動文件），edit 存下來會覆寫某個 PRD 欄位（動到文件本體）。
+ * 用同一個確認流程處理兩者，等於讓人用同一個心理成本按下兩種後果差很多的按鈕。
+ */
+export type StageKind = "review" | "edit";
+
+/**
+ * `edit` 關卡存檔時要寫進哪個欄位。
+ *
+ * 為什麼要明寫而不是讓 agent 自己挑：agent 挑錯欄位時，使用者是在按下存檔
+ * **之後**才發現內容跑到別章去了。關卡定義好目標，存檔前才講得出
+ * 「現值 vs 新值」這組對照 —— 沒有目標就沒有現值可比。
+ */
+export type StageEditTarget = {
+  sectionId: string;
+  fieldKey: string;
+};
+
 /** 簽核流程關卡定義（流程設計） */
 export type WorkflowStageDef = {
   id: string;
   order: number;
   name: string;
   defaultAssigneeId: string | null;
+  /** 見 `StageKind`。這個欄位是必填的：漏了就會退回「全部當 review」的舊行為 */
+  kind: StageKind;
+  /**
+   * 這一關**原本設計給誰做**。
+   *
+   * 跟 `defaultAssigneeId` 不同：那個是「預先綁死的某一個人」，這個是「該找哪一種
+   * 執行者」。個人工作台上具體要派哪個 agent 是送審當下才決定的，但「我核准」
+   * 那一關永遠只能是人，這件事屬於流程定義而不是每次指派。
+   */
+  defaultActor: ActorKind;
+  /** `edit` 關卡才有意義。省略時存檔會退回「開放問題」欄位（見 store.saveAgentResult） */
+  editTarget?: StageEditTarget;
   /**
    * 非必簽的關卡**不擋結案**，而且可以被明確「略過」。
    *
@@ -206,7 +282,19 @@ export type CaseStage = {
   mode?: StageMode;
   /** 非必簽的關卡不擋結案。舊資料沒有就當必簽（＝現行行為） */
   required?: boolean;
+  /**
+   * 這一關要 agent 做哪一種事。**舊資料沒有就當 `review`** —— 那是這個欄位
+   * 出現之前唯一存在的行為，跑到一半的案子不該因為升級突然變成會改內文。
+   */
+  kind?: StageKind;
+  /** `edit` 關卡的落地目標，從關卡定義複製下來 */
+  editTarget?: StageEditTarget;
 };
+
+/** 舊個案的關卡沒有 kind 欄位，一律當 review（＝這個欄位出現之前的行為） */
+export function stageKind(s: Pick<CaseStage, "kind">): StageKind {
+  return s.kind ?? "review";
+}
 
 /** 個案簽核狀態（含抽單） */
 export type CaseRecord = {
@@ -315,6 +403,13 @@ export type Template = {
   /** 這份範本的出處（人看的名字），整份範本才有 */
   source?: string;
   sourceUrl?: string;
+  /**
+   * 這份範本自帶的簽核骨架。**整份範本才有。**
+   *
+   * 省略時走 `resolveWorkflow` 依 `cat` 給的五類骨架 —— 那是絕大多數情況。
+   * 這個欄位留給「同一類但流程要不一樣」的自訂範本，不是給內建的十份用的。
+   */
+  stages?: WorkflowStageDef[];
 };
 
 /** 舊資料沒有 kind 欄位，一律當章節範本 */
