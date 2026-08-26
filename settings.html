@@ -482,6 +482,17 @@
             </div>
           </div>
 
+          <!-- Agent 執行後端：上面那份全域設定是「預設後端」，這裡是它以外的其他通路。
+               清單本體由 settings.ts 的 renderAgentBackends() 渲染（一律讀 store.listBackends()）。 -->
+          <div class="settings-section" data-cat="ai">
+            <h2>🔌 Agent 執行後端</h2>
+            <p class="sub">每個 Agent 可以各自綁一個後端，在 <a href="agents.html">Agents</a> 頁指定。
+              上面那份全域 AI 設定就是清單第一筆「預設」—— 它不是另存的副本，改上面等於改它。
+              CLI 後端走的是這台機器上已登入的 CLI 訂閱，<strong>API 金鑰沒錢或過期時它照樣能跑</strong>，
+              這是這張清單存在的理由。</p>
+            <div id="agent-backends-root"></div>
+          </div>
+
           <!-- AI 按鈕與 Prompt：系統裡每一顆會叫模型的按鈕，prompt 與參數都列在這、可覆寫。
                名冊本體在 src/lib/prompt-registry.ts，這裡由 settings.ts 渲染。 -->
           <div class="settings-section" data-cat="ai">

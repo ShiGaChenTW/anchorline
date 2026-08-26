@@ -12,7 +12,8 @@ import {
   stripAnchor,
   type PlanMeta,
 } from "../lib/plan-parser";
-import { buildHandoff, HANDOFF_NOTE, type AgentFamilyId } from "../lib/agent-handoff";
+import { buildHandoff, HANDOFF_NOTE } from "../lib/agent-handoff";
+import type { AgentFamily } from "../data/types";
 import { uatFixTask, uatProjectRoot } from "../lib/uat-fix-handoff";
 import { initTheme } from "../lib/theme";
 import { invalidateUatBadge } from "../lib/rail-nav";
@@ -521,11 +522,13 @@ if (__authed) {
   }
 
   /**
-   * 交接族系四選一。**id 照抄 `agent-handoff.ts` 的 `RUNNER`** ——
-   * 那一份對照表才是「哪個族系怎麼跑」的真相，這裡多寫一個沒有 runner 的族系，
-   * 症狀會是 `RUNNER[family]` 拿到 undefined 而整支炸掉。
+   * 交接族系四選一 —— 這是**策展過的短清單，不是能力上限**。
+   *
+   * `RUNNER` 現在蓋滿整個 `AgentFamily`（十個都給得出東西），所以這裡少列幾個
+   * 已經不會再讓它拿到 undefined 而炸掉了。留四個純粹是不想把一顆按鈕變成
+   * 十選一；要加就從 `AGENT_FAMILY_LABEL` 裡挑，不必再擔心 runner 對不對得上。
    */
-  const HANDOFF_FAMILIES: { id: AgentFamilyId; label: string }[] = [
+  const HANDOFF_FAMILIES: { id: AgentFamily; label: string }[] = [
     { id: "claude", label: "Claude" },
     { id: "codex", label: "Codex" },
     { id: "gemini", label: "Gemini" },
@@ -624,7 +627,7 @@ if (__authed) {
     };
     fams.querySelectorAll<HTMLButtonElement>("[data-fam]").forEach((b) => {
       b.onmousedown = keepFocus;
-      b.onclick = () => void onSubmitUat(r, b.dataset.fam as AgentFamilyId);
+      b.onclick = () => void onSubmitUat(r, b.dataset.fam as AgentFamily);
     });
     const diffBtn = document.getElementById("uat-diff") as HTMLButtonElement | null;
     if (diffBtn) {
@@ -836,7 +839,7 @@ if (__authed) {
    * 產生修復指令並複製。**事件記在複製成功之後**，跟 `onToggleStep` 同一條規矩：
    * 順序反過來的話，剪貼簿被拒的那一次會在稽核軌跡留下一筆沒發生的送出。
    */
-  async function onSubmitUat(r: UatReport, family: AgentFamilyId) {
+  async function onSubmitUat(r: UatReport, family: AgentFamily) {
     // 指令的 cd 目標用報告自己的路徑推 —— 掃描範圍雖然限定當前專案，
     // 但「這份報告屬於哪個專案」的答案寫在它的路徑裡，不在 store 的選取狀態裡。
     const root = uatProjectRoot(r.path ?? "");
@@ -1518,7 +1521,9 @@ if (__authed) {
       projectRoot: root,
       task: stripAnchor(step.text),
       // 交給誰由使用者的預設族系決定；擋同族核准的規則在 buildHandoff 裡。
-      family: (proj.authorAgentFamily as AgentFamilyId) ?? "claude",
+      // 這裡以前有一個 `as AgentFamilyId` —— 那個 cast 把六個沒有 runner 的
+      // 族系硬塞進一個四成員的型別，是 TypeError 的來源。現在型別對得上，不用轉。
+      family: proj.authorAgentFamily ?? "claude",
       authorFamily: proj.authorAgentFamily ?? null,
       anchor: id,
     });

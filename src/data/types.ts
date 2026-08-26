@@ -926,6 +926,26 @@ export const AGENT_FAMILY_LABEL: Record<AgentFamily, string> = {
   other: "其他 Agent",
 };
 
+/**
+ * 聯集的執行期名冊。**刻意從標籤表推導，不另抄一份陣列** ——
+ * 兩份清單遲早會分岔，而分岔的症狀是「某個族系在下拉裡有、驗證時說沒有」。
+ */
+export const AGENT_FAMILIES: readonly AgentFamily[] = Object.keys(
+  AGENT_FAMILY_LABEL,
+) as AgentFamily[];
+
+/**
+ * 這個字串是不是真的族系。
+ *
+ * 需要它的理由是 `agentFamily` / `authorAgentFamily` 的來源包含 localStorage
+ * 與匯入的備份 —— 兩者都可以被手改。族系隔離閘門用 `===` 比字串，所以一個
+ * 沒被擋下的自造值（例如 `"Pi"`，大小寫差一個字）會變成一個獨一無二的「族系」，
+ * 誰都跟它不同族，於是**該擋的核准全部放行**。這是 fail open，且沒有畫面症狀。
+ */
+export function isAgentFamily(v: unknown): v is AgentFamily {
+  return typeof v === "string" && (AGENT_FAMILIES as readonly string[]).includes(v);
+}
+
 export const AGENT_TASK_LABEL: Record<AgentTaskType, string> = {
   edit: "撰寫／編輯",
   approve: "簽核",

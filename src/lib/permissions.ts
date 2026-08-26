@@ -1,5 +1,5 @@
 import type { AccessRole, ActorKind, AgentFamily, Employee, Project } from "../data/types";
-import { ACCESS_ROLE_LABEL } from "../data/types";
+import { ACCESS_ROLE_LABEL, isAgentFamily } from "../data/types";
 
 export type Permission =
   | "read"
@@ -122,10 +122,22 @@ export function validateEmployeeRole(kind: ActorKind, role: AccessRole): string 
   return null;
 }
 
+/**
+ * 收斂族系。**不是聯集成員的一律變 `other`。**
+ *
+ * 舊版是 `family ?? "other"` —— 只補了 null，沒有檢查成員資格。型別上看起來
+ * 安全，但這支的呼叫端吃的是 localStorage 與匯入備份裡的字串（型別在那裡
+ * 是一句宣稱，不是保證）。一個手改出來的 `"Pi"` 會原封不動穿過去變成一個
+ * 只有它自己屬於的族系，而族系隔離閘門用 `===` 比 —— 於是它跟誰都不同族，
+ * **同族不得核准這條規則對它完全失效**，而畫面上什麼都看不出來。
+ *
+ * 收斂成 `other` 的代價是「一群不同的髒值會被判成同族而互相擋掉」——
+ * 那是過度攔截，使用者看得到、講得出來、改得掉。方向選錯的那一邊沒有症狀。
+ */
 export function normalizeAgentFamily(
   kind: ActorKind,
   family: AgentFamily | null | undefined,
 ): AgentFamily | null {
   if (kind !== "agent") return null;
-  return family ?? "other";
+  return isAgentFamily(family) ? family : "other";
 }

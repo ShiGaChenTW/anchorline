@@ -4,6 +4,7 @@ import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL, AGENT_TASK_LABEL } from "../data
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { canManageUsers } from "../lib/permissions";
+import { backendBinding } from "../lib/agent-backend-ui";
 import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 import { attachDiffSummary } from "../lib/diff-summary";
@@ -86,6 +87,18 @@ if (__authed) {
       .map((t) => `<option value="${t}">${AGENT_TASK_LABEL[t]}</option>`)
       .join("");
 
+    // 執行後端。**一律讀 `store.listBackends()`**，不要讀 `settings.backends` ——
+    // 後者刻意不含 default（那一筆是全域設定的投影，不落地），讀錯的症狀是
+    // 下拉裡沒有預設後端，而且只有在使用者想綁它的時候才會發現。
+    const backends = store.listBackends();
+    const binding = backendBinding(agent.backendId, backends, store.resolveBackend(agent.id));
+    const backendOpts = binding.options
+      .map(
+        (o) =>
+          `<option value="${escapeHtml(o.value)}" ${o.selected ? "selected" : ""}>${escapeHtml(o.label)}</option>`,
+      )
+      .join("");
+
     el.innerHTML = `
       <h1>${escapeHtml(agent.name)}</h1>
       <div class="sub">${escapeHtml(agent.title)} · ${ACCESS_ROLE_LABEL[agent.accessRole]} · ${
@@ -118,6 +131,24 @@ if (__authed) {
         <div style="margin-top:10px">
           <button type="button" class="btn btn-primary" id="btn-invoke" ${enabled ? "" : "disabled"}>▶ 呼叫進場</button>
         </div>
+      </div>
+
+      <div class="field-block">
+        <label for="agent-backend">執行後端</label>
+        <select id="agent-backend" ${canEdit ? "" : "disabled"}>${backendOpts}</select>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px">
+          目前實際使用：<strong>${escapeHtml(binding.resolvedLabel)}</strong>
+          ${
+            binding.warning
+              ? `<div style="color:var(--danger,#c0392b);margin-top:4px">⚠️ ${escapeHtml(binding.warning)}</div>`
+              : ""
+          }
+        </div>
+        ${
+          canEdit
+            ? `<span style="font-size:12px;color:var(--muted)">選好立即生效，不必按下面的儲存 —— 這一項不走 Agent 設定那張表單。</span>`
+            : `<span style="font-size:12px;color:var(--muted)">僅管理員可變更執行後端。</span>`
+        }
       </div>
 
       <div class="field-block">
@@ -167,6 +198,15 @@ if (__authed) {
         }
       </div>
     `;
+
+    // 綁定失敗要把 store 給的 reason 原話講出來（例如「找不到後端「x」」）。
+    // 換成「操作失敗」的話，使用者不知道是自己選錯還是後端被別人刪了。
+    document.getElementById("agent-backend")?.addEventListener("change", (ev) => {
+      const v = (ev.target as HTMLSelectElement).value;
+      const r = store.setAgentBackend(agent.id, v || null);
+      toast(r.ok ? (v ? "已改綁執行後端" : "已改回跟隨預設後端") : (r.reason ?? "改綁失敗"));
+      render();
+    });
 
     document.getElementById("btn-toggle-agent")?.addEventListener("click", () => {
       const r = store.setAgentEnabled(agent.id, !enabled);
