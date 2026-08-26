@@ -3,7 +3,8 @@
  * 支援：Gemini API、OpenAI 相容 chat/completions、Anthropic Messages
  */
 import { store } from "../data/store";
-import type { AISettings } from "../data/types";
+import type { AgentBackend, AISettings, ApiBackend } from "../data/types";
+import { backendLabel } from "./agent-backend";
 import { anthropicMessagesUrl, anthropicModelsUrl, geminiBase } from "./api-url";
 
 export type AiReady =
@@ -41,6 +42,16 @@ export type ChatOpts = {
    * Gemini 帶 responseMimeType；Anthropic 無原生 JSON mode，忽略此旗標。
    */
   jsonMode?: boolean;
+  /**
+   * 這一次呼叫走哪個後端。**不給＝沿用全域設定，也就是升級前的唯一行為。**
+   *
+   * 放在 opts 而不是多一個位置參數：`chatCompletionStream` 的 opts 已經在
+   * 第五位，再往後接一個 backend 會讓「只想指定 backend」的呼叫端被迫寫
+   * `undefined, undefined`。放進來則兩支簽名一致，而且六個既有呼叫端一行都不改。
+   *
+   * CLI 後端傳進來會被 `getAiReadiness` 明確拒絕 —— 這個檔只有 HTTP 通路。
+   */
+  backend?: AgentBackend;
 };
 
 function resolveTemp(s: AISettings, opts?: ChatOpts): number {
@@ -87,8 +98,36 @@ function detectProvider(s: AISettings): AiReady["ok"] extends true
   return { ok: true, provider: "custom" };
 }
 
-export function getAiReadiness(): AiReady {
-  const s = settings();
+/**
+ * 這一次呼叫實際要用的設定。
+ *
+ * 不給 `backend` 就是全域設定 —— 升級前唯一存在的行為，也是**大多數呼叫端
+ * 現在的行為**：教練、AI 撰寫、優化、訪談、UAT、儀表板那幾條路一行都沒改，
+ * 它們走的就是這支的 undefined 分支。
+ *
+ * 給了 API 後端就覆寫那六個欄位。用「base 展開再覆寫」而不是憑空造一份：
+ * 後端沒填的 `localModelName` / `temperature` 要落回全域值，否則綁一個只填了
+ * model 的後端會把全域 temperature 靜默重設成 0.7 —— 沒有畫面症狀，只有輸出
+ * 風格突然變了，而沒有人會往「我換了後端」的方向查。
+ *
+ * 這個檔全程只讀這六個欄位，所以覆寫它們就等於整條路換了後端。
+ */
+function settingsFor(backend?: AgentBackend): AISettings {
+  const base = settings();
+  if (!backend || backend.kind !== "api") return base;
+  const b: ApiBackend = backend;
+  return {
+    ...base,
+    provider: b.provider,
+    model: b.model,
+    endpoint: b.endpoint,
+    apiKey: b.apiKey,
+    ...(b.localModelName !== undefined ? { localModelName: b.localModelName } : {}),
+    ...(b.temperature !== undefined ? { temperature: b.temperature } : {}),
+  };
+}
+
+function readinessOf(s: AISettings): AiReady {
   // Ollama：不需付費 Key
   if (s.model === "local-smart" || s.provider === "ollama") {
     const ep = (s.endpoint || "http://localhost:11434/v1").trim();
@@ -100,8 +139,31 @@ export function getAiReadiness(): AiReady {
   return detectProvider(s) as AiReady;
 }
 
-export function isAiConfigured(): boolean {
-  return getAiReadiness().ok;
+/**
+ * 這條路現在跑不跑得動。`backend` 選填，不給＝問全域設定。
+ *
+ * **CLI 後端在這裡一律回 `ok: false`，而且不是因為它壞了。** 這整個檔案是 HTTP
+ * 通路；`agent_cli_run` 跑完一次回整包，沒有 delta，也沒有 provider 層級的 JSON
+ * 模式。所以 CLI 後端遇上 `chatCompletion` / `chatCompletionStream` / `jsonMode`
+ * 的處理一律是**明確拒絕**，不是降級。
+ *
+ * 為什麼不「靜默回退到全域設定」：使用者綁本機 CLI 的理由通常就是 API 額度用完
+ * 或不想燒錢，而回退會安靜地把帳單記回去 —— 這種錯誤沒有畫面症狀，只會在月底出現。
+ *
+ * CLI 真正的執行路徑在 `store.invokeAgent`，走 `native.agentCliRun`。
+ */
+export function getAiReadiness(backend?: AgentBackend): AiReady {
+  if (backend?.kind === "cli") {
+    return {
+      ok: false,
+      reason: `後端「${backendLabel(backend)}」走本機 CLI，不是 HTTP 通路。CLI 後端只能在桌面版 App 的 Agent 進場流程執行；一般的模型呼叫、逐字串流與 JSON 模式都走不了這條路。`,
+    };
+  }
+  return readinessOf(settingsFor(backend));
+}
+
+export function isAiConfigured(backend?: AgentBackend): boolean {
+  return getAiReadiness(backend).ok;
 }
 
 /**
@@ -309,9 +371,10 @@ function parseHttpError(provider: string, status: number, raw: string): string {
 
 /** 系統 + 使用者訊息 → 模型純文字回覆 */
 export async function chatCompletion(system: string, user: string, opts?: ChatOpts): Promise<string> {
-  const ready = getAiReadiness();
+  // 兩行都在 `opts.backend` 不給時退回全域設定 —— 既有呼叫端零改動的來源就是這裡
+  const ready = getAiReadiness(opts?.backend);
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
-  const s = settings();
+  const s = settingsFor(opts?.backend);
   try {
     if (ready.provider === "gemini") return await callGemini(system, user, s, opts);
     if (ready.provider === "anthropic") return await callAnthropic(system, user, s, opts);
@@ -412,9 +475,12 @@ export async function chatCompletionStream(
   signal?: AbortSignal,
   opts?: ChatOpts,
 ): Promise<string> {
-  const ready = getAiReadiness();
+  // CLI 後端會在這裡被擋掉：`agent_cli_run` 跑完一次回整包，**沒有 delta**。
+  // 假裝串流（等它跑完再一次 onDelta 全文）騙得過畫面卻騙不過使用者的判斷 ——
+  // 串流存在的理由是「證明系統在動、方向不對可以提早喊停」，一次吐完兩者都沒有。
+  const ready = getAiReadiness(opts?.backend);
   if (!ready.ok) throw new AiError(ready.reason, "not_configured");
-  const s = settings();
+  const s = settingsFor(opts?.backend);
   try {
     if (ready.provider === "gemini") return await streamGemini(system, user, s, onDelta, signal, opts);
     if (ready.provider === "anthropic")

@@ -597,9 +597,29 @@ export type AIProvider = "auto" | "gemini" | "openai" | "anthropic" | "openroute
  *
  * 這個欄位的值最後會走到原生端的執行路徑，所以它必須是列舉而不是字串 ——
  * 多一個選項就是多一條任意程式碼執行的入口，那個決定要有人簽字。
- * 對應的 Rust 白名單在 W2；兩邊分岔的話前端擋不住的東西後端要擋得住。
+ * 對應的 Rust 白名單是 `exec::AGENT_TOOLS`（鏡像在 `native.ts` 的 `AGENT_CLI_TOOLS`）。
+ * **三份必須逐字相同**：前端多列的那些只會讓使用者選得到、然後被原生端回一句
+ * 「不認識的 agent CLI」—— failed loud，但是在使用者按下去之後才 loud。
+ *
+ * ## 為什麼是四個而不是六個（2026-08-26）
+ *
+ * 拍板當下是六個，W2 逐個實測後砍掉兩個。判準是 canary —— 放一份內容已知的
+ * 檔案，叫模型讀它，**吐得出原值就是沒擋住**：
+ *
+ * - `codex`：`exec --sandbox read-only --ephemeral --ignore-user-config`
+ *   （最嚴格的非互動組合）下仍實際執行 `/bin/zsh -lc "sed -n …"` 並回傳 canary。
+ *   `read-only` 限制的是寫入，不是執行與讀取，而它沒有任何停用工具的旗標。
+ * - `hermes`：`--safe-mode -t ""` 仍讀走 canary。`-t` 是「啟用哪些 toolset」，
+ *   空字串不等於清空。另外它只吃 argv，本來就違反「prompt 走 stdin」的契約。
+ *
+ * 出局的理由是**實測擋不住工具**，不是偏好。要加回來的前提是拿得出新的 canary
+ * 結果，不是換一個看起來更嚴格的旗標名字。完整表格在 `docs/BRIDGE.md` §3.1。
+ *
+ * ⚠️ `AgentFamily` 的 `codex` / `hermes` **不受影響，也不該一起砍**。族系是
+ * 「這個 agent 是哪一家的」，CLI 白名單是「這台機器可以生出哪些子行程」——
+ * 一個 hermes 族系的 agent 綁 API 後端仍然跑得好好的。兩件事共用名字，不共用清單。
  */
-export type AgentCliTool = "claude" | "codex" | "grok" | "pi" | "hermes" | "agy";
+export type AgentCliTool = "claude" | "grok" | "pi" | "agy";
 
 /** 走 HTTP 打模型的後端 —— 就是升級前那唯一一條路，只是現在可以有很多份 */
 export type ApiBackend = {

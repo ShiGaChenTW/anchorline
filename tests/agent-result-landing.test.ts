@@ -30,6 +30,13 @@ const AGENT_OUTPUT = "建議修改\n\n這段文字是 Agent 產出的，沒有�
 mock.module("../src/lib/ai-coach", () => ({
   isAiConfigured: () => true,
   runAgentTask: async () => AGENT_OUTPUT,
+  // W3：`invokeAgent` 的 CLI 分支會叫這支。**五個 mock 這份的回傳值必須逐字相同**
+  // （理由同 AGENT_OUTPUT：登錄表是全域的）。少了它，CLI 那條路會炸在
+  // 「agentTaskPrompt is not a function」，而且只在整批跑時炸。
+  agentTaskPrompt: (opts: { agentName: string; task: string }) => ({
+    system: `SYSTEM<${opts.agentName}>`,
+    user: `USER<${opts.task}>`,
+  }),
 }));
 
 // store 在 import 時就會讀 localStorage —— 先塞一個最小的實作進去

@@ -22,7 +22,7 @@ import { draftRelease, validateVersion, type Release, type ReleaseItem, type Rel
 import { normalizeShortCode } from "../lib/function-wishlist";
 import { canAddItem } from "../lib/release-track";
 import { logEvent } from "../lib/event-writer";
-import { isNative, native } from "../lib/native";
+import { isNative, isUnavailable, native } from "../lib/native";
 import type {
   ActorKind,
   AgentBackend,
@@ -84,6 +84,7 @@ import {
 } from "../lib/ai-writing-config";
 import {
   backendIdError,
+  backendLabel,
   backendUsers,
   DEFAULT_BACKEND_ID,
   isCliTool,
@@ -3859,6 +3860,23 @@ export const store = {
       };
     }
 
+    // 這個 agent 綁哪一條通路。**一律走 `resolveBackend`，不要讀 `state.settings.backends`**
+    // —— 那個陣列刻意不含 default，而「沒設 backendId」正是升級後絕大多數 agent 的狀態，
+    // 直接讀陣列的話它們全部查無此後端。這支永遠給得出答案（查無就回退 default）。
+    const backend = resolveBackend(agent.id, state.employees, state.settings);
+
+    // 瀏覽器沒有 CLI。**這裡回 `ok:false` 而不是開一張注定失敗的工作單**：
+    // 這個判斷跟輸入無關、跟環境有關，跑之前就知道答案，開一張再讓它 failed
+    // 只是在歷史裡留一筆假的嘗試紀錄。
+    //
+    // 訊息要講得出原因與下一步。灰掉或只說「無法執行」的話，使用者會反覆按同一顆按鈕。
+    if (backend.kind === "cli" && !isNative()) {
+      return {
+        ok: false,
+        reason: `此 Agent 綁的是 CLI 後端「${backendLabel(backend)}」，需要桌面版 App 才能執行 —— 瀏覽器沒有本機 CLI 通道。請改用桌面版 App，或把這個 Agent 改綁 API 後端。`,
+      };
+    }
+
     const jobId = `job-${Date.now()}`;
     const job: AgentJob = {
       id: jobId,
@@ -3905,14 +3923,6 @@ export const store = {
 
       mark("running");
       try {
-        const { runAgentTask, isAiConfigured } = await import("../lib/ai-coach");
-        if (!isAiConfigured()) {
-          mark(
-            "failed",
-            "無法進場：尚未設定 API Key。請至偏好設定填入模型與金鑰後重試。",
-          );
-          return;
-        }
         // **這個專案的**正文，不是畫面上正在開著的那一份。
         //
         // 原本讀 `state.sectionValues`（＝ active 專案的投影）。對別的專案下
@@ -3932,7 +3942,7 @@ export const store = {
           })
           .join("\n\n");
 
-        const result = await runAgentTask({
+        const taskInput = {
           agentName: agent.name,
           agentRole: agent.agentRoleBrief || agent.title,
           agentPrompt: agent.agentPrompt || "",
@@ -3940,7 +3950,52 @@ export const store = {
           projectTitle: project.title,
           note: opts.note || "",
           contextSnippet,
-        });
+        };
+
+        // ── CLI 通路 ────────────────────────────────────────────────
+        //
+        // 到得了這裡代表 `isNative()` 為真（瀏覽器在上面就已經回 ok:false 了）。
+        if (backend.kind === "cli") {
+          const { agentTaskPrompt } = await import("../lib/ai-coach");
+          const { system, user } = agentTaskPrompt(taskInput);
+          // CLI 只有一條 stdin，沒有 system／user 兩個角色。分隔線是給模型看的
+          // 排版，不是格式契約 —— 這條路本來就拿不到 provider 層級的 system role。
+          const res = await native.agentCliRun(backend.tool, `${system}\n\n---\n\n${user}`);
+
+          // **「工具沒裝」是狀態，不是例外**（BRIDGE.md §2）。`agentCliRun` 走
+          // `callMaybe`，沒裝時回 `{ unavailable, message }` 而不是 throw。這裡
+          // 刻意不 throw 出去讓下面的 catch 接：catch 會把它包成「進場失敗：<訊息>」
+          // 的通用文案，而使用者需要知道的是**要裝什麼、去哪裡指定路徑**。
+          if (isUnavailable(res)) {
+            mark(
+              "failed",
+              `無法進場：找不到或無法執行 CLI 工具「${backend.tool}」。${res.message}\n請先安裝「${backend.tool}」並確認它在 PATH 上（或到偏好設定指定執行檔路徑），或把這個 Agent 改綁 API 後端。`,
+            );
+            return;
+          }
+          const text = res.text.trim();
+          if (!text) {
+            mark("failed", `進場失敗：CLI 工具「${backend.tool}」執行完成但沒有輸出任何內容。`);
+            return;
+          }
+          // 截斷要當場講。不講的話下游只會看到「內容怪怪的」然後去查模型。
+          mark("done", res.truncated ? `${text}\n\n（輸出超過原生端上限，已截斷）` : text);
+          return;
+        }
+
+        // ── HTTP 通路（升級前唯一的那條）──────────────────────────────
+        const { runAgentTask, isAiConfigured } = await import("../lib/ai-coach");
+        // 問的是**這個後端**設好了沒，不是全域設定 —— agent 綁了一個沒填金鑰的
+        // 後端時，全域那份填得再完整也不該讓它跑起來然後拿 401 回來。
+        if (!isAiConfigured(backend)) {
+          mark(
+            "failed",
+            `無法進場：後端「${backendLabel(backend)}」尚未設定完成（缺模型或 API Key）。請至偏好設定填入後重試。`,
+          );
+          return;
+        }
+
+        const result = await runAgentTask({ ...taskInput, backend });
 
         // **這裡刻意什麼都不改。**
         //

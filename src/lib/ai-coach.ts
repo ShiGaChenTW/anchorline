@@ -3,7 +3,7 @@
  * 禁止再回傳假 2FA demo 文案。
  */
 import { store } from "../data/store";
-import type { AISettings, Section } from "../data/types";
+import type { AgentBackend, AISettings, Section } from "../data/types";
 import { type GateSpec, runSectionCoach } from "./gate-rules";
 import { BASE_GATE_SPEC } from "./prd-gates";
 import {
@@ -357,8 +357,8 @@ export async function polishTextWithAI(
   return await chatCompletion(system, user, { temperature: promptTemperature("polish") });
 }
 
-/** Agent 進場：依 role/prompt 產出結果文字（真實模型） */
-export async function runAgentTask(opts: {
+/** Agent 進場需要的全部輸入。兩條通路（HTTP／CLI）吃的是同一份 */
+export type AgentTaskInput = {
   agentName: string;
   agentRole: string;
   agentPrompt: string;
@@ -366,9 +366,19 @@ export async function runAgentTask(opts: {
   projectTitle: string;
   note: string;
   contextSnippet: string;
-}): Promise<string> {
-  const ready = getAiReadiness();
-  if (!ready.ok) throw new AiError(ready.reason, "not_configured");
+};
+
+/**
+ * Agent 進場的提示詞。**HTTP 後端與 CLI 後端共用這一支。**
+ *
+ * 抽出來的理由不是整潔，是**防分岔**：CLI 那條路如果自己另外拼一份 prompt，
+ * 兩邊會慢慢長歪，而症狀是「同一個 agent 換個後端，講出來的東西不一樣」——
+ * 沒有錯誤訊息，只會被當成模型差異。
+ *
+ * 回 `{ system, user }` 兩段而不是一整串：HTTP 有 system role 可以放，CLI 沒有
+ * （`agent_cli_run` 只有一條 stdin），所以怎麼合併是呼叫端的事。
+ */
+export function agentTaskPrompt(opts: AgentTaskInput): { system: string; user: string } {
   const settings = store.get().settings;
   // 「System prompt:」嵌套會讓模型把 agent 指令當成被引用的資料而非指令；
   // 層級化的 Standing instructions ＋按 task type 的輸出契約，模板在 prompt-registry
@@ -388,8 +398,27 @@ ${opts.contextSnippet.slice(0, 6000) || "（無內文）"}
 
 Deliver the output your task type's contract asks for.`;
 
-  return await chatCompletion(withDomain(system), user, {
+  return { system: withDomain(system), user };
+}
+
+/**
+ * Agent 進場：依 role/prompt 產出結果文字（真實模型）。
+ *
+ * `backend` 選填。不給＝全域設定，也就是這支在 W3 之前的唯一行為。給了就整條路
+ * 換那個後端 —— 但**只吃得下 API 後端**：CLI 後端會在 `getAiReadiness` 被擋下來，
+ * 因為這支終究是 `chatCompletion`，而 CLI 不走 HTTP。CLI 的分派在
+ * `store.invokeAgent`，那裡拿 `agentTaskPrompt()` 自己接 `native.agentCliRun`。
+ */
+export async function runAgentTask(
+  opts: AgentTaskInput & { backend?: AgentBackend },
+): Promise<string> {
+  const ready = getAiReadiness(opts.backend);
+  if (!ready.ok) throw new AiError(ready.reason, "not_configured");
+  const { system, user } = agentTaskPrompt(opts);
+
+  return await chatCompletion(system, user, {
     temperature: promptTemperature("agent-task"),
+    ...(opts.backend ? { backend: opts.backend } : {}),
   });
 }
 

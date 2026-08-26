@@ -28,9 +28,16 @@ export const DEFAULT_BACKEND_ID = "default";
 
 /**
  * CLI 白名單。**加一個就是多一條原生執行路徑**，不是零成本的清單維護。
- * W2 的 Rust 端有另一份；兩邊必須一致，前端擋不住的東西後端要擋得住。
+ *
+ * 這份必須與 Rust 的 `exec::AGENT_TOOLS` 逐字相同。2026-08-26 從六個收到四個：
+ * `codex` 與 `hermes` 實測在最嚴格的非互動旗標下仍讀得到任意檔案（canary 原值
+ * 被吐回來），理由與完整表格見 `AgentCliTool` 的註解與 `docs/BRIDGE.md` §3.1。
+ *
+ * 收窄的副作用是**存檔裡舊的 `codex` / `hermes` CLI 後端會被 `migrateBackends`
+ * 丟掉**，綁著它們的 agent 依 `resolveBackend` 的既有回退規則落回 default。
+ * 這是刻意的：留著一個原生端一定會拒絕的選項，只是把失敗延到使用者按下去之後。
  */
-export const CLI_TOOLS = ["claude", "codex", "grok", "pi", "hermes", "agy"] as const;
+export const CLI_TOOLS = ["claude", "grok", "pi", "agy"] as const;
 
 const PROVIDERS: readonly AIProvider[] = [
   "auto",
@@ -54,10 +61,8 @@ const PROVIDER_LABEL: Record<AIProvider, string> = {
 
 const CLI_LABEL: Record<AgentCliTool, string> = {
   claude: "Claude CLI",
-  codex: "Codex CLI",
   grok: "Grok CLI",
   pi: "Pi CLI",
-  hermes: "Hermes CLI",
   agy: "Agy CLI",
 };
 

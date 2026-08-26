@@ -146,10 +146,10 @@ describe("store.addBackend", () => {
 
 describe("store.updateBackend", () => {
   test("改得動自訂後端", () => {
-    expect(store.updateBackend("abw1-cli", { label: "改過的名字", tool: "codex" }).ok).toBe(true);
+    expect(store.updateBackend("abw1-cli", { label: "改過的名字", tool: "agy" }).ok).toBe(true);
     const b = store.listBackends().find((x) => x.id === "abw1-cli")!;
     expect(b.label).toBe("改過的名字");
-    expect(b.kind === "cli" && b.tool).toBe("codex");
+    expect(b.kind === "cli" && b.tool).toBe("agy");
   });
 
   test("改到不存在的 id 回 ok:false", () => {
@@ -158,7 +158,11 @@ describe("store.updateBackend", () => {
 
   test("非白名單工具改不進去", () => {
     expect(store.updateBackend("abw1-cli", { tool: "bash" as never }).ok).toBe(false);
-    expect((store.listBackends().find((x) => x.id === "abw1-cli") as { tool: string }).tool).toBe("codex");
+    // `codex` / `hermes` 2026-08-26 實測出局，現在跟 `bash` 同一個待遇 ——
+    // 前端擋不住的東西後端要擋得住，而這裡是前端這一關
+    expect(store.updateBackend("abw1-cli", { tool: "codex" as never }).ok).toBe(false);
+    expect(store.updateBackend("abw1-cli", { tool: "hermes" as never }).ok).toBe(false);
+    expect((store.listBackends().find((x) => x.id === "abw1-cli") as { tool: string }).tool).toBe("agy");
   });
 
   /** default 是全域設定的投影 —— 改它就是改全域，不另存一份 */

@@ -151,7 +151,7 @@ describe("migrateBackends —— 手改過的 localStorage 不能讓清單變成
   });
 
   test("重複 id 只留第一筆 —— 兩筆同 id 會讓解析結果取決於陣列順序", () => {
-    const out = migrateBackends([cli("dup", "claude"), cli("dup", "codex")]);
+    const out = migrateBackends([cli("dup", "claude"), cli("dup", "agy")]);
     expect(out.length).toBe(1);
     expect(out[0]!.kind === "cli" && out[0]!.tool).toBe("claude");
   });
@@ -186,9 +186,9 @@ describe("backendLabel", () => {
   });
 
   test("沒填 label 時 CLI 後端顯示工具名，不是空字串", () => {
-    const l = backendLabel(cli("c", "codex"));
+    const l = backendLabel(cli("c", "agy"));
     expect(l.trim().length).toBeGreaterThan(0);
-    expect(l.toLowerCase()).toContain("codex");
+    expect(l.toLowerCase()).toContain("agy");
   });
 
   test("沒填 label 時 API 後端顯示得出模型", () => {
@@ -263,12 +263,12 @@ describe("findBackend", () => {
 });
 
 /**
- * 白名單是 Scott 2026-08-26 拍板的六個。**多一個就是多一條原生執行路徑**，
+ * 白名單 2026-08-26 從六個收成四個。**多一個就是多一條原生執行路徑**，
  * 所以它不該因為某次重構被順手加回去 —— 這幾條把清單本身釘住。
  */
 describe("CLI 白名單", () => {
-  test("就是這六個，不多不少", () => {
-    expect([...CLI_TOOLS]).toEqual(["claude", "codex", "grok", "pi", "hermes", "agy"]);
+  test("就是這四個，不多不少", () => {
+    expect([...CLI_TOOLS]).toEqual(["claude", "grok", "pi", "agy"]);
   });
 
   test("被拿掉的 gemini／opencode 現在會被收斂掉", () => {
@@ -276,6 +276,39 @@ describe("CLI 白名單", () => {
     expect(isCliTool("gemini")).toBe(false);
     expect(isCliTool("opencode")).toBe(false);
     expect(migrateBackends([{ id: "x", kind: "cli", tool: "opencode" }])).toEqual([]);
+  });
+
+  /**
+   * `codex` 與 `hermes` 是**實測**出局的，不是偏好：兩者在最嚴格的非互動旗標下
+   * 仍讀得到任意檔案（canary 原值被吐回來，`docs/BRIDGE.md` §3.1）。
+   *
+   * 這條釘的是「不要因為型別看起來少了兩個就順手補回去」。要加回來的門檻是
+   * 新的 canary 結果，不是一個看起來更嚴格的旗標名字。
+   */
+  test("codex 與 hermes 因為擋不住工具而出局，前端也認不得它們", () => {
+    expect(isCliTool("codex")).toBe(false);
+    expect(isCliTool("hermes")).toBe(false);
+    // 舊存檔裡若留著這兩種後端，收斂時整筆丟掉 —— 綁著它的 agent 依既有回退
+    // 規則落回 default，而不是拿到一個原生端一定會拒絕的 tool。
+    expect(
+      migrateBackends([
+        { id: "old-codex", kind: "cli", tool: "codex" },
+        { id: "old-hermes", kind: "cli", tool: "hermes" },
+        { id: "still-ok", kind: "cli", tool: "claude" },
+      ]).map((b) => b.id),
+    ).toEqual(["still-ok"]);
+  });
+
+  /**
+   * 三份清單必須逐字相同：前端 `CLI_TOOLS`、`native.ts` 的 `AGENT_CLI_TOOLS`
+   * （Rust 鏡像）、以及 Rust 的 `exec::AGENT_TOOLS`（真正的守門）。
+   *
+   * 前端多列一個的症狀是使用者選得到、然後被原生端回「不認識的 agent CLI」——
+   * failed loud，但要等到他按下去才 loud。這條在 tsc 之外再盯一次執行期的值。
+   */
+  test("與 native.ts 的原生白名單逐字相同", async () => {
+    const { AGENT_CLI_TOOLS } = await import("../src/lib/native");
+    expect([...CLI_TOOLS]).toEqual([...AGENT_CLI_TOOLS]);
   });
 
   test("每個工具都有顯示名，沒有一個會顯示成 undefined", () => {
