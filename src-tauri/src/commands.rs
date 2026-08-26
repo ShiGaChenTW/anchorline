@@ -2275,11 +2275,67 @@ pub fn fastfetch(overrides: State<CliOverrides>) -> R<Maybe<RawOut>> {
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentCliOut {
+    pub tool: String,
+    pub text: String,
+    /// 超過 1 MB 被截掉。**被截斷卻不講就是一份看起來完整的殘缺回答。**
+    pub truncated: bool,
+}
+
+/// 把一段文字從 stdin 餵給白名單內、旗標寫死的 agent CLI（`docs/BRIDGE.md` §4.11）。
+///
+/// 前端只能給兩件事：`tool`（列舉）與 `prompt`（走 stdin）。
+/// **旗標、子指令、環境變數全部在 `exec::AGENT_TOOLS` 裡寫死**，前端插不進 argv。
+///
+/// 三種結局分開表達：
+/// - 工具沒裝 → `Maybe::Missing`（§2 最後一條：不是錯誤的缺席不要 reject）
+/// - 名字不在白名單、prompt 空的或過大 → `Err`（那是輸入錯誤，跟 §4.7d 的 hash 同類）
+/// - 逾時／非零離開 → `Err`（那是真的失敗，不是「缺席」）
+#[tauri::command]
+pub fn agent_cli_run(
+    tool: String,
+    prompt: String,
+    overrides: State<CliOverrides>,
+) -> R<Maybe<AgentCliOut>> {
+    let Some(spec) = exec::agent_tool(&tool) else {
+        return Err(format!("不認識的 agent CLI：{tool}"));
+    };
+    if prompt.trim().is_empty() {
+        return Err("prompt 是空的".into());
+    }
+    if prompt.len() > exec::AGENT_MAX_PROMPT {
+        return Err(format!(
+            "prompt 太長（{} bytes，上限 {}）",
+            prompt.len(),
+            exec::AGENT_MAX_PROMPT
+        ));
+    }
+    match exec::agent_cli(spec, &prompt, &overrides) {
+        exec::AgentRun::Ok(o) => Ok(Maybe::Ok(AgentCliOut {
+            tool,
+            text: o.text,
+            truncated: o.truncated,
+        })),
+        exec::AgentRun::NotInstalled(m) => Ok(Maybe::Missing(Unavailable::new(m))),
+        exec::AgentRun::Failed(m) => Err(format!("{tool}：{m}")),
+    }
+}
+
+/// 路徑覆寫與偵測認得的工具。
+///
+/// 前五個是舊有的唯讀工具；後面接上 `exec::AGENT_TOOLS` 的白名單 ——
+/// **兩張表必須同源**，否則使用者指定得了路徑卻跑不動（或反過來）。
+fn cli_path_allowed(tool: &str) -> bool {
+    const LEGACY: &[&str] = &["git", "openspec", "gh", "onefetch", "fastfetch"];
+    LEGACY.contains(&tool) || exec::agent_tool(tool).is_some()
+}
+
 /// 使用者在設定裡指定 CLI 路徑。探測順序的第一步（`docs/BRIDGE.md` §5）。
 #[tauri::command]
 pub fn set_cli_path(tool: String, path: Option<String>, overrides: State<CliOverrides>) -> R<bool> {
-    const ALLOWED: &[&str] = &["git", "openspec", "gh", "onefetch", "fastfetch"];
-    if !ALLOWED.contains(&tool.as_str()) {
+    if !cli_path_allowed(&tool) {
         return Err(format!("不認識的工具：{tool}"));
     }
     let p = path.map(PathBuf::from);
@@ -2296,7 +2352,9 @@ pub fn set_cli_path(tool: String, path: Option<String>, overrides: State<CliOver
 #[tauri::command]
 pub fn probe_clis(overrides: State<CliOverrides>) -> R<serde_json::Value> {
     let mut out = serde_json::Map::new();
-    for t in ["git", "openspec", "gh", "onefetch", "fastfetch"] {
+    let legacy = ["git", "openspec", "gh", "onefetch", "fastfetch"];
+    let agents = exec::AGENT_TOOLS.iter().map(|t| t.id);
+    for t in legacy.into_iter().chain(agents) {
         out.insert(
             t.into(),
             match exec::locate(t, &overrides) {
@@ -2345,6 +2403,7 @@ pub fn ping() -> R<Pong> {
             "fastfetch",
             "setCliPath",
             "probeClis",
+            "agentCliRun",
             "uatHandoffTake",
             "saveUatEvidence",
             "pickUatImages",

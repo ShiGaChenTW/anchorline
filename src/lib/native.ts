@@ -132,6 +132,18 @@ export async function callMaybe<T>(
 // ── 型別化的十五個入口 ────────────────────────────────────────────────
 // 呼叫端只用這些，不直接碰 call()。名字與 BRIDGE.md §4 對齊。
 
+/**
+ * 原生端**真的跑得動**的 agent CLI。
+ *
+ * 這張表是 Rust 白名單（`exec::AGENT_TOOLS`）的鏡像，**不是**前端設定用的
+ * `CLI_TOOLS`（`agent-backend.ts`）。兩者刻意不同：`codex` 與 `hermes` 實測
+ * 在最嚴格的非互動模式下仍讀得到任意檔案，所以進不了原生白名單。
+ * 真正的守門在 Rust —— 這裡列錯只會讓呼叫端拿到一句「不認識的 agent CLI」。
+ */
+export const AGENT_CLI_TOOLS = ["claude", "grok", "pi", "agy"] as const;
+export type AgentCliTool = (typeof AGENT_CLI_TOOLS)[number];
+export type AgentCliRun = { tool: string; text: string; truncated: boolean };
+
 export type ScannedFile = { path: string; name: string; size: number; text: string };
 export type FolderPick = {
   cancelled: boolean;
@@ -340,6 +352,15 @@ export const native = {
   /** 探測順序的第一步：使用者自己指定路徑（BRIDGE.md §5） */
   setCliPath: (tool: string, path: string | null) => call<boolean>("set_cli_path", { tool, path }),
   probeClis: () => call<Record<string, string | null>>("probe_clis"),
+
+  /**
+   * 把一段文字餵給白名單內的 agent CLI（BRIDGE.md §4.11）。
+   *
+   * 能傳的只有 `tool`（列舉）與 `prompt`（走 stdin）——**旗標全部在 Rust 端寫死**。
+   * 工具沒裝回 unavailable，不是錯誤；逾時／執行失敗才 throw。
+   */
+  agentCliRun: (tool: AgentCliTool, prompt: string) =>
+    callMaybe<AgentCliRun>("agent_cli_run", { tool, prompt }),
 
   ping: () => call<{ native: boolean; capabilities: string[] }>("ping"),
 };

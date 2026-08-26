@@ -25,6 +25,7 @@ import { logEvent } from "../lib/event-writer";
 import { isNative, native } from "../lib/native";
 import type {
   ActorKind,
+  AgentBackend,
   AgentFamily,
   AgentJob,
   AgentTaskType,
@@ -81,6 +82,17 @@ import {
   type InheritableField,
   type ResolvedWriting,
 } from "../lib/ai-writing-config";
+import {
+  backendIdError,
+  backendUsers,
+  DEFAULT_BACKEND_ID,
+  isCliTool,
+  listBackends,
+  migrateBackends,
+  resolveBackend,
+  withMigratedBackends,
+  type BackendPatch,
+} from "../lib/agent-backend";
 import { BASE_GATE_SPEC } from "../lib/prd-gates";
 import type { GateSpec } from "../lib/gate-rules";
 import type { ProjectCandidate } from "../lib/folder-import";
@@ -873,7 +885,10 @@ function load(): AppState {
       currentUser,
       session,
       locked: activeCase?.locked ?? parsed.locked ?? false,
-      settings: {
+      // `withMigratedBackends` 收斂後端清單：手改過的 localStorage 會讓一筆
+      // `kind:"cli", tool:"sh"` 直接變成清單裡的合法後端，而那個欄位最後會走到
+      // 原生執行路徑。這裡丟掉認不得的形狀，不修補。
+      settings: withMigratedBackends({
         ...base.settings,
         ...(parsed.settings ?? {}),
         enableLinters: {
@@ -887,7 +902,7 @@ function load(): AppState {
         // 撰寫設定經歷過兩次改版（頂層 → 角色 → 領域），淺合併會留下混種物件。
         // migrateAiWriting 認得三代格式，一律收斂成 byDomain。
         aiWriting: migrateAiWriting((parsed.settings as AISettings | undefined)?.aiWriting),
-      },
+      }),
       showSamples: APP_VARIANT === "prod" ? false : parsed.showSamples !== false,
       // 舊工作單補 `landed`。跑完卻沒有這個欄位的，副作用在升級前就已經由
       // `invokeAgent` 直接寫進文件了 —— 不補的話 Wave 2 的「待確認」清單會把
@@ -3307,13 +3322,14 @@ export const store = {
     const merged = {
       ...base,
       ...newState,
-      // aiWriting 是後加的巢狀物件，淺合併會讓舊存檔拿到 undefined
-      settings: {
+      // aiWriting 是後加的巢狀物件，淺合併會讓舊存檔拿到 undefined。
+      // backends 同理，而且它的來源是可以手改的備份檔 —— 走跟 load() 同一支收斂。
+      settings: withMigratedBackends({
         ...DEFAULT_SETTINGS,
         ...(newState.settings ?? {}),
         // 匯入的備份可能是任何一代格式 —— 走同一條遷移，不要兩條路徑各修各的
         aiWriting: migrateAiWriting(newState.settings?.aiWriting),
-      },
+      }),
       projects: Array.isArray(newState.projects)
         ? newState.projects.map((pr) =>
             migrateProject(pr as unknown as Record<string, unknown>, employees),
@@ -3474,6 +3490,137 @@ export const store = {
     const e = state.employees.find((x) => x.id === id);
     if (!e || e.kind !== "agent") return { ok: false, reason: "不是 Agent" };
     return this.updateEmployee(id, patch);
+  },
+
+  /* ─── Agent 後端清單 ─────────────────────────────────────────
+   *
+   * 純邏輯全部在 `lib/agent-backend.ts`（測得到）；這裡只做三件事：
+   * 讀 state、驗證、寫 state。
+   *
+   * 一條貫穿全部方法的規則：**`default` 不是清單裡的一筆資料，是全域 AI
+   * 設定的投影。** 所以它不可刪、不可改成 CLI，而改它就是改全域設定 ——
+   * 存一份副本的話，使用者在設定頁換金鑰之後 agent 仍然會用舊的那把，
+   * 而畫面上完全看不出來。
+   */
+
+  /** 目前存在的所有後端，`default` 一定在第一筆。UI 一律讀這支，不要直接讀 `settings.backends` */
+  listBackends(): AgentBackend[] {
+    return listBackends(state.settings);
+  },
+
+  /** 某個 agent 實際會用哪個後端。永遠給得出答案（找不到就回 `default`） */
+  resolveBackend(agentId: string): AgentBackend {
+    return resolveBackend(agentId, state.employees, state.settings);
+  },
+
+  addBackend(b: AgentBackend): { ok: boolean; reason?: string } {
+    const idErr = backendIdError(b.id, listBackends(state.settings));
+    if (idErr) return { ok: false, reason: idErr };
+    if (b.kind === "cli" && !isCliTool(b.tool)) {
+      return { ok: false, reason: `不支援的 CLI 工具「${String(b.tool)}」` };
+    }
+    // 走跟 load()／importState() 同一支收斂 —— 新增這條路如果自己驗一套，
+    // 就會出現「加得進去、重新載入之後消失」的資料
+    const clean = migrateBackends([b])[0];
+    if (!clean) return { ok: false, reason: "後端設定不完整或形狀不支援" };
+    state = {
+      ...state,
+      settings: { ...state.settings, backends: [...(state.settings.backends ?? []), clean] },
+    };
+    emit();
+    return { ok: true };
+  },
+
+  updateBackend(id: string, patch: BackendPatch): { ok: boolean; reason?: string } {
+    const want = id.trim();
+    const cliFields = patch.tool !== undefined || patch.pathOverride !== undefined;
+    const apiFields =
+      patch.provider !== undefined ||
+      patch.model !== undefined ||
+      patch.endpoint !== undefined ||
+      patch.apiKey !== undefined ||
+      patch.localModelName !== undefined ||
+      patch.temperature !== undefined;
+
+    if (want === DEFAULT_BACKEND_ID) {
+      if (cliFields) return { ok: false, reason: "預設後端是 API 後端，不能改成 CLI 後端" };
+      if (patch.label !== undefined) {
+        return { ok: false, reason: "預設後端的名稱由全域 AI 設定推導，不可單獨命名" };
+      }
+      // 改預設後端 ＝ 改全域設定。這是「一份真相」的實作，不是捷徑。
+      const s: Partial<AISettings> = {};
+      if (patch.provider !== undefined) s.provider = patch.provider;
+      if (patch.model !== undefined) s.model = patch.model;
+      if (patch.endpoint !== undefined) s.endpoint = patch.endpoint;
+      if (patch.apiKey !== undefined) s.apiKey = patch.apiKey;
+      if (patch.localModelName !== undefined) s.localModelName = patch.localModelName;
+      if (patch.temperature !== undefined) s.temperature = patch.temperature;
+      this.updateSettings(s);
+      return { ok: true };
+    }
+
+    const list = state.settings.backends ?? [];
+    const cur = list.find((b) => b.id === want);
+    if (!cur) return { ok: false, reason: "找不到這個後端" };
+
+    if (cur.kind === "cli") {
+      if (apiFields) return { ok: false, reason: "CLI 後端沒有模型／金鑰這些欄位" };
+      if (patch.tool !== undefined && !isCliTool(patch.tool)) {
+        return { ok: false, reason: `不支援的 CLI 工具「${String(patch.tool)}」` };
+      }
+    } else if (cliFields) {
+      return { ok: false, reason: "API 後端沒有 CLI 工具欄位" };
+    }
+
+    const next = { ...cur, ...patch } as AgentBackend;
+    const clean = migrateBackends([next])[0];
+    if (!clean) return { ok: false, reason: "改完之後的後端形狀不支援" };
+    state = {
+      ...state,
+      settings: { ...state.settings, backends: list.map((b) => (b.id === want ? clean : b)) },
+    };
+    emit();
+    return { ok: true };
+  },
+
+  /**
+   * 刪除仍被 agent 綁著的後端要**擋下來並說出是誰在用**。
+   *
+   * 靜默刪掉的話那些 agent 會留著一個懸空 id；解析雖然會回退到 default
+   * （所以不會爆），但使用者從此看到的是「我明明選了 opencode」而它走的是 API。
+   * 那種不一致沒有錯誤訊息，只有帳單。
+   */
+  removeBackend(id: string): { ok: boolean; reason?: string } {
+    const want = id.trim();
+    if (want === DEFAULT_BACKEND_ID) {
+      return { ok: false, reason: "預設後端不可刪除 —— 它是所有 agent 的回退目標" };
+    }
+    const list = state.settings.backends ?? [];
+    if (!list.some((b) => b.id === want)) return { ok: false, reason: "找不到這個後端" };
+    const users = backendUsers(want, state.employees);
+    if (users.length) {
+      const names = users.map((u) => `「${u.name}」`).join("、");
+      return { ok: false, reason: `${names} 仍在使用這個後端，請先改綁其他後端` };
+    }
+    state = {
+      ...state,
+      settings: { ...state.settings, backends: list.filter((b) => b.id !== want) },
+    };
+    emit();
+    return { ok: true };
+  },
+
+  /** 綁定／解綁。傳 `null` 是解綁，解綁之後回落 `default` */
+  setAgentBackend(agentId: string, backendId: string | null): { ok: boolean; reason?: string } {
+    const e = state.employees.find((x) => x.id === agentId);
+    if (!e || e.kind !== "agent") return { ok: false, reason: "不是 Agent" };
+    const want = (backendId ?? "").trim();
+    if (!want) return this.updateEmployee(agentId, { backendId: undefined });
+    // 不存在就擋 —— 寫進去的懸空 id 之後沒有任何地方會再檢查一次
+    if (!listBackends(state.settings).some((b) => b.id === want)) {
+      return { ok: false, reason: `找不到後端「${want}」` };
+    }
+    return this.updateEmployee(agentId, { backendId: want });
   },
 
   // ── 版本取號 ─────────────────────────────────────────────────

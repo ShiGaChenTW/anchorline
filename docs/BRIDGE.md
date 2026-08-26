@@ -57,8 +57,47 @@ const res = await invoke<TrackingScan>("tracking_scan", { plansDirs });
 | `openspec` | `list --json` · `status --change <name> --json`。**`<name>` 只能來自 `list --json` 自己的輸出**，不經過前端 |
 | `gh` | `search prs --author=@me --state=open --limit 30 --json …`。**永遠不包含** `pr review` / `pr merge` / `pr comment` / 任何寫入 |
 | `onefetch` `fastfetch` | 固定旗標，唯讀 |
+| `claude` | `-p --tools "" --output-format text --strict-mcp-config --no-session-persistence --safe-mode` |
+| `grok` | `--prompt-file /dev/stdin --deny '*' --output-format plain --no-subagents --disable-web-search` |
+| `pi` | `-p --no-tools --no-session --no-extensions --no-skills --no-context-files --mode text` |
+| `agy` | `--output-format text --disable-slash-commands --sandbox` |
 
-前端能決定的只有「工作目錄是哪個專案」。
+前端能決定的只有「工作目錄是哪個專案」，以及（只對後面四個 agent CLI）**從 stdin 餵進去的那段文字**。
+
+#### 四個 agent CLI 的旗標是實測出來的，不是照文件抄的
+
+上面四行每一個旗標組合都在 2026-08-26 實跑驗證過三件事：**非互動單次輸出**、
+**prompt 真的從 stdin 讀得到**、**工具真的被拒**。驗證方法是放一個內容已知的
+canary 檔在工作目錄，要求模型讀它：**吐得出 canary 值就是沒擋住。**
+
+兩個「看起來對但其實是 no-op」的旗標，是這條規矩存在的理由：
+
+| 旗標 | 看起來 | 實際 |
+|---|---|---|
+| `grok --tools ""` | 空白名單＝沒有工具 | **no-op**，照樣讀走 canary |
+| `grok --disallowed-tools 'Bash,Read,…'` | 逐一停用 | **沒擋住**，grok 內建工具名跟 Claude 那套不同，名字對不上等於沒設 |
+
+兩個都**靜默失效**——沒有錯誤訊息、沒有警告，只有一份看起來正常的回答。
+憑印象寫旗標在這裡不是風格問題，是直接把 §3.3 的界線拆掉。
+
+#### 兩個被排除的工具
+
+`codex` 與 `hermes` **不在白名單**，即使前端設定頁列得出它們：
+
+| 工具 | 實測 | 結論 |
+|---|---|---|
+| `codex` | `codex exec --sandbox read-only --ephemeral --ignore-user-config`（最嚴格的非互動組合）下，**實際執行了 `/bin/zsh -lc "sed -n '1,20p' secret.txt"` 並把 canary 原值回傳** | `read-only` 限制的是**寫入**，不是執行與讀取。沒有任何停用工具的旗標 |
+| `hermes` | `--safe-mode -t ""` 下仍然讀走 canary（兩次）。`-t` 是「啟用哪些 toolset」，給空字串不等於清空 | 另外它的 `-z` 只吃 argv，本來就違反 §3.3 的 stdin 契約 |
+
+放行任何一個，等於讓 WebView 拿到一條**任意檔案讀取＋回傳**的通道——
+而 §3.3 把 prompt 擋在 argv 外面所守的就是這件事。工具的缺席可以補；
+一條沉默的外洩通道補不回來。
+
+`agy` 的守門是四個裡面唯一**不在我們手上**的：它靠「headless 模式問不了人
+就自動拒絕」，實測回「a tool required the "command" permission that headless
+mode cannot prompt for, so it was auto-denied」。那是 fail-closed 的**預設值**，
+不是鎖——使用者若在自己的 `settings.json` 加 `permissions.allow` 就會被放行。
+驗證當下該檔不存在。升級 agy 或改它的設定之後要重驗。
 
 ### 3.2 路徑謂詞（兩條，刻意不共用）
 
@@ -99,11 +138,36 @@ canonicalize(path) 仍位於某個「已註冊專案根目錄」之內   ← 擋
 | `gh pr review --approve` / `gh pr merge` / `gh pr comment` | 不可逆的對外動作，與 `git push` 同類 |
 | `git commit` / `git push` / `git reset` | 同上。工具產生指令，人自己執行（見 `src/lib/git-doctor.ts`） |
 | `openspec archive` | 破壞性，會改寫真相來源 |
-| 執行前端傳來的任意 prompt／指令 | 那會讓 WebView 變成任意程式碼執行入口 |
+| **執行前端傳來的任意「指令」** | 那會讓 WebView 變成任意程式碼執行入口 |
+
+#### 那條禁令的界線在哪（2026-08-26 修訂）
+
+這一格原本寫的是「執行前端傳來的任意 **prompt／指令**」。把 prompt 跟指令綁在
+同一條禁令裡，等於連「叫一個 agent CLI 幫我寫一段文字」都做不到——而那正是
+`agentCliRun`（§4.11）要做的事。所以這條**改寫，不是繞過**：
+
+> **禁的是任意「指令」。允許的是「把一段文字從 stdin 餵給白名單內、旗標寫死的 CLI」。**
+
+界線用一句話講完：**前端能決定「說什麼」，永遠不能決定「怎麼跑」。**
+
+| | 前端說得了 | 前端說不了 |
+|---|---|---|
+| `agentCliRun` | `tool`（§3.1 那四個之一，列舉）、prompt 內容（走 **stdin**） | 執行檔、旗標、子指令、環境變數、工作目錄 |
+
+三個條件缺一不可，缺一條這格就退回原本的全面禁止：
+
+1. **prompt 永不進 argv。** 只走 stdin。進了 argv 就等於前端在組指令列，
+   §3.1「參數永遠寫死在原生端」當場失守。（`grok` 沒有 stdin 旗標，
+   只好用 `--prompt-file /dev/stdin`——路徑是常數，prompt 仍然只從管線進去。）
+2. **工具必須是關的。** 這些 CLI 預設讀得到檔、跑得動 bash。旗標選錯，
+   第 1 條守住的東西全白費——prompt 進不了 argv，但模型自己會去跑 shell。
+   哪個旗標真的擋得住，見 §3.1 底下那張實測表。
+3. **白名單是原生端的常數。** 前端設定頁列得出的工具**不等於**跑得動的工具；
+   `codex` / `hermes` 就列得出但進不了白名單。守門在 Rust，不在 UI。
 
 ---
 
-## 4. 十九個 action
+## 4. 二十個 action
 
 ### 4.1 `pickFolder` / `pickProjectFolder`
 
@@ -421,6 +485,45 @@ UAT 截圖的窄通道。圖只准進 `plans/uat-assets/<報告 stem>/`。
 | `openUatEvidence` | `{ reportPath, name }` → 用系統預覽開該檔 |
 
 `name` / `prefix` 在 Rust 驗證。單檔上限 8MB。
+
+### 4.11 `agentCliRun`
+
+```ts
+agentCliRun(tool: AgentCliTool, prompt: string)
+  -> Maybe<{ tool: string; text: string; truncated: boolean }>
+```
+
+把一段文字餵給白名單內、旗標寫死的 agent CLI，拿回它的純文字回覆。
+存在的理由是通路韌性：API 金鑰會沒錢、會過期，CLI 通路吃的是既有訂閱。
+
+| | |
+|---|---|
+| 輸入 | `{ tool, prompt }` — `tool` ∈ `claude` \| `grok` \| `pi` \| `agy`（**列舉**）；`prompt` 走 **stdin** |
+| 成功 | `{ tool, text, truncated }` |
+| 工具沒裝 | `{ unavailable: true, message }`（**不是 reject**，§2 最後一條） |
+| 不認識的 `tool` | reject `"不認識的 agent CLI：<tool>"` |
+| prompt 空的／超過 256 KB | reject（輸入錯誤，與 §4.7d 的 hash 同類） |
+| 逾時、非零離開 | reject 訊息 |
+
+**「沒裝」與「跑壞了」刻意分成兩種形狀。** 前者是狀態，畫面該顯示安裝提示；
+後者是錯誤，畫面該顯示原因。用同一種形狀表達會讓沒裝 CLI 的人看到一句紅字。
+
+三個上限，都是護欄不是效能調校：
+
+| | |
+|---|---|
+| 逾時 | **180 秒，逾時真的 kill 子程序**。現有的 `exec::run()` 是同步 `cmd.output()` 且無逾時——照抄會把 App 凍住整整幾分鐘 |
+| stdout | 1 MB，超出截斷並把 `truncated` 設為 `true` |
+| prompt | 256 KB。它要跨 IPC 再進管線 |
+
+> **逾時要真的 kill。** 實作上不能用 `wait_with_output()`：它會吃掉 `Child`，
+> 吃掉之後就 kill 不動了，逾時也只能乾等到它自己結束。要用 `try_wait()` 輪詢。
+
+> **超過上限之後仍然要繼續把管線抽乾。** 不抽乾的話子程序會卡在 write 上，
+> 症狀會從「輸出被截斷」變成「每次都逾時」——兩者的畫面訊息完全不同，
+> 會把查錯的人帶去錯的方向。
+
+`truncated` 與 §4.7b 同一條規矩：被截斷卻不講，就是一份看起來完整的殘缺回答。
 
 ### 4.10 `ping`
 

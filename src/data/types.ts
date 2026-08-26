@@ -10,8 +10,27 @@ export type AccessRole = "admin" | "approver" | "editor";
 
 export type ActorKind = "human" | "agent";
 
-/** Agent 族系 — 同一 family 撰寫的文件不可再由同 family 核准 */
-export type AgentFamily = "claude" | "codex" | "grok" | "agy" | "gpt" | "gemini" | "local" | "other";
+/**
+ * Agent 族系 — 同一 family 撰寫的文件不可再由同 family 核准。
+ *
+ * **這個聯集缺一個成員的代價不是「顯示成其他」，是誤判。** 族系隔離閘門
+ * （`store.invokeAgent` 的「同一種 Agent 已撰寫此文件」那段）拿
+ * `project.authorAgentFamily === agent.agentFamily` 在比 —— 沒有自己 family 的
+ * agent 全部歸 `other`，於是兩個毫不相干的 agent 會被判成同族而互相擋掉。
+ * 而它是靜默的：使用者只看到「不可再擔任審查」，看不到原因。
+ * 2026-08-26 補 `pi` / `hermes` 就是在補這個洞。
+ */
+export type AgentFamily =
+  | "claude"
+  | "codex"
+  | "grok"
+  | "pi"
+  | "hermes"
+  | "agy"
+  | "gpt"
+  | "gemini"
+  | "local"
+  | "other";
 
 export type AgentTaskType = "edit" | "approve" | "review" | "coach";
 
@@ -573,6 +592,48 @@ export type DomainWriteConfig = {
  */
 export type AIProvider = "auto" | "gemini" | "openai" | "anthropic" | "openrouter" | "ollama" | "custom";
 
+/**
+ * 可以被 CLI 後端叫起來的工具。**這是白名單，不是提示。**
+ *
+ * 這個欄位的值最後會走到原生端的執行路徑，所以它必須是列舉而不是字串 ——
+ * 多一個選項就是多一條任意程式碼執行的入口，那個決定要有人簽字。
+ * 對應的 Rust 白名單在 W2；兩邊分岔的話前端擋不住的東西後端要擋得住。
+ */
+export type AgentCliTool = "claude" | "codex" | "grok" | "pi" | "hermes" | "agy";
+
+/** 走 HTTP 打模型的後端 —— 就是升級前那唯一一條路，只是現在可以有很多份 */
+export type ApiBackend = {
+  id: string;
+  /** 使用者自己取的顯示名。留空時由 `backendLabel()` 推導 */
+  label: string;
+  kind: "api";
+  provider: AIProvider;
+  model: string;
+  endpoint: string;
+  apiKey: string;
+  localModelName?: string;
+  temperature?: number;
+};
+
+/** 走本機 CLI 的後端。瀏覽器沒有這條路（見 plan D4） */
+export type CliBackend = {
+  id: string;
+  label: string;
+  kind: "cli";
+  tool: AgentCliTool;
+  /** 找不到或想指定別的執行檔時用。空 = 交給原生端的 `locate()` */
+  pathOverride?: string;
+};
+
+/**
+ * 一個 agent 可以綁定的呼叫通路。
+ *
+ * 用 discriminated union 而不是「一堆可選欄位」：`kind` 決定哪些欄位有意義，
+ * 攤平成同一層的話「CLI 後端的 apiKey」這種沒有意義的狀態就表達得出來，
+ * 而表達得出來的錯誤狀態遲早會被存進 localStorage。
+ */
+export type AgentBackend = ApiBackend | CliBackend;
+
 export type AISettings = {
   /**
    * 模型名稱自由填。寫死聯集只會在下一次模型改版時過期，
@@ -639,6 +700,17 @@ export type AISettings = {
    * jsonMode 刻意不在這裡：回傳格式接的是解析器，不是偏好。
    */
   promptOverrides?: Record<string, { system?: string; temperature?: number }>;
+  /**
+   * 使用者**自己新增**的後端清單。
+   *
+   * 刻意不含 `id: "default"` 那一筆 —— 預設後端永遠從上面那份全域
+   * `model / provider / apiKey / endpoint` 即時推導（見 `lib/agent-backend.ts`
+   * 的 `defaultBackendOf`）。存下來就會有兩份真相，而使用者在設定頁改金鑰時
+   * 只會改到其中一份，症狀是改完仍然 401 —— 畫面上看不出任何異常。
+   *
+   * 舊設定沒有這個欄位，讀進來是 undefined，行為與從前完全相同。
+   */
+  backends?: AgentBackend[];
 };
 
 export type Employee = {
@@ -664,6 +736,14 @@ export type Employee = {
   agentRoleBrief?: string;
   /** Agent：執行中開關（可被呼叫進場） */
   agentEnabled?: boolean;
+  /**
+   * Agent：綁定的後端 id。
+   *
+   * 未設、或指到一個已經不存在的 id，一律解析到 `default`（見
+   * `lib/agent-backend.ts` 的 `resolveBackend`）。升級當下所有既有 agent
+   * 都是「未設」，回退這條路徑就是他們唯一能跑的理由。
+   */
+  backendId?: string;
 };
 
 export type Session = {
@@ -817,6 +897,8 @@ export const AGENT_FAMILY_LABEL: Record<AgentFamily, string> = {
   claude: "Claude Code",
   codex: "Codex",
   grok: "Grok",
+  pi: "Pi",
+  hermes: "Hermes",
   agy: "Agy",
   gpt: "GPT 系",
   gemini: "Gemini 系",

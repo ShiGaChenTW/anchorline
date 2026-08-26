@@ -297,6 +297,420 @@ pub fn strip_ansi(s: &str) -> String {
     }
 }
 
+// ── agent CLI ───────────────────────────────────────────────────────
+//
+// 這一段是 `docs/BRIDGE.md` §3.3 新契約的實作：**禁的是任意「指令」，
+// 允許的是「把一段文字從 stdin 餵給白名單內、旗標寫死的 CLI」。**
+//
+// 前端能決定的只有兩件事：`tool`（下面這張表的 id，列舉）與 prompt 內容。
+// 旗標、子指令、環境變數全部是這裡的常數 —— 前端一個字都插不進 argv。
+//
+// **每個工具的旗標都是實測出來的，不是照文件抄的。** 兩個實測踩到的坑：
+//   - grok 的 `--tools ""` 看起來像「空白名單」，實際上是 no-op：帶著它
+//     問「讀 secret.txt」照樣把檔案內容吐回來。真正擋得住的是 `--deny '*'`。
+//   - `--disallowed-tools 'Bash,Read,…'` 同樣沒擋住 —— grok 的內建工具名
+//     跟 Claude 那套不一樣，名字對不上就等於沒設。
+// 這就是「不准憑印象寫旗標」的理由：兩個都是**靜默失效**，沒有錯誤訊息。
+
+/// 逾時。LLM CLI 動輒數十秒，但**沒有上限就是把 App 凍住**。
+pub const AGENT_TIMEOUT_SECS: u64 = 180;
+/// stdout 上限。超出截斷並標示 —— 靜靜給一份短少的輸出比報錯更糟。
+pub const AGENT_MAX_STDOUT: usize = 1024 * 1024;
+/// prompt 上限。它要跨 IPC 再進管線，無上限等於一個呼叫就能吃掉記憶體。
+pub const AGENT_MAX_PROMPT: usize = 256 * 1024;
+
+/// 白名單裡的一個 agent CLI。**`args` / `envs` 是常數，前端碰不到。**
+pub struct AgentTool {
+    pub id: &'static str,
+    pub bin: &'static str,
+    pub args: &'static [&'static str],
+    pub envs: &'static [(&'static str, &'static str)],
+    /// 沒裝時給使用者看的安裝提示（走 unavailable，不是錯誤）。
+    pub install: &'static str,
+    /// 這個工具「工具被禁掉」靠的是哪個旗標。**只有測試在讀它**，
+    /// 而那正是重點：它存在是為了讓「順手刪掉一個旗標」變成紅燈。
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub lockdown: &'static str,
+}
+
+/// 白名單。**四個，不是六個。**
+///
+/// `codex` 與 `hermes` 實測後排除，理由見 `docs/BRIDGE.md` §3.1 底下那段：
+/// 兩者在各自最嚴格的非互動模式下**仍然讀得到任意檔案並把內容回傳**，
+/// 那等於給 WebView 開一條檔案外洩通道，D1 把 prompt 擋在 argv 外就白守了。
+pub const AGENT_TOOLS: &[AgentTool] = &[
+    // `--tools ""` 是官方文件寫明的「停用全部工具」。實測：要求它跑
+    // `touch pwned.txt` 時它「宣稱」跑了並印出假的 ls 輸出，但檔案根本
+    // 沒被建立 —— 模型在幻覺，工具層沒有執行。這是它該有的樣子。
+    // `--safe-mode` 再把 CLAUDE.md／skills／hooks／MCP 全關掉（auth 不受影響）。
+    AgentTool {
+        id: "claude",
+        bin: "claude",
+        args: &[
+            "-p",
+            "--tools",
+            "",
+            "--output-format",
+            "text",
+            "--strict-mcp-config",
+            "--no-session-persistence",
+            "--safe-mode",
+        ],
+        envs: &[],
+        install: "找不到 claude。安裝見 claude.ai/code，或在設定裡指定路徑。",
+        lockdown: "--tools",
+    },
+    // grok 沒有「從 stdin 讀 prompt」的旗標，`-p/--single` 要把 prompt 放進
+    // argv —— 那違反 D1。`--prompt-file /dev/stdin` 是唯一走得通的路：
+    // 路徑本身是常數，prompt 仍然只從管線進去。
+    // 擋工具的是 `--deny '*'`（實測會回「Every tool call in this session is
+    // blocked by a deny rule that matches all tools」）。
+    AgentTool {
+        id: "grok",
+        bin: "grok",
+        args: &[
+            "--prompt-file",
+            "/dev/stdin",
+            "--deny",
+            "*",
+            "--output-format",
+            "plain",
+            "--no-subagents",
+            "--disable-web-search",
+        ],
+        envs: &[],
+        install: "找不到 grok。安裝見 grok CLI 官方說明，或在設定裡指定路徑。",
+        lockdown: "--deny",
+    },
+    // `--no-tools` 是六個裡語意最乾淨的一個：實測它直接回
+    // 「I don't have any file-reading tools available right now」。
+    AgentTool {
+        id: "pi",
+        bin: "pi",
+        args: &[
+            "-p",
+            "--no-tools",
+            "--no-session",
+            "--no-extensions",
+            "--no-skills",
+            "--no-context-files",
+            "--mode",
+            "text",
+        ],
+        envs: &[],
+        install: "找不到 pi。安裝：npm i -g @earendil-works/pi-coding-agent，或在設定裡指定路徑。",
+        lockdown: "--no-tools",
+    },
+    // agy 沒有「停用工具」的旗標，靠的是**headless 模式問不了人就自動拒絕**：
+    // 實測回「a tool required the "command" permission that headless mode
+    // cannot prompt for, so it was auto-denied」。這是 fail-closed 的預設值，
+    // 但它是**預設值不是鎖**：使用者若在 settings.json 加 permissions.allow
+    // 就會被放行。四個裡面只有這個的守門不在我們手上，BRIDGE.md §3.1 有記。
+    // 注意 `--print` 是吃值的旗標，帶了它 prompt 就進 argv；不帶才走 stdin。
+    AgentTool {
+        id: "agy",
+        bin: "agy",
+        args: &[
+            "--output-format",
+            "text",
+            "--disable-slash-commands",
+            "--sandbox",
+        ],
+        envs: &[],
+        install: "找不到 agy。安裝見 agy CLI 官方說明，或在設定裡指定路徑。",
+        lockdown: "--sandbox",
+    },
+];
+
+pub fn agent_tool(id: &str) -> Option<&'static AgentTool> {
+    AGENT_TOOLS.iter().find(|t| t.id == id)
+}
+
+pub struct AgentOut {
+    pub text: String,
+    pub truncated: bool,
+}
+
+/// 三種結局刻意分開：**沒裝**是狀態（走 unavailable），逾時與非零離開才是錯誤。
+pub enum AgentRun {
+    Ok(AgentOut),
+    NotInstalled(String),
+    Failed(String),
+}
+
+/// 把讀到的 bytes 收在 UTF-8 字元邊界上。切一半會讓序列化壞掉（§4.7b 同一條）。
+fn utf8_trim(b: &[u8]) -> String {
+    let mut end = b.len();
+    // 一個 UTF-8 字元最多 4 bytes，所以最多往回退 3 個
+    for _ in 0..4 {
+        if std::str::from_utf8(&b[..end]).is_ok() {
+            break;
+        }
+        if end == 0 {
+            break;
+        }
+        end -= 1;
+    }
+    String::from_utf8_lossy(&b[..end]).into_owned()
+}
+
+/// 讀到上限為止，**但超過上限之後仍然要繼續把管線抽乾**。
+///
+/// 不抽乾的話子程序會卡在 write 上，症狀會變成「每次都逾時」而不是
+/// 「輸出被截斷」—— 兩者的畫面訊息完全不同，會把人帶去查錯方向。
+fn read_capped<R: std::io::Read>(mut r: R, max: usize) -> (Vec<u8>, bool) {
+    let mut buf: Vec<u8> = Vec::new();
+    let mut chunk = [0u8; 8192];
+    let mut truncated = false;
+    loop {
+        match r.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                if buf.len() < max {
+                    let take = (max - buf.len()).min(n);
+                    buf.extend_from_slice(&chunk[..take]);
+                    if take < n {
+                        truncated = true;
+                    }
+                } else {
+                    truncated = true;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+    (buf, truncated)
+}
+
+/// 餵 stdin、限時、限量地跑一個外部程式。
+///
+/// 現有的 `run()` 是同步 `cmd.output()` 而且沒有逾時 —— 對 git 夠用，
+/// 對動輒數分鐘的 LLM CLI 會把整個 App 凍住。這個函式是給後者的。
+///
+/// **三件事都必須在不同執行緒上做**：寫 stdin、讀 stdout、讀 stderr。
+/// 在同一條執行緒上依序做會死鎖 —— 子程序要等我們讀走 stdout 才會繼續
+/// 讀 stdin，而我們在等它收完 stdin 才去讀 stdout。
+///
+/// 逾時用 `try_wait()` 輪詢而不是 `wait_with_output()`：後者會吃掉 `Child`，
+/// 吃掉之後就 **kill 不動了**，逾時也只能乾等。
+pub fn run_stdin(
+    bin: &Path,
+    args: &[&str],
+    envs: &[(&str, &str)],
+    stdin_text: &str,
+    timeout: std::time::Duration,
+    max_bytes: usize,
+) -> Result<AgentOut, String> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let mut cmd = Command::new(bin);
+    cmd.args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (k, v) in envs {
+        cmd.env(k, v);
+    }
+
+    let mut child = cmd.spawn().map_err(|e| format!("啟動失敗：{e}"))?;
+
+    if let Some(mut si) = child.stdin.take() {
+        let data = stdin_text.as_bytes().to_vec();
+        std::thread::spawn(move || {
+            let _ = si.write_all(&data);
+            // drop 關掉管線就是送 EOF。少了它，CLI 會一直等更多輸入，
+            // 而我們只會看到「逾時」——完全看不出真正的原因。
+        });
+    }
+
+    let out_h = child
+        .stdout
+        .take()
+        .map(|so| std::thread::spawn(move || read_capped(so, max_bytes)));
+    let err_h = child
+        .stderr
+        .take()
+        .map(|se| std::thread::spawn(move || read_capped(se, 64 * 1024)));
+
+    let start = std::time::Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(s)) => break Some(s),
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    // 一定要 wait 收屍，否則留下 zombie
+                    let _ = child.wait();
+                    break None;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+            Err(e) => return Err(format!("等待子程序失敗：{e}")),
+        }
+    };
+
+    let (obuf, otrunc) = out_h
+        .and_then(|h| h.join().ok())
+        .unwrap_or((Vec::new(), false));
+    let (ebuf, _) = err_h
+        .and_then(|h| h.join().ok())
+        .unwrap_or((Vec::new(), false));
+
+    let Some(status) = status else {
+        return Err(format!("超過 {} 秒沒有結果，已中止。", timeout.as_secs()));
+    };
+    if !status.success() {
+        let se = utf8_trim(&ebuf);
+        let tail = se.trim();
+        let tail = if tail.is_empty() {
+            String::new()
+        } else {
+            format!("：{}", tail.chars().take(400).collect::<String>())
+        };
+        return Err(format!("執行失敗（exit {:?}）{tail}", status.code()));
+    }
+    Ok(AgentOut {
+        text: utf8_trim(&obuf),
+        truncated: otrunc,
+    })
+}
+
+/// 白名單內的一個 agent CLI，prompt 走 stdin。見 `docs/BRIDGE.md` §4.11。
+pub fn agent_cli(spec: &AgentTool, prompt: &str, overrides: &CliOverrides) -> AgentRun {
+    let Some(bin) = locate(spec.bin, overrides) else {
+        return AgentRun::NotInstalled(spec.install.to_string());
+    };
+    match run_stdin(
+        &bin,
+        spec.args,
+        spec.envs,
+        prompt,
+        std::time::Duration::from_secs(AGENT_TIMEOUT_SECS),
+        AGENT_MAX_STDOUT,
+    ) {
+        Ok(o) => AgentRun::Ok(o),
+        Err(e) => AgentRun::Failed(e),
+    }
+}
+
+#[cfg(test)]
+mod agent_tests {
+    use super::*;
+    use std::time::Duration;
+
+    /// 白名單就是白名單。認不得的名字**不可以**回一個能跑的東西。
+    #[test]
+    fn agent_whitelist_rejects_unknown() {
+        assert!(agent_tool("claude").is_some());
+        assert!(agent_tool("definitely-not-a-tool").is_none());
+        // 實測排除的兩個，不准偷偷回來
+        assert!(
+            agent_tool("codex").is_none(),
+            "codex 實測會執行 shell 並讀走任意檔案，不能進白名單"
+        );
+        assert!(
+            agent_tool("hermes").is_none(),
+            "hermes 實測 --safe-mode -t \"\" 仍然讀得到任意檔案"
+        );
+    }
+
+    /// 每個工具都必須帶著它那個**實測驗證過**的禁工具旗標。
+    ///
+    /// 這條守的是「有人覺得參數太長順手刪一個」。刪掉之後不會有任何錯誤，
+    /// 只會安靜地讓 WebView 多一條任意檔案讀取路徑。
+    #[test]
+    fn every_agent_tool_keeps_its_lockdown_flag() {
+        for t in AGENT_TOOLS {
+            assert!(
+                t.args.contains(&t.lockdown),
+                "{} 少了禁工具旗標 {}",
+                t.id,
+                t.lockdown
+            );
+        }
+    }
+
+    /// prompt 永遠不進 argv（D1）。argv 裡不該出現任何看起來像句子的東西。
+    #[test]
+    fn agent_args_are_constants_not_prompts() {
+        for t in AGENT_TOOLS {
+            for a in t.args {
+                assert!(
+                    a.len() < 32,
+                    "{} 的 argv 出現了過長的字串 {a:?} —— prompt 應該只走 stdin",
+                    t.id
+                );
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_stdin_feeds_the_child() {
+        let out = run_stdin(
+            Path::new("/bin/sh"),
+            &["-c", "cat"],
+            &[],
+            "hello-from-stdin",
+            Duration::from_secs(10),
+            1024,
+        )
+        .expect("cat 應該成功");
+        assert_eq!(out.text, "hello-from-stdin");
+        assert!(!out.truncated);
+    }
+
+    /// 逾時要**真的把子程序殺掉**，而且要真的在時限附近回來。
+    /// 只回一個錯誤但讓 sleep 30 跑完，等於沒有逾時。
+    #[cfg(unix)]
+    #[test]
+    fn run_stdin_kills_on_timeout() {
+        let start = std::time::Instant::now();
+        let r = run_stdin(
+            Path::new("/bin/sh"),
+            &["-c", "sleep 30"],
+            &[],
+            "",
+            Duration::from_millis(300),
+            1024,
+        );
+        let took = start.elapsed();
+        assert!(r.is_err(), "逾時應該回 Err");
+        assert!(
+            took < Duration::from_secs(10),
+            "逾時沒有真的 kill，等了 {took:?}"
+        );
+    }
+
+    /// 超過上限要截斷**並且標示**。而且要能正常結束 ——
+    /// 截斷之後不繼續抽乾管線的話，這條測試會變成逾時而不是截斷。
+    #[cfg(unix)]
+    #[test]
+    fn run_stdin_truncates_and_flags() {
+        let out = run_stdin(
+            Path::new("/bin/sh"),
+            &["-c", "yes abcdefghij | head -n 5000"],
+            &[],
+            "",
+            Duration::from_secs(20),
+            100,
+        )
+        .expect("應該成功而不是逾時");
+        assert_eq!(out.text.len(), 100, "沒有截到上限");
+        assert!(out.truncated, "截斷了卻沒有標示");
+    }
+
+    /// 截斷點落在 UTF-8 邊界上，不會切出半個字。
+    #[test]
+    fn utf8_trim_lands_on_char_boundary() {
+        let s = "中文字";
+        // 「中」是 3 bytes，砍在第 4 個 byte 等於切開「文」
+        assert_eq!(utf8_trim(&s.as_bytes()[..4]), "中");
+        assert_eq!(utf8_trim(s.as_bytes()), "中文字");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     /// `openspec init` 沒有 `--tools` 就是互動式的，而 GUI 起的行程沒有 TTY：

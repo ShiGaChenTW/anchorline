@@ -97,6 +97,7 @@ pub fn run() {
             commands::fastfetch,
             commands::set_cli_path,
             commands::probe_clis,
+            commands::agent_cli_run,
             commands::ping,
         ])
         .run(tauri::generate_context!())
