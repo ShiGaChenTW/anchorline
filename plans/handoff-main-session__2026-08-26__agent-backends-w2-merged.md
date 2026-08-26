@@ -1,21 +1,26 @@
-# Handoff — Agent 後端可管理化（W1+W2+W3 完成，剩 W4）
+# Handoff — Agent 後端可管理化（W1–W4 全部完成；W4 未 merge，等拍板）
 
-- 更新：2026-08-26 15:35
-- `main` 在 **`ab2dd2d`**，**未 push**（領先 `origin/main` **8** 個 commit）
-  - 2026-08-26 更正：原本寫 `384cb23` / 792，兩個都錯。`384cb23` 之後還有一個 handoff commit；
-    792 是某次過期 `origin` ref 算出來的，`git rev-list --count origin/main..main` 實測是 8
+- 更新：2026-08-26（W4 收貨後）
+- `main` 在 **`c3040f6`**，**未 push**（領先 `origin/main` **9** 個 commit）
+  - ⚠️ 這個數字每次有人 commit 就會過期，**冷啟動請自己跑一次**：
+    `git rev-parse --short main && git rev-list --count origin/main..main`。
+    這份文件的舊版寫 `384cb23` / 792（兩個都錯），已經害一個 session 照著去重派已完成的 W1/W2
 - 規格與收貨紀錄（先讀這份）：`plans/Project_Anchorline__2026-08-26-1323__agent-backends.md`
 
 ## 一句話
 
 **簽核呼叫 agent 原本只有一條全域 HTTP 通路，沒 API Key 就整個功能停擺。
 現在資料層（W1）、CLI 原生橋（W2）、接線（W3）全部完成並驗過，在 main 上。
-剩 W4 的 UI —— 在那之前使用者看不到這批的任何能力。**
+W4 的 UI 也完成並驗過了，但**還在 worktree 裡沒 merge** —— 在它進 main 之前，
+使用者仍然看不到這批的任何能力。**
 
 ## 冷啟動第一件事
 
-工作樹乾淨、沒有 agent 在跑。**唯一未提交的是 `plans/uat-簽核流程重新設計-wave-2-實測.md`，
-那是另一個 session 在改的，不要碰、不要 commit。**
+先跑 `git status`。工作樹在 `c3040f6` 當下是乾淨的，但這份文件本身可能是未提交的改動。
+
+⚠️ **`plans/uat-簽核流程重新設計-wave-2-實測.md` 的時間戳差異不是有人在編輯** ——
+那是 Anchorline App 開啟該報告時自己寫回去的。2026-08-26 曾被誤判成「有第三個 session 在改」，
+白追了一條線頭。
 
 三份 agent 報告在 `plans/agent-backends-w{1,2,3}-report.md`，收貨紀錄在規格檔裡。
 
@@ -67,10 +72,41 @@ cargo check         乾淨
 cargo test          68 passed / 0 failed
 ```
 
+## W4 已完成，在 worktree 裡等拍板（2026-08-26）
+
+實作＋測試都完成且驗過，**但沒有 merge 進 main**，在
+`.claude/worktrees/agent-ae491953ea5b09c3e`（branch `worktree-agent-ae491953ea5b09c3e`）。
+
+主 session 自己跑的數字：`bunx tsc --noEmit` exit 0、`bun test` **1959 pass / 0 fail / 96 files**
+（基線 1907/93 → +52 測試、+3 檔）。收貨報告在該 worktree 的 `plans/agent-backends-w4-report.md`。
+
+內容：設定頁「🔌 Agent 執行後端」CRUD、agents 頁後端下拉（含「目前實際使用」與失效綁定警告）、
+`RUNNER` 總函式化、`normalizeAgentFamily` 收斂、新檔 `src/lib/agent-backend-ui.ts`（顯示邏輯純函式化，
+所以金鑰有沒有漏到畫面上測得到）。
+
+⚠️ **開新 worktree 前先確認起點。** 這次 Engineer 進去時 branch 停在 `7603b70`，
+W1/W2/W3 全不在裡面（`src/lib/agent-backend.ts` 根本不存在），它自己 `git merge --ff-only main`
+才開工。沒發現的話會在一個沒有資料層的樹上重寫一份資料層。
+
+### 三個等 Scott 拍板的決定
+
+1. **worktree 要不要 merge 回 main**
+2. **匯出洩漏 API 金鑰要不要修** —— 見下方「舊帳」，這是產品決定不是實作決定
+3. **`main` 那 9 個 commit 要不要 push**
+
+### 🔴 匯出洩漏 API 金鑰（舊帳，非 W4 造成，主 session 逐字驗過）
+
+`src/lib/export.ts:148` 的 `exportJsonFile()` 把整個 `state` 直接 `JSON.stringify`，
+**全檔零 redaction**（`grep 'apiKey\|redact'` 零命中）。所以 `settings.apiKey`
+一直都進備份檔。W1 的影響是**從一把變成 N 把** —— `settings.backends[].apiKey` 也一起進去。
+event JSONL 是乾淨的。
+
+沒有自己動手是刻意的：拿掉金鑰會改變備份的 round-trip 語義（匯入回來的檔案不再能還原成可用狀態）。
+兩個選項寫在 W4 報告裡。
+
 ## 還沒收的線頭
 
-- **W4 UI 完全沒做 —— 這是下一步**：設定頁兩張清單的 CRUD、agents 頁的後端下拉、
-  金鑰不得進匯出/log。⚠️ **W4 必須讀 `store.listBackends()`，不是 `settings.backends`**（default 是投影）
+- ~~W4 UI 完全沒做~~ —— **已完成，見上方「W4 已完成，在 worktree 裡等拍板」**。未 merge
 - **CLI 通路從未實機驗過**：真的 spawn `claude`/`grok`/`pi`/`agy` 在 `bun test` 裡驗不到，
   要桌面版 App 的 UAT。這是這整批最大的未驗區
 - **兩份 CLI 清單已對齊（前端四個＝Rust 四個）**，但第三份還在： **`src/lib/agent-handoff.ts:70` 的 `RUNNER`**
