@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpenSpec 工作台 · Wishlist / Changes / Specs 分頁</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+    --inset: #21262d;
+    --accent: #2f81f7;
+    --accent-on: #ffffff;
+    --accent-soft: rgba(56, 139, 253, 0.15);
+    --success: #3fb950;
+    --warn: #d29922;
+    --danger: #f85149;
+    --done: #a371f7;
+    --shell: #010409;
+    --font: "Geist", -apple-system, "Segoe UI", "Noto Sans TC", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--shell); color: var(--fg); font-family: var(--font); }
+  body { padding: 2rem 2.25rem 4.5rem; }
+  .wrap { max-width: 1320px; }
+  .kicker {
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); font-weight: 500; margin: 0 0 10px;
+  }
+  h1 {
+    font-size: clamp(1.7rem, 3vw, 2.45rem); letter-spacing: -0.04em;
+    line-height: 1.08; font-weight: 600; margin: 0 0 12px; max-width: 22ch;
+  }
+  .lede {
+    font-size: 16px; line-height: 1.55; color: var(--muted); max-width: 68ch; margin: 0 0 1.75rem;
+  }
+  .lede strong { color: var(--fg); font-weight: 550; }
+
+  .verdict {
+    display: grid; grid-template-columns: auto 1fr; gap: 16px 20px;
+    padding: 16px 18px; margin: 0 0 2.75rem;
+    border: 1px solid color-mix(in oklab, var(--success) 35%, var(--border));
+    background: color-mix(in oklab, var(--success) 7%, var(--surface));
+    border-radius: 12px; max-width: 920px;
+  }
+  .verdict .mark {
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--success); font-weight: 600; padding-top: 3px;
+  }
+  .verdict h2 { margin: 0 0 6px; font-size: 18px; letter-spacing: -0.02em; }
+  .verdict p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
+  .verdict p b { color: var(--fg); font-weight: 550; }
+
+  .app {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+    box-shadow: 0 22px 50px -24px rgba(1,4,9,.75);
+  }
+  .toolbar { padding: 12px 16px 0; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .ctx { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .ctx .k { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .ctx h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .ctx .sub { font-size: 12px; color: var(--muted); }
+  .tabs { display: flex; gap: 2px; }
+  .tab {
+    border: 1px solid transparent; border-bottom: 0; background: transparent;
+    color: var(--muted); font: 600 13px/1 var(--font); padding: 9px 14px 10px;
+    border-radius: 8px 8px 0 0; cursor: pointer;
+  }
+  .tab[aria-selected="true"] {
+    background: var(--bg); color: var(--fg); border-color: var(--border);
+  }
+  .tab .b {
+    display: inline-block; margin-left: 8px; font-family: var(--mono); font-size: 10px; font-weight: 500;
+    background: var(--inset); color: var(--muted); padding: 1px 6px; border-radius: 99px; vertical-align: 1px;
+  }
+  .tab[aria-selected="true"] .b { background: var(--accent-soft); color: var(--accent); }
+  .tab.warn .b { background: rgba(210,153,34,.18); color: var(--warn); }
+
+  .stage { display: none; min-height: 520px; }
+  .stage.on { display: grid; }
+  .stage-w { grid-template-columns: 320px 1fr; }
+  .stage-c { grid-template-columns: 300px 1fr 240px; }
+  .stage-s { grid-template-columns: 280px 1fr 240px; }
+  .pane { min-height: 0; overflow: auto; border-right: 1px solid var(--border); }
+  .pane:last-child { border-right: 0; }
+  .pane-h {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted);
+  }
+  .pane-h strong { color: var(--fg); font-size: 13px; font-weight: 600; }
+
+  .btn {
+    border: 1px solid var(--border); background: var(--inset); color: var(--fg);
+    font: 500 12px/1 var(--font); padding: 5px 10px; border-radius: 6px;
+  }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
+  .btn-ghost { background: transparent; color: var(--muted); }
+  .btn-sm { padding: 4px 8px; font-size: 11px; }
+  .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .wish-tools { padding: 10px 12px; display: flex; gap: 6px; border-bottom: 1px solid var(--border); }
+  .empty { margin: 0; padding: 16px 12px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  .compose { padding: 16px 18px; }
+  .compose label { display: block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .compose select, .compose textarea {
+    width: 100%; background: var(--inset); border: 1px solid var(--border); color: var(--fg);
+    border-radius: 6px; font: 13px/1.45 var(--font); padding: 8px 10px; margin-bottom: 12px;
+  }
+  .compose textarea { min-height: 140px; resize: vertical; }
+
+  .now {
+    margin: 8px; padding: 10px 11px; border-radius: 10px;
+    border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--border));
+    background: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  }
+  .now .k { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 0 0 4px; }
+  .now .t { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+  .now .w { margin: 0 0 8px; font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+  .group {
+    display: flex; justify-content: space-between; padding: 8px 12px 4px;
+    font-size: 12px; color: var(--accent); font-weight: 500;
+  }
+  .group span { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--inset); padding: 1px 6px; border-radius: 99px; }
+  .q-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 2px 8px;
+    padding: 8px 10px; margin: 0 6px 3px; border-radius: 8px;
+  }
+  .q-row.on { background: var(--accent-soft); }
+  .q-name { font-size: 12.5px; font-weight: 500; }
+  .q-prog { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .q-why { grid-column: 1 / -1; font-size: 11px; color: var(--muted); }
+  .q-act { grid-column: 1 / -1; display: flex; gap: 6px; margin-top: 4px; }
+  .files { grid-column: 1 / -1; margin-top: 6px; border-top: 1px solid color-mix(in oklab, var(--accent) 25%, var(--border)); padding-top: 6px; }
+  .file { display: grid; grid-template-columns: 8px 1fr auto auto; gap: 8px; align-items: center; padding: 3px 0; font-size: 12px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .dot.done { background: var(--success); }
+  .dot.ready { background: var(--accent); }
+  .file.next .file-name { color: var(--accent); font-weight: 600; }
+
+  .stall {
+    margin: 10px 12px; padding: 10px 12px; border-radius: 8px;
+    background: rgba(210,153,34,.12); border: 1px solid color-mix(in oklab, var(--warn) 35%, var(--border));
+  }
+  .stall .k { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--warn); margin: 0 0 4px; }
+  .stall p { margin: 0 0 8px; font-size: 12.5px; line-height: 1.45; }
+  .code {
+    margin: 0 12px 16px; padding: 10px 12px; font-family: var(--mono); font-size: 12px;
+    color: #c9d1d9; line-height: 1.55; white-space: pre;
+  }
+  .code .here { background: color-mix(in oklab, var(--accent) 18%, transparent); }
+  .card { margin: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+  .card h4 { margin: 0 0 8px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  .card .num { font-family: var(--mono); font-size: 13px; }
+  .card p { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+  .bar { height: 5px; border-radius: 99px; background: var(--inset); overflow: hidden; margin: 8px 0; }
+  .bar > i { display: block; height: 100%; width: 0%; background: var(--accent); }
+
+  .spec-note { margin: 10px 12px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .spec-row {
+    padding: 9px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px;
+    border-bottom: 1px solid var(--inset);
+  }
+  .spec-row.on { background: var(--accent-soft); }
+  .spec-row .why { grid-column: 1 / -1; font-size: 11px; color: var(--muted); }
+
+  .inv { margin: 3.25rem 0 0; }
+  .inv h2 { font-size: 22px; letter-spacing: -0.03em; margin: 0 0 8px; }
+  .inv .sub { margin: 0 0 18px; color: var(--muted); font-size: 14px; max-width: 60ch; line-height: 1.5; }
+  .cols { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: 16px; }
+  .col {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 10px;
+  }
+  .col h3 { margin: 0 0 4px; font-size: 15px; }
+  .col .job { font-size: 12px; color: var(--muted); margin: 0 0 12px; }
+  .col ol { margin: 0; padding: 0; list-style: none; counter-reset: n; }
+  .col li {
+    counter-increment: n; display: grid; grid-template-columns: 22px 1fr; gap: 8px;
+    padding: 8px 0; border-bottom: 1px solid var(--inset); font-size: 13px; line-height: 1.4;
+  }
+  .col li::before {
+    content: counter(n); font-family: var(--mono); font-size: 11px; color: var(--accent); padding-top: 1px;
+  }
+  .col li span { display: block; font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+  .flow {
+    display: grid; grid-template-columns: 1.3fr 1fr; gap: 28px; margin-top: 3.25rem; align-items: start;
+  }
+  .flow h2 { font-size: 22px; letter-spacing: -0.03em; margin: 0 0 8px; }
+  .path { display: flex; flex-direction: column; gap: 0; margin: 16px 0 0; }
+  .step {
+    display: grid; grid-template-columns: 18px 1fr; gap: 12px; position: relative; padding: 8px 0 16px;
+  }
+  .step + .step::before {
+    content: ""; position: absolute; left: 8px; top: -8px; width: 1px; height: 16px; background: var(--border);
+  }
+  .node { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--border); }
+  .node.a { border-color: var(--done); background: var(--done); }
+  .node.b { border-color: var(--accent); background: var(--accent); }
+  .node.c { border-color: var(--success); background: var(--success); }
+  .step .ttl { font-size: 14px; font-weight: 550; }
+  .step .d { font-size: 13px; color: var(--muted); margin-top: 3px; line-height: 1.45; }
+  .checks { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+  .checks h3 { margin: 0 0 10px; font-size: 14px; }
+  .checks ul { margin: 0; padding: 0; list-style: none; }
+  .checks li { padding: 8px 0; border-bottom: 1px solid var(--inset); font-size: 13px; line-height: 1.45; color: var(--muted); }
+  .checks li b { color: var(--fg); font-weight: 550; }
+  .ok { color: var(--success); font-family: var(--mono); font-size: 11px; margin-right: 6px; }
+  .no { color: var(--danger); font-family: var(--mono); font-size: 11px; margin-right: 6px; }
+
+  .dont { margin-top: 2.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .dont h2 { font-size: 18px; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .dont li { font-size: 13.5px; color: var(--muted); padding: 7px 0; border-bottom: 1px solid var(--inset); line-height: 1.45; }
+  .dont li b { color: var(--fg); }
+  .dont ul { margin: 0; padding: 0; list-style: none; }
+
+  .tab-switch { display: flex; gap: 8px; margin: 0 0 12px; }
+  .tab-switch button {
+    border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+    font: 600 12px/1 var(--font); padding: 7px 12px; border-radius: 8px; cursor: pointer;
+  }
+  .tab-switch button.on { color: var(--fg); border-color: var(--accent); background: var(--accent-soft); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+  @media (max-width: 900px) {
+    .cols, .flow, .dont, .stage-c, .stage-s, .stage-w { grid-template-columns: 1fr; }
+    body { padding: 1.25rem; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="kicker">OpenSpec 工作台 · 修訂提案</p>
+    <h1>Wishlist / Changes / Specs 改成三個標籤頁。</h1>
+    <p class="lede">
+      上一版把下一步按鈕塞進同一條捲軸。問題沒變：三種工作搶同一欄。
+      改成標籤頁之後，<strong>每一種工作拿一整頁</strong>，功能依 OpenSpec 順序放進去。
+      中欄編輯器和右欄「這個 Change」不再在看願望或現況規格時還掛著。
+    </p>
+
+    <div class="verdict">
+      <div class="mark">適合</div>
+      <div>
+        <h2>流程接得上，前提是分頁切的是整頁，不是只切左欄。</h2>
+        <p>
+          Wishlist 是捕捉、Changes 是推進未完成、Specs 是已生效承諾。
+          這三件事順序對、形狀不同，不該疊在同一份清單裡。
+          有未完成 change 時預設停在 Changes；Wishlist 不再蓋過 16 個坑。
+          跨頁用連結與徽章，不靠同時看見三份清單。
+        </p>
+      </div>
+    </div>
+
+    <div class="tab-switch" role="tablist" aria-label="預覽哪一頁">
+      <button type="button" class="on" data-preview="changes">預覽 Changes</button>
+      <button type="button" data-preview="wishlist">預覽 Wishlist</button>
+      <button type="button" data-preview="specs">預覽 Specs</button>
+    </div>
+
+    <div class="app">
+      <div class="toolbar">
+        <div class="ctx">
+          <div>
+            <div class="k">07 / OPENSPEC</div>
+            <h3>TXTML · 工作台</h3>
+          </div>
+          <div class="sub">16 個未完成 change · 預設停在這頁</div>
+        </div>
+        <div class="tabs" role="tablist">
+          <button type="button" class="tab" role="tab" data-tab="wishlist" aria-selected="false">Wishlist<span class="b">0</span></button>
+          <button type="button" class="tab warn" role="tab" data-tab="changes" aria-selected="true">Changes<span class="b">16</span></button>
+          <button type="button" class="tab" role="tab" data-tab="specs" aria-selected="false">Specs<span class="b">6</span></button>
+        </div>
+      </div>
+
+      <div class="stage stage-c on" data-stage="changes">
+        <div class="pane">
+          <div class="now">
+            <p class="k">此刻該推</p>
+            <p class="t">add-habit-tracker</p>
+            <p class="w">待實作 · 0/8 · 檔案齊了，一題都還沒勾。11 天沒動。</p>
+            <div class="btns">
+              <span class="btn btn-primary btn-sm">開始 1.1</span>
+              <span class="btn btn-sm">複製交接</span>
+            </div>
+          </div>
+          <p class="group">待實作<span>5</span></p>
+          <div class="q-row on">
+            <span class="q-name">add-habit-tracker</span>
+            <span class="q-prog">0/8</span>
+            <span class="q-why">不是缺檔。tasks.md 存在但 0/8。</span>
+            <div class="files">
+              <div class="file"><i class="dot done"></i><span class="file-name">proposal.md</span><span class="btn btn-sm btn-ghost">開</span></div>
+              <div class="file next"><i class="dot ready"></i><span class="file-name">tasks.md</span><span class="btn btn-sm">開並繼續</span></div>
+            </div>
+            <div class="q-act">
+              <span class="btn btn-primary btn-sm">開始 1.1 資料模型</span>
+              <span class="btn btn-sm">複製交接</span>
+            </div>
+          </div>
+          <div class="q-row">
+            <span class="q-name">add-brain-dump-parse</span>
+            <span class="q-prog">0/6</span>
+            <span class="q-why">步驟一題未勾。</span>
+            <div class="q-act"><span class="btn btn-sm">開始第一步</span></div>
+          </div>
+          <p class="group">進行中<span>11</span></p>
+          <div class="q-row">
+            <span class="q-name">add-agent-query-broker</span>
+            <span class="q-prog">4/11</span>
+            <span class="q-why">停在 2.3 · 6 天沒動。</span>
+            <div class="q-act"><span class="btn btn-sm">繼續 2.3</span></div>
+          </div>
+          <div class="q-row">
+            <span class="q-name">add-export-write</span>
+            <span class="q-prog">9/9</span>
+            <span class="q-why">勾完還沒 archive。</span>
+            <div class="q-act"><span class="btn btn-sm">複製 archive 指令</span></div>
+          </div>
+        </div>
+        <div class="pane" style="background:var(--bg)">
+          <div class="pane-h"><strong>tasks.md</strong><span>add-habit-tracker</span></div>
+          <div class="stall">
+            <p class="k">為什麼還在待實作</p>
+            <p>四個 artifact 都在，8 步一題都還沒勾。下一步是 1.1 訂資料模型。</p>
+            <div class="btns">
+              <span class="btn btn-primary btn-sm">捲到 1.1</span>
+              <span class="btn btn-sm">複製交接</span>
+            </div>
+          </div>
+          <div class="code">## 1. 資料模型
+<span class="here">- [ ] 1.1 訂習慣事件的欄位</span>
+- [ ] 1.2 跟 task-file-format 怎麼共用</div>
+        </div>
+        <div class="pane">
+          <div class="pane-h"><strong>這個 Change</strong><span>0%</span></div>
+          <div class="card">
+            <h4>任務進度</h4>
+            <div class="bar"><i></i></div>
+            <div class="num">0/8 · 0%</div>
+            <p>下一步：1.1 訂資料模型。</p>
+          </div>
+          <div class="card">
+            <h4>健康狀態</h4>
+            <p>proposal / design / spec 都齊。下一步就是寫 tasks。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="stage stage-w" data-stage="wishlist">
+        <div class="pane">
+          <div class="wish-tools">
+            <span class="btn btn-sm">新增</span>
+            <span class="btn btn-sm btn-primary">送出</span>
+          </div>
+          <p class="empty">還沒有願望。按新增，寫一段期望的功能說明。下拉選「撰寫 Spec」會帶進開新 change。</p>
+        </div>
+        <div class="pane" style="background:var(--bg)">
+          <div class="pane-h"><strong>新增願望</strong><span>取號後才能存</span></div>
+          <div class="compose">
+            <label>類型</label>
+            <select disabled><option>請選擇</option></select>
+            <label>期望的功能說明</label>
+            <textarea placeholder="寫完按存檔。截圖直接貼進來。"></textarea>
+            <div class="btns">
+              <span class="btn btn-primary btn-sm">存檔</span>
+              <span class="btn btn-sm">貼上截圖</span>
+              <span class="btn btn-sm btn-ghost">取消</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stage stage-s" data-stage="specs">
+        <div class="pane">
+          <p class="spec-note">這是 archive 之後留下的現況規格，不是待辦。它不會完成。要改，從這裡開 change。</p>
+          <div class="spec-row on">
+            <span>focus-mode</span>
+            <span class="btn btn-sm">開 change 改這份</span>
+            <span class="why">已生效 · 沒有進行中的 delta</span>
+          </div>
+          <div class="spec-row">
+            <span>list-view</span>
+            <span class="btn btn-sm btn-ghost">對照</span>
+            <span class="why">已生效 · 進行中：add-nl-report</span>
+          </div>
+          <div class="spec-row">
+            <span>quadrant-view</span>
+            <span class="btn btn-sm">開 change 改這份</span>
+            <span class="why">已生效 · 沒有進行中的 delta</span>
+          </div>
+          <div class="spec-row">
+            <span>quick-capture</span>
+            <span class="btn btn-sm">開 change 改這份</span>
+            <span class="why">已生效</span>
+          </div>
+          <div class="spec-row">
+            <span>scratch-and-archive</span>
+            <span class="btn btn-sm">開 change 改這份</span>
+            <span class="why">已生效</span>
+          </div>
+          <div class="spec-row">
+            <span>task-file-format</span>
+            <span class="btn btn-sm">開 change 改這份</span>
+            <span class="why">已生效</span>
+          </div>
+        </div>
+        <div class="pane" style="background:var(--bg)">
+          <div class="pane-h"><strong>openspec/specs/focus-mode/spec.md</strong><span>現況規格</span></div>
+          <div class="stall" style="background:var(--accent-soft);border-color:color-mix(in oklab, var(--accent) 35%, var(--border))">
+            <p class="k" style="color:var(--accent)">這不是未完成的 change</p>
+            <p>這份已經生效。畫面上沒有勾選進度，是因為它不走 tasks.md。要改行為，開一個新 change。</p>
+            <div class="btns"><span class="btn btn-primary btn-sm">開 change 改 focus-mode</span></div>
+          </div>
+          <div class="code">## Purpose
+Focus mode hides adjacent panes so the
+current task is the only bright thing.
+
+## Requirements
+The system SHALL persist focus state.</div>
+        </div>
+        <div class="pane">
+          <div class="pane-h"><strong>誰在改這份</strong></div>
+          <div class="card">
+            <h4>進行中的 delta</h4>
+            <p>沒有 change 正在改 focus-mode。這份就是現行承諾。</p>
+          </div>
+          <div class="card">
+            <h4>下一步</h4>
+            <p>維持現況，或開 change 寫 delta spec。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="inv">
+      <p class="kicker">各頁放什麼 · 依 OpenSpec 順序</p>
+      <h2>功能不共用一欄。哪一頁在做哪件事，就只放那件事。</h2>
+      <p class="sub">上一版的「列上有下一步按鈕、卡住原因、k/N」全部留在 Changes。Wishlist 與 Specs 不再假裝自己是同一種清單。</p>
+      <div class="cols">
+        <div class="col">
+          <h3>Wishlist</h3>
+          <p class="job">捕捉還沒變成 change 的想法</p>
+          <ol>
+            <li>專案簡寫與取號<span>TXTML、尚未設簡寫時先設</span></li>
+            <li>新增<span>類型、說明、貼截圖、存檔／取消</span></li>
+            <li>Active<span>勾選、編輯、撰寫 Spec、移除</span></li>
+            <li>送出<span>寫 handoff，跳到 openspec.html 開新 change</span></li>
+            <li>封存<span>已寫成 spec 的願望，只讀</span></li>
+          </ol>
+        </div>
+        <div class="col">
+          <h3>Changes</h3>
+          <p class="job">推進還沒收完的提案</p>
+          <ol>
+            <li>此刻該推<span>16 個裡只亮一個建議，不鎖其他列</span></li>
+            <li>待實作<span>k/N、卡住原因、開始第一步</span></li>
+            <li>進行中<span>繼續下一題、複製交接、缺檔就寫缺的那份</span></li>
+            <li>選中展開檔案<span>proposal / design / tasks / spec，標出 next</span></li>
+            <li>中欄檔案 + 卡住橫幅<span>同一句話，可捲到下一步</span></li>
+            <li>右欄這個 Change<span>進度、健康、archive 指令</span></li>
+            <li>已完成<span>預設收合，含已封存</span></li>
+          </ol>
+        </div>
+        <div class="col">
+          <h3>Specs</h3>
+          <p class="job">讀已生效的承諾，不是待辦佇列</p>
+          <ol>
+            <li>說明這不是待辦<span>archive 之後才會出現在這裡</span></li>
+            <li>現況規格清單<span>開 change 改這份／對照進行中的 delta</span></li>
+            <li>中欄讀 spec.md<span>橫幅重複「這份已生效」</span></li>
+            <li>右欄誰在改這份<span>有 delta 就連回 Changes 那個 change</span></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow">
+      <div>
+        <p class="kicker">流程</p>
+        <h2>三個標籤頁就是三個階段。頁面切換要接得上，不能變成斷點。</h2>
+        <div class="path">
+          <div class="step">
+            <i class="node a"></i>
+            <div>
+              <div class="ttl">Wishlist → 送出 / 撰寫 Spec</div>
+              <div class="d">維持現況：寫 handoff，跳 <code>openspec.html</code> 開新 change。精靈結束後回到工作台，停在 Changes，並選中剛建的那個。</div>
+            </div>
+          </div>
+          <div class="step">
+            <i class="node b"></i>
+            <div>
+              <div class="ttl">Changes → 推下一步</div>
+              <div class="d">待實作與進行中可以同時存在。推 B 不必先收完 A。主按鈕開對的檔、複製交接、或複製 archive 指令。Change 裡的 delta spec 在這一頁開，不必跳到 Specs。</div>
+            </div>
+          </div>
+          <div class="step">
+            <i class="node c"></i>
+            <div>
+              <div class="ttl">archive 之後才進 Specs</div>
+              <div class="d">現況規格從這裡讀。「開 change 改這份」回到開新 change 的精靈，然後再進 Changes。有進行中的 delta 時，「對照」跳回那個 change，而不是把 Specs 變成第二份佇列。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="checks">
+        <h3>適不適合 · 四條約束</h3>
+        <ul>
+          <li><span class="ok">YES</span><b>預設頁是 Changes。</b>有未完成就不要先停在 Wishlist，否則又在加速開新坑。</li>
+          <li><span class="ok">YES</span><b>標籤上一定有數字。</b>藏起來的 16 個 change 若沒徽章，等於安靜地少列。</li>
+          <li><span class="ok">YES</span><b>深連結記住分頁。</b><code>?change=</code> 開 Changes；<code>?tab=specs</code> 開 Specs。從 Task Tracking 進來不能落到空白的 Wishlist。</li>
+          <li><span class="no">NO</span><b>不要只把左欄切成標籤。</b>中欄編輯器與右欄「這個 Change」是 Changes 的功能。掛在 Wishlist／Specs 上會變成死面板。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="dont">
+      <div>
+        <h2>仍要做</h2>
+        <ul>
+          <li><b>Changes 列上的下一步。</b>上一版的 k/N、卡住原因、主按鈕，原封放進 Changes 頁。</li>
+          <li><b>卡住說明掛編輯器上方。</b>不寫進使用者的 OpenSpec 檔。</li>
+          <li><b>交接只複製指令。</b>App 不跑 agent、不自動勾、不自動 archive。</li>
+          <li><b>進行中不鎖其他列。</b>分頁解決的是三種工作搶欄位，不是一次只能有一個坑。</li>
+        </ul>
+      </div>
+      <div>
+        <h2>仍不做</h2>
+        <ul>
+          <li><b>不做看板。</b></li>
+          <li><b>不讓 Wishlist 當首頁。</b>有 16 個未完成時，那是在幫 C0 加速。</li>
+          <li><b>不把 Specs 做成待實作／進行中。</b>它沒有 tasks.md，硬分類會永遠待實作。</li>
+          <li><b>不為了對照現況規格而強迫切頁。</b>Changes 裡可以直接開 <code>openspec/specs/…</code>；Specs 頁是瀏覽用。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <script>
+    const stages = Array.from(document.querySelectorAll("[data-stage]"));
+    const appTabs = Array.from(document.querySelectorAll(".tab[data-tab]"));
+    const previewBtns = Array.from(document.querySelectorAll("[data-preview]"));
+    function show(id) {
+      stages.forEach((el) => el.classList.toggle("on", el.getAttribute("data-stage") === id));
+      appTabs.forEach((el) => el.setAttribute("aria-selected", el.getAttribute("data-tab") === id ? "true" : "false"));
+      previewBtns.forEach((el) => el.classList.toggle("on", el.getAttribute("data-preview") === id));
+    }
+    appTabs.forEach((el) => el.addEventListener("click", () => show(el.getAttribute("data-tab"))));
+    previewBtns.forEach((el) => el.addEventListener("click", () => show(el.getAttribute("data-preview"))));
+  </script>
+</body>
+</html>

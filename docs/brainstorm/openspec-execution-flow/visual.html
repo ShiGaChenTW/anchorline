@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpenSpec 在執行流程裡做什麼</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+    --inset: #21262d;
+    --accent: #2f81f7;
+    --success: #3fb950;
+    --warn: #d29922;
+    --danger: #f85149;
+    --done: #a371f7;
+    --shell: #010409;
+    --font: "Geist", -apple-system, "Segoe UI", "Noto Sans TC", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--shell); color: var(--fg); font-family: var(--font); }
+  body { padding: 2rem 2.25rem 4.5rem; }
+  .wrap { max-width: 1280px; }
+  .kicker {
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); font-weight: 500; margin: 0 0 10px;
+  }
+  h1 {
+    font-size: clamp(1.7rem, 3.1vw, 2.5rem); letter-spacing: -0.04em;
+    line-height: 1.08; font-weight: 600; margin: 0 0 12px; max-width: 16ch;
+  }
+  .lede {
+    font-size: 16.5px; line-height: 1.55; color: var(--muted); max-width: 62ch; margin: 0 0 2.5rem;
+  }
+  .lede strong { color: var(--fg); font-weight: 550; }
+
+  h2 { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin: 0 0 14px; }
+
+  /* product chain */
+  .chain {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1.6fr 1fr 1fr;
+    gap: 8px; align-items: stretch; margin-bottom: 8px;
+  }
+  .link {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 12px 12px; position: relative;
+  }
+  .link .n { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .link .t { margin: 6px 0 4px; font-size: 14px; font-weight: 600; }
+  .link .d { font-size: 12px; color: var(--muted); line-height: 1.4; }
+  .link.os {
+    border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
+    background: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  }
+  .link.os .t { color: var(--accent); }
+  .arrow-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1.6fr 1fr 1fr;
+    gap: 8px; margin: 0 0 2.75rem; height: 14px;
+  }
+  .arrow-row span {
+    display: block; height: 1px; background: var(--border); margin-top: 6px; position: relative;
+  }
+  .arrow-row span::after {
+    content: ""; position: absolute; right: -1px; top: -3px;
+    border: 4px solid transparent; border-left-color: var(--muted);
+  }
+  .arrow-row span:last-child { background: transparent; }
+  .arrow-row span:last-child::after { display: none; }
+
+  /* main loop */
+  .loop-wrap { display: grid; grid-template-columns: 1.4fr 0.9fr; gap: 28px; margin-bottom: 3rem; align-items: start; }
+  .loop {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 8px 8px 12px;
+  }
+  svg { width: 100%; height: auto; display: block; }
+  .who { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 8px; }
+  .who h3 { margin: 0 0 12px; font-size: 15px; letter-spacing: -0.02em; text-transform: none; color: var(--fg); }
+  .who table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .who th { text-align: left; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 500; padding: 0 8px 8px 0; border-bottom: 1px solid var(--border); }
+  .who td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--inset); vertical-align: top; line-height: 1.4; }
+  .who td.actor { font-family: var(--mono); font-size: 11px; color: var(--accent); white-space: nowrap; }
+  .who td.no { color: var(--muted); }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 2.5rem; }
+  .box {
+    border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 16px 18px;
+  }
+  .box h3 { margin: 0 0 6px; font-size: 16px; letter-spacing: -0.02em; }
+  .box p { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+  .box code { font-family: var(--mono); font-size: 12px; color: var(--fg); }
+  .box.truth { border-color: color-mix(in oklab, var(--done) 40%, var(--border)); }
+  .box.delta { border-color: color-mix(in oklab, var(--accent) 40%, var(--border)); }
+
+  .stuck {
+    border-left: 2px solid var(--warn); padding: 2px 0 2px 16px; max-width: 70ch;
+  }
+  .stuck p { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--muted); }
+  .stuck b { color: var(--fg); font-weight: 550; }
+
+  .node-label { font-family: var(--font); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+  @media (max-width: 900px) {
+    .chain, .arrow-row { grid-template-columns: 1fr 1fr; }
+    .loop-wrap, .two { grid-template-columns: 1fr; }
+    body { padding: 1.25rem; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="kicker">OpenSpec · 在執行流程裡的位置</p>
+    <h1>它不是 PRD，也不是實作。它是可執行的變更信封。</h1>
+    <p class="lede">
+      Anchorline 的治理鏈是「PRD 撰寫 → 結構 gate → 簽核 → <strong>openspec change</strong> → commits → PR → release」。
+      OpenSpec 接在簽核之後、程式碼之前：把「我們同意做」收成一筆對現況規格的 <strong>delta</strong>，
+      讓 agent 可以按 <code>tasks.md</code> 實作，做完再 archive 併回真相。
+    </p>
+
+    <h2>整條產品鏈</h2>
+    <div class="chain">
+      <div class="link"><div class="n">01</div><div class="t">PRD</div><div class="d">產品要做成什麼。人讀的規格，在工作台-PRD。</div></div>
+      <div class="link"><div class="n">02</div><div class="t">Gate / 審閱</div><div class="d">結構過了才能送簽。還沒授權開工。</div></div>
+      <div class="link"><div class="n">03</div><div class="t">簽核</div><div class="d">人批准這份產品意圖。到這裡仍不是執行單位。</div></div>
+      <div class="link os"><div class="n">04 · 執行單位</div><div class="t">OpenSpec change</div><div class="d">一筆可實作的變更：proposal、delta spec、design、tasks。工作台-OpenSpec 管這一截。</div></div>
+      <div class="link"><div class="n">05</div><div class="t">Commit / PR</div><div class="d">實作留下的 git 紀錄。Tracking 用錨點串回來。</div></div>
+      <div class="link"><div class="n">06</div><div class="t">Release</div><div class="d">發布。change 早在這之前就該 archive 進現況規格。</div></div>
+    </div>
+    <div class="arrow-row" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+
+    <div class="two">
+      <div class="box truth">
+        <h3>openspec/specs/ · 真相</h3>
+        <p>系統<strong>現在</strong>怎麼運作。行為契約（SHALL / MUST），不是實作計畫。archive 之後才會改這裡。工作台上的 Specs 分頁讀的就是它。</p>
+      </div>
+      <div class="box delta">
+        <h3>openspec/changes/ · 提案</h3>
+        <p>我們<strong>想改成什麼</strong>。一筆 change 是一次執行。多筆可以同時存在、互不覆蓋真相。待實作／進行中列的就是還沒 archive 的這些資料夾。</p>
+      </div>
+    </div>
+
+    <div class="loop-wrap">
+      <div>
+        <h2>一筆 change 怎麼走完</h2>
+        <div class="loop">
+          <svg viewBox="0 0 720 620" role="img" aria-label="OpenSpec change 生命週期流程圖">
+            <defs>
+              <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b949e"/>
+              </marker>
+              <marker id="arr-a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#2f81f7"/>
+              </marker>
+            </defs>
+
+            <!-- wishlist -->
+            <rect x="40" y="24" width="200" height="72" rx="10" fill="#161b22" stroke="#30363d"/>
+            <text x="56" y="50" fill="#8b949e" font-size="11" font-family="JetBrains Mono, monospace">Wishlist</text>
+            <text x="56" y="72" fill="#e6edf3" font-size="15" font-weight="600" font-family="Geist, sans-serif">捕捉想法</text>
+            <text x="56" y="90" fill="#8b949e" font-size="11" font-family="Geist, sans-serif">新增 → 送出 / 撰寫 Spec</text>
+
+            <line x1="240" y1="60" x2="300" y2="60" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr)"/>
+
+            <!-- new change -->
+            <rect x="308" y="24" width="220" height="72" rx="10" fill="#161b22" stroke="#30363d"/>
+            <text x="324" y="50" fill="#8b949e" font-size="11" font-family="JetBrains Mono, monospace">openspec.html</text>
+            <text x="324" y="72" fill="#e6edf3" font-size="15" font-weight="600" font-family="Geist, sans-serif">開新 change</text>
+            <text x="324" y="90" fill="#8b949e" font-size="11" font-family="Geist, sans-serif">寫出資料夾骨架，還不能寫碼</text>
+
+            <line x1="418" y1="96" x2="418" y2="132" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr)"/>
+
+            <!-- artifacts -->
+            <rect x="250" y="136" width="336" height="168" rx="12" fill="#0d1117" stroke="#2f81f7"/>
+            <text x="268" y="162" fill="#2f81f7" font-size="11" font-family="JetBrains Mono, monospace">specify · CLI 依相依排出下一步</text>
+            <text x="268" y="184" fill="#e6edf3" font-size="16" font-weight="600" font-family="Geist, sans-serif">寫齊 artifact</text>
+
+            <rect x="268" y="200" width="70" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+            <text x="303" y="218" text-anchor="middle" fill="#8b949e" font-size="10" font-family="JetBrains Mono, monospace">1</text>
+            <text x="303" y="234" text-anchor="middle" fill="#e6edf3" font-size="11" font-family="Geist, sans-serif">proposal</text>
+
+            <rect x="346" y="200" width="70" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+            <text x="381" y="218" text-anchor="middle" fill="#8b949e" font-size="10" font-family="JetBrains Mono, monospace">2</text>
+            <text x="381" y="234" text-anchor="middle" fill="#e6edf3" font-size="11" font-family="Geist, sans-serif">spec delta</text>
+
+            <rect x="424" y="200" width="70" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+            <text x="459" y="218" text-anchor="middle" fill="#8b949e" font-size="10" font-family="JetBrains Mono, monospace">3</text>
+            <text x="459" y="234" text-anchor="middle" fill="#e6edf3" font-size="11" font-family="Geist, sans-serif">design</text>
+
+            <rect x="502" y="200" width="70" height="44" rx="6" fill="#161b22" stroke="#2f81f7"/>
+            <text x="537" y="218" text-anchor="middle" fill="#2f81f7" font-size="10" font-family="JetBrains Mono, monospace">4</text>
+            <text x="537" y="234" text-anchor="middle" fill="#e6edf3" font-size="11" font-family="Geist, sans-serif">tasks</text>
+
+            <text x="268" y="272" fill="#8b949e" font-size="11" font-family="Geist, sans-serif">blocked = 缺上游檔。ready = 現在能寫的那一份。</text>
+            <text x="268" y="290" fill="#8b949e" font-size="11" font-family="Geist, sans-serif">applyRequires 通常是 tasks：沒拆步驟就不能開工。</text>
+
+            <line x1="418" y1="304" x2="418" y2="340" stroke="#2f81f7" stroke-width="1.5" marker-end="url(#arr-a)"/>
+
+            <!-- apply -->
+            <rect x="250" y="344" width="336" height="100" rx="12" fill="#161b22" stroke="#2f81f7"/>
+            <text x="268" y="370" fill="#2f81f7" font-size="11" font-family="JetBrains Mono, monospace">apply · 真正的執行</text>
+            <text x="268" y="394" fill="#e6edf3" font-size="16" font-weight="600" font-family="Geist, sans-serif">照 tasks.md 改程式碼</text>
+            <text x="268" y="416" fill="#8b949e" font-size="12" font-family="Geist, sans-serif">agent 跑 /opsx:apply。勾 [ ] → [x]。</text>
+            <text x="268" y="434" fill="#8b949e" font-size="12" font-family="Geist, sans-serif">App 不執行這一步，只產生交接指令、追進度。</text>
+
+            <line x1="418" y1="444" x2="418" y2="478" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr)"/>
+
+            <!-- archive -->
+            <rect x="250" y="482" width="336" height="88" rx="12" fill="#161b22" stroke="#3fb950"/>
+            <text x="268" y="508" fill="#3fb950" font-size="11" font-family="JetBrains Mono, monospace">archive</text>
+            <text x="268" y="532" fill="#e6edf3" font-size="16" font-weight="600" font-family="Geist, sans-serif">delta 併回 specs/</text>
+            <text x="268" y="552" fill="#8b949e" font-size="12" font-family="Geist, sans-serif">change 搬進 archive/。現況規格從此改寫。</text>
+
+            <!-- return arrow to specs truth -->
+            <path d="M 250 526 C 120 526, 80 400, 80 200" fill="none" stroke="#a371f7" stroke-width="1.5" marker-end="url(#arr)"/>
+            <rect x="40" y="136" width="160" height="88" rx="10" fill="#161b22" stroke="#a371f7"/>
+            <text x="56" y="162" fill="#a371f7" font-size="11" font-family="JetBrains Mono, monospace">Specs</text>
+            <text x="56" y="184" fill="#e6edf3" font-size="14" font-weight="600" font-family="Geist, sans-serif">現況規格</text>
+            <text x="56" y="204" fill="#8b949e" font-size="11" font-family="Geist, sans-serif">已生效的承諾。</text>
+            <text x="56" y="218" fill="#8b949e" font-size="11" font-family="Geist, sans-serif">不是待辦。</text>
+
+            <!-- stuck callout -->
+            <text x="40" y="260" fill="#d29922" font-size="11" font-family="JetBrains Mono, monospace">待實作 / 進行中</text>
+            <text x="40" y="278" fill="#8b949e" font-size="11" font-family="Geist, sans-serif">停在 specify 或 apply，</text>
+            <text x="40" y="294" fill="#8b949e" font-size="11" font-family="Geist, sans-serif">還沒走到 archive。</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="who">
+        <h3>誰動手</h3>
+        <table>
+          <thead><tr><th>步驟</th><th>誰做</th><th>App 做什麼</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>捕捉願望</td>
+              <td class="actor">人 · App</td>
+              <td>Wishlist 新增／送出</td>
+            </tr>
+            <tr>
+              <td>開 change、寫 artifact</td>
+              <td class="actor">人 · agent propose</td>
+              <td>開新 change 精靈；工作台編檔</td>
+            </tr>
+            <tr>
+              <td>狀態 / 下一步是哪份檔</td>
+              <td class="actor">openspec CLI</td>
+              <td>只讀 <code>list</code> / <code>status --json</code></td>
+            </tr>
+            <tr>
+              <td>勾 tasks.md</td>
+              <td class="actor">人 · Tracking</td>
+              <td>只翻一個方框字元（D10a）</td>
+            </tr>
+            <tr>
+              <td>apply 改程式碼</td>
+              <td class="actor">agent · 終端</td>
+              <td class="no">不跑。只複製交接指令</td>
+            </tr>
+            <tr>
+              <td>archive 併回真相</td>
+              <td class="actor">人 · CLI / skill</td>
+              <td class="no">不跑。白名單沒有 archive</td>
+            </tr>
+            <tr>
+              <td>讀現況規格</td>
+              <td class="actor">人 · App</td>
+              <td>Specs 分頁開 <code>openspec/specs/</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="stuck">
+      <p>
+        <b>所以截圖裡那 16 個檔還在，是因為執行卡在信封裡，不是卡在清單。</b>
+        待實作 = artifact 在、tasks 還沒開始勾。進行中 = apply 做了一半。
+        Specs 會出現，是因為更早的 change 已經 archive 過——那一截已經走完，不是另一批待辦。
+        App 被設計成<strong>管信封、追進度、產生指令</strong>；真正改程式與改寫真相，留在 agent 與 CLI。
+      </p>
+    </div>
+  </div>
+</body>
+</html>
