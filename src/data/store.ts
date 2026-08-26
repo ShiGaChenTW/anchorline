@@ -712,6 +712,33 @@ function sanitizeSkeletons(
  * 吃的是同一份資料，而只有 `load()` 這一條補過。匯入一份舊備份之後
  * `st.required` 是 `undefined`，`allStagesSettled` 那一類判斷就跟著換一個答案。
  */
+/**
+ * 匯入的空金鑰**不覆蓋**目前正在用的金鑰。
+ *
+ * 這是 `export.ts` 的 `redactSecrets()` 的另一半。匯出檔從 2026-08-26 起
+ * 一律遮蔽金鑰，所以還原一份自己的備份時，`settings.apiKey` 進來就是 `""`。
+ * 照 spread 的語意那會把現用金鑰清成空字串 —— 而使用者不會當場發現，
+ * 症狀是稍後某次 AI 呼叫 401，看起來跟「我剛剛還原了備份」毫無關聯。
+ *
+ * 判準是「**進來的是空的**」而不是「這份備份有沒有遮蔽標記」：舊的、
+ * 未遮蔽的備份帶著真金鑰進來時照樣覆蓋（那是使用者要的還原），
+ * 而任何一份沒填金鑰的備份都不該有清空的權力。
+ */
+function keepExistingKeys(next: AISettings, current: AISettings): AISettings {
+  const prevById = new Map(
+    (current.backends ?? []).map((b) => [b.id, b] as const),
+  );
+  return {
+    ...next,
+    apiKey: next.apiKey?.trim() ? next.apiKey : current.apiKey,
+    backends: (next.backends ?? []).map((b) => {
+      if (b.kind !== "api" || b.apiKey.trim()) return b;
+      const prev = prevById.get(b.id);
+      return prev && prev.kind === "api" && prev.apiKey ? { ...b, apiKey: prev.apiKey } : b;
+    }),
+  };
+}
+
 function normalizeCases(
   raw: unknown,
   workflowStages: readonly WorkflowStageDef[],
@@ -3325,12 +3352,17 @@ export const store = {
       ...newState,
       // aiWriting 是後加的巢狀物件，淺合併會讓舊存檔拿到 undefined。
       // backends 同理，而且它的來源是可以手改的備份檔 —— 走跟 load() 同一支收斂。
-      settings: withMigratedBackends({
-        ...DEFAULT_SETTINGS,
-        ...(newState.settings ?? {}),
-        // 匯入的備份可能是任何一代格式 —— 走同一條遷移，不要兩條路徑各修各的
-        aiWriting: migrateAiWriting(newState.settings?.aiWriting),
-      }),
+      settings: withMigratedBackends(
+        keepExistingKeys(
+          {
+            ...DEFAULT_SETTINGS,
+            ...(newState.settings ?? {}),
+            // 匯入的備份可能是任何一代格式 —— 走同一條遷移，不要兩條路徑各修各的
+            aiWriting: migrateAiWriting(newState.settings?.aiWriting),
+          },
+          state.settings,
+        ),
+      ),
       projects: Array.isArray(newState.projects)
         ? newState.projects.map((pr) =>
             migrateProject(pr as unknown as Record<string, unknown>, employees),

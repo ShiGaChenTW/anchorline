@@ -1257,10 +1257,17 @@ fileInput?.addEventListener("change", (e) => {
     try {
       const parsed = JSON.parse(event.target?.result as string) as Partial<AppState> & {
         state?: Partial<AppState>;
+        keysRedacted?: boolean;
       };
       store.importState(parsed.state ?? parsed);
       populateSettings();
-      toast("已成功匯入工作區狀態");
+      // 遮蔽過的備份要講一句。這台機器上原本有金鑰的話 importState 會保留，
+      // 但換一台機器還原就是空的 —— 不講的話那看起來只像是「設定不見了」。
+      toast(
+        parsed.keysRedacted
+          ? "已匯入工作區狀態。備份不含 API 金鑰：本機原有的金鑰已保留，若是新機器請重新輸入。"
+          : "已成功匯入工作區狀態",
+      );
     } catch {
       toast("匯入失敗：檔案格式無效");
     }

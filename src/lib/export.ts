@@ -145,11 +145,44 @@ export function exportMarkdownFile(state: AppState, project?: Project | null) {
   void deliver(state, project, `${name}-${stamp()}.md`, buildMarkdown(state, p), "text/markdown;charset=utf-8");
 }
 
+/**
+ * 匯出前把所有 API 金鑰換成空字串。
+ *
+ * 2026-08-26 之前 `exportJsonFile` 直接序列化整個 `state`，於是
+ * `settings.apiKey` 一直都躺在備份檔裡；Agent 後端上線之後
+ * `settings.backends[].apiKey` 也加入同一份 dump，**從一把變成 N 把**。
+ * 備份檔會被丟進雲端硬碟、貼進 issue、寄給人看 —— 那是金鑰最容易外流的形狀。
+ *
+ * 遮蔽成 `""` 而不是刪掉欄位：刪欄位會讓匯入端分不出「這一代沒有這個欄位」
+ * 與「這一份被遮蔽過」，而前者要落回預設值、後者要保留現有金鑰。
+ *
+ * 對稱的另一半在 `store.importState()` —— 匯入時空金鑰**不覆蓋**現有的金鑰。
+ * 只做這一半的話，使用者還原一份備份就會把自己正在用的金鑰清空，
+ * 而症狀是稍後某次 AI 呼叫 401，看不出跟還原有關。
+ */
+export function redactSecrets(state: AppState): AppState {
+  return {
+    ...state,
+    settings: {
+      ...state.settings,
+      apiKey: "",
+      backends: (state.settings.backends ?? []).map((b) =>
+        b.kind === "api" ? { ...b, apiKey: "" } : b,
+      ),
+    },
+  };
+}
+
 export function exportJsonFile(state: AppState) {
   const payload = {
     exportedAt: new Date().toISOString(),
     exporter: { id: state.currentUser.id, name: state.currentUser.name, role: state.currentUser.accessRole },
-    state,
+    // 讓匯入端與讀檔的人都知道這份為什麼沒有金鑰。少了這行，
+    // 「金鑰欄位是空的」看起來就只像是使用者沒設定過。
+    keysRedacted: true,
+    keysRedactedNote:
+      "API 金鑰已在匯出時移除。還原這份備份不會清掉你目前設定的金鑰；換一台機器還原則需要重新輸入。",
+    state: redactSecrets(state),
   };
   void deliver(
     state,
