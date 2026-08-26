@@ -1,7 +1,9 @@
 # Handoff — Agent 後端可管理化（W1+W2+W3 完成，剩 W4）
 
 - 更新：2026-08-26 15:35
-- `main` 在 **`384cb23`**，**未 push**（領先 `origin/main` 792 個 commit，多數是舊帳不是這批）
+- `main` 在 **`ab2dd2d`**，**未 push**（領先 `origin/main` **8** 個 commit）
+  - 2026-08-26 更正：原本寫 `384cb23` / 792，兩個都錯。`384cb23` 之後還有一個 handoff commit；
+    792 是某次過期 `origin` ref 算出來的，`git rev-list --count origin/main..main` 實測是 8
 - 規格與收貨紀錄（先讀這份）：`plans/Project_Anchorline__2026-08-26-1323__agent-backends.md`
 
 ## 一句話

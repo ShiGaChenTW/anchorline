@@ -200,3 +200,37 @@ fail-closed 的**預設值**，不是鎖；使用者在自己的 `settings.json`
 ## 結束摘要
 
 （工作結束時補上）
+
+## W4 派工（2026-08-26 · Engineer · worktree）
+
+額度閘門：`AgentQuota.ts` — Engineer `routable: true`（anthropic，與主 session 同池）。
+
+**一次派兩件**：W4 UI ＋ 兩個既有地雷（`RUNNER` 沒 fallback、第三份 CLI 清單）。
+合併理由：W4 讓使用者能選後端之後，`onHandoffStep` 那條被觸發的機率變高，
+分兩次派會讓第二次動到第一次剛改過的檔。
+
+### 主 session 先讀出來的事實（brief 建立在這些之上，不是回憶）
+
+- `store.addBackend / updateBackend / removeBackend / setAgentBackend / listBackends / resolveBackend`
+  在 `src/data/store.ts:3508-3625` **已完整存在且有測試**（`tests/agent-backend-store.test.ts`）。
+  W4 是接線，不是再寫一層邏輯
+- `updateBackend("default", …)` 已經正確地轉寫全域設定，且會拒絕 `label` 與 CLI 欄位
+- `removeBackend` 已擋「仍被 agent 綁著」並回傳是誰在用
+- `native.probeClis()` → `Record<string, string|null>`；`native.setCliPath(tool, path)`；
+  `native.agentCliRun(tool, prompt)`（`src/lib/native.ts:352-363`）
+
+### 這次發現的規格缺口（比 handoff 記的更精確）
+
+**`pathOverride` 是 per-backend，但 `setCliPath` 是 per-tool 全域。**
+兩個都綁 `claude` 的 CLI 後端各填一個 pathOverride，原生端只存得下一個。
+`agentCliRun(tool, prompt)` 也不吃路徑。這是 W1/W2 沒對上的接縫，不是 W4 造成的。
+
+**`RUNNER` 的 TypeError 比 handoff 寫的更廣。** `AgentFamilyId` 是四個
+（`agent-handoff.ts:20`），`AgentFamily` 是十個（`types.ts:23`）。
+`tracking.ts:1521` 用 `as` 硬轉，所以 `grok`/`pi`/`hermes`/`agy`/`gpt`/`local` **六個**
+族系都會讓 `RUNNER[family]` 是 undefined 而當場 TypeError，不是四個。
+
+**`RUNNER` 與 CLI 執行白名單是兩件事，不要對齊。**
+`RUNNER` 產生的是給人貼進終端的字串，App 不執行它；四個工具的白名單管的是
+原生 spawn。`RUNNER` 留著 `gemini` 沒有安全問題（頂多指令貼過去失敗）。
+真正要修的是「總函式 ＋ fallback」，不是砍清單。

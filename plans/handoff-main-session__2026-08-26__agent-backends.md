@@ -1,5 +1,9 @@
 # Handoff — Anchorline：轉去做 Agent 後端可管理化
 
+> ⚠️ **已作廢（2026-08-26）。冷啟動請改讀 `plans/handoff-main-session__2026-08-26__agent-backends-w2-merged.md`。**
+> 這份寫於 13:34，當時 W1–W4 全未開工；其後 W1/W2/W3 已完成並在 `main` 上。
+> 下面的 commit hash 與「全未開工」的描述**都已過時**，照著做會重複去派已完成的 W1/W2。
+
 - 更新：2026-08-26 13:34（本 session 結束）
 - `main` 在 **`a7893e6`**，**領先 `origin/main` 兩個 commit，尚未 push**（Scott 沒授權推）
 - 工作樹乾淨
