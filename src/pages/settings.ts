@@ -1,10 +1,29 @@
 import { store } from "../data/store";
-import type { AccessRole, ActorKind, AgentFamily, AISettings, AppState, Employee } from "../data/types";
+import type {
+  AccessRole,
+  ActorKind,
+  AgentBackend,
+  AgentCliTool,
+  AgentFamily,
+  AIProvider,
+  AISettings,
+  AppState,
+  Employee,
+} from "../data/types";
 import { ACCESS_ROLE_LABEL, AGENT_FAMILY_LABEL } from "../data/types";
 import { askConfirm } from "../lib/ask";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { exportHtmlFile, exportJsonFile, exportMarkdownFile } from "../lib/export";
 import { canManageUsers } from "../lib/permissions";
+import { isNative, native } from "../lib/native";
+import { CLI_TOOLS, type BackendPatch } from "../lib/agent-backend";
+import {
+  backendRow,
+  cliProbe,
+  cliProbeNote,
+  keyStateLabel,
+  type CliPaths,
+} from "../lib/agent-backend-ui";
 import { applyFontScale, currentFontScale, FONT_SCALES, initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 import { BUILTIN_PACKS, listDomains } from "../data/domains";
@@ -870,6 +889,315 @@ function renderPromptRegistry(): void {
 }
 
 renderPromptRegistry();
+
+/* ─── Agent 執行後端清單 ──────────────────────────────────────────
+ *
+ * 三條規矩，違反哪一條都不會有畫面症狀，所以寫在這裡：
+ *
+ * 1. **一律 `store.listBackends()`**，不要讀 `state.settings.backends`。
+ *    後者刻意不含 default（那筆是全域設定的投影，不落地存），讀錯的話
+ *    設定頁看不到預設後端，而且只有在使用者想綁它時才會發現。
+ * 2. **金鑰只顯示「有沒有」，永不顯示值。** 連既有值都不回填進 input ——
+ *    回填等於把金鑰放進 DOM，而 DOM 會進截圖、進錄影、進 bug 回報。
+ * 3. **store 回傳的 `reason` 原話照登。** 那些字串是刻意寫給人看的
+ *    （「「小明」仍在使用這個後端」），換成「操作失敗」就把可行動的資訊丟了。
+ */
+
+/** 展開中的後端 id；null＝全部收合 */
+let openBackendId: string | null = null;
+/** 正在新增哪一種；null＝沒有在新增 */
+let addingBackendKind: "api" | "cli" | null = null;
+/** `probeClis()` 的結果。null＝還沒回來（或非桌面版，那條路根本不跑） */
+let cliPaths: CliPaths | null = null;
+let cliProbeStarted = false;
+
+/**
+ * 探測一次就好。失敗也要收斂成「探測完成、什麼都沒找到」——
+ * 卡在「偵測中…」的畫面會讓使用者一直等一個不會來的答案。
+ */
+function ensureCliProbe(): void {
+  if (cliProbeStarted || !isNative()) return;
+  cliProbeStarted = true;
+  void native
+    .probeClis()
+    .then((p) => {
+      cliPaths = p;
+      renderAgentBackends();
+    })
+    .catch(() => {
+      cliPaths = {};
+      renderAgentBackends();
+    });
+}
+
+/** 沿用設定頁既有的 `.form-group` / `.hint`，不另外開一套 class */
+function backendFieldHtml(id: string, label: string, input: string, hint = ""): string {
+  return `<div class="form-group">
+    <label for="${id}">${escapeHtml(label)}</label>
+    ${input}
+    ${hint ? `<span class="hint">${hint}</span>` : ""}
+  </div>`;
+}
+
+function providerOptionsHtml(selected: string): string {
+  return (["auto", "gemini", "openai", "anthropic", "openrouter", "ollama", "custom"] as const)
+    .map((p) => `<option value="${p}" ${p === selected ? "selected" : ""}>${p}</option>`)
+    .join("");
+}
+
+/**
+ * CLI 工具下拉。**選項來自 `CLI_TOOLS`，不自己抄一份字串陣列** ——
+ * 那份要跟 Rust 的 `exec::AGENT_TOOLS` 逐字相同，抄第二份就是準備讓它們分岔，
+ * 而分岔的症狀是「設定頁選得到、按下去 Rust 說不認識」。
+ */
+function cliToolOptionsHtml(selected: string): string {
+  return CLI_TOOLS.map((t) => {
+    const p = cliProbe(t, cliPaths, isNative());
+    const suffix = p.state === "found" ? "（已偵測到）" : p.state === "missing" ? "（找不到）" : "";
+    return `<option value="${t}" ${t === selected ? "selected" : ""}>${t}${suffix}</option>`;
+  }).join("");
+}
+
+function renderAgentBackends(): void {
+  const host = document.getElementById("agent-backends-root");
+  if (!host) return;
+  ensureCliProbe();
+
+  const nativeNow = isNative();
+  const backends = store.listBackends();
+  const rows = backends.map((b) => backendRow(b, cliPaths, nativeNow));
+
+  const listHtml = rows
+    .map((r, i) => {
+      const b = backends[i]!;
+      const open = openBackendId === r.id;
+      const head = `<tr class="pr-row${open ? " is-open" : ""}">
+        <td class="pr-label">
+          ${escapeHtml(r.label)}
+          ${r.badge ? `<span class="pr-badge">${escapeHtml(r.badge)}</span>` : ""}
+        </td>
+        <td class="mono">${escapeHtml(r.id)}</td>
+        <td>${r.kindLabel}</td>
+        <td>${escapeHtml(r.detail)}</td>
+        <td>${r.keyState ? escapeHtml(keyStateLabel(r.keyState)) : "—"}</td>
+        <td>
+          ${
+            r.isDefault
+              ? `<span class="hint">在上方「🤖 AI 寫作教練模型與金鑰設定」修改</span>`
+              : `<button type="button" class="btn btn-sm" data-ab-edit="${escapeHtml(r.id)}">${open ? "收合" : "編輯"}</button>
+                 <button type="button" class="btn btn-sm btn-ghost" data-ab-del="${escapeHtml(r.id)}">刪除</button>`
+          }
+        </td>
+      </tr>`;
+      if (!open || r.isDefault) return head;
+      return `${head}<tr class="pr-editor-row"><td colspan="6">
+        <div class="pr-editor">${backendEditorHtml(b)}
+          <div class="pr-editor-foot">
+            <span style="flex:1"></span>
+            <button type="button" class="btn btn-sm btn-primary" data-ab-save="${escapeHtml(r.id)}">儲存</button>
+          </div>
+        </div>
+      </td></tr>`;
+    })
+    .join("");
+
+  host.innerHTML = `<table class="pr-table">
+    <thead><tr><th>名稱</th><th>ID</th><th>種類</th><th>細節</th><th>金鑰</th><th></th></tr></thead>
+    <tbody>${listHtml}</tbody>
+  </table>
+  <div class="actions-row" style="margin-top:12px">
+    <button type="button" class="btn btn-sm" id="ab-add-api">＋ 新增 API 後端</button>
+    <button type="button" class="btn btn-sm" id="ab-add-cli" ${nativeNow ? "" : "disabled"}
+      title="${nativeNow ? "" : "瀏覽器版沒有 CLI 通路，要用 CLI 後端請開桌面版 App"}">＋ 新增 CLI 後端</button>
+    ${nativeNow ? "" : `<span class="hint">瀏覽器版沒有 CLI 通路 —— CLI 後端要在桌面版 App 裡建立與使用。</span>`}
+  </div>
+  ${addingBackendKind ? `<div class="pr-editor" style="margin-top:12px">${addBackendFormHtml(addingBackendKind)}</div>` : ""}`;
+
+  bindAgentBackends(host);
+}
+
+function backendEditorHtml(b: AgentBackend): string {
+  const common = `${backendFieldHtml(
+    "ab-label",
+    "顯示名稱",
+    `<input type="text" id="ab-label" value="${escapeHtml(b.label)}" placeholder="留空則由通路與模型推導" />`,
+  )}`;
+  if (b.kind === "cli") {
+    const probe = cliProbe(b.tool, cliPaths, isNative());
+    return `${common}
+      ${backendFieldHtml("ab-tool", "CLI 工具", `<select id="ab-tool">${cliToolOptionsHtml(b.tool)}</select>`, escapeHtml(cliProbeNote(probe, b.tool)))}
+      ${backendFieldHtml(
+        "ab-path",
+        "CLI 路徑（選填）",
+        `<input type="text" id="ab-path" value="${escapeHtml(b.pathOverride ?? "")}" placeholder="例如 /opt/homebrew/bin/claude" spellcheck="false" />`,
+        // ponytail: pathOverride 存在後端這一筆，但原生端的 set_cli_path 是
+        // per-tool 全域，agent_cli_run(tool, prompt) 根本不吃路徑。天花板是
+        // 「同一個 CLI 工具只會套用最後儲存的那個路徑」——兩個都綁 claude 的
+        // 後端各填一個路徑，後存的那個贏。升級路徑：Rust 端把 run 的簽章
+        // 改成收 path（或收 backendId 由 Rust 自己查），前端這一欄就能真正 per-backend。
+        // 現在不改是因為那要動 W2 已驗收的原生契約，成本不成比例。
+        "留空＝用自動偵測到的路徑。⚠️ 同一個 CLI 工具只會套用<strong>最後儲存</strong>的路徑：兩個都綁同一個工具的後端各填一個，後存的那個會蓋掉前一個。",
+      )}`;
+  }
+  return `${common}
+    ${backendFieldHtml("ab-provider", "API 通路", `<select id="ab-provider">${providerOptionsHtml(b.provider)}</select>`)}
+    ${backendFieldHtml("ab-model", "模型 ID", `<input type="text" id="ab-model" value="${escapeHtml(b.model)}" spellcheck="false" />`)}
+    ${backendFieldHtml("ab-endpoint", "API 端點", `<input type="text" id="ab-endpoint" value="${escapeHtml(b.endpoint)}" spellcheck="false" />`)}
+    ${backendFieldHtml(
+      "ab-key",
+      "API Key",
+      `<input type="password" id="ab-key" value="" autocomplete="off" placeholder="${b.apiKey.trim() ? "已設定 —— 留空表示不變更" : "尚未設定"}" />`,
+      // 既有金鑰不回填進 value，是規矩 2。留空＝不動，所以要另給一顆清除鍵，
+      // 否則使用者沒有辦法把一把設錯的金鑰刪掉（只能刪掉整筆後端重建）。
+      `僅存本機、永遠不顯示既有值。留空＝不變更。${b.apiKey.trim() ? ` <button type="button" class="linkish" data-ab-clearkey="${escapeHtml(b.id)}">清除這把金鑰</button>` : ""}`,
+    )}`;
+}
+
+function addBackendFormHtml(kind: "api" | "cli"): string {
+  const head = `<h3 style="margin:0 0 8px;font-size:13px">新增${kind === "api" ? " API " : " CLI "}後端</h3>
+    ${backendFieldHtml("ab-new-id", "後端 ID", `<input type="text" id="ab-new-id" placeholder="英數即可，例如 openrouter-backup" spellcheck="false" />`, "之後綁 Agent 時認的就是這個 ID，建立後不可更改。")}
+    ${backendFieldHtml("ab-new-label", "顯示名稱（選填）", `<input type="text" id="ab-new-label" placeholder="留空則自動推導" />`)}`;
+  const body =
+    kind === "cli"
+      ? `${backendFieldHtml("ab-new-tool", "CLI 工具", `<select id="ab-new-tool">${cliToolOptionsHtml("")}</select>`, "只有這幾個 —— 其餘工具實測後因安全理由出局，清單與理由見 docs/BRIDGE.md §3.1。")}
+         ${backendFieldHtml("ab-new-path", "CLI 路徑（選填）", `<input type="text" id="ab-new-path" placeholder="留空＝用自動偵測" spellcheck="false" />`, "⚠️ 同一個 CLI 工具只會套用<strong>最後儲存</strong>的路徑。")}`
+      : `${backendFieldHtml("ab-new-provider", "API 通路", `<select id="ab-new-provider">${providerOptionsHtml("auto")}</select>`)}
+         ${backendFieldHtml("ab-new-model", "模型 ID", `<input type="text" id="ab-new-model" spellcheck="false" />`)}
+         ${backendFieldHtml("ab-new-endpoint", "API 端點", `<input type="text" id="ab-new-endpoint" spellcheck="false" />`)}
+         ${backendFieldHtml("ab-new-key", "API Key", `<input type="password" id="ab-new-key" value="" autocomplete="off" />`, "僅存本機。")}`;
+  return `${head}${body}
+    <div class="pr-editor-foot">
+      <span style="flex:1"></span>
+      <button type="button" class="btn btn-sm btn-ghost" id="ab-new-cancel">取消</button>
+      <button type="button" class="btn btn-sm btn-primary" id="ab-new-save">建立</button>
+    </div>`;
+}
+
+function val(id: string): string {
+  return (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value ?? "";
+}
+
+function bindAgentBackends(host: HTMLElement): void {
+  host.querySelectorAll<HTMLButtonElement>("[data-ab-edit]").forEach((b) => {
+    b.onclick = () => {
+      openBackendId = openBackendId === b.dataset.abEdit ? null : b.dataset.abEdit!;
+      renderAgentBackends();
+    };
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-ab-del]").forEach((b) => {
+    b.onclick = async () => {
+      const id = b.dataset.abDel!;
+      if (!(await askConfirm({ title: `刪除後端「${id}」？`, danger: true }))) return;
+      const r = store.removeBackend(id);
+      // 擋下來的理由（誰還綁著它）原話照登 —— 那句話就是使用者的下一步。
+      toast(r.ok ? "已刪除後端" : (r.reason ?? "刪除失敗"));
+      if (r.ok && openBackendId === id) openBackendId = null;
+      renderAgentBackends();
+    };
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-ab-clearkey]").forEach((b) => {
+    b.onclick = () => {
+      const r = store.updateBackend(b.dataset.abClearkey!, { apiKey: "" });
+      toast(r.ok ? "已清除金鑰" : (r.reason ?? "清除失敗"));
+      renderAgentBackends();
+    };
+  });
+
+  host.querySelectorAll<HTMLButtonElement>("[data-ab-save]").forEach((b) => {
+    b.onclick = () => {
+      const id = b.dataset.abSave!;
+      const cur = store.listBackends().find((x) => x.id === id);
+      if (!cur) return;
+      const patch: BackendPatch = { label: val("ab-label") };
+      if (cur.kind === "cli") {
+        patch.tool = val("ab-tool") as AgentCliTool;
+        patch.pathOverride = val("ab-path").trim();
+      } else {
+        patch.provider = val("ab-provider") as AIProvider;
+        patch.model = val("ab-model").trim();
+        patch.endpoint = val("ab-endpoint").trim();
+        // 空字串＝沒動它。這是「既有值不回填」的必然結果，也是唯一能兼顧
+        // 「不把金鑰放進 DOM」與「可以只改模型不重打金鑰」的做法。
+        const key = val("ab-key");
+        if (key) patch.apiKey = key;
+      }
+      const r = store.updateBackend(id, patch);
+      toast(r.ok ? "已儲存後端" : (r.reason ?? "儲存失敗"));
+      if (r.ok && cur.kind === "cli") pushCliPath(patch.tool!, patch.pathOverride ?? "");
+      if (r.ok) openBackendId = null;
+      renderAgentBackends();
+    };
+  });
+
+  const addApi = document.getElementById("ab-add-api");
+  if (addApi) addApi.onclick = () => { addingBackendKind = "api"; renderAgentBackends(); };
+  const addCli = document.getElementById("ab-add-cli");
+  if (addCli) addCli.onclick = () => { addingBackendKind = "cli"; renderAgentBackends(); };
+  const cancel = document.getElementById("ab-new-cancel");
+  if (cancel) cancel.onclick = () => { addingBackendKind = null; renderAgentBackends(); };
+
+  const save = document.getElementById("ab-new-save");
+  if (save)
+    save.onclick = () => {
+      const kind = addingBackendKind;
+      if (!kind) return;
+      const id = val("ab-new-id").trim();
+      const label = val("ab-new-label");
+      const b: AgentBackend =
+        kind === "cli"
+          ? {
+              id,
+              label,
+              kind: "cli",
+              tool: val("ab-new-tool") as AgentCliTool,
+              pathOverride: val("ab-new-path").trim(),
+            }
+          : {
+              id,
+              label,
+              kind: "api",
+              provider: val("ab-new-provider") as AIProvider,
+              model: val("ab-new-model").trim(),
+              endpoint: val("ab-new-endpoint").trim(),
+              apiKey: val("ab-new-key"),
+            };
+      const r = store.addBackend(b);
+      // 擋下的理由原話照登：「後端 ID 不可空白」「已經有一個 ID 為「x」的後端」
+      // 這些字串直接告訴使用者要改什麼，換成「新增失敗」他只會再按一次。
+      toast(r.ok ? "已新增後端" : (r.reason ?? "新增失敗"));
+      if (!r.ok) return;
+      if (b.kind === "cli") pushCliPath(b.tool, b.pathOverride ?? "");
+      addingBackendKind = null;
+      renderAgentBackends();
+    };
+}
+
+/**
+ * 把使用者填的路徑推給原生端。
+ *
+ * ponytail: 這是 per-backend 的欄位打進一個 per-tool 的全域槽。`set_cli_path`
+ * 與 `agent_cli_run(tool, prompt)` 都只認工具，不認後端，所以同一個工具的
+ * 最後一次儲存會蓋掉前一次。不推的話這一欄會是純裝飾（存了但沒人讀），
+ * 那比會被覆蓋更糟 —— 至少覆蓋這件事講在欄位旁邊。
+ * 升級路徑寫在 `backendEditorHtml` 的那則 ponytail 註解。
+ */
+function pushCliPath(tool: AgentCliTool, path: string): void {
+  if (!isNative()) return;
+  void native
+    .setCliPath(tool, path.trim() || null)
+    .then(() => native.probeClis())
+    .then((p) => {
+      cliPaths = p;
+      renderAgentBackends();
+    })
+    .catch(() => {
+      /* 路徑設定失敗不擋儲存 —— 後端那一筆已經存好了，下次啟動照樣會重試偵測 */
+    });
+}
+
+renderAgentBackends();
 
 document.getElementById("btn-ai-test")?.addEventListener("click", async () => {
   const out = document.getElementById("ai-test-result");

@@ -15,16 +15,24 @@
  * 純函式、零 I/O。
  */
 
+import type { AgentFamily } from "../data/types";
 import { ANCHOR_PREFIX } from "./plan-parser";
-
-export type AgentFamilyId = "claude" | "codex" | "gemini" | "other";
 
 export type HandoffInput = {
   /** 專案根目錄絕對路徑 */
   projectRoot: string;
   /** 要交代的事 */
   task: string;
-  family: AgentFamilyId;
+  /**
+   * 交給哪個族系。**型別是完整的 `AgentFamily`（十個），不是 runner 表的子集。**
+   *
+   * 2026-08-26 之前這裡是一個只有四個成員的 `AgentFamilyId`，而
+   * `tracking.ts` 用 `as` 把十個成員的 `AgentFamily` 硬轉進來 ——
+   * 於是 `grok`/`pi`/`hermes`/`agy`/`gpt`/`local` 六個族系會讓
+   * `RUNNER[family]` 拿到 undefined，按下交接當場 TypeError。
+   * 收窄的那個型別沒有擋住任何東西，只是把錯誤從編譯期挪到執行期。
+   */
+  family: AgentFamily;
   /** openspec change 名稱（有的話會寫進 prompt） */
   change?: string;
   /** 下一個 ready 的 artifact，例如 `design.md` */
@@ -67,12 +75,76 @@ export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
-const RUNNER: Record<AgentFamilyId, (prompt: string) => string> = {
-  claude: (p) => `claude -p ${shellQuote(p)}`,
-  codex: (p) => `codex exec ${shellQuote(p)}`,
-  gemini: (p) => `gemini -p ${shellQuote(p)}`,
-  other: (p) => `# 貼給你的 agent：\n${p}`,
+/**
+ * 一個族系怎麼跑。
+ *
+ * `cwd` 是「這串東西是不是一行可執行的指令」—— 是的話前面要接
+ * `cd <專案根>`；不是的話它只是一段給人自己貼進 agent 的文字，接 `cd` 只會
+ * 讓人以為那是可執行的。
+ */
+type FamilyRunner = {
+  run: (prompt: string) => string;
+  cwd: boolean;
 };
+
+/**
+ * 沒有已知 CLI 的族系走這條：把 prompt 原樣交出去，由人自己貼。
+ *
+ * 這是**回退，不是失敗**。要緊的是它一定給得出東西 —— 這顆按鈕唯一不可接受的
+ * 行為是丟 TypeError，因為那會讓使用者以為是 App 壞了而不是「這個族系沒有 CLI」。
+ */
+const PASTE: FamilyRunner = {
+  run: (p) => `# 貼給你的 agent：\n${p}`,
+  cwd: false,
+};
+
+/**
+ * 族系 → 指令。**十個成員一個都不能少**：型別寫成完整的
+ * `Record<AgentFamily, …>` 是刻意的，將來 `AgentFamily` 加一個成員時
+ * `tsc` 會在這裡紅燈，而不是等使用者按下交接才炸。
+ *
+ * ⚠️ **這份清單跟 `exec.rs` 的 CLI 執行白名單是兩件事，不要對齊。**
+ * 這裡產生的是給人貼進終端的字串，App 從頭到尾不執行它（見檔頭）；
+ * 那份白名單管的是原生 spawn，`agent-backend.ts` 的 `CLI_TOOLS` 才要跟它逐字相同。
+ * 所以這裡留著 `gemini`（這台機器沒裝）沒有安全問題 —— 頂多是貼過去指令失敗，
+ * 而那是使用者看得見、講得出原因的失敗。
+ *
+ * 旗標全部是實跑 `--help` 看來的，不是憑印象：`pi --print, -p`、
+ * `agy -p / --print`、`grok` 的 prompt 是位置參數（`grok [OPTIONS] [PROMPT]`）。
+ * 這些是**要幹活的**呼叫，所以刻意不帶 `exec.rs` 那套停用工具的旗標 ——
+ * 那套是給 App 自己 spawn 用的，交接出去的 agent 本來就該有工具。
+ */
+const RUNNER: Record<AgentFamily, FamilyRunner> = {
+  claude: { run: (p) => `claude -p ${shellQuote(p)}`, cwd: true },
+  codex: { run: (p) => `codex exec ${shellQuote(p)}`, cwd: true },
+  gemini: { run: (p) => `gemini -p ${shellQuote(p)}`, cwd: true },
+  grok: { run: (p) => `grok ${shellQuote(p)}`, cwd: true },
+  pi: { run: (p) => `pi -p ${shellQuote(p)}`, cwd: true },
+  agy: { run: (p) => `agy -p ${shellQuote(p)}`, cwd: true },
+  // 以下四個沒有「一行就能派工」的 CLI 呼叫。`hermes` 有 CLI，但它的
+  // 非互動旗標沒有實測過，寧可交出 prompt 讓人自己跑，也不要給一行猜的指令。
+  hermes: PASTE,
+  gpt: PASTE,
+  local: PASTE,
+  other: PASTE,
+};
+
+/**
+ * 總函式：**任何**字串都給得出 runner。
+ *
+ * 型別上 `RUNNER` 已經蓋滿聯集，但 `project.authorAgentFamily` 的來源是
+ * localStorage 與匯入的備份，兩者都可以被手改成聯集外的值，而型別擋不到
+ * 執行期的資料。所以這裡再擋一次 —— 型別的完整性防的是未來改 code 的人，
+ * 這個 `??` 防的是已經存在磁碟上的髒資料。
+ */
+export function runnerFor(family: string | null | undefined): FamilyRunner {
+  // 用 hasOwnProperty 而不是 `RUNNER[family] ?? PASTE`：後者對 `"toString"`
+  // 這類 `Object.prototype` 上的名字會拿到**繼承來的函式**（不是 undefined），
+  // `??` 於是不會觸發，接著 `runner.cwd` 是 undefined、`runner.run` 不存在 ——
+  // 也就是把原本要修掉的那個 TypeError 換一個入口再開一次。
+  if (!family || !Object.prototype.hasOwnProperty.call(RUNNER, family)) return PASTE;
+  return RUNNER[family as AgentFamily];
+}
 
 /**
  * 組出 prompt。刻意帶上 openspec 脈絡 —— agent 拿到「寫 design.md」比
@@ -150,11 +222,11 @@ export function buildHandoff(input: HandoffInput): Handoff {
       : null;
 
   const prompt = buildPrompt(input);
-  const run = RUNNER[input.family](prompt);
-  const command =
-    input.family === "other"
-      ? run
-      : `cd ${shellQuote(input.projectRoot)} && ${run}`;
+  const runner = runnerFor(input.family);
+  const run = runner.run(prompt);
+  // 判準從「族系是不是 other」換成「這串是不是可執行的指令」。前者只是後者的
+  // 一個特例，而每多一個沒有 CLI 的族系，前者就會多錯一次。
+  const command = runner.cwd ? `cd ${shellQuote(input.projectRoot)} && ${run}` : run;
 
   return { command, blocked };
 }
