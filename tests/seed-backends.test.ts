@@ -32,6 +32,22 @@ describe("SEED_BACKENDS", () => {
     for (const t of tools) expect(CLI_TOOLS as readonly string[]).toContain(t);
   });
 
+  test("**每一隻**示範 agent 都綁了後端 —— 漏綁一隻的症狀是那條路照樣打 API", async () => {
+    const { SEED_EMPLOYEES_DEMO } = await import("../src/data/seed");
+    const agents = SEED_EMPLOYEES_DEMO.filter((e) => e.kind === "agent");
+    expect(agents.length).toBeGreaterThan(1);
+    const unbound = agents.filter((a) => !a.backendId).map((a) => a.id);
+    expect(unbound).toEqual([]);
+  });
+
+  test("綁的 id 就是種子裡真的存在的那一個", () => {
+    const ids = [...SEED_SRC.matchAll(/backendId:\s*"([\w-]+)"/g)].map((m) => m[1]!);
+    const declared = SEED_SRC.match(/const DEMO_CLI_BACKEND_ID = "([\w-]+)"/)?.[1];
+    expect(declared).toBeTruthy();
+    for (const id of ids) expect(id).toBe(declared);
+    expect(SEED_SRC).toContain(`id: "${declared}"`);
+  });
+
   test("正式版的 starter agents 不帶後端綁定", () => {
     const block = SEED_SRC.slice(SEED_SRC.indexOf("export function buildStarterAgents"));
     expect(block.slice(0, 600)).toContain("backendId: undefined");

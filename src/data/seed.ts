@@ -862,6 +862,20 @@ export function buildSeedCase(projectId: string, employees: Employee[]): CaseRec
 }
 
 /** 測試版示範帳號（密碼一律 demo）；正式版不載入 */
+/**
+ * 測試版示範 agent 一律綁這個後端。
+ *
+ * **每一隻都綁，不是綁一隻就好。** 2026-08-27 只綁了編輯 agent，結果簽核頁
+ * 按「執行分析」照樣打 API —— 那條路派工的是**關卡指定的那隻 agent**
+ * （`signoff.ts` 的 `dataset.sgAgent`），跟編輯 agent 不是同一隻。
+ * 漏綁的症狀不是報錯，是「我明明設定好了它還是走 API」。
+ *
+ * 全部綁同一個 `claude` 後端而不是各自綁同名 CLI（grok / agy 也在白名單裡）：
+ * 那兩個工具在這台機器上還沒實跑驗證過，預載沒驗過的東西，使用者拿到失敗時
+ * 分不出是 App 壞了還是那個 CLI 沒裝。
+ */
+const DEMO_CLI_BACKEND_ID = "local-claude";
+
 export const SEED_EMPLOYEES_DEMO: Employee[] = [
   {
     id: "scott",
@@ -884,6 +898,7 @@ export const SEED_EMPLOYEES_DEMO: Employee[] = [
     email: "claude.approve@agents.local",
     accessRole: "approver",
     kind: "agent",
+    backendId: DEMO_CLI_BACKEND_ID,
     agentFamily: "claude",
     password: "demo",
     isCurrent: false,
@@ -902,11 +917,8 @@ export const SEED_EMPLOYEES_DEMO: Employee[] = [
     email: "claude.edit@agents.local",
     accessRole: "editor",
     kind: "agent",
+    backendId: DEMO_CLI_BACKEND_ID,
     agentFamily: "claude",
-    // 測試版開箱就有一隻走本機 CLI 的 agent —— CLI 通路是整批最大的未驗區，
-    // 而要使用者先自己建後端再綁才測得到的話，那一區實務上永遠不會被測。
-    // 正式版由 `buildStarterAgents` 把這個欄位拔掉（那邊沒有這個後端）。
-    backendId: "local-claude",
     password: "demo",
     isCurrent: false,
     active: true,
@@ -924,6 +936,7 @@ export const SEED_EMPLOYEES_DEMO: Employee[] = [
     email: "codex.approve@agents.local",
     accessRole: "approver",
     kind: "agent",
+    backendId: DEMO_CLI_BACKEND_ID,
     agentFamily: "codex",
     password: "demo",
     isCurrent: false,
@@ -942,6 +955,7 @@ export const SEED_EMPLOYEES_DEMO: Employee[] = [
     email: "codex.edit@agents.local",
     accessRole: "editor",
     kind: "agent",
+    backendId: DEMO_CLI_BACKEND_ID,
     agentFamily: "codex",
     password: "demo",
     isCurrent: false,
@@ -960,6 +974,7 @@ export const SEED_EMPLOYEES_DEMO: Employee[] = [
     email: "grok.approve@agents.local",
     accessRole: "approver",
     kind: "agent",
+    backendId: DEMO_CLI_BACKEND_ID,
     agentFamily: "grok",
     password: "demo",
     isCurrent: false,
@@ -978,6 +993,7 @@ export const SEED_EMPLOYEES_DEMO: Employee[] = [
     email: "grok.edit@agents.local",
     accessRole: "editor",
     kind: "agent",
+    backendId: DEMO_CLI_BACKEND_ID,
     agentFamily: "grok",
     password: "demo",
     isCurrent: false,
@@ -996,6 +1012,7 @@ export const SEED_EMPLOYEES_DEMO: Employee[] = [
     email: "agy.approve@agents.local",
     accessRole: "approver",
     kind: "agent",
+    backendId: DEMO_CLI_BACKEND_ID,
     agentFamily: "agy",
     password: "demo",
     isCurrent: false,
@@ -1014,6 +1031,7 @@ export const SEED_EMPLOYEES_DEMO: Employee[] = [
     email: "agy.edit@agents.local",
     accessRole: "editor",
     kind: "agent",
+    backendId: DEMO_CLI_BACKEND_ID,
     agentFamily: "agy",
     password: "demo",
     isCurrent: false,
