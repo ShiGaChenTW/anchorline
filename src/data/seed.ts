@@ -1,4 +1,5 @@
 import type {
+  AgentBackend,
   AISettings,
   Approval,
   CaseRecord,
@@ -902,6 +903,10 @@ export const SEED_EMPLOYEES_DEMO: Employee[] = [
     accessRole: "editor",
     kind: "agent",
     agentFamily: "claude",
+    // 測試版開箱就有一隻走本機 CLI 的 agent —— CLI 通路是整批最大的未驗區，
+    // 而要使用者先自己建後端再綁才測得到的話，那一區實務上永遠不會被測。
+    // 正式版由 `buildStarterAgents` 把這個欄位拔掉（那邊沒有這個後端）。
+    backendId: "local-claude",
     password: "demo",
     isCurrent: false,
     active: true,
@@ -1032,12 +1037,32 @@ export const SEED_EMPLOYEES: Employee[] =
 export function buildStarterAgents(adminPassword: string): Employee[] {
   return SEED_EMPLOYEES_DEMO.filter((e) => e.kind === "agent").map((e) => ({
     ...structuredClone(e),
+    // 示範資料裡的後端綁定不能跟著進正式版 —— 那個 CLI 後端只存在於測試版種子。
+    // 留著雖然會被 `resolveBackend` 安全回退，但 agents 頁會顯示一個
+    // 「你綁的後端不存在」的警告，而使用者從沒綁過任何東西。
+    backendId: undefined,
     password: adminPassword || e.password,
     isCurrent: false,
     active: true,
     agentEnabled: true,
   }));
 }
+
+/**
+ * 測試版預載的 Agent 後端。**正式版是空的。**
+ *
+ * 只放 `claude`：四個白名單工具裡，它是唯一在開發機上實跑驗證過
+ * （2026-08-27，GUI 的裸 PATH ＋ Rust 寫死的旗標，回得出內容）的一個。
+ * 預載一個沒驗過的工具，使用者第一次按下去拿到「找不到」，
+ * 會以為是功能壞了而不是那台機器沒裝。
+ *
+ * 正式版不預載的理由更硬：**別人的機器上不一定有 `claude`**，
+ * 而預設就綁一個不存在的東西，等於出廠即故障。
+ */
+export const SEED_BACKENDS: AgentBackend[] =
+  APP_VARIANT === "test"
+    ? [{ id: "local-claude", label: "本機 Claude CLI（示範）", kind: "cli", tool: "claude" }]
+    : [];
 
 export const DEFAULT_SETTINGS: AISettings = {
   model: "gemini-2.5-flash",

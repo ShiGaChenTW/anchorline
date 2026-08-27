@@ -7,6 +7,7 @@ import {
   DEFAULT_SETTINGS,
   GHOST_USER,
   SEED_APPROVALS,
+  SEED_BACKENDS,
   SEED_COMMENTS,
   SEED_EMPLOYEES,
   SEED_PROJECTS,
@@ -523,7 +524,9 @@ function seedState(): AppState {
     activeSectionId: "summary",
     activeOpenSpecChange: "",
     activeOpenSpecFile: "",
-    settings: structuredClone(DEFAULT_SETTINGS),
+    // 測試版種子帶一個本機 CLI 後端（正式版是空陣列）—— CLI 通路是這批最大的
+    // 未驗區，要使用者先自己建後端才測得到的話，那一區實務上永遠不會被測。
+    settings: { ...structuredClone(DEFAULT_SETTINGS), backends: structuredClone(SEED_BACKENDS) },
     showSamples: isTest,
     agentJobs: [],
     releases: [],

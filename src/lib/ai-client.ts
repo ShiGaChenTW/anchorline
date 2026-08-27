@@ -243,6 +243,18 @@ async function callGemini(system: string, user: string, s: AISettings, opts?: Ch
   return text.trim();
 }
 
+/**
+ * 回應長度上限。**每一條 provider 通路都必須送**，不是只有 Anthropic。
+ *
+ * 不送的代價不是「回應可以更長」，而是**額度預授權按模型上限算**。
+ * 2026-08-27 實測：OpenRouter 對沒帶 `max_tokens` 的請求用模型的
+ * 最大 completion 長度（該模型是 65536）去預扣，於是回
+ * `402 … You requested up to 65536 tokens, but can only afford 24775` ——
+ * 使用者的餘額跑一次正常回應綽綽有餘，卻被一個從來不打算用到的天花板擋死。
+ * Anthropic 那條路一直有送，OpenAI 相容這條漏了，所以症狀只出現在 OpenRouter。
+ */
+const MAX_TOKENS = 16384;
+
 async function callOpenAICompat(system: string, user: string, s: AISettings, opts?: ChatOpts): Promise<string> {
   const isLocal =
     s.model === "local-smart" || /localhost|127\.0\.0\.1|11434/i.test(s.endpoint || "");
@@ -258,6 +270,7 @@ async function callOpenAICompat(system: string, user: string, s: AISettings, opt
     JSON.stringify({
       model,
       temperature: resolveTemp(s, opts),
+      max_tokens: MAX_TOKENS,
       ...(withJsonMode ? { response_format: { type: "json_object" } } : {}),
       messages: [
         { role: "system", content: system },
@@ -313,7 +326,7 @@ async function callAnthropic(system: string, user: string, s: AISettings, opts?:
       // 4096 對散文夠，對「產生一份完整的領域包」遠遠不夠——實測一份含五個
       // 章節與法規引用的包會被切在半句話。而截斷的症狀不是「內容變短」，是
       // 下游解析器說「缺少 frontmatter」，完全指不到真正的原因。
-      max_tokens: 16384,
+      max_tokens: MAX_TOKENS,
       ...(withTemp ? { temperature: resolveTemp(s, opts) } : {}),
       system,
       messages: [{ role: "user", content: user }],
@@ -347,7 +360,7 @@ async function callAnthropic(system: string, user: string, s: AISettings, opts?:
   // 截斷要當場講。不講的話下游只會看到「格式不對」，然後所有人去查格式。
   if (data.stop_reason === "max_tokens") {
     throw new AiError(
-      `回應超過長度上限被截斷（max_tokens ${16384}）。請把要求縮小，或分兩次產生。`,
+      `回應超過長度上限被截斷（max_tokens ${MAX_TOKENS}）。請把要求縮小，或分兩次產生。`,
       "truncated",
     );
   }
@@ -595,7 +608,7 @@ async function streamAnthropic(
   const body = (withTemp: boolean) =>
     JSON.stringify({
       model,
-      max_tokens: 16384,
+      max_tokens: MAX_TOKENS,
       stream: true,
       ...(withTemp ? { temperature: resolveTemp(s, opts) } : {}),
       system,
@@ -649,6 +662,7 @@ async function streamOpenAICompat(
       model,
       stream: true,
       temperature: resolveTemp(s, opts),
+      max_tokens: MAX_TOKENS,
       ...(withJsonMode ? { response_format: { type: "json_object" } } : {}),
       messages: [
         { role: "system", content: system },
