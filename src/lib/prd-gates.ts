@@ -452,6 +452,55 @@ export const BASE_GATE_SPEC: GateSpec = {
   },
 };
 
+/**
+ * 試作／探索（vibe）的最小規則組 —— 獨立一份純資料，不是 `_base` 的濾鏡。
+ *
+ * 一頁意圖只有三節，gate 只剩兩道 block：
+ * - 三行摘要**只查「做什麼」**——給誰／為何現在在「還不確定要不要做」的
+ *   階段常常答不出來，逼著填只會逼人編
+ * - Non-Goals 降為至少 1 條（**仍是 block**）——「刻意不做什麼」是這一檔
+ *   唯一擋 scope 膨脹的欄杆，歸零等於治理歸零
+ *
+ * 指標類 gate、warn 組與 hints、空章節檢查**全部不載入**：vibe 檔的空白
+ * 是常態不是欠債，對一頁意圖噴警告是把人趕回「乾脆不進 App」那條爛路。
+ *
+ * 規則 id 沿用 `_base` 的同名 id（`summary-incomplete`／`non-goals-min`），
+ * 自檢對照表與畫面上的既有文案映射才接得上。
+ */
+export const VIBE_GATE_SPEC: GateSpec = {
+  groups: [
+    {
+      rules: [
+        {
+          id: "summary-incomplete",
+          level: "block",
+          label: "三行摘要不完整",
+          detail: "缺少欄位：{missing}（做什麼）",
+          section: "summary",
+          fields: ["what"],
+          require: { kind: "present" },
+        },
+      ],
+      pass: { id: "summary-ok", label: "三行摘要完整", detail: "「做什麼」已有內容（試作檔只查這一欄）" },
+    },
+    {
+      rules: [
+        {
+          id: "non-goals-min",
+          level: "block",
+          label: "Non-Goals 不足 1 條",
+          detail: "目前約 {count} 條。試作檔也要至少 1 條「刻意不做」—— 那是唯一擋 scope 膨脹的欄杆。",
+          section: "goals",
+          fields: ["nongoals"],
+          require: { kind: "bullets", min: 1 },
+        },
+      ],
+      pass: { id: "non-goals-ok", label: "Non-Goals 達標", detail: "已有 {count} 條非目標" },
+    },
+  ],
+  // hints 與 emptySections 刻意缺席 —— 不是漏寫。見上方檔頭說明。
+};
+
 /** 領域包接進來時，把 spec 換掉即可；預設走 `_base`。 */
 export function evaluatePrdGates(state: AppState, spec: GateSpec = BASE_GATE_SPEC): GateReport {
   return runGateSpec(

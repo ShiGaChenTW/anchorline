@@ -12,7 +12,7 @@ import { describe, expect, test } from "bun:test";
 import type { AppState, Section } from "../src/data/types";
 import type { GateReport } from "../src/lib/gate-rules";
 import { type GateSpec, runSectionCoach } from "../src/lib/gate-rules";
-import { BASE_GATE_SPEC, evaluatePrdGates, gateSummaryLine } from "../src/lib/prd-gates";
+import { BASE_GATE_SPEC, evaluatePrdGates, gateSummaryLine, VIBE_GATE_SPEC } from "../src/lib/prd-gates";
 
 type Values = Record<string, Record<string, string>>;
 
@@ -644,5 +644,116 @@ describe("自檢規則：其餘章節", () => {
 
   test("背景缺佐證 → warn", () => {
     expect(find(st({ ...OK, problem: { ...OK.problem, quote: "有" } }), "problem-no-evidence")?.level).toBe("warn");
+  });
+});
+
+// ── 試作／探索（vibe）的最小規則組 ────────────────────────────
+//
+// 決策 5 之下的獨立 spec：兩道 block（what、Non-Goals ≥1），其餘全關。
+// 「只寫了做什麼＋1 條 Non-Goal 就零 block」是這一檔的驗收場景 ——
+// 給誰／為何現在／指標在「還不確定要不要做」的階段不該擋人。
+
+describe("VIBE_GATE_SPEC —— 結構", () => {
+  const allRules = VIBE_GATE_SPEC.groups.flatMap((g) => g.rules);
+
+  test("只有兩條規則，全是 block：summary-incomplete 與 non-goals-min", () => {
+    expect(allRules.map((r) => r.id).sort()).toEqual(["non-goals-min", "summary-incomplete"]);
+    for (const r of allRules) expect(r.level, r.id).toBe("block");
+  });
+
+  test("三行摘要只查「做什麼」—— 給誰／為何現在不進欄位清單", () => {
+    const r = allRules.find((x) => x.id === "summary-incomplete")!;
+    expect(r.fields).toEqual(["what"]);
+  });
+
+  test("Non-Goals 降為 ≥1（仍 block）", () => {
+    const r = allRules.find((x) => x.id === "non-goals-min")!;
+    expect(r.require).toEqual({ kind: "bullets", min: 1 });
+  });
+
+  test("warn 組與 hints 不載入、emptySections 關 —— 刻意缺席，不是漏寫", () => {
+    expect(allRules.some((r) => r.level === "warn")).toBe(false);
+    expect(VIBE_GATE_SPEC.hints).toBeUndefined();
+    expect(VIBE_GATE_SPEC.emptySections).toBeUndefined();
+  });
+});
+
+describe("VIBE_GATE_SPEC —— 行為", () => {
+  const vibe = (values: Values, statuses: Section["status"][] = []) =>
+    evaluatePrdGates(st(values, statuses), VIBE_GATE_SPEC);
+
+  test("只寫「做什麼」＋ 1 條 Non-Goal → 零 block、可送審（spec 的驗收場景）", () => {
+    const r = vibe({
+      summary: { what: "把匯入流程改成拖拉即可" },
+      goals: { nongoals: "- 不做批次匯入" },
+    });
+    expect(r.blocks).toBe(0);
+    expect(r.canSubmit).toBe(true);
+    expect(r.warns).toBe(0);
+  });
+
+  test("「做什麼」空白 → block（試作檔唯一必填的一句話）", () => {
+    const r = vibe({ summary: { who: "自己" }, goals: { nongoals: "- 不做批次匯入" } });
+    expect(r.findings.find((f) => f.id === "summary-incomplete")?.level).toBe("block");
+  });
+
+  test("給誰／為何現在／指標全空 → 不 block 也不 warn", () => {
+    const r = vibe({
+      summary: { what: "把匯入流程改成拖拉即可", who: "", why: "" },
+      goals: { nongoals: "- 不做批次匯入" },
+      metrics: {},
+    });
+    expect(r.blocks).toBe(0);
+    expect(r.warns).toBe(0);
+  });
+
+  test("Non-Goals 零條 → block；1 條就過", () => {
+    const none = vibe({ summary: { what: "拖拉匯入" }, goals: { nongoals: "" } });
+    expect(none.findings.find((f) => f.id === "non-goals-min")?.level).toBe("block");
+    const one = vibe({ summary: { what: "拖拉匯入" }, goals: { nongoals: "- 不做批次匯入" } });
+    expect(one.findings.find((f) => f.id === "non-goals-min")).toBeUndefined();
+  });
+
+  test("整片空章節也不發「多個章節仍空白」—— vibe 的空白是常態不是欠債", () => {
+    const r = vibe({ summary: { what: "拖拉匯入" }, goals: { nongoals: "- 不做批次匯入" } }, [
+      "empty",
+      "empty",
+      "empty",
+      "empty",
+    ]);
+    expect(r.findings.find((f) => f.id === "many-empty")).toBeUndefined();
+    expect(r.warns).toBe(0);
+  });
+
+  test("同一份內容餵 BASE_GATE_SPEC 會被擋 —— 兩份 spec 真的不同，不是同一份的別名", () => {
+    const values: Values = {
+      summary: { what: "拖拉匯入" },
+      goals: { nongoals: "- 不做批次匯入" },
+    };
+    expect(evaluatePrdGates(st(values), BASE_GATE_SPEC).blocks).toBeGreaterThan(0);
+    expect(evaluatePrdGates(st(values), VIBE_GATE_SPEC).blocks).toBe(0);
+  });
+});
+
+describe("VIBE_GATE_SPEC —— 直譯器對缺席欄位的容錯", () => {
+  // hints 與 emptySections 是選填：這份 spec 兩個都不帶。直譯器的兩條
+  // 讀取路徑（runGateSpec 的 emptySections、runSectionCoach 的 hints）
+  // 都要在 undefined 上安靜走過 —— 不拋錯、也不憑空長出 finding。
+  const input = (vals: Values) => ({ sectionValues: vals, sectionStatuses: [] as Section["status"][] });
+
+  test("runSectionCoach 在 hints 缺席時照走 gate 規則，不拋錯", () => {
+    const findings = runSectionCoach(input({ summary: { what: "" } }), VIBE_GATE_SPEC, "summary");
+    expect(findings.map((f) => f.id)).toEqual(["summary-incomplete"]);
+    // 沒規則管的章節回空陣列 —— 不會因為 hints 是 undefined 而炸
+    expect(runSectionCoach(input({}), VIBE_GATE_SPEC, "metrics")).toEqual([]);
+  });
+
+  test("runGateSpec 在 emptySections 缺席時不發空章節警告，統計欄位齊全", () => {
+    const r = evaluatePrdGates(st({}, ["empty", "empty", "empty", "empty", "empty"]), VIBE_GATE_SPEC);
+    expect(r.findings.find((f) => f.id === "many-empty")).toBeUndefined();
+    // 報告本身仍完整可讀 —— blocks/warns 是數字不是 NaN
+    expect(r.blocks).toBe(2);
+    expect(r.warns).toBe(0);
+    expect(r.canSubmit).toBe(false);
   });
 });

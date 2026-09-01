@@ -14,6 +14,7 @@ import {
   sortPrdFileVersions,
 } from "../src/lib/prd-file";
 import { SEED_SECTIONS } from "../src/data/seed";
+import { VIBE_SECTIONS } from "../src/lib/prd-triage";
 import type { PrdVersion, Project, Section } from "../src/data/types";
 
 const AT = new Date("2026-09-01T14:20:00");
@@ -116,5 +117,26 @@ describe("renderPrdMarkdown", () => {
       version: version("commit"),
     });
     expect(md).toContain("Lite（");
+  });
+
+  // 釘住 138 行那個坑：路線標籤原本是寫死的 lite/full 三元，vibe 會被
+  // 誤標成「Full」而且看起來完全正常。這裡連同「只出三節」一起鎖。
+  test("vibe 專案的抬頭說「試作（3 節）」，且只出試作的三節", () => {
+    const vibeSections = SEED_SECTIONS.filter((s) =>
+      (VIBE_SECTIONS as readonly string[]).includes(s.id),
+    ) as Section[];
+    expect(vibeSections.length).toBe(VIBE_SECTIONS.length); // 濾出來的真的是三節
+    const md = renderPrdMarkdown({
+      project: { ...project, route: "vibe" },
+      sections: vibeSections,
+      docs: version("merge").docs,
+      version: version("merge"),
+    });
+    expect(md).toContain(`試作（${VIBE_SECTIONS.length} 節）`);
+    expect(md).not.toContain("Full（");
+    expect(md).not.toContain("Lite（");
+    // 章節標題剛好是那三節 —— 不在範圍裡的一節都不出現
+    const heads = md.match(/^## /gm) ?? [];
+    expect(heads.length).toBe(VIBE_SECTIONS.length);
   });
 });

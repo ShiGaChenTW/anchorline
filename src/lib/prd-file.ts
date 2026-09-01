@@ -21,6 +21,7 @@
  */
 import type { Project, PrdVersion, Section } from "../data/types";
 import { projectDisplayName } from "../data/types";
+import { projectRoute, type ProjectRoute } from "./prd-triage";
 
 /** 快照目錄，相對專案根 */
 export const PRD_VERSION_DIR = ".anchorline/prd";
@@ -111,6 +112,18 @@ const KIND_LABEL: Record<PrdVersion["kind"], string> = {
 };
 
 /**
+ * 抬頭「路線」欄的標籤。查表而不是三元式 —— 舊寫法
+ * `route === "lite" ? "Lite" : "Full"` 在 vibe 上路時會把試作檔誤標成
+ * 「Full（3 節）」，而且看起來完全正常。`Record<ProjectRoute, …>` 讓
+ * 下一條新路線在 tsc 就露餡，不用等有人讀到錯的檔頭。
+ */
+const ROUTE_LABEL: Record<ProjectRoute, string> = {
+  full: "Full",
+  lite: "Lite",
+  vibe: "試作",
+};
+
+/**
  * 一版 PRD 的 markdown。
  *
  * 為什麼不重用 `export.buildMarkdown`：那一支讀的是 `state.sections` /
@@ -135,7 +148,7 @@ export function renderPrdMarkdown({ project, sections, docs, version }: RenderIn
     `| 時間 | ${at.toLocaleString("zh-TW")} |`,
     `| 提交者 | ${version.byName} |`,
     `| 專案狀態 | ${project.status} |`,
-    `| 路線 | ${project.route === "lite" ? `Lite（${sections.length} 節）` : `Full（${sections.length} 節）`} |`,
+    `| 路線 | ${ROUTE_LABEL[projectRoute(project)]}（${sections.length} 節） |`,
     ``,
   ];
   if (version.message) lines.push(`> ${version.message}`, ``);

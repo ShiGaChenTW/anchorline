@@ -124,7 +124,11 @@
               <select id="route-select" aria-label="PRD 路線">
                 <option value="full">Full — 全量</option>
                 <option value="lite">Lite — 簡化</option>
+                <option value="vibe">試作／探索 — 一頁意圖</option>
               </select>
+              <!-- vibe 檔的最小治理：一鍵自簽＋錨點事件。非 vibe 路線整顆藏起來 -->
+              <button type="button" class="btn btn-ghost btn-sm" id="btn-self-sign" hidden
+                      title="一鍵完成簽核，並寫入一筆帶 anc:t= 錨點的稽核事件 —— 轉正時治理鏈從這裡接回去">自簽</button>
             </div>
             <div class="domain-orphans" id="domain-orphans" hidden></div>
             <div class="section-list" id="outline" role="listbox" aria-label="章節"></div>

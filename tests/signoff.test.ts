@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  canSelfSign,
   canSignAnyStage,
   canSignStage,
   groupTimelineByRound,
+  SELF_SIGN_NOTE,
+  selfSignSubject,
   signoffSummary,
   signoffTimeline,
   stageRows,
@@ -581,5 +584,97 @@ describe("canSignAnyStage", () => {
   test("沒有個案／沒有關卡各有各的說法", () => {
     expect((canSignAnyStage(emp(), proj(), undefined) as { reason: string }).reason).toContain("還沒有簽核個案");
     expect((canSignAnyStage(emp(), proj(), kase({ stages: [] })) as { reason: string }).reason).toContain("還沒有關卡");
+  });
+});
+
+// ── vibe 檔的一鍵自簽（最小治理）───────────────────────────────
+//
+// 自簽不是跳過簽核：它要留得下決策紀錄與帶錨點的稽核事件，轉正時鏈條
+// 才接得回去。這裡守純邏輯的三件事：只有 vibe 按得到、擋得住的情況講得
+// 出理由、事件 subject 帶 `anc:t=` 前綴（join key 與其他 writer 同形）。
+
+describe("canSelfSign", () => {
+  const vibe = () => proj({ route: "vibe" });
+
+  test("vibe 檔＋有簽核權限 → 可以自簽（豁免的是「人的自審」那一條，族系隔離照擋）", () => {
+    expect(canSelfSign(emp({ id: "u9" }), vibe(), kase())).toEqual({ can: true });
+    // authorId 就是簽的人 —— 一般簽核會被職責分立擋下，自簽不會
+    expect(canSelfSign(emp({ id: "u9" }), proj({ route: "vibe", authorId: "u9" }), kase())).toEqual({
+      can: true,
+    });
+  });
+
+  test("沒有個案也可以自簽 —— 個案由 store 補建", () => {
+    expect(canSelfSign(emp(), vibe(), undefined)).toEqual({ can: true });
+  });
+
+  test("full / lite 檔不給自簽，理由指向正式簽核", () => {
+    for (const route of [undefined, "lite"] as const) {
+      const r = canSelfSign(emp(), proj(route ? { route } : {}), kase());
+      expect(r.can).toBe(false);
+      expect((r as { reason: string }).reason).toContain("試作／探索");
+    }
+  });
+
+  test("已抽單擋下來", () => {
+    const r = canSelfSign(emp(), vibe(), kase({ withdrawn: true }));
+    expect((r as { reason: string }).reason).toContain("抽單");
+  });
+
+  test("已核准鎖定的案子擋下來", () => {
+    const r = canSelfSign(emp(), vibe(), kase({ locked: true }));
+    expect(r.can).toBe(false);
+    expect((r as { reason: string }).reason).toContain("已核准鎖定");
+  });
+
+  test("log 已有自簽決策 → 擋，說「已經自簽過」", () => {
+    const signed = kase({
+      log: [
+        {
+          id: "d1",
+          stageId: "cs1",
+          round: 1,
+          at: "2026-09-02T00:00:00Z",
+          byId: "u1",
+          byName: "阿明",
+          kind: "approved",
+          comment: `${SELF_SIGN_NOTE} · anc:t=ABCD1234`,
+        },
+      ],
+    });
+    const r = canSelfSign(emp(), vibe(), signed);
+    expect(r.can).toBe(false);
+    expect((r as { reason: string }).reason).toContain("已經自簽過");
+  });
+
+  test("全部關卡 skipped 的舊個案仍可自簽 —— allStagesSettled 會誤判 settled，vibe 檔就完全沒有簽核了", () => {
+    const r = canSelfSign(emp(), vibe(), kase({ stages: [stage({ state: "skipped" })] }));
+    expect(r).toEqual({ can: true });
+  });
+
+  test("同族系 agent 不能自簽自己家寫的文件 —— 族系隔離沒有自簽豁免（D3：沒有 admin 例外）", () => {
+    const agent = emp({ kind: "agent", agentFamily: "claude", accessRole: "admin" });
+    const r = canSelfSign(agent, proj({ route: "vibe", authorAgentFamily: "claude" }), kase());
+    expect(r.can).toBe(false);
+    expect((r as { reason: string }).reason).toContain("claude");
+  });
+
+  test("不同族系的 agent 有簽核權限就可以自簽", () => {
+    const agent = emp({ kind: "agent", agentFamily: "codex" });
+    expect(canSelfSign(agent, proj({ route: "vibe", authorAgentFamily: "claude" }), kase())).toEqual({
+      can: true,
+    });
+  });
+
+  test("無簽核權限的角色擋下來（editor 可寫不可簽）", () => {
+    const r = canSelfSign(emp({ accessRole: "editor" }), vibe(), kase());
+    expect(r.can).toBe(false);
+    expect((r as { reason: string }).reason).toContain("簽核權限");
+  });
+});
+
+describe("selfSignSubject", () => {
+  test("帶 anc:t= 前綴 —— 與 git 回填 writer 的 subject 同一種形狀", () => {
+    expect(selfSignSubject("ABCD1234")).toBe("anc:t=ABCD1234");
   });
 });

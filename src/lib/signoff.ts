@@ -28,6 +28,8 @@ import type {
 } from "../data/types";
 import { isPendingAgentJob, stageKind } from "../data/types";
 import { hasPermission } from "./permissions";
+import { ANCHOR_PREFIX } from "./plan-parser";
+import { projectRoute } from "./prd-triage";
 import { stageBlockedBy } from "./prd-versions";
 
 export type SignAbility =
@@ -595,6 +597,75 @@ export function signoffCta(sum: SignoffSummary, opts?: { preview?: boolean }): S
   if (opts?.preview) return null;
   const mine = sum.mine[0];
   return mine ? { kind: "approve", stage: mine } : null;
+}
+
+// ── vibe 檔的一鍵自簽（最小治理）────────────────────────────────
+//
+// 試作／探索檔的簽核不是走關卡流程，是一顆「自簽」鈕：一個動作核准所有
+// 關卡，並寫一筆帶 `anc:t=` 錨點的事件進稽核軌跡。**不是跳過簽核** ——
+// 完全跳過的代價是轉正時治理鏈沒有起點可 replay（proposal 決策 2）。
+//
+// 職責分立只豁免**「人的自審」那一條**：自簽的定義就是作者簽自己的東西，
+// 擋人的自審等於把這顆鈕做成永遠按不下去；那一條的問責改靠錨點事件 ——
+// 誰、何時、簽了哪一版，replay 讀得到。**族系隔離照擋**：D3 明寫它是
+// 主要守門、沒有 admin 例外 —— 同一家模型審自己家寫的文件，錨點記下的
+// 只是「同一顆腦袋蓋了章」，記錄得再全也換不回第二雙眼睛。
+
+/** 自簽決策寫進 `CaseDecision.comment` 的固定前綴 —— store 靠它認出
+ *  「這一關的核准是自簽來的」（離開 vibe 時要重設的就是這些）。 */
+export const SELF_SIGN_NOTE = "一鍵自簽（試作／探索）";
+
+/**
+ * 自簽事件的 join key：`anc:t=<錨點>`。
+ *
+ * **帶前綴**，與 git 回填（`commitsToEvents`）和 App 內動作寫出的 subject
+ * 同一種形狀 —— 裸 id 會讓兩個 writer 對同一件事產生兩種 subject，
+ * join key 接不起來，而且不會有任何錯誤，只會顯示成兩條各自獨立的軌跡。
+ */
+export function selfSignSubject(anchorId: string): string {
+  return `${ANCHOR_PREFIX}:t=${anchorId}`;
+}
+
+/**
+ * 這個人現在能不能對這個專案一鍵自簽。
+ *
+ * `reason` 是使用者會讀到的解釋，同 `canSignStage` 的規矩。
+ * 順序也照那邊的原則：先講路線（這顆鈕存在的前提），再講案子層級的阻擋
+ * （抽單／鎖定／已自簽過），再講族系隔離，最後才是權限。
+ *
+ * 「已自簽過」查的是 `c.log` 裡有沒有自簽決策，**不用** `allStagesSettled`：
+ * 全 skipped 的舊個案會被那支判成 settled，vibe 檔從此永遠簽不了 ——
+ * 那就成了「完全跳過簽核」，正是 spec 禁止的事。
+ */
+export function canSelfSign(
+  user: Employee,
+  project: Project | null | undefined,
+  c: CaseRecord | undefined,
+): SignAbility {
+  if (!project) return { can: false, reason: "找不到專案" };
+  if (projectRoute(project) !== "vibe") {
+    return { can: false, reason: "只有「試作／探索」路線可以一鍵自簽 —— 其他路線走正式簽核" };
+  }
+  if (c?.withdrawn) return { can: false, reason: "此案已抽單" };
+  if (c?.locked) return { can: false, reason: "已核准鎖定 —— 不能再自簽" };
+  if (c?.log?.some((d) => d.kind === "approved" && d.comment.startsWith(SELF_SIGN_NOTE))) {
+    return { can: false, reason: "已經自簽過 —— 決策紀錄裡已有帶錨點的自簽事件" };
+  }
+  // 族系隔離照擋（見上方檔段說明）—— 文案與 `separationOfDuties` 同一句
+  if (
+    user.kind === "agent" &&
+    user.agentFamily &&
+    project.authorAgentFamily === user.agentFamily
+  ) {
+    return {
+      can: false,
+      reason: `同一種 Agent（${project.authorAgentFamily}）已撰寫此文件，不可再擔任核准角色`,
+    };
+  }
+  if (!hasPermission(user, "approve")) {
+    return { can: false, reason: "目前角色無簽核權限（需核准人員或管理員）" };
+  }
+  return { can: true };
 }
 
 // ── 關卡上的 Agent 分析 ─────────────────────────────────────────

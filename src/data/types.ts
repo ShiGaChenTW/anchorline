@@ -214,7 +214,9 @@ export type Project = {
    */
   templateCat?: FullCat;
   /**
-   * 這份 PRD 走哪一條路線 —— `full`（15 節全量）或 `lite`（8 節）。
+   * 這份 PRD 走哪一條路線 —— `full`（全量）、`lite`（8 節）或 `vibe`
+   * （試作／探索，3 節一頁意圖）。型別是 `Exclude<RouteId, "openspec">`，
+   * 所以 `RouteId` 擴充時這裡自動跟上，tsc 守著。
    *
    * 沒有這個欄位的專案（路線持久化上路前建立的）一律當 `full`：它們是照
    * 全量章節寫的，退成 `lite` 會讓已經寫好的七節在編輯台上憑空消失。

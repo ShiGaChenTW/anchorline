@@ -932,6 +932,7 @@ if (!requireAuth()) {
           <span class="route-desc">${escapeHtml(r.desc)}</span>
           <span class="route-cases-head">適用情境</span>
           <ul class="route-cases">${r.cases.map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul>
+          <span class="route-timing">時機：${escapeHtml(r.timing)}</span>
           <span class="route-go">${r.id === "openspec" ? "去 OpenSpec →" : "選這個 →"}</span>
         </button>`,
       ).join("");
@@ -956,7 +957,8 @@ if (!requireAuth()) {
       return;
     }
     triageNote = `${route.name} — ${routeScaleLabel(route)}`;
-    pickedRoute = route.id === "lite" ? "lite" : "full";
+    // openspec 已在上面 return，這裡只剩存得進專案的三條
+    pickedRoute = route.id === "lite" || route.id === "vibe" ? route.id : "full";
     openWizard(beginnerPath);
   }
 
@@ -1013,8 +1015,9 @@ if (!requireAuth()) {
       lastFileAt: new Date().toISOString(),
       tag: tpl.includes("資安") ? "security" : tpl.includes("成長") ? "growth" : "product",
       isSample: false,
-      // 跳過路線就不設欄位 —— undefined 是 Full，不是「未知」
-      ...(pickedRoute === "lite" ? { route: "lite" as const } : {}),
+      // 跳過路線就不設欄位 —— undefined 是 Full，不是「未知」。
+      // full 也不落欄位（同 setProjectRoute：預設值寫進去只是讓資料看起來像被改過）
+      ...(pickedRoute && pickedRoute !== "full" ? { route: pickedRoute } : {}),
       domain:
         (document.getElementById("new-domain") as HTMLSelectElement | null)?.value || DEFAULT_DOMAIN,
     };

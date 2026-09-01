@@ -9,9 +9,10 @@ import {
 import { askConfirm, askCustom, askText } from "../lib/ask";
 import {
   hiddenSectionIds,
-  LITE_SECTIONS,
   projectRoute,
   type ProjectRoute,
+  routeSectionCount,
+  upgradeSeedText,
 } from "../lib/prd-triage";
 import {
   assignDialogHtml,
@@ -261,6 +262,12 @@ function renderRouteBar(project: Project | undefined, editable: boolean) {
   if (!project) return;
   sel.value = projectRoute(project);
   sel.disabled = !editable;
+  // 自簽鈕只屬於試作檔 —— 其他路線走正式簽核，這顆鈕出現就是引人跳過流程
+  const selfSign = document.getElementById("btn-self-sign") as HTMLButtonElement | null;
+  if (selfSign) {
+    selfSign.hidden = projectRoute(project) !== "vibe";
+    selfSign.disabled = !editable;
+  }
 }
 
 /**
@@ -1494,31 +1501,48 @@ document.getElementById("domain-select")?.addEventListener("change", (e) => {
 });
 
 /**
- * 換路線。降級要先問過 —— 章節會從清單上少掉七節，而使用者按下去之前
- * 看到的只有「Lite — 簡化」四個字，那不足以預期「我寫的東西不見了」。
+ * 換路線。降級要先問過 —— 章節會從清單上少掉，而使用者按下去之前看到的
+ * 只有「Lite — 簡化」四個字，那不足以預期「我寫的東西不見了」。
  * 對話框把「藏起來、沒有刪」講清楚，是這個操作可逆這件事唯一的說明機會。
+ *
+ * 從 vibe 升檔也問一次，但講的是另一件事：種子文案「已寫的 N 節原樣保留，
+ * 新增 N 節待補」—— 升檔不藏東西，要說清楚的是「接下來多出來的空白從哪來」。
+ * lite → full 維持現行（不問，直接切）：那條路的行為不在本次 change 範圍。
  */
 document.getElementById("route-select")?.addEventListener("change", async (e) => {
   const sel = e.target as HTMLSelectElement;
-  const next: ProjectRoute = sel.value === "lite" ? "lite" : "full";
+  const next: ProjectRoute = sel.value === "lite" || sel.value === "vibe" ? sel.value : "full";
   const st = store.get();
   if (!editable() || !st.activeProjectId) return;
-  if (next === "lite") {
-    const hidden = hiddenSectionIds("lite");
+  const cur = projectRoute(st.projects.find((p) => p.id === st.activeProjectId));
+  if (next === cur) return;
+  const NAME: Record<ProjectRoute, string> = { full: "Full", lite: "Lite", vibe: "試作／探索" };
+  // 使用者取消時把下拉拉回去；不還原的話畫面會停在新值但實際沒切
+  const revert = () => {
+    sel.value = projectRoute(store.get().projects.find((p) => p.id === st.activeProjectId));
+  };
+  if (routeSectionCount(next) < routeSectionCount(cur)) {
+    // 降級：目標路線看不見的章節會從清單上收起
+    const hidden = hiddenSectionIds(next);
+    const kept = routeSectionCount(next);
     const ok = await askConfirm({
-      title: "降級成 Lite？",
-      body: `${hidden.length} 節會從清單上收起（${hidden.length + LITE_SECTIONS.length} → ${LITE_SECTIONS.length} 節）。\n\n內容不會刪除 —— 換回 Full 就原封不動回來。`,
-      confirmLabel: "降級成 Lite",
+      title: `降級成 ${NAME[next]}？`,
+      body: `${hidden.length - hiddenSectionIds(cur).length} 節會從清單上收起（${routeSectionCount(cur)} → ${kept} 節）。\n\n內容不會刪除 —— 換回 ${NAME[cur]} 就原封不動回來。`,
+      confirmLabel: `降級成 ${NAME[next]}`,
     });
-    // 使用者取消時把下拉拉回去；不還原的話畫面會停在「Lite」但實際還是 Full
-    if (!ok) {
-      sel.value = projectRoute(st.projects.find((p) => p.id === st.activeProjectId));
-      return;
-    }
+    if (!ok) return revert();
+  } else if (cur === "vibe") {
+    // 從試作升檔：種子文案講清楚保留與待補（數字從路線資料算，不寫死）
+    const ok = await askConfirm({
+      title: `升級成 ${NAME[next]}？`,
+      body: `${upgradeSeedText(cur, next)}。\n\n已寫的內容原封不動 —— 升檔只是清單上長出新的章節。\n轉正後需走正式簽核：自簽的核准不帶過去，錨點紀錄仍在。`,
+      confirmLabel: `升級成 ${NAME[next]}`,
+    });
+    if (!ok) return revert();
   }
   const r = store.setProjectRoute(st.activeProjectId, next);
   if (!r.ok) {
-    sel.value = projectRoute(st.projects.find((p) => p.id === st.activeProjectId));
+    revert();
     toast(r.reason ?? "換路線失敗");
     return;
   }
@@ -1526,7 +1550,35 @@ document.getElementById("route-select")?.addEventListener("change", async (e) =>
   idx = 0;
   const first = sections()[0];
   if (first) store.setActiveSection(first.id);
-  toast(next === "lite" ? `已降級成 Lite — ${sections().length} 節，收起的內容沒有刪除` : "已升級成 Full — 全部章節回來了");
+  toast(
+    next === "full"
+      ? "已升級成 Full — 全部章節回來了"
+      : routeSectionCount(next) < routeSectionCount(cur)
+        ? `已降級成 ${NAME[next]} — ${sections().length} 節，收起的內容沒有刪除`
+        : `已升級成 ${NAME[next]} — ${sections().length} 節，原本的內容都在`,
+  );
+  render();
+});
+
+/**
+ * vibe 檔的一鍵自簽（最小治理）。按下去之前把後果講清楚 —— 這是一個
+ * 會寫進簽核紀錄與稽核軌跡的動作，不是隨手按的確認框。
+ */
+document.getElementById("btn-self-sign")?.addEventListener("click", async () => {
+  const st = store.get();
+  if (!editable() || !st.activeProjectId) return;
+  const ok = await askConfirm({
+    title: "一鍵自簽？",
+    body: "以你的名義核准所有關卡，並寫入一筆帶 anc:t= 錨點的稽核事件。\n\n檔案不會鎖定 —— 試作可以繼續改；之後升檔轉正時，治理鏈從這個錨點接回去。",
+    confirmLabel: "自簽",
+  });
+  if (!ok) return;
+  const r = store.selfSignVibe(st.activeProjectId);
+  if (!r.ok) {
+    toast(r.reason ?? "自簽失敗");
+    return;
+  }
+  toast(`已自簽 —— 錨點 anc:t=${r.anchorId}`);
   render();
 });
 

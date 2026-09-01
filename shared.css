@@ -15510,10 +15510,18 @@ p.gd-warn {
 }
 .route-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* 四條路線（full／lite／vibe／openspec）。寬螢幕四欄一排；卡片數再變時
+     這裡要跟著改 —— 寫死欄數換來的是欄寬不會因為少一張卡而跳動 */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 20px;
   width: 100%;
-  max-width: 1140px;
+  max-width: 1280px;
+}
+@media (max-width: 1100px) {
+  .route-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: 760px;
+  }
 }
 @media (max-width: 900px) {
   .route-grid {
@@ -15580,6 +15588,14 @@ p.gd-warn {
   font-size: var(--fs-1);
   line-height: 1.6;
   color: var(--fg-2);
+}
+.route-timing {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: var(--fs-1);
+  line-height: 1.6;
+  color: var(--muted);
 }
 .route-go {
   margin-top: auto;

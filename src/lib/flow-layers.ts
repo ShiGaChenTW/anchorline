@@ -37,10 +37,12 @@ function activeProject(state: AppState): Project | null {
 
 export function deriveFlowLayers(
   state: AppState,
-  opts?: { hasPlanSteps?: boolean; gateSpec?: GateSpec },
+  // gateSpec **必填**：漏傳會退回 BASE_GATE_SPEC，vibe 專案的 L2 就照 15 節
+  // 的規則算 —— 永遠不會亮，而且沒有任何錯誤。必填讓漏傳在 tsc 露餡。
+  opts: { hasPlanSteps?: boolean; gateSpec: GateSpec },
 ): FlowLayer[] {
   // gateSpec 由呼叫端給（store.activeGateSpec()）——這個檔是純函式，不該認得 store
-  const gate = evaluatePrdGates(state, opts?.gateSpec);
+  const gate = evaluatePrdGates(state, opts.gateSpec);
   const summary = state.sectionValues.summary ?? {};
   const problem = (state.sectionValues.problem?.problem ?? "").trim();
   const project = activeProject(state);
@@ -48,7 +50,7 @@ export function deriveFlowLayers(
   const hasIntent = !!(summary.what?.trim() && summary.who?.trim()) || problem.length > 40;
   const hasSpec = gate.canSubmit;
   // 不可預設 true：否則一進畫面 L3 永遠完成
-  const hasPlan = opts?.hasPlanSteps === true;
+  const hasPlan = opts.hasPlanSteps === true;
 
   const status = project?.status ?? "draft";
   const locked = state.locked && state.activeProjectId === (project?.id ?? state.activeProjectId);

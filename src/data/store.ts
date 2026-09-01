@@ -97,7 +97,7 @@ import {
   withMigratedBackends,
   type BackendPatch,
 } from "../lib/agent-backend";
-import { BASE_GATE_SPEC } from "../lib/prd-gates";
+import { BASE_GATE_SPEC, VIBE_GATE_SPEC } from "../lib/prd-gates";
 import type { GateSpec } from "../lib/gate-rules";
 import type { ProjectCandidate } from "../lib/folder-import";
 import { mapCandidateToSectionValues } from "../lib/folder-import";
@@ -108,13 +108,17 @@ import {
   validateEmployeeRole,
 } from "../lib/permissions";
 import {
+  canSelfSign,
   canSignStage,
   caseHasRun,
   normalizeStageAssignee,
+  SELF_SIGN_NOTE,
+  selfSignSubject,
   separationOfDuties,
   stageAssignment,
   stagesFromWorkflow,
 } from "../lib/signoff";
+import { mintId } from "../lib/plan-parser";
 import { hasHumanApproval, resolveWorkflow } from "../lib/workflow-resolve";
 import { nowIso } from "../lib/time-format";
 
@@ -635,7 +639,7 @@ export function migrateProject(raw: Record<string, unknown>, employees: Employee
     versionPolicy: raw.versionPolicy === "strict" ? "strict" : undefined,
     // 第八次。這一次是實測抓到的：選了 Lite 建立專案，`route: "lite"` 確實寫進
     // localStorage，但編輯台一律顯示 15 節 —— 因為重新載入時這裡沒有把它列出來。
-    // 只認 `"lite"`：其他任何值（包含髒資料）都落回 undefined＝Full，
+    // 只認 `"lite"` 與 `"vibe"`：其他任何值（包含髒資料）都落回 undefined＝Full，
     // 而 Full 是「看得到全部」，錯得最安全的那一邊。
     route: normalizeRoute(raw.route),
     // 第五、六、七次。同一個坑的註解上面已經寫了三遍，所以這裡只講後果：
@@ -1898,9 +1902,9 @@ export const store = {
   },
 
   /**
-   * 換路線。Full ↔ Lite 隨時可切，**兩個方向都不刪任何正文**。
+   * 換路線。Full ↔ Lite ↔ 試作（vibe）隨時可切，**任何方向都不刪任何正文**。
    *
-   * 降級只是把 Lite 沒有的七節從骨架濾掉（`routeFilter`），正文原封不動留在
+   * 降級只是把目標路線沒有的章節從骨架濾掉（`routeFilter`），正文原封不動留在
    * `projectSectionValues`；升級回 Full 就全部長回來。刻意不做成不可逆 ——
    * 「寫到一半發現選錯」比「鎖死不給改」常見得多，而讓降級變成破壞性操作
    * 的結果是沒有人敢按，那張卡就白做了。這條規則跟 `setProjectDomain`
@@ -1918,10 +1922,30 @@ export const store = {
     }
     if (projectRoute(p) === route) return { ok: true };
     const projects = state.projects.map((x) =>
-      // `full` 存成 undefined —— 那是預設值，寫進去只是讓每一份舊資料看起來像被改過
-      x.id === projectId ? { ...x, route: route === "lite" ? ("lite" as const) : undefined, updated: "剛剛" } : x,
+      // `full` 存成 undefined —— 那是預設值，寫進去只是讓每一份舊資料看起來像被改過。
+      // 判斷寫成「full 才落 undefined」而不是逐值枚舉：舊寫法 `route === "lite" ? "lite" : undefined`
+      // 在 vibe 上路時會把它靜默存成 undefined＝重載回退 full，與 lite 當年同型的坑。
+      x.id === projectId ? { ...x, route: route === "full" ? undefined : route, updated: "剛剛" } : x,
     );
-    state = { ...state, projects };
+    // 離開 vibe（升檔轉正）：**自簽產生的核准不帶進正式流程** —— 那些關卡
+    // 重設回 pending。不重設的話，「切 vibe → 自簽 → 切回」就是任何未鎖定
+    // 專案的通用核准繞道。log 裡的自簽決策與稽核軌跡的錨點事件**原樣保留**：
+    // spec 要保存的是可 replay 的錨點紀錄，不是核准狀態。
+    let cases = state.cases;
+    if (projectRoute(p) === "vibe" && route !== "vibe") {
+      const c = state.cases[projectId];
+      if (c) {
+        const stages = c.stages.map((s) => {
+          if (s.state !== "approved" || !s.comment?.startsWith(SELF_SIGN_NOTE)) return s;
+          const { comment, decidedAt, decidedById, decidedByName, ...rest } = s;
+          return { ...rest, state: "pending" as const };
+        });
+        if (stages.some((s, i) => s !== c.stages[i])) {
+          cases = { ...state.cases, [projectId]: { ...c, stages, locked: false } };
+        }
+      }
+    }
+    state = { ...state, projects, cases };
     state = {
       ...state,
       sections:
@@ -1939,6 +1963,92 @@ export const store = {
     audit(state, projectId, "decision.record", `route:${route}`, { route });
     emit();
     return { ok: true };
+  },
+
+  /**
+   * vibe 檔的一鍵自簽 —— 最小治理（proposal 決策 2）。
+   *
+   * 一個動作做完兩件事：把個案上還開著的關卡全部以本人名義核准（逐關留
+   * `approved` 決策進 `log`，replay 讀得到），並寫一筆帶 `anc:t=` 錨點的
+   * `review.approve` 事件進稽核軌跡。**不跳過簽核** —— 完全跳過的代價是
+   * 轉正時治理鏈沒有起點可 replay。
+   *
+   * 三個刻意的決定：
+   * - **不動鎖態（`locked` 原樣帶過）**：`approveAndLock` 簽完會鎖，而
+   *   `setProjectRoute` 對鎖定的專案拒絕換路線 —— 自簽如果上鎖，試作檔
+   *   就升不了檔，正好堵死這一檔存在的理由。自簽是錨點，不是凍結。
+   *   （已鎖定的案子根本進不來 —— `canSelfSign` 在門口就擋掉。）
+   * - **只豁免「人的自審」**：自簽的定義就是作者簽自己的東西，那一條的
+   *   問責改靠錨點事件。**族系隔離照擋**（在 `canSelfSign` 裡）——
+   *   同族 agent 自簽自己家寫的文件，沒有 admin 例外。
+   * - **不碰 `changes_requested`**：自簽簽的是「還沒人審過」的關卡。
+   *   審閱者的負向決策是另一個人留下的裁決，一顆自簽鈕把它翻成核准，
+   *   等於誰都能單方面撤銷別人的「要求修改」。
+   *
+   * 已知代價：在草稿個案上留決策痕跡，會讓 `caseHasRun` 判 true，之後
+   * 轉正送審沿用建案當下那套全域關卡（範本骨架不再落地）。反向的選擇是
+   * 讓自簽紀錄在送審時被整批重建吃掉 —— 那等於治理鏈斷在轉正那一刻，
+   * 正是決策 2 要避免的事。
+   */
+  selfSignVibe(projectId: string): { ok: boolean; reason?: string; anchorId?: string } {
+    // 同 `setProjectRoute` 的慣例：先擋沒有編輯權限的角色
+    if (!canEditContent(state.currentUser)) return { ok: false, reason: "無編輯權限" };
+    const p = state.projects.find((x) => x.id === projectId);
+    const c0 = state.cases[projectId];
+    const u = state.currentUser;
+    const ability = canSelfSign(u, p, c0);
+    if (!ability.can) return { ok: false, reason: ability.reason };
+
+    const c = c0 ?? caseForProject(projectId);
+    const at = nowIso();
+    const anchorId = mintId();
+    const subject = selfSignSubject(anchorId);
+    const round = c.round ?? 1;
+    const note = `${SELF_SIGN_NOTE} · ${subject}`;
+    const decisions: CaseDecision[] = [];
+    // `changes_requested` 刻意不在名單裡 —— 見上方第三個決定
+    const open = (s: CaseStage) => s.state === "pending" || s.state === "empty";
+    const stages = c.stages.map((s) => {
+      if (!open(s)) return s;
+      decisions.push({
+        id: `d-${at}-${s.id}-${decisions.length}`,
+        stageId: s.id,
+        round,
+        at,
+        byId: u.id,
+        byName: u.name,
+        kind: "approved",
+        // 錨點也寫進決策意見 —— 個案紀錄與稽核軌跡靠同一個 join key 接起來
+        comment: note,
+      });
+      return {
+        ...s,
+        state: "approved" as const,
+        assigneeId: s.assigneeId ?? u.id,
+        assigneeName: s.assigneeId ? s.assigneeName : u.name,
+        decidedAt: at,
+        decidedById: u.id,
+        decidedByName: u.name,
+        comment: note,
+      };
+    });
+    state = {
+      ...state,
+      cases: {
+        ...state.cases,
+        // locked 原樣帶過（進得來就是 false）—— 不在這裡發明新的鎖態
+        [projectId]: { ...c, stages, log: [...(c.log ?? []), ...decisions], locked: c.locked ?? false },
+      },
+      projects: state.projects.map((x) => (x.id === projectId ? { ...x, updated: "剛剛" } : x)),
+    };
+    syncApprovalsFromActiveCase();
+    audit(state, projectId, "review.approve", subject, {
+      selfSign: true,
+      route: "vibe",
+      stages: decisions.length,
+    });
+    emit();
+    return { ok: true, anchorId };
   },
 
   /** 自訂側欄顯示名稱（空字串＝清除自訂，改回資料夾／標題） */
@@ -2072,14 +2182,22 @@ export const store = {
     return { ok: true };
   },
 
-  /** 目前專案領域的 gate 規則（通用 + 領域）。呼叫端傳給 `evaluatePrdGates`。 */
+  /**
+   * 目前專案領域的 gate 規則（通用 + 領域）。呼叫端傳給 `evaluatePrdGates`。
+   *
+   * 依 route 選 spec：vibe 一律回最小規則組且**不經 `domainGates`**（決策 5：
+   * vibe 忽略領域包 —— 掛了帶 gate 的領域包，結果也跟沒掛時相同）；
+   * lite/full 走現行路徑逐字不變。
+   */
   activeGateSpec(): GateSpec {
-    return domainGates(domainOf(state.projects.find((p) => p.id === state.activeProjectId)));
+    const p = state.projects.find((x) => x.id === state.activeProjectId);
+    return projectRoute(p) === "vibe" ? VIBE_GATE_SPEC : domainGates(domainOf(p));
   },
 
   /** 指定專案的 gate 規則。跨專案總覽要用這個，不能共用 active 的那份。 */
   gateSpecFor(projectId: string): GateSpec {
-    return domainGates(domainOf(state.projects.find((p) => p.id === projectId)));
+    const p = state.projects.find((x) => x.id === projectId);
+    return projectRoute(p) === "vibe" ? VIBE_GATE_SPEC : domainGates(domainOf(p));
   },
 
   /**
