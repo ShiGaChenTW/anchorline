@@ -35,7 +35,7 @@ import {
 import { parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
 import { askForProjectFolder } from "../lib/project-folder";
 import { canDelete, canEditContent, canExport } from "../lib/permissions";
-import { PRD_ROUTES, routeById, routeScaleLabel } from "../lib/prd-triage";
+import { PRD_ROUTES, routeById, routeScaleLabel, type ProjectRoute } from "../lib/prd-triage";
 import { bindRailProjects, renderRailProjects } from "../lib/rail-projects";
 import { initTheme } from "../lib/theme";
 import {
@@ -908,13 +908,18 @@ if (!requireAuth()) {
   /* ─── 範本第 0 章：這次要寫哪一種 ─── */
 
   /**
-   * 選到的路線只帶到精靈的確認頁上顯示，**不寫進 Project**。
+   * 選到的路線會**寫進 `Project.route`**，不只是確認頁上的一行字。
    *
-   * 存下來才有意義的前提是有人會用它 —— 而 Lite/Full 目前不是可切換的模式
-   * （Full 才有的章節一律 warn 不 block）。先存一個沒人讀的欄位，換來的是
-   * 一次 schema 變更加一次 migration，然後在真的要用時發現當初存錯了形狀。
+   * 2026-09-01 之前這裡只留了 `triageNote`，理由是「Lite/Full 不是可切換的
+   * 模式，存一個沒人讀的欄位不划算」。那個前提已經不成立：`sectionsForProject`
+   * 現在照 route 濾章節，Lite 真的只看得到八節。沒存的話三張卡就回到
+   * 純心理暗示 —— 選了 Lite 照樣拿到十五節。
+   *
+   * 跳過路線（`triage-skip`）留 `null`，落到 `Project.route` 是 undefined，
+   * 也就是 Full。那是對的：沒表態的人要看得到全部，不是被默默降級。
    */
   let triageNote = "";
+  let pickedRoute: ProjectRoute | null = null;
 
   function openTriage(asBeginner: boolean) {
     beginnerPath = asBeginner;
@@ -951,12 +956,14 @@ if (!requireAuth()) {
       return;
     }
     triageNote = `${route.name} — ${routeScaleLabel(route)}`;
+    pickedRoute = route.id === "lite" ? "lite" : "full";
     openWizard(beginnerPath);
   }
 
   document.getElementById("triage-close")?.addEventListener("click", () => closeModal("modal-triage"));
   document.getElementById("triage-skip")?.addEventListener("click", () => {
     triageNote = "";
+    pickedRoute = null;
     closeModal("modal-triage");
     openWizard(beginnerPath);
   });
@@ -1006,6 +1013,8 @@ if (!requireAuth()) {
       lastFileAt: new Date().toISOString(),
       tag: tpl.includes("資安") ? "security" : tpl.includes("成長") ? "growth" : "product",
       isSample: false,
+      // 跳過路線就不設欄位 —— undefined 是 Full，不是「未知」
+      ...(pickedRoute === "lite" ? { route: "lite" as const } : {}),
       domain:
         (document.getElementById("new-domain") as HTMLSelectElement | null)?.value || DEFAULT_DOMAIN,
     };

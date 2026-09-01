@@ -1,4 +1,5 @@
 import type { Release } from "../lib/release";
+import type { RouteId } from "../lib/prd-triage";
 
 /** 僅保留 kami（紙）與 github（暗） */
 export type ThemeId = "kami" | "github" | "terminal";
@@ -212,6 +213,21 @@ export type Project = {
    * 這裡刻意**不存範本 id**：範本會被改、被刪，而骨架只跟「哪一類」有關。
    */
   templateCat?: FullCat;
+  /**
+   * 這份 PRD 走哪一條路線 —— `full`（15 節全量）或 `lite`（8 節）。
+   *
+   * 沒有這個欄位的專案（路線持久化上路前建立的）一律當 `full`：它們是照
+   * 全量章節寫的，退成 `lite` 會讓已經寫好的七節在編輯台上憑空消失。
+   *
+   * **降級是檢視過濾器，不是資料遷移。** `full → lite` 只是把 Lite 沒有的
+   * 七節藏起來（不計完成度、gate 跳過、匯出不出），內容原封不動留在
+   * `projectSectionValues` 裡；切回 `full` 就全部長回來。沿用的是
+   * `domain` 改領域時「孤兒章節不刪」的同一條規則 —— 「寫到一半發現選錯」
+   * 遠比「鎖死不給改」常見，而讓降級變成破壞性操作只會讓人不敢按。
+   *
+   * `openspec` 不會出現在這裡：那條路線根本不建專案，直接跳去 openspec.html。
+   */
+  route?: Exclude<RouteId, "openspec">;
   /**
    * 自訂範本自帶的骨架，套用時從 `Template.stages` 複製下來。
    *

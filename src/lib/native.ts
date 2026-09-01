@@ -312,6 +312,18 @@ export const native = {
   writeExport: (folderPath: string, name: string, text: string) =>
     callMaybe<{ path: string }>("write_export", { folderPath, name, text }),
   /**
+   * PRD 主檔與版本快照。
+   *
+   * `versioned: false` → `<root>/docs/PRD.md`，**覆寫**（歷史交給 git）。
+   * `versioned: true` → `<root>/.anchorline/prd/<name>`，**不覆寫**
+   * （快照是「當時這份 PRD 長這樣」，蓋掉就沒有東西可以比對）。
+   */
+  writePrd: (folderPath: string, name: string, versioned: boolean, text: string) =>
+    callMaybe<{ path: string }>("write_prd", { folderPath, name, versioned, text }),
+  /** `.anchorline/prd/` 底下的版本快照。跟分析報告分開放，兩者不是同一種東西。 */
+  listPrdVersions: (folderPath: string) =>
+    call<{ name: string; mtimeMs: number; bytes: number }[]>("list_prd_versions", { folderPath }),
+  /**
    * Function wish list。路徑寫死為 `<root>/.anchorline/function-wishlist.md`。
    * **允許建新檔與覆寫**——第一次存檔時檔還不存在，`writeFile` 過不了。
    */

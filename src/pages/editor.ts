@@ -8,6 +8,12 @@ import {
 } from "../lib/ai-coach";
 import { askConfirm, askCustom, askText } from "../lib/ask";
 import {
+  hiddenSectionIds,
+  LITE_SECTIONS,
+  projectRoute,
+  type ProjectRoute,
+} from "../lib/prd-triage";
+import {
   assignDialogHtml,
   buildAssignments,
   FULL_CAT_LABEL,
@@ -229,6 +235,8 @@ function renderDomainBar() {
     sel.disabled = !editable;
   }
 
+  renderRouteBar(project, editable);
+
   const orphans = store.orphanSectionIds();
   if (orphanBox) {
     orphanBox.hidden = orphans.length === 0;
@@ -237,6 +245,22 @@ function renderDomainBar() {
       ? `${orphans.length} 個章節的內容不屬於目前領域。內容仍保留，換回原領域就會回來。`
       : "";
   }
+}
+
+/**
+ * 路線選擇器。放在領域正下方，理由跟領域一樣：換路線最直接的後果就是
+ * 下面那份章節清單會變短，因和果要在同一個視野裡。
+ *
+ * 沒綁專案時整條藏起來 —— 一個永遠停在 Full 又按不動的下拉是雜訊。
+ */
+function renderRouteBar(project: Project | undefined, editable: boolean) {
+  const bar = document.getElementById("route-bar");
+  const sel = document.getElementById("route-select") as HTMLSelectElement | null;
+  if (!bar || !sel) return;
+  bar.hidden = !project;
+  if (!project) return;
+  sel.value = projectRoute(project);
+  sel.disabled = !editable;
 }
 
 /**
@@ -1466,6 +1490,43 @@ document.getElementById("domain-select")?.addEventListener("change", (e) => {
   if (first) store.setActiveSection(first.id);
   const orphans = store.orphanSectionIds().length;
   toast(orphans ? `已換領域 — ${orphans} 個章節的內容暫時收起，沒有刪除` : "已換領域");
+  render();
+});
+
+/**
+ * 換路線。降級要先問過 —— 章節會從清單上少掉七節，而使用者按下去之前
+ * 看到的只有「Lite — 簡化」四個字，那不足以預期「我寫的東西不見了」。
+ * 對話框把「藏起來、沒有刪」講清楚，是這個操作可逆這件事唯一的說明機會。
+ */
+document.getElementById("route-select")?.addEventListener("change", async (e) => {
+  const sel = e.target as HTMLSelectElement;
+  const next: ProjectRoute = sel.value === "lite" ? "lite" : "full";
+  const st = store.get();
+  if (!editable() || !st.activeProjectId) return;
+  if (next === "lite") {
+    const hidden = hiddenSectionIds("lite");
+    const ok = await askConfirm({
+      title: "降級成 Lite？",
+      body: `${hidden.length} 節會從清單上收起（${hidden.length + LITE_SECTIONS.length} → ${LITE_SECTIONS.length} 節）。\n\n內容不會刪除 —— 換回 Full 就原封不動回來。`,
+      confirmLabel: "降級成 Lite",
+    });
+    // 使用者取消時把下拉拉回去；不還原的話畫面會停在「Lite」但實際還是 Full
+    if (!ok) {
+      sel.value = projectRoute(st.projects.find((p) => p.id === st.activeProjectId));
+      return;
+    }
+  }
+  const r = store.setProjectRoute(st.activeProjectId, next);
+  if (!r.ok) {
+    sel.value = projectRoute(st.projects.find((p) => p.id === st.activeProjectId));
+    toast(r.reason ?? "換路線失敗");
+    return;
+  }
+  // 章節集合換了，游標可能指到已經被收起的一節
+  idx = 0;
+  const first = sections()[0];
+  if (first) store.setActiveSection(first.id);
+  toast(next === "lite" ? `已降級成 Lite — ${sections().length} 節，收起的內容沒有刪除` : "已升級成 Full — 全部章節回來了");
   render();
 });
 

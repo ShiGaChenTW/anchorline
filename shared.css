@@ -11912,6 +11912,15 @@ p.gd-warn {
   gap: 8px;
   padding: 6px 12px 8px;
 }
+/* `display:flex` 蓋過 [hidden] 的 UA `display:none` —— 沒有這一條，
+   `bar.hidden = true` 什麼都不會發生，而且不會有任何錯誤。 */
+.domain-bar[hidden] {
+  display: none;
+}
+/* 路線緊接在領域下面，兩條各自帶上下 padding 會撐出 14px 的空隙 */
+#route-bar {
+  padding-top: 0;
+}
 .domain-bar-label {
   font-size: var(--fs-1);
   letter-spacing: 0.04em;

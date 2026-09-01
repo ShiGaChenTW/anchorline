@@ -71,6 +71,8 @@ import {
   type OrphanRef,
 } from "../lib/orphan-content";
 import { applyMeta, metaFromSections, orphanSectionIds, pickDomain } from "../lib/section-meta";
+import { isSectionVisible, normalizeRoute, projectRoute, type ProjectRoute } from "../lib/prd-triage";
+import { prdVersionFileName, renderPrdMarkdown } from "../lib/prd-file";
 import { DEFAULT_DOMAIN, domainPacks, reloadUserPacks } from "./domains";
 import { autoRescanUserDomains } from "../lib/user-domains";
 import { resolveDomain } from "../lib/domain-pack";
@@ -353,7 +355,40 @@ function sectionsForProject(
   const own = p ? overrides?.[p.id] : undefined;
   const raw = own?.length ? withCustomSection(own) : domainSections(domainOf(p));
   const skeleton = p && noCustom?.[p.id] ? raw.filter((x) => x.id !== CUSTOM_SECTION_ID) : raw;
-  return applyMeta(skeleton, p ? metaBag[p.id] : undefined);
+  return applyMeta(routeFilter(p, skeleton), p ? metaBag[p.id] : undefined);
+}
+
+/**
+ * Lite 路線把 Full 才有的七節藏起來。**濾在這裡，不濾在畫面上。**
+ *
+ * `sectionsForProject` 是 `state.sections` 的唯一產地；三十幾個消費端
+ * （編輯台、完成度、gate、匯出、簽核）全部從那裡拿。改成每個消費端自己濾的話
+ * 就是這個 repo 已經吃過一次的虧 —— 漏掉的那一層不會報錯，只會靜默地
+ * 顯示舊行為（見 CLAUDE.md 的四層主題註冊）。
+ *
+ * 藏起來的章節**正文不動**，還留在 `projectSectionValues` 裡；切回 Full
+ * 就原封不動長回來。代價是那些正文會落在 `state.sections` 之外，也就是
+ * 孤兒判定的射程內 —— 補償在 `orphanSectionIds()` 與 `orphansOf()`。
+ */
+function routeFilter(p: Project | undefined, sections: Section[]): Section[] {
+  const route = projectRoute(p);
+  if (route === "full") return sections;
+  return sections.filter((s) => isSectionVisible(route, s.id, s.id === CUSTOM_SECTION_ID));
+}
+
+/**
+ * 被路線藏起來、因此**不算孤兒**的章節 id。
+ *
+ * 沒有這個補償的話，降級成 Lite 會讓那七節的正文立刻被判成孤兒，
+ * 編輯台跳出「有 N 段內容不見了」—— 但沒有任何東西不見，是使用者自己
+ * 按下的降級。那句提示會把一個正常操作講成資料事故。
+ */
+function routeHiddenIds(p: Project | undefined): Set<string> {
+  const route = projectRoute(p);
+  if (route === "full") return new Set();
+  const full = p ? state.projectSections?.[p.id] : undefined;
+  const base = full?.length ? withCustomSection(full) : domainSections(domainOf(p));
+  return new Set(base.filter((s) => !isSectionVisible(route, s.id, s.id === CUSTOM_SECTION_ID)).map((s) => s.id));
 }
 
 /**
@@ -598,6 +633,11 @@ export function migrateProject(raw: Record<string, unknown>, employees: Employee
     // 第三次踩同一個坑：漏了這行，改採 vX.YY.ZZ 每次重新載入就退回 loose，
     // 版號紀錄卡又重新問一次 —— 選擇「存了」但被這裡吃掉。
     versionPolicy: raw.versionPolicy === "strict" ? "strict" : undefined,
+    // 第八次。這一次是實測抓到的：選了 Lite 建立專案，`route: "lite"` 確實寫進
+    // localStorage，但編輯台一律顯示 15 節 —— 因為重新載入時這裡沒有把它列出來。
+    // 只認 `"lite"`：其他任何值（包含髒資料）都落回 undefined＝Full，
+    // 而 Full 是「看得到全部」，錯得最安全的那一邊。
+    route: normalizeRoute(raw.route),
     // 第五、六、七次。同一個坑的註解上面已經寫了三遍，所以這裡只講後果：
     // 漏了 workflowStages，跑到一半的案子重新載入就退回全域流程，關卡 id 跟著
     // 變，第一輪的簽核意見在紀錄上變成「（已移除的關卡）」—— 而簽核紀錄
@@ -993,6 +1033,45 @@ function emit() {
   listeners.forEach((fn) => fn());
 }
 
+/**
+ * PRD 版本落到專案資料夾：主檔 `docs/PRD.md` 覆寫，
+ * 快照 `.anchorline/prd/PRD-<時間>-<commit|merge>.md` 另存。
+ *
+ * ## 為什麼掛在 commit / merge，不掛在「狀態變了」
+ *
+ * 這兩支就是版本線本身 —— 送審＝commit、核准＝merge。它們手上已經有
+ * `version.docs`（那一刻整份 PRD 的深拷貝），所以寫出去的檔案跟 App 裡
+ * 那一版**逐字相同**。改用「狀態變了」當觸發的話，內容只能從 live state 撈，
+ * 而 live state 在核准之後可能已經被改過了 —— 寫出來的「核准版」會混進
+ * 核准後才打的字，而且沒有任何地方看得出來。
+ *
+ * ## 為什麼要落到檔案（App 裡不是已經有版本了嗎）
+ *
+ * 有，但 `capVersions` 會把舊 commit 丟掉，而且整條版本線活在 localStorage ——
+ * 清一次瀏覽器資料就全部消失，也沒有任何人能在 App 之外讀到它。
+ * 落到檔案之後它進 git、進備份、clone 得下來。
+ *
+ * **絕不擋業務動作**，跟 `audit()` 同一條規則：核准就是核准，寫不進檔案是
+ * 檔案的問題。全程吞錯、不回傳、不 await。
+ */
+function syncPrdFiles(pid: string, version: PrdVersion): void {
+  if (!isNative()) return;
+  try {
+    const p = state.projects.find((x) => x.id === pid);
+    const root = p?.importSummary?.rootPath;
+    if (!p || !root) return;
+    const body = renderPrdMarkdown({
+      project: p,
+      sections: sectionsForProject(p, state.projectSectionMeta, state.projectSections, state.projectNoCustom),
+      docs: version.docs,
+      version,
+    });
+    void native.writePrd(root, "", false, body);
+    void native.writePrd(root, prdVersionFileName(version, new Date(version.at)), true, body);
+  } catch {
+    /* 檔案落地失敗不影響業務動作 */
+  }
+}
 
 /**
  * Writer A —— App 內動作寫進稽核軌跡。
@@ -1050,6 +1129,7 @@ function syncProfile(state: AppState, projectId: string): void {
     /* 同步失敗不影響業務動作 */
   }
 }
+
 
 export const store = {
   get(): AppState {
@@ -1768,6 +1848,7 @@ export const store = {
       ...state,
       prdVersions: { ...state.prdVersions, [pid]: capVersions([version, ...(state.prdVersions[pid] ?? [])]) },
     };
+    syncPrdFiles(pid, version);
     emit();
     return { ok: true, version };
   },
@@ -1811,8 +1892,53 @@ export const store = {
       ...state,
       prdVersions: { ...state.prdVersions, [pid]: [version, ...(state.prdVersions[pid] ?? [])] },
     };
+    syncPrdFiles(pid, version);
     emit();
     return { ok: true, version };
+  },
+
+  /**
+   * 換路線。Full ↔ Lite 隨時可切，**兩個方向都不刪任何正文**。
+   *
+   * 降級只是把 Lite 沒有的七節從骨架濾掉（`routeFilter`），正文原封不動留在
+   * `projectSectionValues`；升級回 Full 就全部長回來。刻意不做成不可逆 ——
+   * 「寫到一半發現選錯」比「鎖死不給改」常見得多，而讓降級變成破壞性操作
+   * 的結果是沒有人敢按，那張卡就白做了。這條規則跟 `setProjectDomain`
+   * 換領域時「孤兒章節不刪」是同一條。
+   *
+   * 鎖定（已核准）的專案不給改：那會讓已核准的 PRD 少掉幾節，而核准的是
+   * 完整的那一份。
+   */
+  setProjectRoute(projectId: string, route: ProjectRoute): { ok: boolean; reason?: string } {
+    if (!canEditContent(state.currentUser)) return { ok: false, reason: "無編輯權限" };
+    const p = state.projects.find((x) => x.id === projectId);
+    if (!p) return { ok: false, reason: "找不到專案" };
+    if (projectId === state.activeProjectId && state.locked) {
+      return { ok: false, reason: "已核准鎖定，不能換路線" };
+    }
+    if (projectRoute(p) === route) return { ok: true };
+    const projects = state.projects.map((x) =>
+      // `full` 存成 undefined —— 那是預設值，寫進去只是讓每一份舊資料看起來像被改過
+      x.id === projectId ? { ...x, route: route === "lite" ? ("lite" as const) : undefined, updated: "剛剛" } : x,
+    );
+    state = { ...state, projects };
+    state = {
+      ...state,
+      sections:
+        projectId === state.activeProjectId
+          ? sectionsForProject(
+              projects.find((x) => x.id === projectId),
+              state.projectSectionMeta,
+              state.projectSections,
+              state.projectNoCustom,
+            )
+          : state.sections,
+    };
+    // `decision.record`：降級改變的是「這份 PRD 要寫到多細」，不是某一節的內容。
+    // 用 `prd.section.edit` 會讓它混進逐節編輯的統計裡，而它其實是一次範圍決策。
+    audit(state, projectId, "decision.record", `route:${route}`, { route });
+    emit();
+    return { ok: true };
   },
 
   /** 自訂側欄顯示名稱（空字串＝清除自訂，改回資料夾／標題） */
@@ -2034,7 +2160,8 @@ export const store = {
 
   /** 目前專案有正文、但不屬於目前領域的章節 id（UI 用來提示孤兒內容） */
   orphanSectionIds(): string[] {
-    return orphanSectionIds(state.sections, state.sectionValues);
+    const hidden = routeHiddenIds(state.projects.find((p) => p.id === state.activeProjectId));
+    return orphanSectionIds(state.sections, state.sectionValues).filter((id) => !hidden.has(id));
   },
 
   /**
@@ -2046,10 +2173,11 @@ export const store = {
    * 正上方的 `orphanSectionIds()` 就是 active-only 的那一版，不要照抄。
    */
   orphansOf(projectId: string): OrphanEntry[] {
+    const hidden = routeHiddenIds(state.projects.find((p) => p.id === projectId));
     return findOrphans(
       this.sectionsFor(projectId),
       visibleValues(state.projectSectionValues[projectId] ?? {}, state.prdDrafts[projectId] ?? {}),
-    );
+    ).filter((o) => !hidden.has(o.sectionId));
   },
 
   /**

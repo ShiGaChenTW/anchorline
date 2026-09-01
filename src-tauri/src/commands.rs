@@ -19,6 +19,9 @@ use tauri_plugin_dialog::DialogExt;
 const MAX_TEXT_BYTES: u64 = 512 * 1024;
 const MAX_PLAN_FILES: usize = 300;
 
+/// PRD 主檔的檔名。路徑寫死在 `write_prd` 裡，前端說不上話。
+const PRD_MAIN_FILE: &str = "PRD.md";
+
 type R<T> = Result<T, String>;
 
 // ── 共用形狀 ─────────────────────────────────────────────────────────
@@ -1906,6 +1909,114 @@ pub fn write_export(
     }
 }
 
+/// PRD 檔案要寫到哪。**純函式**，好讓路徑決策進得了測試網 ——
+/// 這裡分岔錯了不會報錯，只會把主檔寫進快照目錄（或反過來），
+/// 而兩邊的覆寫語意是相反的。
+fn prd_target(dir: &Path, name: &str, versioned: bool) -> Result<(PathBuf, String), String> {
+    if versioned {
+        // 檔名由前端給 —— 沿用快照那套：只接受 .md、不能帶路徑
+        let safe = safe_snapshot_name(name)
+            .ok_or_else(|| "檔名不合法（只接受 .md，且不能包含路徑）".to_string())?;
+        Ok((dir.join(".anchorline").join("prd"), safe))
+    } else {
+        // 主檔路徑寫死，前端說不上話 —— 少一個可以被穿越的參數
+        Ok((dir.join("docs"), PRD_MAIN_FILE.to_string()))
+    }
+}
+
+/// PRD 主檔與版本快照。
+///
+/// 兩種形狀共用一支 command，因為它們只差在「寫哪」與「能不能蓋」：
+///
+/// - `versioned: false` → `<root>/docs/PRD.md`，**覆寫**。這是那份會被 git
+///   追蹤的主檔，它就該只有一份、永遠是最新的；歷史交給 git。
+/// - `versioned: true` → `<root>/.anchorline/prd/<name>`，**不覆寫**。快照是
+///   「送審／核准當下這份 PRD 長這樣」，蓋掉就沒有東西可以比對 ——
+///   跟 `write_snapshot` 拒絕同名是同一個理由。
+///
+/// 為什麼不沿用 `write_export`：那支只寫 `.anchorline/exports/`、一律覆寫，
+/// 而且不接受子目錄。硬塞進去就得同時放寬它的目錄與覆寫語意，
+/// 那會讓「匯出可重生、快照不可覆寫」這條分界消失。
+#[tauri::command]
+pub fn write_prd(
+    folder_path: String,
+    name: String,
+    versioned: bool,
+    text: String,
+    roots: State<RegisteredRoots>,
+) -> R<Maybe<FilePath>> {
+    let dir = PathBuf::from(&folder_path);
+    if !roots.contains_ancestor_of(&dir) && !roots.contains_ancestor_of(&dir.join("x")) {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "這個資料夾沒有註冊為專案根目錄".to_string(),
+        )));
+    }
+    if text.len() > MAX_TEXT_BYTES as usize {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "PRD 內容太長，寫不進去".to_string(),
+        )));
+    }
+    let (target_dir, file_name) = match prd_target(&dir, &name, versioned) {
+        Ok(t) => t,
+        Err(e) => return Ok(Maybe::Missing(Unavailable::new(e))),
+    };
+    if std::fs::create_dir_all(&target_dir).is_err() {
+        return Ok(Maybe::Missing(Unavailable::new(format!(
+            "無法建立 {}",
+            target_dir.display()
+        ))));
+    }
+    let target = target_dir.join(&file_name);
+    if versioned && target.exists() {
+        return Ok(Maybe::Missing(Unavailable::new(
+            "同名版本已存在（同一分鐘內重複產生）".to_string(),
+        )));
+    }
+    match std::fs::write(&target, text) {
+        Ok(_) => Ok(Maybe::Ok(FilePath {
+            path: target.to_string_lossy().to_string(),
+        })),
+        Err(e) => Ok(Maybe::Missing(Unavailable::new(format!("寫入失敗：{e}")))),
+    }
+}
+
+/// PRD 版本快照清單。形狀跟 `list_snapshots` 一樣，只是換一個目錄 ——
+/// 分析報告（`.anchorline/context/`）與 PRD 版本（`.anchorline/prd/`）是
+/// 兩種東西，混在同一個目錄裡會讓「上一版 PRD」這個問題答不出來。
+#[tauri::command]
+pub fn list_prd_versions(
+    folder_path: String,
+    roots: State<RegisteredRoots>,
+) -> R<Vec<SnapshotEntry>> {
+    let dir = PathBuf::from(&folder_path);
+    if !roots.contains_ancestor_of(&dir) && !roots.contains_ancestor_of(&dir.join("x")) {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir.join(".anchorline").join("prd")) {
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if !name.ends_with(".md") {
+                continue;
+            }
+            let meta = e.metadata().ok();
+            let mtime_ms = meta
+                .as_ref()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as f64)
+                .unwrap_or(0.0);
+            let bytes = meta.as_ref().map(|m| m.len() as f64).unwrap_or(0.0);
+            out.push(SnapshotEntry {
+                name,
+                mtime_ms,
+                bytes,
+            });
+        }
+    }
+    Ok(out)
+}
+
 /// Function wish list。檔名與目錄都寫死，前端只能說「寫進哪個已註冊根」。
 ///
 /// `write_file` 建不了新檔；願望清單第一次存檔時檔還不存在。
@@ -2659,5 +2770,40 @@ mod rename_openspec_change_tests {
         assert!(dir.join("openspec/changes/add-old").exists());
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+
+#[cfg(test)]
+mod prd_target_tests {
+    use super::*;
+
+    #[test]
+    fn main_file_ignores_caller_supplied_name() {
+        // 主檔路徑寫死。前端傳什麼都一樣 —— 這是那個參數不能被穿越的原因
+        for name in ["", "../../etc/passwd", "whatever.md"] {
+            let (dir, file) = prd_target(Path::new("/tmp/proj"), name, false).unwrap();
+            assert_eq!(dir, Path::new("/tmp/proj/docs"), "{name}");
+            assert_eq!(file, "PRD.md", "{name}");
+        }
+    }
+
+    #[test]
+    fn versioned_goes_to_anchorline_prd_not_context() {
+        // `.anchorline/context/` 是專案分析報告的家。混進去會讓
+        // 「上一版 PRD 是哪一份」這個問題答不出來
+        let (dir, file) = prd_target(Path::new("/tmp/proj"), "PRD-20260901-1420-merge.md", true).unwrap();
+        assert_eq!(dir, Path::new("/tmp/proj/.anchorline/prd"));
+        assert_eq!(file, "PRD-20260901-1420-merge.md");
+    }
+
+    #[test]
+    fn versioned_rejects_traversal_and_non_md() {
+        for bad in ["../x.md", "a/b.md", "a\\b.md", "..md.md/../x.md", "notes.txt", "PRD"] {
+            assert!(
+                prd_target(Path::new("/tmp/proj"), bad, true).is_err(),
+                "should reject {bad}"
+            );
+        }
     }
 }

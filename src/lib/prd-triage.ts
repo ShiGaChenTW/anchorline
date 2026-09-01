@@ -84,3 +84,64 @@ export function routeScaleLabel(route: PrdRoute): string {
   if (route.sections === "all") return `Full ${SEED_SECTIONS.length} 節（全量）`;
   return `Lite ${route.sections.length} 節（簡化）`;
 }
+
+// ── 路線 → 看得見哪幾節 ────────────────────────────────────────
+
+/** 專案身上存得下的路線。`openspec` 不建專案，所以不在這裡。 */
+export type ProjectRoute = Exclude<RouteId, "openspec">;
+
+/**
+ * 沒存路線的專案一律當 `full`。
+ *
+ * 舊專案是照全量章節寫的 —— 猜成 `lite` 會讓已經寫好的七節在編輯台上
+ * 憑空消失，而且沒有任何錯誤訊息，只是東西不見了。
+ */
+export function projectRoute(p: { route?: ProjectRoute } | null | undefined): ProjectRoute {
+  return p?.route === "lite" ? "lite" : "full";
+}
+
+/**
+ * 這條路線看得見哪些章節 id。`full` 回 null 代表**全部**。
+ *
+ * 回 null 而不是回一份完整清單，是因為呼叫端幾乎都在問「要不要濾」——
+ * 回清單的話每個呼叫端都得自己判斷「這份清單是不是剛好等於全部」，
+ * 而那個判斷在新增章節時會靜默地變成錯的。
+ */
+export function visibleSectionIds(route: ProjectRoute): ReadonlySet<string> | null {
+  return route === "lite" ? new Set<string>(LITE_SECTIONS) : null;
+}
+
+/**
+ * 這一節在這條路線底下看得見嗎。
+ *
+ * **自訂章節永遠看得見。** 它們不在 `SEED_SECTIONS` 裡，也就不在
+ * `LITE_SECTIONS` 裡 —— 照白名單濾的話，使用者自己加的章節會在降級時
+ * 一起消失，而他從來沒有把那一節歸給任何路線。
+ */
+export function isSectionVisible(route: ProjectRoute, sectionId: string, isCustom = false): boolean {
+  if (isCustom) return true;
+  const allow = visibleSectionIds(route);
+  return !allow || allow.has(sectionId);
+}
+
+/** 降級會藏起來的那幾節（給確認對話框列出來用）。升級不藏任何東西。 */
+export function hiddenSectionIds(route: ProjectRoute): string[] {
+  const allow = visibleSectionIds(route);
+  if (!allow) return [];
+  return SEED_SECTIONS.map((s) => s.id).filter((id) => !allow.has(id));
+}
+
+/**
+ * 從外部資料（localStorage、匯入的 JSON）讀回路線。
+ *
+ * `migrateProject` 逐欄位重建 Project，而 store 的相依鏈載不進 bun test
+ * （`import.meta.glob`），所以那裡的正規化沒有測試網。把判斷搬到這支純函式
+ * 才守得住 —— 而它守的是一個實測抓到的洞：漏了這一步，選了 Lite 的專案
+ * 重新載入就變回 Full，15 節照樣長出來，沒有任何錯誤。
+ *
+ * 只認 `"lite"`：其他任何值（含髒資料）都回 undefined＝Full。Full 是
+ * 「看得到全部」，是錯得最安全的那一邊。
+ */
+export function normalizeRoute(raw: unknown): "lite" | undefined {
+  return raw === "lite" ? "lite" : undefined;
+}

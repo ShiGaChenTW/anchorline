@@ -118,6 +118,14 @@
               <label class="domain-bar-label" for="domain-select">領域</label>
               <select id="domain-select" aria-label="專案領域"></select>
             </div>
+            <!-- 路線 = 這份 PRD 要寫幾節。降級只藏章節，正文不刪（見 Project.route） -->
+            <div class="domain-bar" id="route-bar">
+              <label class="domain-bar-label" for="route-select">路線</label>
+              <select id="route-select" aria-label="PRD 路線">
+                <option value="full">Full — 全量</option>
+                <option value="lite">Lite — 簡化</option>
+              </select>
+            </div>
             <div class="domain-orphans" id="domain-orphans" hidden></div>
             <div class="section-list" id="outline" role="listbox" aria-label="章節"></div>
             <!-- 孤兒正文：有內容、但 sectionId 不在目前骨架裡。整塊的生死由 JS 決定 -->
