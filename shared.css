@@ -2049,12 +2049,14 @@ table.data tbody tr.selected td.col-actions {
   font-weight: 500;
   color: var(--fg);
 }
-.check-list {
+.check-list,
+.selfcheck-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.check-list label {
+.check-list label,
+.selfcheck-list label {
   display: flex;
   gap: 8px;
   align-items: flex-start;
@@ -2062,7 +2064,8 @@ table.data tbody tr.selected td.col-actions {
   cursor: pointer;
   color: var(--fg-2);
 }
-.check-list input {
+.check-list input,
+.selfcheck-list input {
   margin-top: 3px;
   accent-color: var(--fg-2);
 }
@@ -6871,6 +6874,7 @@ html.adhd-calm .adhd-editor-hint {
   white-space: nowrap;
 }
 .adhd-coach-details .check-list,
+.adhd-coach-details .selfcheck-group,
 .adhd-coach-details .example,
 .adhd-coach-details .adhd-ai-actions,
 .adhd-coach-details .adhd-ai-prompt-row,
@@ -15430,4 +15434,151 @@ p.gd-warn {
   color: var(--muted);
   font-size: var(--fs-2);
   line-height: 1.6;
+}
+
+/* 送出前自檢（範本第 11 章）。auto 項目沿用 .adhd-gate-row 的排版，
+   這裡只補分組標題的間距與「前往」連結。 */
+.selfcheck-group + .selfcheck-group {
+  padding-top: 0 !important;
+}
+.selfcheck-group .adhd-coach-kicker {
+  margin: 0 0 6px;
+}
+.selfcheck-jump {
+  margin-left: 6px;
+  font-size: var(--fs-1);
+  color: var(--accent, var(--fg-2));
+  text-decoration: none;
+  white-space: nowrap;
+}
+.selfcheck-jump:hover {
+  text-decoration: underline;
+}
+.adhd-gate-row.is-failing .adhd-gate-detail {
+  color: var(--fg-2);
+}
+
+/* 送出前自檢的「待優化」標示。這張卡的判定規則還沒收斂，視覺上必須跟
+   結構 gate 分開 —— gate 是放行條件，這張卡目前只是提示。 */
+.selfcheck-wip {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.selfcheck-wip-note {
+  margin: 0;
+  padding: 8px 12px 10px;
+  font-size: var(--fs-1);
+  line-height: 1.6;
+  color: var(--fg-2);
+  background: var(--warn-bg);
+  border-top: 1px solid color-mix(in oklab, var(--warn) 24%, transparent);
+  border-bottom: 1px solid color-mix(in oklab, var(--warn) 24%, transparent);
+}
+
+/* 範本第 0 章：這次要寫哪一種。三欄並排是刻意的 —— 三條路線是對照關係，
+   上下排會讓它們讀成一串平行清單，比較關係消失。滿版容器由 .modal-sheet 提供。 */
+.modal-back.is-sheet {
+  padding: 0;
+}
+.modal.modal-sheet {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+}
+.modal.modal-sheet > .body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+}
+.route-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+  max-width: 1140px;
+}
+@media (max-width: 900px) {
+  .route-grid {
+    grid-template-columns: 1fr;
+    max-width: 560px;
+  }
+  .modal.modal-sheet > .body {
+    align-items: flex-start;
+  }
+}
+.route-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+  text-align: left;
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+}
+.route-card:hover,
+.route-card:focus-visible {
+  border-color: var(--accent, var(--fg-2));
+  background: var(--inset);
+  transform: translateY(-2px);
+}
+.route-name {
+  font-size: var(--fs-4);
+  line-height: 1.4;
+}
+.route-scale {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-1);
+  color: var(--fg-2);
+  background: var(--inset);
+  border: 1px solid var(--border);
+}
+.route-card.is-openspec .route-scale {
+  background: var(--warn-bg);
+  border-color: color-mix(in oklab, var(--warn) 30%, transparent);
+}
+.route-desc {
+  font-size: var(--fs-2);
+  line-height: 1.6;
+  color: var(--fg-2);
+}
+.route-cases-head {
+  margin-top: 4px;
+  font-size: var(--fs-1);
+  color: var(--muted);
+}
+.route-cases {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-1);
+  line-height: 1.6;
+  color: var(--fg-2);
+}
+.route-go {
+  margin-top: auto;
+  padding-top: 12px;
+  font-size: var(--fs-2);
+  color: var(--muted);
+}
+.route-card:hover .route-go,
+.route-card:focus-visible .route-go {
+  color: var(--fg);
 }

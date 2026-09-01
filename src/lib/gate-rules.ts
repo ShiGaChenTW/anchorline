@@ -60,7 +60,12 @@ export type GatePredicate =
   | { kind: "present" }
   | { kind: "minLength"; n: number }
   | { kind: "match"; re: string; flags?: string }
-  | { kind: "bullets"; min: number };
+  /**
+   * `max` 是為了範本第 10 節「開放問題控制在 8 題以內」。用 regex 表達不出
+   * 「條目不超過 N」——那是計數，不是字串比對。加一個選填上限比長出第五個
+   * predicate 便宜，也不影響任何既有規則（沒寫 max 就沒有上限）。
+   */
+  | { kind: "bullets"; min: number; max?: number };
 
 export type GateRule = {
   id: string;
@@ -153,7 +158,7 @@ function evaluateRule(input: GateInput, rule: GateRule): Outcome {
       return { ok: new RegExp(p.re, p.flags).test(text), count: 0, missing: [] };
     case "bullets": {
       const n = countBullets(text);
-      return { ok: n >= p.min, count: n, missing: [] };
+      return { ok: n >= p.min && (p.max === undefined || n <= p.max), count: n, missing: [] };
     }
   }
 }

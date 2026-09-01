@@ -192,6 +192,32 @@
   </div>
 </div>
 
+<!--
+  範本第 0 章「這次要寫哪一種」。刻意做成**精靈之前的一道關**，不是精靈的第 0 題：
+  第 0 章問的是「這件事該走哪一條路」，塞進精靈裡就變成「已經在建了才問要不要建」。
+  滿版是因為三條路線要並排比較 —— 480px 的對話框放不下三欄，一擠成單欄就
+  變成一串平行清單，比較關係整個消失。
+  路線資料在 src/lib/prd-triage.ts，這裡只留容器。
+-->
+<div class="modal-back is-sheet" id="modal-triage" data-od-id="modal-triage">
+  <div class="modal modal-sheet" role="dialog" aria-labelledby="triage-title" aria-modal="true">
+    <header>
+      <div>
+        <h3 id="triage-title">這次要寫哪一種？</h3>
+        <p class="sub">選一個就開始，選錯了進編輯台還能改。</p>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="triage-close">關閉</button>
+    </header>
+    <div class="body ask-body">
+      <div class="route-grid" id="route-grid" role="list"></div>
+    </div>
+    <footer>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn-ghost" id="triage-skip">跳過判定，直接建立</button>
+    </footer>
+  </div>
+</div>
+
 <div class="modal-back" id="modal" data-od-id="modal-new">
   <div class="modal modal-wizard modal-ask" role="dialog" aria-labelledby="modal-title">
     <header>

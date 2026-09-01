@@ -35,6 +35,7 @@ import {
 import { parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
 import { askForProjectFolder } from "../lib/project-folder";
 import { canDelete, canEditContent, canExport } from "../lib/permissions";
+import { PRD_ROUTES, routeById, routeScaleLabel } from "../lib/prd-triage";
 import { bindRailProjects, renderRailProjects } from "../lib/rail-projects";
 import { initTheme } from "../lib/theme";
 import {
@@ -748,6 +749,8 @@ if (!requireAuth()) {
       ["做什麼", what || "（跳過了 — 進編輯台再補）"],
       ["給誰", val("wiz-who") || "（跳過了 — 進編輯台再補）"],
       ["為何現在", val("wiz-why") || "（跳過了 — 進編輯台再補）"],
+      // 第 0 章的判定跟著走到確認頁。不顯示的話，那一關等於問完就丟。
+      ...(triageNote ? ([["路線", triageNote]] as [string, string][]) : []),
     ];
     dl.innerHTML = rows
       .map(
@@ -902,9 +905,65 @@ if (!requireAuth()) {
     saveDraft();
   });
 
-  document.getElementById("btn-new")?.addEventListener("click", () => openWizard(false));
-  document.getElementById("btn-beginner")?.addEventListener("click", () => openWizard(true));
-  document.getElementById("btn-beginner-cta")?.addEventListener("click", () => openWizard(true));
+  /* ─── 範本第 0 章：這次要寫哪一種 ─── */
+
+  /**
+   * 選到的路線只帶到精靈的確認頁上顯示，**不寫進 Project**。
+   *
+   * 存下來才有意義的前提是有人會用它 —— 而 Lite/Full 目前不是可切換的模式
+   * （Full 才有的章節一律 warn 不 block）。先存一個沒人讀的欄位，換來的是
+   * 一次 schema 變更加一次 migration，然後在真的要用時發現當初存錯了形狀。
+   */
+  let triageNote = "";
+
+  function openTriage(asBeginner: boolean) {
+    beginnerPath = asBeginner;
+    const host = document.getElementById("route-grid");
+    if (host) {
+      host.innerHTML = PRD_ROUTES.map(
+        (r) => `<button type="button" class="route-card is-${escapeHtml(r.id)}" role="listitem" data-route="${escapeHtml(r.id)}">
+          <span class="route-name">${escapeHtml(r.name)}</span>
+          <span class="route-scale">${escapeHtml(routeScaleLabel(r))}</span>
+          <span class="route-desc">${escapeHtml(r.desc)}</span>
+          <span class="route-cases-head">適用情境</span>
+          <ul class="route-cases">${r.cases.map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul>
+          <span class="route-go">${r.id === "openspec" ? "去 OpenSpec →" : "選這個 →"}</span>
+        </button>`,
+      ).join("");
+      for (const el of host.querySelectorAll<HTMLButtonElement>("[data-route]")) {
+        el.addEventListener("click", () => pickRoute(el.dataset.route!));
+      }
+    }
+    openModal("modal-triage");
+  }
+
+  /**
+   * Debug／維運那條**不進精靈**，直接跳 OpenSpec。
+   *
+   * 讓它照樣開一份 PRD 再叫使用者自己別填，等於這張卡什麼都沒做。
+   */
+  function pickRoute(id: string) {
+    const route = routeById(id);
+    if (!route) return;
+    closeModal("modal-triage");
+    if (route.id === "openspec") {
+      location.href = "openspec.html";
+      return;
+    }
+    triageNote = `${route.name} — ${routeScaleLabel(route)}`;
+    openWizard(beginnerPath);
+  }
+
+  document.getElementById("triage-close")?.addEventListener("click", () => closeModal("modal-triage"));
+  document.getElementById("triage-skip")?.addEventListener("click", () => {
+    triageNote = "";
+    closeModal("modal-triage");
+    openWizard(beginnerPath);
+  });
+
+  document.getElementById("btn-new")?.addEventListener("click", () => openTriage(false));
+  document.getElementById("btn-beginner")?.addEventListener("click", () => openTriage(true));
+  document.getElementById("btn-beginner-cta")?.addEventListener("click", () => openTriage(true));
   document.getElementById("modal-close")?.addEventListener("click", () => closeModal("modal"));
   document.getElementById("modal-cancel")?.addEventListener("click", () => closeModal("modal"));
   document.getElementById("wizard-prev")?.addEventListener("click", () => {
@@ -1001,10 +1060,10 @@ if (!requireAuth()) {
   // 初始化步驟列（關閉時也有正確 DOM）
   renderWizardChrome();
 
-  // 側欄「＋」直接開新建精靈（非新手路徑）
+  // 側欄「＋」先過第 0 章判定，再進精靈（非新手路徑）
   if (new URLSearchParams(location.search).get("new") === "1") {
     window.setTimeout(() => {
-      if (canEditContent(store.get().currentUser)) openWizard(false);
+      if (canEditContent(store.get().currentUser)) openTriage(false);
     }, 120);
   }
 

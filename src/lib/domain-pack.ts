@@ -79,7 +79,13 @@ const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 function normalizeSection(p: SectionPatch, order: number): Section {
   return {
     id: p.id,
-    n: p.n ?? String(order + 1).padStart(2, "0"),
+    // 編號一律由位置算，**刻意忽略** frontmatter 寫的 `n`。
+    //
+    // 領域包原本各自硬寫 `n: "08"`（接在通用 7 章之後）。2026-08-31 通用骨架
+    // 換成範本的 15 章時，那三份包的 08–10 當場跟 base 撞號 —— 而症狀是大綱
+    // 出現重號，不是任何錯誤訊息。追加章節的編號本來就是「排在第幾個」的
+    // 函數，讓它由呼叫端手寫等於把一個算得出來的值交給人維護。
+    n: String(order + 1).padStart(2, "0"),
     title: p.title ?? p.id,
     desc: p.desc ?? "",
     status: p.status ?? "empty",

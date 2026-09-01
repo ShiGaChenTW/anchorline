@@ -12,6 +12,20 @@ kind: maintenance
 
 取消登入註冊功能,首次使用時需要有簡單三頁的說明頁面,並且最後一頁要求輸入使用者姓名和主要連接的agent是誰即可
 
+### ANCHL-002
+
+created: 2026-08-31T15:20:29
+kind: maintenance
+
+目前AI撰寫ＰＲＤ僅限使用API,請調整成可透過API和AI Agent CLI雙路線
+
+### ANCHL-003
+
+created: 2026-08-31T15:23:11
+kind: bug
+
+AI撰寫PRD按鈕應該要放在”工作台-PRD”頁籤,現在放的位置不對
+
 ## Archive
 
 （沒有）

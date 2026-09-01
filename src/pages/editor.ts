@@ -53,6 +53,7 @@ import {
   restoreCaret,
 } from "../lib/writing-assist";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
+import { SELF_CHECK, resolveSelfCheck } from "../lib/prd-selfcheck";
 import { DEFAULT_DOMAIN, listDomains } from "../data/domains";
 import { initTheme } from "../lib/theme";
 import { renderDiffSummary } from "../lib/diff-summary";
@@ -868,6 +869,37 @@ function nothingToSubmit(): boolean {
   return store.commitPrecheck().code === "no-diff";
 }
 
+/**
+ * 送出前自檢的人工勾選，依專案分開存。
+ *
+ * 讀寫都吞掉錯誤：localStorage 在無痕視窗或關掉站台資料時會直接拋，
+ * 而一份自檢清單不該讓整個編輯台白畫面。壞掉的後果是勾選不留存，
+ * 那比看不到編輯台好得多。
+ */
+function selfCheckKey(): string {
+  return `anchorline.selfcheck.${store.get().activeProjectId ?? "_"}`;
+}
+
+function readSelfCheckTicks(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(selfCheckKey());
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, boolean>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeSelfCheckTick(id: string, on: boolean) {
+  try {
+    localStorage.setItem(selfCheckKey(), JSON.stringify({ ...readSelfCheckTicks(), [id]: on }));
+  } catch {
+    /* 存不進去就算了 —— 見上面的註解 */
+  }
+}
+
 function renderCoach() {
   const s = sections()[idx];
   if (!s) return;
@@ -891,6 +923,11 @@ function renderCoach() {
   // ADHD R1 迴路反轉：原本 `gateOpen = !gate.canSubmit`，等於「越卡住畫面越吵」。
   // 改成只在快過關時才主動展開細節；卡住時保持安靜，數量留在 summary 行。
   const gateOpen = gate.canSubmit && gate.warns > 0;
+
+  // 範本第 11 章。auto 項目由 gate 判定，人工項目存在 localStorage —— 不進
+  // AppState 是因為它是「我看過了」的個人痕跡，不是 PRD 的一部分：進了
+  // AppState 就會被匯出、被 diff、被拿去跟主線比對。
+  const selfCheck = resolveSelfCheck(gate, readSelfCheckTicks(), store.get().sectionValues);
 
   coach.innerHTML = `
     <div class="card adhd-coach-now" data-od-id="next-card">
@@ -973,6 +1010,51 @@ function renderCoach() {
       <p class="adhd-coach-link"><a href="tracking.html">開啟計劃追蹤 →</a></p>
     </details>
 
+    <details class="adhd-coach-details card" data-od-id="selfcheck-card" ${selfCheck.failing.length === 1 ? "open" : ""}>
+      <summary>送出前自檢 <span class="pill pill-warn selfcheck-wip" title="這張卡的判定還在收斂，先當提示看，不要當放行條件。細節見下方說明。">待優化</span> <span class="adhd-details-meta">${selfCheck.done}/${selfCheck.total}${
+        selfCheck.failing.length ? ` · ${selfCheck.failing.length} 項要改正文` : ""
+      }</span></summary>
+      <p class="selfcheck-wip-note">⚠️ 待優化 — 這張卡的判定還沒收斂完：<strong>${
+        SELF_CHECK.flatMap((g) => g.items).filter((i) => !i.gate).length
+      } 項只能人工勾</strong>（機器判不出來），其餘規則是啟發式比對，會有偽陽性與偽陰性。<strong>先當提示看，不要當放行條件。</strong></p>
+      ${selfCheck.groups
+        .map(
+          (g) => `<div class="selfcheck-group">
+            <p class="adhd-coach-kicker">${escapeHtml(g.title)}</p>
+            <div class="selfcheck-list">
+              ${g.items
+                .map((it) => {
+                  // auto 項目**刻意不做成可勾的 checkbox**：勾得掉就等於允許
+                  // 這份清單說謊，而它存在的唯一理由是送審前不說謊。
+                  const jump = it.section
+                    ? ` <a href="#" class="selfcheck-jump" data-sec="${escapeHtml(it.section)}">前往</a>`
+                    : "";
+                  if (!it.auto) {
+                    return `<label>
+                      <input type="checkbox" ${it.pass ? "checked" : ""} data-sc-id="${escapeHtml(it.id)}" />
+                      <span>${escapeHtml(it.label)}${jump}</span>
+                    </label>`;
+                  }
+                  // 三態各自的符號。`pending` 用中性 ○／muted —— 未嘗試就先看到
+                  // 紅叉會觸發迴避，這一點在 gate 卡那邊已經是既定作法。
+                  const icon = it.state === "pass" ? "✔" : it.state === "fail" ? "!" : "○";
+                  const color =
+                    it.state === "pass" ? "var(--success)" : it.state === "fail" ? "var(--warn)" : "var(--muted)";
+                  return `<div class="adhd-gate-row${it.state === "fail" ? " is-failing" : ""}${
+                    it.state === "pending" ? " is-untouched" : ""
+                  }">
+                    <span style="color:${color}">${icon}</span>
+                    <span>${escapeHtml(it.label)}${jump}
+                    ${it.detail ? `<span class="adhd-gate-detail"> — ${escapeHtml(it.detail)}</span>` : ""}</span>
+                  </div>`;
+                })
+                .join("")}
+            </div>
+          </div>`,
+        )
+        .join("")}
+    </details>
+
     <details class="adhd-coach-details card adhd-ai-card" data-od-id="ai-tools-card">
       <summary>AI 助教 <span class="adhd-details-meta">${
         aiReadyNow ? escapeHtml(settings.model) : "未設定"
@@ -1003,6 +1085,27 @@ function renderCoach() {
       store.setCheck(s.id, cb.dataset.cid!, cb.checked);
       renderCoach();
       renderOutline();
+    });
+  });
+
+  // 自檢清單的人工項目走自己的 class 與自己的 handler。共用 `.check-list`
+  // 會被上面那個選擇器一起抓走，然後拿 undefined 當 checkId 去呼叫
+  // `store.setCheck` —— 那是靜默寫壞資料，不是報錯。
+  coach.querySelectorAll<HTMLInputElement>(".selfcheck-list input[data-sc-id]").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      writeSelfCheckTick(cb.dataset.scId!, cb.checked);
+      renderCoach();
+    });
+  });
+
+  coach.querySelectorAll<HTMLAnchorElement>(".selfcheck-jump").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      const i = sections().findIndex((x) => x.id === a.dataset.sec);
+      if (i < 0) return;
+      store.setActiveSection(sections()[i]!.id);
+      idx = i;
+      render();
     });
   });
 

@@ -4241,16 +4241,20 @@ export function liveScore(section: Section, values: Record<string, string>): num
 }
 
 export function evaluateChecks(section: Section, values: Record<string, string>) {
+  // 讀整章而不是單一欄位鍵：範本改版時欄位會拆會併（`scope` 就從一格 `ms`
+  // 變成 `phases` + `ms`），綁死欄位鍵的檢查會靜默失效——勾勾永遠不亮，
+  // 而沒有任何錯誤訊息說明為什麼。
+  const text = Object.values(values).join("\n");
   return section.checks.map((c) => {
     let pass = c.pass;
     if (section.id === "open" && c.id === "c2") {
-      pass = /\d{1,2}\/\d{1,2}|Q\d|週|前/.test(values.oq ?? "");
+      pass = /\d{1,2}\/\d{1,2}|\d{4}-\d{2}-\d{2}|Q\d|週|前/.test(text);
     }
     if (section.id === "metrics" && c.id === "c3") {
-      pass = /完成率|漏斗|開始/.test(values.m1 ?? "");
+      pass = /領先|leading|完成率|漏斗/.test(text);
     }
     if (section.id === "scope" && c.id === "c2") {
-      pass = /依賴|風險|設計|法務|資安/.test(values.ms ?? "");
+      pass = /依賴|相依|風險|設計|法務|資安/.test(text);
     }
     return { ...c, pass };
   });

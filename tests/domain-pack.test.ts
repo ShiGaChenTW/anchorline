@@ -74,9 +74,11 @@ describe("applySectionPatches", () => {
   const base = SEED_SECTIONS.slice(0, 2);
 
   test("同 id 覆寫指定欄位，其餘保留", () => {
+    // 依 id 取，不依索引 —— 骨架換順序時這份測試該繼續驗它要驗的事
+    const i = base.findIndex((s) => s.id === "summary");
     const out = applySectionPatches(base, [{ id: "summary", title: "改過的標題" }]);
-    expect(out[0].title).toBe("改過的標題");
-    expect(out[0].fields).toBe(base[0].fields); // 沒給 fields 就不動
+    expect(out[i].title).toBe("改過的標題");
+    expect(out[i].fields).toBe(base[i].fields); // 沒給 fields 就不動
     expect(out).toHaveLength(2);
   });
 
