@@ -447,6 +447,33 @@ export type SignoffSummary = {
 export const PREVIEW_DETAIL = (n: number) =>
   `這是預覽 —— 送出審閱時才會照現在的範本建立這 ${n} 關，屆時會逐關問你派給誰。`;
 
+/**
+ * 自簽過、但還沒送審時的頭條。
+ *
+ * 取代的是「尚未送審」—— 那句話對自簽過的個案是**全 App 最大的一句謊**：
+ * 關卡全部 approved、進度條滿格，頭條卻說沒送審，使用者只讀得出
+ * 「系統漏了我的簽核」。系統沒漏，是自簽刻意不推進正式流程（SPEC-03）。
+ *
+ * 分號後面那半句是重點：說得出**已經簽了**，也說得出**還沒進正式流程**。
+ * 只講前半會變成「已核准」的假象，只講後半就是現在這句謊。
+ */
+export const SELF_SIGN_DRAFT_HEADLINE = "已自簽 —— 尚未進入正式審閱";
+
+/**
+ * 自簽過、還沒送審時的細節。
+ *
+ * 講三件事，缺一件就會被誤讀：①自簽核准了幾關 ②專案狀態仍是草稿、進度
+ * 不會因為自簽而前進（這是 SPEC-03 拍板的行為，不是缺陷）③要正式送審
+ * 的話路在哪。第三句對得上 `signoffCta` 在 `draft` 給的那顆「去編輯台送審」。
+ *
+ * 用 `selfApproved/total` 不用單一個 `total`：自簽只核准 pending／empty 的關卡，
+ * `changes_requested` 刻意留著（見 `selfSignVibe`），寫死「都核准了」會是新的謊。
+ * 分子是**自簽核准**的關卡數（`selfApproved`），不是全部 approved —— 別人正式簽的
+ * 不算在「自簽已核准」這句話裡。`total` 仍是這份投影的全部關卡數。
+ */
+export const SELF_SIGN_DRAFT_DETAIL = (selfApproved: number, total: number) =>
+  `自簽已核准 ${selfApproved}/${total} 關，但沒有推進正式流程 —— 專案狀態仍是草稿，進度不會因為自簽而前進。要送進正式審閱，到編輯台按「送出審閱」。`;
+
 export function signoffSummary(
   user: Employee,
   project: Project,
@@ -459,6 +486,8 @@ export function signoffSummary(
 ): SignoffSummary {
   const rows = stageRows(user, project, c);
   const approved = rows.filter((r) => r.stage.state === "approved").length;
+  // 分子與 `total` 必須數在同一份投影（`rows`）：自簽細節句只數自簽核准的關卡
+  const selfApproved = rows.filter((r) => isSelfSignStage(r.stage)).length;
   const total = rows.length;
   const mine = rows.filter((r) => r.ability.can).map((r) => r.stage);
   const waiting = rows
@@ -496,6 +525,25 @@ export function signoffSummary(
     };
   }
   if (!c.reviewCommitId) {
+    // 自簽過的個案要講自簽的話 —— 判準一律問 helper，不要在這裡再寫一次
+    // 前綴比對：判準將來要換掉，散出去的比對沒人會提醒你。
+    //
+    // **問的是 `caseHoldsSelfSign`（現況）不是 `caseHasSelfSign`（歷史）。**
+    // 這一句頭條講的是當下狀態，而同句的 `approved/total` 是從關卡當下的
+    // `state` 現算的。升檔轉正（vibe → full/lite）會把自簽關卡重設回 pending
+    // 卻保留 log，用歷史判準的話畫面會變成「已自簽 —— 尚未進入正式審閱」＋
+    // 「自簽已核准 **0**/N 關」：使用者剛做的動作正是把自簽核准丟掉轉進正式
+    // 流程，系統卻回他一句已自簽再附一個自相矛盾的 0。那是 B3 修掉的
+    // 「自簽了卻說沒送審」的鏡像。兩個時態的差別見 `caseHoldsSelfSign`。
+    //
+    // **只換文案，不動行為**：`state` 仍是 `draft`、計數一個都不改。自簽不推進
+    // `status`／`pct` 是 SPEC-03 拍板的，這一題修的是「誠實呈現」不是行為。
+    //
+    // 細節仍讓 `preview` 優先：預覽那句講的是「這 N 關送出時才會建立」，被蓋掉
+    // 等於把預覽的警告吃掉。實務上兩者互斥 —— 自簽寫進 log 的 `kind: "approved"`
+    // 決策會讓 `caseHasRun` 判 true，`submitPlan().landsNow` 就是 false，
+    // `signoffStageView` 也就不會回 `preview: true`。這個組合只到得了測試裡。
+    const selfSigned = caseHoldsSelfSign(c);
     return {
       approved,
       total,
@@ -503,10 +551,12 @@ export function signoffSummary(
       waiting,
       changesRequested,
       state: "draft",
-      headline: "尚未送審",
+      headline: selfSigned ? SELF_SIGN_DRAFT_HEADLINE : "尚未送審",
       detail: opts?.preview
         ? PREVIEW_DETAIL(total)
-        : `流程有 ${total} 關。到編輯台按「送出審閱」之後才會開始跑。`,
+        : selfSigned
+          ? SELF_SIGN_DRAFT_DETAIL(selfApproved, total)
+          : `流程有 ${total} 關。到編輯台按「送出審閱」之後才會開始跑。`,
     };
   }
   // 有人要求修改 → 球在作者身上，這比「還有幾關沒簽」重要得多
@@ -616,6 +666,101 @@ export function signoffCta(sum: SignoffSummary, opts?: { preview?: boolean }): S
 export const SELF_SIGN_NOTE = "一鍵自簽（試作／探索）";
 
 /**
+ * 自簽註記的 writer —— **唯一一支**組得出自簽 comment 的函式。
+ *
+ * writer 與下面那組 reader 刻意放在同一個檔：判準原本是兩個地方各自寫一次
+ * 前綴比對（`canSelfSign`、`setProjectRoute`）加上 store 裡的一句字串樣板，
+ * 改格式時沒有任何東西會提醒你還有另外兩處。合約測試
+ * （`selfSignNote(selfSignSubject(id))` 要被三支 reader 全部認出）守的就是這件事。
+ *
+ * PRD §11 記著判準將來要換成不依賴字串比對的做法 —— 換的時候只有
+ * `isSelfSignComment` 與這一支要動。
+ */
+export function selfSignNote(subject: string): string {
+  return `${SELF_SIGN_NOTE} · ${subject}`;
+}
+
+/**
+ * 底層判準：這一句 comment 是不是自簽寫的。
+ *
+ * **將來換判準只改這一支。** 現在是前綴比對（`SELF_SIGN_NOTE` 開頭），
+ * 與 `selfSignNote` 的組法對偶。
+ *
+ * 收 `null | undefined` 而不是逼呼叫端先 narrow：`CaseStage.comment` 是
+ * optional，舊個案根本沒有這一欄，而「沒有意見」的答案就是 false。
+ */
+export function isSelfSignComment(comment: string | null | undefined): boolean {
+  return typeof comment === "string" && comment.startsWith(SELF_SIGN_NOTE);
+}
+
+/** 這一筆決策是不是自簽來的核准。`comment` 決策必填，但仍走同一支判準。 */
+export function isSelfSignDecision(d: Pick<CaseDecision, "kind" | "comment">): boolean {
+  return d.kind === "approved" && isSelfSignComment(d.comment);
+}
+
+/**
+ * 這一關的核准是不是自簽來的 —— 離開 vibe 時要重設回 pending 的就是這些。
+ *
+ * 收結構型 `Pick<>` 而不是完整 `CaseStage`：渲染端餵進來的常是 join 過的
+ * 投影物件，逼它們補齊十幾個用不到的欄位只會讓呼叫端改用 `as`。
+ */
+export function isSelfSignStage(s: Pick<CaseStage, "state" | "comment">): boolean {
+  return s.state === "approved" && isSelfSignComment(s.comment);
+}
+
+/**
+ * 這個個案**曾經**有沒有自簽過 —— 歷史問題，答案只會從 false 變 true。
+ *
+ * 有內容的 `log` 就以 log 為準 —— 那是只追加不覆蓋的真相，關卡狀態只是投影，
+ * 升檔時會被重設回 pending（`setProjectRoute`），拿它當判準會讓「已自簽過」
+ * 在升檔後突然變成 false。log **空的**個案沒有第二個來源，才退回查 stages。
+ *
+ * ⚠️ 判準是 `c.log?.length` 而不是 `c.log`：`load()`（`store.ts`）把每一份個案
+ * 的 log 正規化成陣列，而 `[]` 是 truthy。用真值判斷的話 stages 那條退路在正式版
+ * 是**死碼** —— 只有測試裡手捏的 `log: undefined` 走得到 —— 而 `signoffTimeline`
+ * 用的是長度判斷，於是同一個舊個案（stages 有自簽戳記、log 被正規化成 `[]`）在
+ * 同一頁上會拿到三種答案：頭條說沒自簽、關卡列印自簽徽章、時間軸印自簽核准。
+ * 這兩支的判準要一起改，改一支就是把三方分歧留在畫面上。
+ *
+ * ⚠️ 這一支回答的是「曾經」。「**現在**還掛著自簽核准嗎」是另一個問題，
+ * 問 `caseHoldsSelfSign` —— 講當下狀態的句子不可以拿這一支當判準。
+ *
+ * ⚠️ `canSelfSign` 的第六條守門**刻意不用這一支**：那裡查的是純 log，
+ * 換成有 stages 退路的版本會讓判斷變嚴（舊個案多一條擋法）。要改成
+ * 統一判準是產品決定，不是重構順手能做的事。
+ */
+export function caseHasSelfSign(c: CaseRecord | undefined): boolean {
+  if (!c) return false;
+  if (c.log?.length) return c.log.some(isSelfSignDecision);
+  return c.stages.some(isSelfSignStage);
+}
+
+/**
+ * 這個個案**現在**還掛不掛著自簽來的核准 —— 現況投影，可以從 true 變回 false。
+ *
+ * 與 `caseHasSelfSign` 是**兩個時態**，不是同一件事的兩種寫法：
+ *
+ * ```
+ * 一鍵自簽        → 曾經 true ／ 現在 true
+ * 升檔轉正之後    → 曾經 true ／ 現在 false   ← 只有這一支跟得上
+ * ```
+ *
+ * `setProjectRoute` 離開 vibe 時把自簽關卡重設回 pending 並清掉 comment，但
+ * **log 原樣保留**（spec 要的是可 replay 的錨點紀錄，不是核准狀態）。所以升檔後
+ * `caseHasSelfSign` 仍是 true，而畫面上一個自簽核准都不剩。
+ *
+ * 選邊的規則：**句子講當下就用這一支，句子講歷史才用 `caseHasSelfSign`。**
+ * 頭條「已自簽 —— 尚未進入正式審閱」與跟它同句的 `approved/total`（從關卡當下
+ * 的 `state` 現算）都是當下，混用歷史判準會湊出「已自簽，已核准 0/N 關」這種
+ * 自相矛盾的話 —— 而使用者剛做的動作正是把那些核准丟掉。時間軸講的是歷史，
+ * 用 `caseHasSelfSign` 才對。
+ */
+export function caseHoldsSelfSign(c: CaseRecord | undefined): boolean {
+  if (!c) return false;
+  return c.stages.some(isSelfSignStage);
+}
+
+/**
  * 自簽事件的 join key：`anc:t=<錨點>`。
  *
  * **帶前綴**，與 git 回填（`commitsToEvents`）和 App 內動作寫出的 subject
@@ -624,6 +769,25 @@ export const SELF_SIGN_NOTE = "一鍵自簽（試作／探索）";
  */
 export function selfSignSubject(anchorId: string): string {
   return `${ANCHOR_PREFIX}:t=${anchorId}`;
+}
+
+/**
+ * `selfSignSubject` 的逆向：從自簽 comment 取回**錨點 id**（裸 id，不含
+ * `anc:t=` 前綴 —— 與 `anchorOf` 同一種回傳形狀）。
+ *
+ * 取最後一段 ` · ` 之後的字：note 的形狀是 `<前綴> · <subject>`，而前綴本身
+ * 含全形括號與斜線，用正則挖前綴反而比切分隔符更脆。
+ *
+ * 認不出來就回 `null`，不丟例外 —— 呼叫端是渲染，拿不到錨點就少顯示一條
+ * 連結，不該讓整頁掛掉。
+ */
+export function selfSignAnchor(comment: string): string | null {
+  const at = comment.lastIndexOf(" · ");
+  if (at < 0) return null;
+  const subject = comment.slice(at + 3).trim();
+  const head = `${ANCHOR_PREFIX}:t=`;
+  if (!subject.startsWith(head)) return null;
+  return subject.slice(head.length) || null;
 }
 
 /**
@@ -672,7 +836,7 @@ export function canSelfSign(
     };
   }
   if (c?.locked) return { can: false, reason: "已核准鎖定 —— 不能再自簽" };
-  if (c?.log?.some((d) => d.kind === "approved" && d.comment.startsWith(SELF_SIGN_NOTE))) {
+  if (c?.log?.some(isSelfSignDecision)) {
     return { can: false, reason: "已經自簽過 —— 決策紀錄裡已有帶錨點的自簽事件" };
   }
   // 族系隔離照擋（見上方檔段說明）—— 文案與 `separationOfDuties` 同一句
@@ -781,6 +945,7 @@ export type TimelineKind =
   | "submit"
   | "approve"
   | "approved"
+  | "selfsign"
   | "changes_requested"
   | "comment"
   | "skipped"
@@ -798,6 +963,15 @@ export type TimelineEntry = {
   detail: string;
   /** 第幾輪。版本事件與稽核事件推不出輪次，給 0 表示「不分輪」 */
   round: number;
+  /**
+   * 自簽事件的錨點 id（**裸 id**，不含 `anc:t=` 前綴）。只有 `kind: "selfsign"`
+   * 會有，其餘一律 undefined。
+   *
+   * 分成獨立欄位而不是塞進 `detail`：`detail` 是整段跳脫後直接印的文字，
+   * 而錨點要用 `<span class="mono">` 呈現 —— 混在一起就只能在渲染端切字串，
+   * 那等於把 note 的格式再解析一次（第四個 reader）。
+   */
+  anchor?: string | null;
 };
 
 export type TimelineInput = {
@@ -824,6 +998,29 @@ const DECISION_TITLE: Record<CaseDecision["kind"], (stage: string) => string> = 
 };
 
 /**
+ * 自簽決策在時間軸上的標題。
+ *
+ * **刻意不併進 `DECISION_TITLE`**：那是 `Record<CaseDecision["kind"], …>`，
+ * 而自簽在資料層就是一筆 `approved` —— 多一個 key 會型別錯，改成寬鬆型別
+ * 又會讓「決策種類」這個聯集失去窮舉檢查。自簽是**渲染層的分類**，
+ * 不是第六種決策，所以住在渲染層這一側。
+ */
+export const SELF_SIGN_TITLE = (stage: string) => `自簽核准「${stage}」`;
+
+/**
+ * 自簽在畫面上該說的那句話 —— 關卡列與時間軸共用。
+ *
+ * 以前兩邊都直接印 `CaseDecision.comment`，也就是把內部 join key
+ * （`一鍵自簽（試作／探索） · anc:t=XXXX`）原樣端給使用者看。那串字是寫給
+ * `selfSignAnchor` 讀的，不是寫給人讀的：它沒講清楚「誰核准了誰」，
+ * 卻用括號與冒號假裝自己是說明。
+ *
+ * 這裡只講那件唯一重要的事 —— 蓋章的人就是作者本人，沒有第二雙眼睛。
+ * 錨點另外用 `<span class="mono">` 印裸 id（見 `TimelineEntry.anchor`）。
+ */
+export const SELF_SIGN_HUMAN = "作者核准自己 · 未經第三方";
+
+/**
  * 決策紀錄改讀 `CaseRecord.log`。
  *
  * 舊版是從關卡上那組「最新一筆」的戳記反推的，所以第二輪的決策會把第一輪的
@@ -840,6 +1037,21 @@ export function signoffTimeline(input: TimelineInput): TimelineEntry[] {
   if (c?.log?.length) {
     for (const d of c.log) {
       const name = stageName.get(d.stageId) ?? "（已移除的關卡）";
+      // 自簽在資料層是一筆 approved，但在畫面上它跟「有人審過了」是兩件事。
+      // 分出 `selfsign` 這個 kind，讓標題、樣式、意見三處一起分岔 ——
+      // 只改其中一處的話，剩下兩處仍在把自簽畫成正常核准。
+      if (isSelfSignDecision(d)) {
+        out.push({
+          kind: "selfsign",
+          at: d.at,
+          who: d.byName,
+          title: SELF_SIGN_TITLE(name),
+          detail: SELF_SIGN_HUMAN,
+          round: d.round,
+          anchor: selfSignAnchor(d.comment),
+        });
+        continue;
+      }
       out.push({
         kind: d.kind,
         at: d.at,
@@ -853,6 +1065,20 @@ export function signoffTimeline(input: TimelineInput): TimelineEntry[] {
     // 舊個案：只有關卡上的最新戳記可以反推，拿得到多少算多少
     for (const s of c?.stages ?? []) {
       if (s.state !== "approved") continue;
+      // 反推路徑也要分岔。漏掉這一半的話，沒有 `log` 的舊個案會把整串
+      // join key 原樣印在紀錄裡 —— 而那正是這一題要消掉的東西。
+      if (isSelfSignStage(s)) {
+        out.push({
+          kind: "selfsign",
+          at: s.decidedAt ?? "",
+          who: s.decidedByName || s.assigneeName || "—",
+          title: SELF_SIGN_TITLE(s.name),
+          detail: SELF_SIGN_HUMAN,
+          round: 0,
+          anchor: selfSignAnchor(s.comment ?? ""),
+        });
+        continue;
+      }
       out.push({
         kind: "approve",
         at: s.decidedAt ?? "",

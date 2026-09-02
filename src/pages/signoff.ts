@@ -28,6 +28,7 @@ import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import { syncRailContext } from "../lib/rail-projects";
+import { timelineRowHtml } from "../lib/signoff-log";
 import {
   groupTimelineByRound,
   signoffCta,
@@ -51,7 +52,6 @@ import {
   type StagePending,
 } from "../lib/signoff-stages";
 import { initTheme } from "../lib/theme";
-import { sinceLabel } from "../lib/time-format";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
 // 第一行：攔截要先裝好才擋得住後面任何一行的 throw。8 秒硬上限只是最後一道
@@ -170,14 +170,7 @@ if (!requireAuth()) {
     const entries = signoffTimeline({ c: st.cases[p.id], versions: store.prdVersionsOf(p.id) });
     const groups = groupTimelineByRound(entries);
 
-    const rowHtml = (e: (typeof entries)[0]) => `<li class="sg-log sg-log--${e.kind}">
-      <span class="sg-log-when mono">${escapeHtml(e.at ? sinceLabel(e.at, Date.now()) : "時間不詳")}</span>
-      <span class="sg-log-body">
-        <b>${escapeHtml(e.title)}</b>
-        <span class="sg-log-who">${escapeHtml(e.who)}</span>
-        <span class="sg-log-detail">${escapeHtml(e.detail)}</span>
-      </span>
-    </li>`;
+    const rowHtml = (e: (typeof entries)[0]) => timelineRowHtml(e);
 
     // 依輪分組，最新一輪展開，其餘收合 —— 平鋪的時間軸在多輪之後讀不出因果，
     // 「要求修改」會跟三筆核准混在一起，看不出哪幾筆發生在同一份內容上

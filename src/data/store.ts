@@ -112,8 +112,9 @@ import {
   canSelfSign,
   canSignStage,
   caseHasRun,
+  isSelfSignStage,
   normalizeStageAssignee,
-  SELF_SIGN_NOTE,
+  selfSignNote,
   selfSignSubject,
   separationOfDuties,
   stageAssignment,
@@ -2038,7 +2039,7 @@ export const store = {
       const c = state.cases[projectId];
       if (c) {
         const stages = c.stages.map((s) => {
-          if (s.state !== "approved" || !s.comment?.startsWith(SELF_SIGN_NOTE)) return s;
+          if (!isSelfSignStage(s)) return s;
           const { comment, decidedAt, decidedById, decidedByName, ...rest } = s;
           return { ...rest, state: "pending" as const };
         });
@@ -2149,7 +2150,7 @@ export const store = {
     const anchorId = mintId();
     const subject = selfSignSubject(anchorId);
     const round = c.round ?? 1;
-    const note = `${SELF_SIGN_NOTE} · ${subject}`;
+    const note = selfSignNote(subject);
     const decisions: CaseDecision[] = [];
     // `changes_requested` 刻意不在名單裡 —— 見上方第三個決定
     const open = (s: CaseStage) => s.state === "pending" || s.state === "empty";

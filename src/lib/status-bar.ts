@@ -3,10 +3,11 @@
  * 由 requireAuth 注入，不需各 HTML 手寫。
  */
 import { store } from "../data/store";
-import { projectDisplayName } from "../data/types";
+import { type Project, projectDisplayName } from "../data/types";
 import { formatBuildStamp, resolveBuildInfo } from "./build-info";
-import { evaluatePrdGates, gateSummaryLine } from "./prd-gates";
+import { evaluatePrdGates } from "./prd-gates";
 import { detectRailPage, type RailPage } from "./rail-nav";
+import { gateStatusText, projectNameHtml, routeChipHtml } from "./status-bar-view";
 import { escapeHtml } from "./ui";
 
 const PAGE_LABEL: Record<RailPage, string> = {
@@ -98,16 +99,27 @@ function bindBuildStampCopy() {
   });
 }
 
-function activeProject() {
+/**
+ * 狀態列要標示的專案，外加「這是不是真的 focus 專案」。
+ *
+ * fallback 鏈本身是刻意的 —— 狀態列寧可顯示某個專案，也不要在剛啟動、
+ * `activeProjectId` 還沒落地時整條變空白。但 fallback 出來的專案**不能**拿去配
+ * gate 結果：`evaluatePrdGates()` 讀的永遠是 `activeProjectId` 的章節內容，
+ * 配起來就是 A 專案的名字配 B 專案的檢查結果，而且不會有任何錯誤訊息。
+ *
+ * 所以這裡把分岔如實回報給呼叫端，而不是呼叫 `setActiveProject()` 去「收斂」它 ——
+ * `renderStatusBar` 掛在 `store.subscribe`，在裡面寫 store 會自遞迴。
+ */
+function activeProject(): { project: Project | null; isFocus: boolean } {
   const st = store.get();
   const visible = st.projects.filter((p) => (st.showSamples ? true : !p.isSample));
-  return (
+  const project =
     visible.find((p) => p.id === st.activeProjectId) ??
     visible[0] ??
     st.projects.find((p) => p.id === st.activeProjectId) ??
     st.projects[0] ??
-    null
-  );
+    null;
+  return { project, isFocus: project != null && project.id === st.activeProjectId };
 }
 
 function clockText(): string {
@@ -147,18 +159,14 @@ export function renderStatusBar(): void {
   const st = store.get();
   const page = detectRailPage();
   const pageLabel = page ? PAGE_LABEL[page] : "工作台";
-  const p = activeProject();
+  const { project: p, isFocus } = activeProject();
   const name = p ? projectDisplayName(p) : "未選擇專案";
   const stInfo = (p && STATUS_MAP[p.status]) || STATUS_MAP.draft;
   const user = st.currentUser;
   const role = ROLE_LABEL[user.accessRole] ?? user.accessRole;
-  const gate = evaluatePrdGates(st, store.activeGateSpec());
-  const gateText = st.locked
-    ? "已鎖定"
-    : gate.canSubmit
-      ? "結構可送審"
-      : gateSummaryLine(gate);
-  const gateTone = st.locked ? "ok" : gate.canSubmit ? "ok" : gate.canApprove === false ? "warn" : "draft";
+  // 非 focus 時整條 gate 不計算 —— 算出來的是別的專案的結果（見 activeProject 說明）
+  const gate = isFocus ? evaluatePrdGates(st, store.activeGateSpec()) : null;
+  const { text: gateText, tone: gateTone } = gateStatusText({ locked: st.locked, gate });
 
   const eph =
     ephemeral && ephemeral.until > Date.now() ? ephemeral.text : null;
@@ -167,16 +175,19 @@ export function renderStatusBar(): void {
   bar.innerHTML = `
     <div class="app-status-left">
       <span class="app-status-dot app-status-dot--${stInfo.tone}" title="${escapeHtml(stInfo.label)}"></span>
-      <span class="app-status-project" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+      ${projectNameHtml(name)}
       <span class="app-status-sep" aria-hidden="true">·</span>
       <span class="app-status-page">${escapeHtml(pageLabel)}</span>
       <span class="app-status-pill app-status-pill--${stInfo.tone}">${escapeHtml(stInfo.label)}</span>
+      ${routeChipHtml(p)}
     </div>
     <div class="app-status-center" title="${escapeHtml(gateText)}">
       ${
         eph
           ? `<span class="app-status-ephemeral">${escapeHtml(eph)}</span>`
-          : `<span class="app-status-gate app-status-gate--${gateTone}">${escapeHtml(gateText)}</span>`
+          : gateText
+            ? `<span class="app-status-gate app-status-gate--${gateTone}">${escapeHtml(gateText)}</span>`
+            : ""
       }
     </div>
     <div class="app-status-right">

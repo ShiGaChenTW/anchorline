@@ -24,3 +24,20 @@
 
 `localhost:5173` 通常是主 repo（`~/Documents/20_Projects/Project_Anchorline`）在跑。
 在 worktree 裡驗證要 `bunx vite --port <其他埠> --strictPort`，否則你會對著別的 checkout 截圖。
+
+## 這個 repo 沒有原生 `<dialog>` —— 查 `dialog[open]` 一定是空的
+
+全 repo **零個 `<dialog>` 元素**。`askConfirm()`（`src/lib/ask.ts:122`）與其他所有 modal
+（`welcome.ts` / `ai-write-console.ts` / `ai-optimize.ts` / `uat-format-panel.ts`）
+渲染的都是 **`.modal-back` div**。
+
+驅動瀏覽器時查 `document.querySelector("dialog[open]")` 會拿到 `null`，
+然後你會推論成「確認框沒跳出來」，其實它就在畫面上。**這條不報錯，只讓你多繞好幾輪。**
+
+要等 modal 出現就查 `.modal-back`。
+
+## 主題只有 3 個
+
+`kami` / `github` / `terminal`（`src/lib/theme.ts:9-13`、`src/data/types.ts:5` 的 `ThemeId`）。
+文件裡若出現「四個主題」，是那份文件錯了 —— 2026-09-02 的介面改版派工單就寫錯過，
+兩個 agent 各自獨立回報矛盾才抓到。跨主題驗證拍 3 張，不是 4 張。

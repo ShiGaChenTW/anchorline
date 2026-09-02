@@ -690,6 +690,27 @@ html[data-theme="terminal"] body {
   border-color: color-mix(in oklab, var(--danger) 35%, var(--border));
   background: color-mix(in oklab, var(--danger) 10%, transparent);
 }
+/*
+ * 路線籤（新產品／新專案 · 功能建構／迭代優化 · 試作／探索）。
+ *
+ * 沿用 `.app-status-pill` 的尺寸與邊框，只換顏色 —— 少一組尺寸常數就少一個
+ * 會跟旁邊那顆狀態 pill 對不齊的地方。`flex-shrink: 0` 也是從基底繼承的：
+ * 左欄擠不下時先讓專案名 ellipsis，路線籤不縮（縮 `.app-status-project`
+ * 的 28ch 是跨頁面共用面，動它會牽到每一頁）。
+ */
+.app-status-route {
+  color: var(--muted);
+}
+/*
+ * `vibe` 走 warn 色相，`full` / `lite` 維持中性。
+ * 「最低治理強度」全站同色相 —— P1-2 的自簽語彙用同一組，看到黃色就知道
+ * 這條線的治理是自己扛的。配方結構照抄 `.app-status-pill--review`。
+ */
+.app-status-route--vibe {
+  color: color-mix(in oklab, var(--warn) 55%, var(--fg));
+  border-color: color-mix(in oklab, var(--warn) 35%, var(--border));
+  background: color-mix(in oklab, var(--warn) 10%, transparent);
+}
 .app-status-gate,
 .app-status-ephemeral {
   overflow: hidden;
@@ -2198,6 +2219,44 @@ table.data tbody tr.selected td.col-actions {
 }
 .approval-card.is-empty .name {
   color: var(--muted);
+}
+/* 自簽核准 —— 一鍵自簽跟四個人真的逐關看過再簽，在這條列上本來一個字都不差。
+   斜線底紋負責「這張不一樣」，`.ap-selfsign` 那一行負責說清楚哪裡不一樣。
+   幾何走 --space-* 當週期（45deg 與百分比不是長度，不觸發硬編限制）。
+
+   ⚠️ 選擇器帶 `.approval-strip` 是**必要的**，不是順手寫長。主題 chrome 區的
+   `html[data-theme="github"] .approval-card` 與 terminal 的那一條（本檔 :3791
+   與 :3835）用 `background` **簡寫**把每張卡片拍平，簡寫會把 background-image
+   一起歸零，而它們的權重是 (0,2,1)、位置又在後面。少了這一層祖先，
+   底紋與邊框都會被靜默吃掉 —— 規則明明在樣式表裡，computed style 卻是
+   `none`（2026-09-02 實測）。加祖先把權重提到 (0,3,0)，比在主題區再開一個
+   分叉好：底紋只有一份，不用跟著主題數量長。 */
+.approval-strip .approval-card.is-self-signed {
+  border-color: color-mix(in oklab, var(--warn) 45%, var(--border));
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in oklab, var(--warn) 8%, transparent) 0,
+    color-mix(in oklab, var(--warn) 8%, transparent) var(--space-1),
+    transparent var(--space-1),
+    transparent var(--space-3)
+  );
+}
+/* terminal 的底是極暗色，8% 的 warn 疊上去視覺為零 —— 提到 14% 才看得見。
+   只調百分比，不新增 token、不新增主題。 */
+html[data-theme="terminal"] .approval-strip .approval-card.is-self-signed {
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in oklab, var(--warn) 14%, transparent) 0,
+    color-mix(in oklab, var(--warn) 14%, transparent) var(--space-1),
+    transparent var(--space-1),
+    transparent var(--space-3)
+  );
+}
+.approval-card .ap-selfsign {
+  grid-column: 2;
+  font-size: var(--fs-1);
+  line-height: 1.35;
+  color: color-mix(in oklab, var(--warn) 72%, var(--fg));
 }
 .approval-meta {
   margin-left: auto;
@@ -13770,6 +13829,8 @@ p.gd-warn {
   overflow-wrap: anywhere;
 }
 .sg-log--approve .sg-log-when { color: var(--success); }
+/* 自簽是核准，但不是「有人審過了」—— 時間戳走警示色，不走成功綠 */
+.sg-log--selfsign .sg-log-when { color: var(--warn); }
 .sg-log--withdraw .sg-log-when { color: var(--danger); }
 .sg-log--merge .sg-log-when { color: var(--accent); }
 @media (max-width: 640px) {
@@ -13895,6 +13956,31 @@ p.gd-warn {
 }
 .sg-stage--changes_requested .sg-stage-comment {
   color: var(--danger);
+}
+/* 自簽過的關卡：斜線底紋。
+   跟上面那條退回列刻意用不同的「材質」而不只是不同顏色 —— 兩者在畫面上
+   都是「這一關不對勁」，但色彩是三個主題各自變動的東西，紋理不是。
+   幾何走 --space-* token（4/12），角度與百分比不是長度，不吃硬編 px 的限制。 */
+.sg-stage--self-signed {
+  background: repeating-linear-gradient(
+    45deg,
+    color-mix(in oklab, var(--warn) 8%, transparent),
+    color-mix(in oklab, var(--warn) 8%, transparent) var(--space-1),
+    transparent var(--space-1),
+    transparent var(--space-3)
+  );
+  border-radius: var(--radius-sm);
+}
+/* 「自簽」徽章。跟 .sg-mode（串行／並行）同一個位置、同一級字，但那組是
+   關卡的性質、這一個是警訊，所以帶底色 —— 灰字小標會被當成又一個性質標籤。 */
+.sg-selfsign {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-1);
+  font-weight: 400;
+  color: var(--warn);
+  background: color-mix(in oklab, var(--warn) 18%, transparent);
 }
 .sg-sign-head {
   margin: 0 0 6px;

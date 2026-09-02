@@ -3,8 +3,18 @@ import {
   canSelfSign,
   canSignAnyStage,
   canSignStage,
+  caseHasSelfSign,
+  caseHoldsSelfSign,
   groupTimelineByRound,
+  isSelfSignComment,
+  isSelfSignDecision,
+  isSelfSignStage,
+  PREVIEW_DETAIL,
+  SELF_SIGN_DRAFT_DETAIL,
+  SELF_SIGN_DRAFT_HEADLINE,
   SELF_SIGN_NOTE,
+  selfSignAnchor,
+  selfSignNote,
   selfSignSubject,
   signoffSummary,
   signoffTimeline,
@@ -184,6 +194,183 @@ describe("signoffSummary", () => {
   test("沒有個案 / 沒有關卡", () => {
     expect(signoffSummary(emp(), proj(), undefined).state).toBe("none");
     expect(signoffSummary(emp(), proj(), kase({ stages: [] })).state).toBe("none");
+  });
+});
+
+// 自簽過但沒送審時，頭條原本寫「尚未送審」—— 關卡全 approved、進度條滿格，
+// 使用者只讀得出「系統漏了我的簽核」。系統沒漏，是自簽刻意不推進正式流程。
+// 這一組釘住的是**只換文案、不動行為**：新文案要出現，舊文案要一字不動，
+// `state` 要仍然是 `draft`。
+describe("signoffSummary：自簽過但未送審", () => {
+  const NOTE = selfSignNote(selfSignSubject("Z9K3M7QR"));
+  const decision = (stageId: string) => ({
+    id: `d-${stageId}`,
+    stageId,
+    round: 1,
+    at: "2026-09-02T00:00:00Z",
+    byId: "u1",
+    byName: "阿明",
+    kind: "approved" as const,
+    comment: NOTE,
+  });
+  /** 自簽過的草稿個案：關卡蓋了自簽戳記，log 也留了對應決策 */
+  const selfSigned = (over: Partial<CaseRecord> = {}) =>
+    kase({
+      reviewCommitId: null,
+      stages: [stage({ id: "cs1", state: "approved", comment: NOTE })],
+      log: [decision("cs1")],
+      ...over,
+    });
+
+  test("自簽 + 未送審 → 頭條說得出已自簽，也說得出還沒進正式審閱", () => {
+    const s = signoffSummary(emp(), proj(), selfSigned());
+    expect(s.headline).toBe(SELF_SIGN_DRAFT_HEADLINE);
+    expect(s.headline).toBe("已自簽 —— 尚未進入正式審閱");
+    // 舊的那句謊不能還留在畫面上任何一處
+    expect(s.headline).not.toBe("尚未送審");
+    expect(s.detail).toBe(SELF_SIGN_DRAFT_DETAIL(1, 1));
+    // 細節必須講「仍是草稿、進度不前進」—— 這正是使用者會誤讀的那一點
+    expect(s.detail).toContain("仍是草稿");
+    expect(s.detail).toContain("進度不會因為自簽而前進");
+  });
+
+  test("**逐字防迴歸**：沒自簽 + 未送審的文案一個字都不能變", () => {
+    const s = signoffSummary(emp(), proj(), kase({ reviewCommitId: null }));
+    expect(s.state).toBe("draft");
+    expect(s.headline).toBe("尚未送審");
+    expect(s.detail).toBe("流程有 1 關。到編輯台按「送出審閱」之後才會開始跑。");
+
+    // 多關的情況也照舊帶數字
+    const three = signoffSummary(
+      emp(),
+      proj(),
+      kase({
+        reviewCommitId: null,
+        stages: [stage({ id: "a", order: 1 }), stage({ id: "b", order: 2 }), stage({ id: "c", order: 3 })],
+      }),
+    );
+    expect(three.headline).toBe("尚未送審");
+    expect(three.detail).toBe("流程有 3 關。到編輯台按「送出審閱」之後才會開始跑。");
+  });
+
+  test("**SPEC-03**：只換文案不換行為 —— state 仍是 draft，計數照舊", () => {
+    const c = selfSigned({
+      stages: [
+        stage({ id: "cs1", state: "approved", comment: NOTE }),
+        stage({ id: "cs2", order: 2, name: "設計", state: "changes_requested" }),
+      ],
+    });
+    const s = signoffSummary(emp(), proj(), c);
+    expect(s.state).toBe("draft");
+    expect(s.approved).toBe(1);
+    expect(s.total).toBe(2);
+    // 自簽不核准 `changes_requested`（見 `selfSignVibe`），所以細節不能寫死「都核准了」
+    expect(s.detail).toBe(SELF_SIGN_DRAFT_DETAIL(1, 2));
+    expect(s.detail).toContain("1/2 關");
+  });
+
+  test("1 關自簽 approved ＋ 2 關別人簽的 approved → 細節說 1/3，不是 3/3", () => {
+    const c = selfSigned({
+      stages: [
+        stage({ id: "cs1", state: "approved", comment: NOTE }),
+        stage({ id: "cs2", order: 2, name: "設計", state: "approved", comment: "看過了" }),
+        stage({ id: "cs3", order: 3, name: "資安", state: "approved", comment: "沒問題" }),
+      ],
+    });
+    const s = signoffSummary(emp(), proj(), c);
+    expect(s.state).toBe("draft");
+    expect(s.headline).toBe(SELF_SIGN_DRAFT_HEADLINE);
+    // 回傳欄位維持「全部 approved」的語意 —— 改的只有細節句的分子
+    expect(s.approved).toBe(3);
+    expect(s.total).toBe(3);
+    // 細節句的主詞是「自簽已核准」—— 分子只數帶自簽戳記的那一關
+    expect(s.detail).toBe(SELF_SIGN_DRAFT_DETAIL(1, 3));
+    expect(s.detail).toContain("1/3 關");
+    expect(s.detail).not.toContain("3/3");
+  });
+
+  test("自簽 + 已送審 → 走正式流程那幾支，不落在這條分支", () => {
+    const s = signoffSummary(
+      emp(),
+      proj(),
+      selfSigned({ reviewCommitId: "c1" }),
+    );
+    expect(s.state).toBe("approved");
+    expect(s.headline).not.toBe(SELF_SIGN_DRAFT_HEADLINE);
+  });
+
+  test("抽單優先於自簽 —— 停掉的案子先講停掉", () => {
+    const s = signoffSummary(
+      emp(),
+      proj(),
+      selfSigned({ withdrawn: true, withdrawReason: "指標還沒對齊" }),
+    );
+    expect(s.state).toBe("withdrawn");
+    expect(s.headline).toBe("此案已抽單");
+  });
+
+  test("preview 時細節仍是預覽那句 —— 自簽不得繞過 PREVIEW_DETAIL", () => {
+    const s = signoffSummary(emp(), proj(), selfSigned(), { preview: true });
+    // 頭條照樣誠實
+    expect(s.headline).toBe(SELF_SIGN_DRAFT_HEADLINE);
+    // 但「這 N 關送出時才會建立」的警告不能被吃掉
+    expect(s.detail).toBe(PREVIEW_DETAIL(1));
+    expect(s.state).toBe("draft");
+  });
+
+  test("preview + 沒自簽 → 逐字仍是舊的預覽組合", () => {
+    const s = signoffSummary(emp(), proj(), kase({ reviewCommitId: null }), { preview: true });
+    expect(s.headline).toBe("尚未送審");
+    expect(s.detail).toBe(PREVIEW_DETAIL(1));
+  });
+
+  /**
+   * **P0：升檔轉正之後不准再說「已自簽」。**
+   *
+   * 可達路徑是正常動線，不是邊角：vibe 專案 → 一鍵自簽 → 在編輯台把路線改成
+   * full/lite。`setProjectRoute` 把自簽關卡重設回 pending、清掉 comment，但
+   * **log 原樣保留**（spec 要的是可 replay 的錨點紀錄）。頭條若拿 log 當判準，
+   * 畫面會變成「已自簽 —— 尚未進入正式審閱」＋「自簽已核准 0/1 關」——
+   * 使用者剛做的動作正是把自簽核准丟掉轉進正式流程。
+   *
+   * 這是 B3 修掉的「自簽了卻說沒送審」的鏡像：沒自簽了卻說已自簽。判準要用
+   * 現況（`caseHoldsSelfSign`），不是歷史（`caseHasSelfSign`）。
+   */
+  test("**P0**：升檔轉正後頭條回到「尚未送審」，細節不出現 0/N", () => {
+    const c = selfSigned({ stages: [stage({ id: "cs1", state: "pending", comment: null })] });
+    // 前提：log 的自簽紀錄真的還在，否則下面驗的是空集合
+    expect(caseHasSelfSign(c)).toBe(true);
+    expect(caseHoldsSelfSign(c)).toBe(false);
+
+    const s = signoffSummary(emp(), proj(), c);
+    expect(s.headline).not.toBe(SELF_SIGN_DRAFT_HEADLINE);
+    expect(s.headline).toBe("尚未送審");
+    // 自相矛盾的那句不能出現在任何一處
+    expect(s.detail).toBe("流程有 1 關。到編輯台按「送出審閱」之後才會開始跑。");
+    expect(s.detail).not.toContain("0/1");
+    expect(s.detail).not.toContain("自簽");
+    // 行為一個都不動：仍是草稿、計數照舊
+    expect(s.state).toBe("draft");
+    expect(s.approved).toBe(0);
+    expect(s.total).toBe(1);
+  });
+
+  /**
+   * 升檔只重設「自簽來的」核准 —— 正式簽的留著。這一條擋的是把判準寫成
+   * 「stages 全 pending 就當沒自簽」之類的近似解：一關自簽、一關別人正式簽，
+   * 升檔後自簽那關回 pending，正式那關仍 approved，頭條照樣不准說已自簽。
+   */
+  test("**P0**：升檔後只剩正式核准 —— 仍然不說已自簽", () => {
+    const c = selfSigned({
+      stages: [
+        stage({ id: "cs1", state: "pending", comment: null }),
+        stage({ id: "cs2", order: 2, name: "設計", state: "approved", comment: "看過了" }),
+      ],
+    });
+    const s = signoffSummary(emp(), proj(), c);
+    expect(s.headline).toBe("尚未送審");
+    expect(s.approved).toBe(1);
+    expect(s.detail).not.toContain("自簽");
   });
 });
 
@@ -698,5 +885,147 @@ describe("canSelfSign", () => {
 describe("selfSignSubject", () => {
   test("帶 anc:t= 前綴 —— 與 git 回填 writer 的 subject 同一種形狀", () => {
     expect(selfSignSubject("ABCD1234")).toBe("anc:t=ABCD1234");
+  });
+});
+
+// ── 自簽判讀 helper（writer 與 reader 同檔）────────────────────────
+//
+// 判準原本散在三處字串前綴比對（`canSelfSign` / `setProjectRoute` / store 的
+// 字串樣板），改格式時沒有任何東西會提醒你還有另外兩處。收編之後這一組
+// 是唯一入口，下面第一條合約測試就是「收編有沒有真的成立」的證據。
+
+describe("自簽判讀 helper", () => {
+  /** writer 產的那一句，逐字。後面每一條 reader 測試都吃這一句。 */
+  const NOTE = selfSignNote(selfSignSubject("Z9K3M7QR"));
+
+  test("**合約**：writer 產的字串被三支 reader 全部認得", () => {
+    // 這一條是 writer 與 reader 進同一個檔的全部價值 —— 有人改了 note 的
+    // 格式（前綴、分隔符、subject 形狀任一），這裡會紅，而不是等到升檔時
+    // 才發現自簽核准沒被重設。
+    expect(isSelfSignComment(NOTE)).toBe(true);
+    expect(isSelfSignDecision({ kind: "approved", comment: NOTE })).toBe(true);
+    expect(isSelfSignStage({ state: "approved", comment: NOTE })).toBe(true);
+    // 錨點也要接得回去：三支認得但錨點取不出來，join key 一樣斷掉
+    expect(selfSignAnchor(NOTE)).toBe("Z9K3M7QR");
+  });
+
+  test("selfSignNote 就是「前綴 · subject」—— store 那句字串樣板的唯一來源", () => {
+    expect(NOTE).toBe(`${SELF_SIGN_NOTE} · anc:t=Z9K3M7QR`);
+  });
+
+  test("isSelfSignComment：沒有意見／空字串／別人的意見都不是自簽", () => {
+    expect(isSelfSignComment(undefined)).toBe(false);
+    expect(isSelfSignComment(null)).toBe(false);
+    expect(isSelfSignComment("")).toBe(false);
+    expect(isSelfSignComment("看過了，沒問題")).toBe(false);
+    // 前綴在中間不算 —— 判準是「開頭」，不是「含有」。否則審閱者在意見裡
+    // 引用這個詞（「這不是一鍵自簽（試作／探索）」）就會被誤判成自簽核准。
+    expect(isSelfSignComment(`不是${NOTE}`)).toBe(false);
+  });
+
+  test("isSelfSignDecision：只有 approved 算 —— 帶同一句話的其他決策不算", () => {
+    for (const kind of ["changes_requested", "comment", "skipped", "override"] as const) {
+      expect(isSelfSignDecision({ kind, comment: NOTE }), kind).toBe(false);
+    }
+    expect(isSelfSignDecision({ kind: "approved", comment: "一般核准" })).toBe(false);
+  });
+
+  test("isSelfSignStage：state 與 comment 兩個條件缺一不可", () => {
+    // 這一支是 `setProjectRoute` 早退條件的否定 —— 兩條真值表都要對，
+    // 寫反的症狀是「升檔時把別人正式簽的核准也重設掉」（或反過來，
+    // 自簽核准原樣帶進正式流程＝通用核准繞道）
+    expect(isSelfSignStage({ state: "approved", comment: NOTE })).toBe(true);
+    expect(isSelfSignStage({ state: "pending", comment: NOTE })).toBe(false);
+    expect(isSelfSignStage({ state: "skipped", comment: NOTE })).toBe(false);
+    expect(isSelfSignStage({ state: "approved", comment: "工程看過了" })).toBe(false);
+    // 舊個案沒有 comment 欄位 —— 不能丟例外，答案就是 false
+    expect(isSelfSignStage({ state: "approved" })).toBe(false);
+  });
+
+  test("caseHasSelfSign：有 log 就以 log 為準", () => {
+    const d = {
+      id: "d1",
+      stageId: "cs1",
+      round: 1,
+      at: "2026-09-02T00:00:00Z",
+      byId: "u1",
+      byName: "阿明",
+      kind: "approved" as const,
+      comment: NOTE,
+    };
+    expect(caseHasSelfSign(kase({ log: [d] }))).toBe(true);
+    expect(caseHasSelfSign(kase({ log: [{ ...d, comment: "一般核准" }] }))).toBe(false);
+    // log **有內容**但沒有自簽 → false，即使關卡上有自簽戳記。log 是只追加的
+    // 真相，關卡狀態只是投影。
+    expect(
+      caseHasSelfSign(
+        kase({
+          log: [{ ...d, comment: "一般核准" }],
+          stages: [stage({ state: "approved", comment: NOTE })],
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  test("caseHasSelfSign：log 空的舊個案退回查 stages —— `[]` 與 undefined 同一路", () => {
+    const old = kase({ stages: [stage({ state: "approved", comment: NOTE })] });
+    expect(old.log).toBeUndefined();
+    expect(caseHasSelfSign(old)).toBe(true);
+    expect(caseHasSelfSign(kase({ stages: [stage({ state: "approved" })] }))).toBe(false);
+    // 沒有個案就是沒簽過，不丟例外
+    expect(caseHasSelfSign(undefined)).toBe(false);
+
+    // ⚠️ `log: []` 必須與 `log: undefined` 走同一條路。`store.ts` 的 `load()`
+    // 把每一份個案正規化成 `log: Array.isArray(c.log) ? c.log : []`，所以正式版
+    // 根本不存在 `log: undefined` —— 判準寫成 `if (c.log)` 的話 stages 退路是死碼，
+    // 而 `signoffTimeline` 用的是長度判斷，同一個個案兩支會給相反答案。
+    expect(
+      caseHasSelfSign(kase({ log: [], stages: [stage({ state: "approved", comment: NOTE })] })),
+    ).toBe(true);
+    expect(caseHasSelfSign(kase({ log: [], stages: [stage({ state: "approved" })] }))).toBe(false);
+  });
+
+  test("caseHoldsSelfSign：問的是現在還掛不掛著，不是曾經簽過", () => {
+    const d = {
+      id: "d1",
+      stageId: "cs1",
+      round: 1,
+      at: "2026-09-02T00:00:00Z",
+      byId: "u1",
+      byName: "阿明",
+      kind: "approved" as const,
+      comment: NOTE,
+    };
+    // 自簽當下：兩個時態都是 true
+    const signed = kase({ stages: [stage({ state: "approved", comment: NOTE })], log: [d] });
+    expect(caseHasSelfSign(signed)).toBe(true);
+    expect(caseHoldsSelfSign(signed)).toBe(true);
+
+    // 升檔轉正之後（`setProjectRoute` 重設關卡、保留 log）：歷史仍在，現況沒了
+    const promoted = kase({ stages: [stage({ state: "pending" })], log: [d] });
+    expect(caseHasSelfSign(promoted)).toBe(true);
+    expect(caseHoldsSelfSign(promoted)).toBe(false);
+
+    // log 空的舊個案：現況只看 stages，跟 log 有沒有無關
+    expect(
+      caseHoldsSelfSign(kase({ log: [], stages: [stage({ state: "approved", comment: NOTE })] })),
+    ).toBe(true);
+    expect(caseHoldsSelfSign(undefined)).toBe(false);
+  });
+
+  test("selfSignAnchor 是 selfSignSubject 的逆向 —— 來回接得起來", () => {
+    for (const id of ["ABCD1234", "Z9K3M7QR", "AB12"]) {
+      expect(selfSignAnchor(selfSignNote(selfSignSubject(id))), id).toBe(id);
+    }
+  });
+
+  test("selfSignAnchor 認不出來就回 null，不丟例外", () => {
+    expect(selfSignAnchor("")).toBeNull();
+    // 沒有分隔符
+    expect(selfSignAnchor(SELF_SIGN_NOTE)).toBeNull();
+    // 有分隔符但後面不是錨點 subject
+    expect(selfSignAnchor(`${SELF_SIGN_NOTE} · 隨手寫的`)).toBeNull();
+    // 有前綴但錨點是空的
+    expect(selfSignAnchor(`${SELF_SIGN_NOTE} · anc:t=`)).toBeNull();
   });
 });

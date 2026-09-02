@@ -26,7 +26,14 @@ import type {
 } from "../data/types";
 import { jobLanded } from "../data/types";
 import { stageAnalysisRowHtml } from "./agent-result";
-import { stageAnalysisJobs, stageRows, type SignoffStageView } from "./signoff";
+import {
+  isSelfSignStage,
+  SELF_SIGN_HUMAN,
+  selfSignAnchor,
+  stageAnalysisJobs,
+  stageRows,
+  type SignoffStageView,
+} from "./signoff";
 import { sinceLabel } from "./time-format";
 import { escapeHtml } from "./ui";
 
@@ -228,10 +235,15 @@ export function stageListHtml(opts: StageListInput): string {
           : "";
 
       const kind = pending?.kind ?? "approved";
-      return `<li class="sg-stage sg-stage--${s.state}${open ? " is-signing" : ""}">
+      // 自簽的關卡跟「有人審過了」在這張列表上原本長得一模一樣 —— 同一顆綠 pill、
+      // 同一句「已核准」。差別畫出來才看得見：整列底紋 + 名字旁的徽章。
+      const selfSigned = isSelfSignStage(s);
+      const selfSignAnchorId = selfSigned ? selfSignAnchor(s.comment ?? "") : null;
+      return `<li class="sg-stage sg-stage--${s.state}${selfSigned ? " sg-stage--self-signed" : ""}${open ? " is-signing" : ""}">
         <div class="sg-stage-main">
           <span class="sg-stage-n mono">${s.order}</span>
           <span class="sg-stage-name">${escapeHtml(s.name)}
+            ${selfSigned ? `<span class="sg-selfsign" title="作者核准自己，沒有第二雙眼睛">自簽</span>` : ""}
             <span class="sg-mode" title="${mode === "sequential" ? "要等前面的關卡結案" : "隨時可簽"}">${mode === "sequential" ? "串行" : "並行"}</span>
             ${s.required === false ? `<span class="sg-mode">非必簽</span>` : ""}</span>
           <span class="sg-stage-who">${escapeHtml(who)}${when ? ` · ${escapeHtml(when)}` : ""}</span>
@@ -245,9 +257,18 @@ export function stageListHtml(opts: StageListInput): string {
           // **只在意見還代表現況時才貼在列上。** 重送之後關卡退回待簽核，
           // 上一輪的意見卻還掛在那裡，看起來像「這一輪已經有人講過話了」——
           // 它屬於上一輪，位置在下面的紀錄裡。
-          s.comment?.trim() && s.state !== "pending" && s.state !== "empty"
-            ? `<p class="sg-stage-comment">「${escapeHtml(s.comment.trim())}」</p>`
-            : ""
+          // 自簽的 comment 是內部 join key（`一鍵自簽（試作／探索） · anc:t=…`），
+          // 那串字是寫給 `selfSignAnchor` 讀的，不是寫給人讀的。這裡改印人話，
+          // 錨點另外用等寬字排裸 id —— 其餘路徑逐字不動。
+          selfSigned
+            ? `<p class="sg-stage-comment">${escapeHtml(SELF_SIGN_HUMAN)}${
+                selfSignAnchorId
+                  ? ` · 錨點 <span class="mono">${escapeHtml(selfSignAnchorId)}</span>`
+                  : ""
+              }</p>`
+            : s.comment?.trim() && s.state !== "pending" && s.state !== "empty"
+              ? `<p class="sg-stage-comment">「${escapeHtml(s.comment.trim())}」</p>`
+              : ""
         }
         ${
           open

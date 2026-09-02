@@ -32,6 +32,7 @@ parent: docs/PRD.md
 | 日期 | 版本 | 修改人 | 修改章節 | 變更內容 | 已通知 |
 |---|---|---|---|---|---|
 | 2026-09-02 | v0.1 | Miles（代筆） | 全部 | 初版：從 `plans/Anchorline__2026-09-02-1221__app-ui-update.md`、`plans/A-新增專案架構調查__2026-09-02.md`、`plans/handoff-app-ui-update__2026-09-02-1330.md` 收攏 | — |
+| 2026-09-02 | v0.3 | Miles（代筆） | 05 / 13 | 實作前查證修正三處：**M-01／AC-06 的「22 頁」改為「17 個 App 頁」**（根目錄 22 個 HTML 只有 17 個帶 `class="app"`，`ensureBar()` 沒有 `.app` 就 return null，在 login 頁塞狀態條是 bug）；**AC-08 口徑寫死**（「有資料狀態」＝磁碟量測結果，跨專案實測列保留、身分卡與政策卡去殼、影子鏈不算）；另記 §09 P3 的實際覆蓋率是 **1/4 不是 1/3**（`projects.ts:1093` 的 `?beginner=1` 繞過 triage） | ☑ 已知會併行線 |
 | 2026-09-02 | v0.2 | Miles（代筆） | 01 / 03 / 05 / 09 / 11 / 12 / 13 / 14 / 15 | 兩輪跨廠商審查（Cato `gpt-5.6-sol` 5 條、`gpt-5.6-luna` 5 條）findings 全數修正：L4 亮燈條件補上 `hasSpec`、AC-10/AC-11 改 diff-only 判準、§03 引用標明為 P0 修正前狀態、P0-2 與 dashboard 空狀態落點更正；`bun test` 2132 pass/0 fail 獨立驗證；§15 七題全部拍板（Q-01 選 b、Q-05 進 repo、Q-02 留、Q-04 toast、Q-06 只定順序、Q-07 不做量表、Q-03 延後） | ☑ 已於本次 commit 記錄 |
 
 ## 02 摘要
@@ -136,7 +137,7 @@ Anchorline 對外的主張是「跨四種身分的錨點 join key ＋ 看得見�
 
 | 指標 | 現況基準 | 目標值 | 量測方式 | 領先／落後 |
 |---|---|---|---|---|
-| M-01 路線可見的頁面數 | 1 / 22（僅 `editor.html`；證據 `A 報告:398-411`） | 22 / 22（P1-1 完成後常駐狀態條全頁覆蓋） | `status-bar.ts` 渲染測試 ＋ Interceptor 逐頁抽驗 | 領先 |
+| M-01 路線可見的頁面數 | 1 / 17（僅 `editor.html`；證據 `A 報告:398-411`） | 17 / 17 **App 頁**（P1-1 完成後常駐狀態條全頁覆蓋） | `status-bar.ts` 渲染測試 ＋ Interceptor 逐頁抽驗 | 領先 |
 | M-02 自簽事實有渲染的頁面數 | 0（`SELF_SIGN_NOTE` 零頁面渲染） | ≥ 2（`review.html`、`signoff.html`） | `git grep SELF_SIGN_NOTE -- src/pages` ＋ UAT 實測 | 領先 |
 | M-03 流程條會說謊的格數 | 2（L4 恆不亮、L2 判定文案寫死） | 0 | `bun test`（`prd-progress.test.ts`、`flow-layer-detail.test.ts`） | 領先 |
 | M-04 vibe 自簽的守門條數 | 5（路線／抽單鎖定／重複簽／簽核權限／簽核者族系） | 7（＋結構 gate、＋`status === "review"`） | `signoff.ts` / `store.ts` 測試；已於 `a2b5d0b` 達成 | 落後 |
@@ -438,9 +439,9 @@ Markdown 匯入 → importMarkdownProject()    → addProject()        ❌ 不�
 | AC-03 | vibe 專案在 non-goals 為空時點一鍵自簽 | 被擋，訊息說明還差什麼，**不建立任何決策紀錄** | ☐ Pass ☐ Fail |
 | AC-04 | vibe 專案送出正式審閱後，作者點一鍵自簽 | 被擋，且訊息**不引導使用者去抽單** | ☐ Pass ☐ Fail |
 | AC-05 | 開啟 vibe 專案，點流程條 L2 | 判定說明寫「Non-Goals 至少 1 條」而非 3 條 | ☐ Pass ☐ Fail |
-| AC-06 | 在 22 個頁面中隨機抽 5 頁，看常駐狀態條 | 都顯示路線，且顯示的是四檔中文名稱 | ☐ Pass ☐ Fail |
+| AC-06 | 在 **17 個 App 頁**中隨機抽 5 頁，看常駐狀態條 | 都顯示路線，且顯示的是四檔中文名稱。**排除 5 個無 `class="app"` 外殼的頁面**：`index.html` / `landing.html` / `landing-aid.html` / `login.html` / `onboarding.html` —— `ensureBar()`（`status-bar.ts:120-141`）找不到 `.app` 就 `return null`，在登入頁塞狀態條是 bug 不是修正 | ☐ Pass ☐ Fail |
 | AC-07 | 一個自簽過的 vibe 專案，開 `review.html` | 自簽關卡有專屬視覺語彙，與多方核准可一眼分辨 | ☐ Pass ☐ Fail |
-| AC-08 | 未綁資料夾的專案，開單一專案總覽 | 整頁空狀態＋一個明確動作；**沒有**任何有資料狀態的元件同時出現 | ☐ Pass ☐ Fail |
+| AC-08 | 未綁資料夾的專案，開單一專案總覽 | 整頁空狀態＋一個明確動作；**沒有**任何有資料狀態的元件同時出現。**「有資料狀態的元件」＝呈現磁碟量測結果者**（`ProjectStats` / `CoverageResult` / UAT rollup 三種來源）。跨專案實測列**保留**（Scott 2026-09-02 拍板：它問的是全部專案，不屬於這個未綁定專案）；身分卡與版號政策卡的**卡片外殼移除**，改為輕量次要文字連結；影子鏈不算有資料狀態（每站都寫「未建立」，不宣稱任何事實） | ☐ Pass ☐ Fail |
 | AC-09 | 用 Markdown 匯入與資料夾匯入各建一個專案 | 兩條路徑都問過路線，不再一律落成 Full | ☐ Pass ☐ Fail |
 | AC-10 | 全 App 逐頁掃視 ＋ `git diff <phase1-base>..HEAD -- src '*.html' \| grep '^+' \| grep -nE '"[^"]*L[0-4][^"]*"'` | **新增行零命中**。既有內部 id（`l1`–`l6`）與程式註解不受此約束——現況全檔 `L[0-4]` 有 49 個命中，不設 diff 範圍就讀不出 pass/fail | ☐ Pass ☐ Fail |
 | AC-11 | `git diff <phase1-base>..HEAD -- src shared.css '*.html' \| grep '^+' \| grep -nE 'https?://(cdn\|fonts)'` | **新增行零命中**。注意 `shared.css` 在 **repo 根**、不在 `src/` 下，pathspec 漏了它就驗不到最可能違反的檔案；現況 `docs/` 與 `landing*.html` 本來就有 15 處外部字體／CDN（非 App 頁面），不設 diff 範圍會全數誤報 | ☐ Pass ☐ Fail |

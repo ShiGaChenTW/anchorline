@@ -246,6 +246,46 @@ describe("selfSignVibe", () => {
     store.setProjectRoute(id, "vibe"); // 還原給後續測試
   });
 
+  /**
+   * `setProjectRoute` 的重設從行內字串比對換成 `isSelfSignStage` 的回歸保護。
+   *
+   * 上一條只看 `state`；這一條看**被清掉的那四個欄位**（`comment` 與三個
+   * `decidedBy*` 戳記）。少了它，把 `const { comment, decidedAt, ... } = s`
+   * 的解構拿掉不會有任何測試變紅 —— 症狀是關卡顯示「待簽核」卻同時掛著
+   * 「某某 · 已簽」的舊戳記，正是 `CaseStage.decidedAt` 那段註解記的那個坑。
+   */
+  test("升檔重設清掉自簽的決策戳記，案子解鎖，log 與錨點原樣保留", () => {
+    const id = freshProject("vrs-reset-stamps", { route: "vibe" });
+    fillVibeGate(id);
+    const signed = store.selfSignVibe(id);
+    expect(signed.ok).toBe(true);
+
+    const before = store.get().cases[id]!;
+    // 前提：自簽真的在每一關留了戳記與帶錨點的意見，否則下面驗的是空集合
+    expect(before.stages.length).toBeGreaterThan(0);
+    for (const s of before.stages) {
+      expect(s.state, s.name).toBe("approved");
+      expect(s.comment, s.name).toContain(`anc:t=${signed.anchorId}`);
+      expect(s.decidedById, s.name).toBe(ADMIN);
+    }
+
+    expect(store.setProjectRoute(id, "full").ok).toBe(true);
+
+    const after = store.get().cases[id]!;
+    for (const s of after.stages) {
+      expect(s.state, s.name).toBe("pending");
+      // 四個戳記全部要不見 —— 留一個就是「待簽核卻顯示誰簽的」
+      expect(s.comment, s.name).toBeUndefined();
+      expect(s.decidedAt, s.name).toBeUndefined();
+      expect(s.decidedById, s.name).toBeUndefined();
+      expect(s.decidedByName, s.name).toBeUndefined();
+    }
+    // 鎖態不得被順手打開成 true；log 的錨點紀錄一筆不少（replay 的起點）
+    expect(after.locked).toBe(false);
+    expect(after.log.length).toBe(before.log.length);
+    expect(after.log.every((d) => d.comment.includes(`anc:t=${signed.anchorId}`))).toBe(true);
+  });
+
   test("重複自簽擋下來 —— log 裡已有帶錨點的自簽決策（不看 stages）", () => {
     // 上一條升檔已把 stages 重設回 pending —— 擋重複自簽的是 log，不是關卡狀態
     const r = store.selfSignVibe("vrs-selfsign");
