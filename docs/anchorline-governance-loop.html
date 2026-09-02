@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anchorline 治理鏈迴圈圖</title>
+<meta name="description" content="從《AI-Native SDLC Playbook》05 節單獨拉出的 Anchorline 治理鏈流程圖：七站迴圈、兩處結構缺口、每一站的使用情境，以及 14 條 Play 的判定對照。">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@700;900&family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* 色票沿用 docs/ai-native-sdlc-playbook.html：冷調紙面 + 靛藍結構線 + 語意三色 */
+:root{
+  --paper:#EDEFEA; --surface:#F8F9F6; --sunk:#E3E7DF;
+  --ink:#171B1A; --muted:#5E6A66; --faint:#8B948F;
+  --line:#C8CFC6; --hair:#D8DED4;
+  --indigo:#2B3F8F; --indigo-soft:#E1E5F4;
+  --amber:#A0700C; --amber-soft:#F3E9D2;
+  --moss:#3B6A4C; --moss-soft:#DEE9DF;
+  --rust:#8E3B2C; --rust-soft:#F2DFDA;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#111514; --surface:#191E1C; --sunk:#0C100F;
+    --ink:#E7EBE6; --muted:#98A29C; --faint:#727C77;
+    --line:#2F3733; --hair:#242B27;
+    --indigo:#93A7EE; --indigo-soft:#1E2540;
+    --amber:#DBA645; --amber-soft:#332913;
+    --moss:#7DB694; --moss-soft:#16261B;
+    --rust:#E28870; --rust-soft:#2C1713;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#111514; --surface:#191E1C; --sunk:#0C100F;
+  --ink:#E7EBE6; --muted:#98A29C; --faint:#727C77;
+  --line:#2F3733; --hair:#242B27;
+  --indigo:#93A7EE; --indigo-soft:#1E2540;
+  --amber:#DBA645; --amber-soft:#332913;
+  --moss:#7DB694; --moss-soft:#16261B;
+  --rust:#E28870; --rust-soft:#2C1713;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Hiragino Sans TC",system-ui,sans-serif;
+  font-size:16px;line-height:1.85;letter-spacing:.01em;-webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:"Chivo","Noto Sans TC","PingFang TC",system-ui,sans-serif;line-height:1.3;text-wrap:balance;margin:0}
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+code{font-size:.88em;background:var(--sunk);padding:1px 5px;border-radius:3px}
+a{color:var(--indigo);text-underline-offset:3px}
+
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+.col{max-width:74ch}
+
+header{padding:56px 0 36px;border-bottom:1px solid var(--line)}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--indigo);margin-bottom:16px}
+h1{font-size:clamp(30px,4.6vw,50px);font-weight:900;letter-spacing:-.015em}
+.dek{font-size:clamp(16px,1.9vw,19px);color:var(--muted);margin-top:16px;max-width:62ch;line-height:1.7}
+
+section{padding:48px 0;border-bottom:1px solid var(--line)}
+section:last-of-type{border-bottom:0}
+.sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px}
+.sec-num{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--indigo);letter-spacing:.1em}
+h2{font-size:clamp(22px,3vw,31px);font-weight:900;letter-spacing:-.01em}
+h3{font-size:19px;font-weight:700;margin-top:32px}
+p{margin:14px 0}
+.lede{font-size:17px;color:var(--muted);max-width:66ch;margin-top:12px}
+ol,ul{padding-inline-start:1.25em;margin:14px 0}
+li{margin:8px 0}
+li::marker{color:var(--faint)}
+
+blockquote{margin:24px 0;padding:16px 22px;border-inline-start:3px solid var(--indigo);background:var(--surface);font-size:15.5px;line-height:1.7;max-width:74ch}
+blockquote p{margin:0}
+
+/* 圖版 */
+.plate{margin:32px 0;border:1px solid var(--line);background:var(--surface)}
+.plate__bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 16px;border-bottom:1px solid var(--hair);background:var(--sunk)}
+.plate__id{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--indigo)}
+.plate__t{font-size:13px;color:var(--muted)}
+.plate__body{padding:12px;overflow-x:auto}
+.plate svg{display:block;width:100%;height:auto;min-width:720px}
+
+/* 節點情境卡 */
+.stations{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-top:28px}
+.st{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:18px 20px}
+.st.gap{border-color:var(--rust);background:var(--rust-soft)}
+.st__h{display:flex;align-items:center;gap:10px;margin-bottom:2px}
+.st__tag{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.1em;border:1px solid var(--line);border-radius:2px;padding:1px 6px;color:var(--faint)}
+.st.gap .st__tag{border-color:var(--rust);color:var(--rust)}
+.st__h h4{font-size:16.5px;font-weight:700}
+.st dl{margin:10px 0 0;font-size:14.5px;line-height:1.75}
+.st dt{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-top:12px}
+.st dd{margin:2px 0 0}
+.st.gap dt{color:var(--rust)}
+
+/* 表格 */
+.tbl-scroll{overflow-x:auto;margin:26px 0;border:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;min-width:840px;font-size:14px;background:var(--surface)}
+th,td{text-align:start;padding:11px 14px;border-bottom:1px solid var(--hair);vertical-align:top;line-height:1.65}
+th{background:var(--sunk);font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+.tag{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.06em;padding:2px 7px;border-radius:2px;white-space:nowrap}
+.t-have{background:var(--moss-soft);color:var(--moss)}
+.t-part{background:var(--amber-soft);color:var(--amber)}
+.t-gap{background:var(--rust-soft);color:var(--rust)}
+.t-ctx{background:var(--indigo-soft);color:var(--indigo)}
+.ctx-mark{display:inline-block;margin-inline-start:6px;font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.06em;padding:1px 5px;border-radius:2px;background:var(--indigo-soft);color:var(--indigo);white-space:nowrap;vertical-align:2px}
+.mini{overflow-x:auto;margin:22px 0;border:1px solid var(--line)}
+.mini table{min-width:600px}
+.pair{margin:20px 0;border-inline-start:3px solid var(--line);padding-inline-start:18px;font-size:14.5px;line-height:1.8}
+.pair b{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);display:block}
+.pair span{font-family:"IBM Plex Mono",monospace;font-size:13px}
+
+footer{padding:28px 0 60px;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--faint);line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="col">
+    <p class="eyebrow">AI-Native SDLC Playbook · 05 對照 Anchorline</p>
+    <h1>治理鏈為什麼還是一條線</h1>
+    <p class="dek">Anchorline 已經在做的事，跟 playbook 講的是同一件事的<strong>不同一半</strong>：playbook 講「怎麼讓 agent 跑完整條 SDLC」，Anchorline 講「怎麼證明這些 agent 做過的事被治理過」。把兩邊疊起來，缺口出現在鏈的<strong>兩端</strong>——不是中間。</p>
+  </div>
+</header>
+
+<section id="loop">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">圖</span><h2>Anchorline 治理鏈迴圈</h2></div>
+    <p class="lede">七站順時針，每一站都寫回同一組錨點。實線是今天已經在跑的環節；<strong>鏽紅虛線那兩段不存在</strong>——所以它現在是一條線，不是迴圈。</p>
+  </div>
+
+  <div class="plate">
+    <div class="plate__bar">
+      <div><span class="plate__id">圖 A</span> <span class="plate__t">治理鏈七站 · 錨點為共用狀態</span></div>
+      <div class="plate__t mono">Loop · 7 stations · 1 hub</div>
+    </div>
+    <div class="plate__body">
+<svg viewBox="0 0 896 800" role="img" aria-labelledby="anchorloop-title anchorloop-desc" xmlns="http://www.w3.org/2000/svg">
+<title id="anchorloop-title">Anchorline 治理鏈迴圈</title>
+<desc id="anchorloop-desc">七站順時針迴圈圖，顯示 Anchorline 的治理鏈：意圖、規格、計畫、核准、實作、發布、訊號回寫，中心為共用的錨點稽核軌跡。意圖入口與訊號回寫兩站以鏽紅虛線標示為尚未存在，因此迴圈在鏈的兩端是斷開的；中間五站以實線相連並各有一條虛線輻條寫回中心錨點。</desc>
+
+<defs>
+  <marker id="al-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <polygon points="0 0, 8 3, 0 6" fill="var(--muted)"/>
+  </marker>
+  <marker id="al-arrow-gap" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <polygon points="0 0, 8 3, 0 6" fill="var(--rust)"/>
+  </marker>
+  <marker id="al-arrow-soft" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <polygon points="0 0, 8 3, 0 6" fill="var(--faint)"/>
+  </marker>
+</defs>
+
+<rect width="896" height="800" fill="var(--surface)"/>
+
+<!-- ── 環流：實線＝已存在 ── -->
+<g fill="none" stroke="var(--muted)" stroke-width="1.2" marker-end="url(#al-arrow)">
+  <path d="M 685.82 228.00 A 272 272 0 0 1 719.04 382.80"/>
+  <path d="M 702.50 456.00 A 272 272 0 0 1 624.19 567.22"/>
+  <path d="M 472.00 630.94 A 272 272 0 0 1 425.20 631.04"/>
+  <path d="M 272.73 568.00 A 272 272 0 0 1 193.93 457.12"/>
+  <path d="M 177.06 384.00 A 272 272 0 0 1 209.60 229.05"/>
+</g>
+
+<!-- ── 環流：鏽紅虛線＝尚不存在 ── -->
+<g fill="none" stroke="var(--rust)" stroke-width="1.2" stroke-dasharray="6,5" marker-end="url(#al-arrow-gap)">
+  <path d="M 544.00 105.50 A 272 272 0 0 1 627.01 155.21"/>
+  <path d="M 268.09 156.00 A 272 272 0 0 1 350.88 105.93"/>
+</g>
+
+<!-- ── 寫回錨點的輻條（僅實際會寫入的五站） ── -->
+<g fill="none" stroke="var(--faint)" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#al-arrow-soft)">
+  <path d="M 614.86 228.00 L 520.40 302.26"/>
+  <path d="M 616.00 398.09 L 561.85 385.99"/>
+  <path d="M 550.66 568.00 L 476.61 419.41"/>
+  <path d="M 345.34 568.00 L 419.39 419.41"/>
+  <path d="M 280.00 398.09 L 334.15 385.99"/>
+</g>
+
+<!-- ── 站點 ── -->
+<!-- k0 · P1 意圖 · 缺口 -->
+<rect x="352" y="52" width="192" height="72" rx="6" fill="var(--surface)"/>
+<rect x="352" y="52" width="192" height="72" rx="6" fill="var(--rust-soft)" stroke="var(--rust)" stroke-width="1" stroke-dasharray="6,5"/>
+<rect x="360" y="58" width="28" height="14" rx="2" fill="none" stroke="var(--rust)" stroke-width=".8" stroke-opacity=".55"/>
+<text x="374" y="68" fill="var(--rust)" font-size="9" font-family="'IBM Plex Mono',monospace" text-anchor="middle" letter-spacing=".08em">P1</text>
+<text x="448" y="96" fill="var(--rust)" font-size="16" font-weight="700" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">意圖 intent/</text>
+<text x="448" y="114" fill="var(--muted)" font-size="11" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">非工程師寫的 proto-spec · 無入口</text>
+
+<!-- k1 · D1 規格 -->
+<rect x="564" y="156" width="192" height="72" rx="6" fill="var(--surface)"/>
+<rect x="564" y="156" width="192" height="72" rx="6" fill="var(--surface)" stroke="var(--ink)" stroke-width="1"/>
+<rect x="572" y="162" width="28" height="14" rx="2" fill="none" stroke="var(--line)" stroke-width=".8"/>
+<text x="586" y="172" fill="var(--faint)" font-size="9" font-family="'IBM Plex Mono',monospace" text-anchor="middle" letter-spacing=".08em">D1</text>
+<text x="660" y="200" fill="var(--ink)" font-size="16" font-weight="700" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">規格 PRD</text>
+<text x="660" y="218" fill="var(--muted)" font-size="11" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">編輯台 · 結構 gate</text>
+
+<!-- k2 · B1 計畫 -->
+<rect x="616" y="384" width="192" height="72" rx="6" fill="var(--surface)"/>
+<rect x="616" y="384" width="192" height="72" rx="6" fill="var(--surface)" stroke="var(--ink)" stroke-width="1"/>
+<rect x="624" y="390" width="28" height="14" rx="2" fill="none" stroke="var(--line)" stroke-width=".8"/>
+<text x="638" y="400" fill="var(--faint)" font-size="9" font-family="'IBM Plex Mono',monospace" text-anchor="middle" letter-spacing=".08em">B1</text>
+<text x="712" y="428" fill="var(--ink)" font-size="16" font-weight="700" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">計畫 plans/</text>
+<text x="712" y="446" fill="var(--muted)" font-size="11" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">Task Tracking · checkbox</text>
+
+<!-- k3 · R2 核准 -->
+<rect x="472" y="568" width="192" height="72" rx="6" fill="var(--surface)"/>
+<rect x="472" y="568" width="192" height="72" rx="6" fill="var(--moss-soft)" stroke="var(--moss)" stroke-width="1"/>
+<rect x="480" y="574" width="28" height="14" rx="2" fill="none" stroke="var(--moss)" stroke-width=".8" stroke-opacity=".5"/>
+<text x="494" y="584" fill="var(--moss)" font-size="9" font-family="'IBM Plex Mono',monospace" text-anchor="middle" letter-spacing=".08em">R2</text>
+<text x="568" y="612" fill="var(--ink)" font-size="16" font-weight="700" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">核准 簽核閘</text>
+<text x="568" y="630" fill="var(--muted)" font-size="11" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">gate 未過擋核准</text>
+
+<!-- k4 · R1 實作 -->
+<rect x="232" y="568" width="192" height="72" rx="6" fill="var(--surface)"/>
+<rect x="232" y="568" width="192" height="72" rx="6" fill="var(--surface)" stroke="var(--ink)" stroke-width="1"/>
+<rect x="240" y="574" width="28" height="14" rx="2" fill="none" stroke="var(--line)" stroke-width=".8"/>
+<text x="254" y="584" fill="var(--faint)" font-size="9" font-family="'IBM Plex Mono',monospace" text-anchor="middle" letter-spacing=".08em">R1</text>
+<text x="328" y="612" fill="var(--ink)" font-size="16" font-weight="700" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">實作 commits / PR</text>
+<text x="328" y="630" fill="var(--muted)" font-size="11" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">authorAgentFamily 職責分離</text>
+
+<!-- k5 · R3 發布 -->
+<rect x="88" y="384" width="192" height="72" rx="6" fill="var(--surface)"/>
+<rect x="88" y="384" width="192" height="72" rx="6" fill="var(--surface)" stroke="var(--ink)" stroke-width="1"/>
+<rect x="96" y="390" width="28" height="14" rx="2" fill="none" stroke="var(--line)" stroke-width=".8"/>
+<text x="110" y="400" fill="var(--faint)" font-size="9" font-family="'IBM Plex Mono',monospace" text-anchor="middle" letter-spacing=".08em">R3</text>
+<text x="184" y="428" fill="var(--ink)" font-size="16" font-weight="700" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">發布 release</text>
+<text x="184" y="446" fill="var(--muted)" font-size="11" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">發布頁 · 缺 rollback</text>
+
+<!-- k6 · M1 訊號回寫 · 缺口 -->
+<rect x="140" y="156" width="192" height="72" rx="6" fill="var(--surface)"/>
+<rect x="140" y="156" width="192" height="72" rx="6" fill="var(--rust-soft)" stroke="var(--rust)" stroke-width="1" stroke-dasharray="6,5"/>
+<rect x="148" y="162" width="28" height="14" rx="2" fill="none" stroke="var(--rust)" stroke-width=".8" stroke-opacity=".55"/>
+<text x="162" y="172" fill="var(--rust)" font-size="9" font-family="'IBM Plex Mono',monospace" text-anchor="middle" letter-spacing=".08em">M1</text>
+<text x="236" y="200" fill="var(--rust)" font-size="16" font-weight="700" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">訊號回寫</text>
+<text x="236" y="218" fill="var(--muted)" font-size="11" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">四種訊號都有錨點 · 沒人接回去</text>
+
+<!-- ── 中心：累積狀態 ── -->
+<rect x="340" y="306" width="216" height="108" rx="8" fill="var(--ink)"/>
+<text x="448" y="352" fill="var(--paper)" font-size="16" font-weight="700" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">錨點 · 稽核軌跡</text>
+<text x="448" y="376" fill="var(--paper)" fill-opacity=".72" font-size="11" font-family="'Noto Sans TC',sans-serif" text-anchor="middle">每一段都寫回同一組錨點</text>
+<text x="448" y="394" fill="var(--paper)" fill-opacity=".55" font-size="10" font-family="'IBM Plex Mono',monospace" text-anchor="middle" letter-spacing=".08em">SHARED STATE</text>
+
+<!-- ── 圖例 ── -->
+<line x1="88" y1="700" x2="808" y2="700" stroke="var(--line)" stroke-width=".8"/>
+<text x="88" y="720" fill="var(--faint)" font-size="9" font-family="'IBM Plex Mono',monospace" letter-spacing=".14em">LEGEND</text>
+
+<line x1="88" y1="748" x2="124" y2="748" stroke="var(--muted)" stroke-width="1.2"/>
+<text x="132" y="752" fill="var(--muted)" font-size="11" font-family="'Noto Sans TC',sans-serif">今天已經在跑的環節</text>
+
+<line x1="292" y1="748" x2="328" y2="748" stroke="var(--rust)" stroke-width="1.2" stroke-dasharray="6,5"/>
+<text x="336" y="752" fill="var(--muted)" font-size="11" font-family="'Noto Sans TC',sans-serif">尚不存在（P1 入口 / M1 回寫）</text>
+
+<line x1="560" y1="748" x2="596" y2="748" stroke="var(--faint)" stroke-width="1" stroke-dasharray="5,4"/>
+<text x="604" y="752" fill="var(--muted)" font-size="11" font-family="'Noto Sans TC',sans-serif">寫回錨點軌跡</text>
+
+<rect x="756" y="741" width="14" height="14" rx="3" fill="var(--ink)"/>
+<text x="778" y="752" fill="var(--muted)" font-size="11" font-family="'Noto Sans TC',sans-serif">累積狀態</text>
+</svg>
+    </div>
+  </div>
+
+  <div class="col">
+    <p><strong>Anchorline 有一處比 playbook 更嚴。</strong>原文在 R1 的治理段寫的是「寫程式的那個 agent 沒有任何途徑核准它」——那是人／agent 粒度的職責分離。Anchorline 的 <code>authorAgentFamily</code> 把粒度再降一層：<strong>同一個 agent 族系撰寫的文件，不能由同族系核准</strong>。GitHub 的 CODEOWNERS 與分支保護只認人不認族系，抓不到這一類。</p>
+    <blockquote>
+      <p>現況依 <code>README.md</code> 與 <code>docs/PRD.md</code> 判讀，<strong>未逐一核對原始碼</strong>；建議是判斷，不是原文的主張。真的要動工前，每一站都該回去驗一次。</p>
+    </blockquote>
+  </div>
+</section>
+
+<section id="stations">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">情境 A</span><h2>每一站什麼時候會走到</h2></div>
+    <p class="lede">跟著圖順時針讀。每一站回答四件事：什麼時候會走到這裡、實務上長什麼樣、誰在操作、現在卡在哪。</p>
+  </div>
+
+  <div class="stations">
+
+    <div class="st gap">
+      <div class="st__h"><span class="st__tag">P1</span><h4>意圖 intent/</h4></div>
+      <dl>
+        <dt>什麼時候走到這裡</dt><dd>有人覺得「這件事該做」，但還沒到能寫成 PRD 的程度。</dd>
+        <dt>實務上長什麼樣</dt><dd>一則 Slack 訊息、一次 UAT 失敗後的抱怨、一個客訴。今天它們沒有家，被口頭轉成 PRD。</dd>
+        <dt>誰在操作</dt><dd>提出者本人，通常不是工程師。這是唯一一站不需要懂規格格式的入口。</dd>
+        <dt>現在卡在哪</dt><dd>治理鏈從 PRD 起手，等於默認「已經有人把想法寫成規格了」——而那是傳統 SDLC 最慢的一段。想法本身不在稽核軌跡上。</dd>
+      </dl>
+    </div>
+
+    <div class="st">
+      <div class="st__h"><span class="st__tag">D1</span><h4>規格 PRD</h4></div>
+      <dl>
+        <dt>什麼時候走到這裡</dt><dd>意圖確定要做，開始把它寫成能被審的東西。</dd>
+        <dt>實務上長什麼樣</dt><dd>Anchorline 編輯台：引導撰寫 ＋ 結構 gate ＋ Markdown 即時預覽。</dd>
+        <dt>誰在操作</dt><dd>人下指令、agent 起草，gate 判定結構是否完整。</dd>
+        <dt>現在卡在哪</dt><dd>結構 gate 檢查的是「章節齊不齊」，playbook 要的是<strong>政策約束</strong>。而且沒有記錄「這份 PRD 是在哪一版 skill／政策下寫的」——這一欄沒有，spec 的可稽核性就不完整。</dd>
+      </dl>
+    </div>
+
+    <div class="st">
+      <div class="st__h"><span class="st__tag">B1</span><h4>計畫 plans/</h4></div>
+      <dl>
+        <dt>什麼時候走到這裡</dt><dd>規格過了 gate，要拆成可執行的步驟與檔案清單。</dd>
+        <dt>實務上長什麼樣</dt><dd>Task Tracking 直接讀 <code>plans/*.md</code>，checkbox 可勾，右欄三層稽核軌跡。<code>plans/</code> 本來就是 plan.md 的家。</dd>
+        <dt>誰在操作</dt><dd>plan mode 產出、人核准；勾選由執行中的 agent 或人同步。</dd>
+        <dt>現在卡在哪</dt><dd>缺<strong>對照</strong>：merge 的 diff 有沒有還吻合 plan？「plan.md 未同步」應該是治理鏈上的一種違規標記，跟 <code>authorAgentFamily</code> 走同一套 replay。</dd>
+      </dl>
+    </div>
+
+    <div class="st">
+      <div class="st__h"><span class="st__tag">R2</span><h4>核准 簽核閘</h4></div>
+      <dl>
+        <dt>什麼時候走到這裡</dt><dd>東西要往下一步推之前的人為關卡。</dd>
+        <dt>實務上長什麼樣</dt><dd>審閱／簽核畫面：gate 未過就擋核准，治理鏈 replay 會標出違規。<strong>這是全鏈做得最好的一段</strong>，概念上等同 playbook 的 ask-hook。</dd>
+        <dt>誰在操作</dt><dd>人。而且必須是人——這一站的價值就在於它不能被 agent 代掉。</dd>
+        <dt>可以再補</dt><dd>「封鎖必須自己解釋自己」：擋下時同時顯示理由與取得核准的途徑，而不只是把按鈕變灰。</dd>
+      </dl>
+    </div>
+
+    <div class="st">
+      <div class="st__h"><span class="st__tag">R1</span><h4>實作 commits / PR</h4></div>
+      <dl>
+        <dt>什麼時候走到這裡</dt><dd>核准過了，agent 開始寫，產出 commits 與 PR。</dd>
+        <dt>實務上長什麼樣</dt><dd>跨 repo PR 雷達；<code>authorAgentFamily</code> 擋掉同族系自審——這一條比原文更嚴。</dd>
+        <dt>誰在操作</dt><dd>agent 寫、人審。多線同時在飛的時候，這一站是瓶頸所在。</dd>
+        <dt>現在卡在哪</dt><dd>缺 <code>REVIEW.md</code> 那一層（審查政策、Important／Nit 的界線、要跳過什麼），而且<strong>審查發現本身沒進軌跡</strong>——它是 playbook 明列的六份產物之一。</dd>
+      </dl>
+    </div>
+
+    <div class="st">
+      <div class="st__h"><span class="st__tag">R3</span><h4>發布 release</h4></div>
+      <dl>
+        <dt>什麼時候走到這裡</dt><dd>PR 併進去了，要發版。</dd>
+        <dt>實務上長什麼樣</dt><dd>發布頁追蹤 release，鏈的末端是 <code>commits → PR → release</code>。</dd>
+        <dt>誰在操作</dt><dd>CI 觸發、人確認。</dd>
+        <dt>現在卡在哪</dt><dd>缺 <strong>rollback</strong>。原文說 rollback 應該是整條 pipeline 中被演練得最熟的路徑，因為 M1 的 3σ 會呼叫它。鏈目前只有單向，走不回來。</dd>
+      </dl>
+    </div>
+
+    <div class="st gap">
+      <div class="st__h"><span class="st__tag">M1</span><h4>訊號回寫</h4></div>
+      <dl>
+        <dt>什麼時候走到這裡</dt><dd>發布之後，或任何一關失敗的當下。</dd>
+        <dt>實務上長什麼樣</dt><dd>UAT 失敗、gate 未過、PR 失敗、release 異常——四種訊號目前<strong>全部停在畫面上等人看</strong>。</dd>
+        <dt>誰在操作</dt><dd>應該是系統自己。需要人記得回頭看的迴圈，等於沒有迴圈。</dd>
+        <dt>現在卡在哪</dt><dd>四種訊號都已經有錨點，只差最後一步：自動生成一份帶錨點的 <code>intent.md</code> 草稿丟回 P1。<strong>做到這裡，Anchorline 才從「看板」變成「迴圈」。</strong></dd>
+      </dl>
+    </div>
+
+    <div class="st">
+      <div class="st__h"><span class="st__tag">HUB</span><h4>錨點 · 稽核軌跡</h4></div>
+      <dl>
+        <dt>它不是一站</dt><dd>是累積狀態。七站都寫回同一組錨點，這才是 Anchorline 真正在賣的東西。</dd>
+        <dt>現在卡在哪</dt><dd>操縱 agent 的設定沒有被治理。<code>CLAUDE.md</code>、<code>.claude/skills/</code>、<code>.claude/settings.json</code> 決定了 agent 的行為，但它們的變更不在軌跡上——<strong>治理了產出，沒治理產出者的設定</strong>。</dd>
+      </dl>
+    </div>
+
+  </div>
+</section>
+
+<section id="usage">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">情境 B</span><h2>這張圖什麼場合拿出來用</h2></div>
+    <p class="lede">上一節是圖裡面；這一節是圖外面——什麼決策該把它攤開，什麼問題不該問它。</p>
+
+    <h3>四個該用的場合</h3>
+    <ol>
+      <li><strong>排優先序的時候。</strong>兩段鏽紅就是排序的答案：P1 最便宜（一個目錄 ＋ 一份範本），M1 最有價值（訊號已有錨點，只差自動生成草稿）。中間五站全是「加強」，不是「開路」——可以排隊。</li>
+      <li><strong>對外解釋定位的時候。</strong>被問「Anchorline 到底是什麼」，這張圖一句話回答：<strong>它記錄鏈，不執行鏈</strong>。B4 那條刻意不自己做 hook runtime 的判斷，理由就在這張圖上——中心是狀態，不是執行器。</li>
+      <li><strong>收到功能請求的時候。</strong>先問「它落在哪一站」。落在中間五站是改良，可以排；落在兩段鏽紅是補結構，會改變產品敘事。這個分類比「重要／不重要」有用得多。</li>
+      <li><strong>解釋為什麼 R2 是護城河的時候。</strong>核准閘是全鏈唯一「已具備」的一站，而 <code>authorAgentFamily</code> 的族系粒度是 GitHub 原生機制抓不到的。要講差異化，指這一站。</li>
+    </ol>
+
+    <h3>兩個不該用它的地方</h3>
+    <ul>
+      <li><strong>不要拿它談 M2/M3（掃描與 on-call）。</strong>對單人＋多 agent 的情境優先度最低，且高度依賴 Claude Enterprise。硬塞進圖裡會讓兩個真正的缺口失焦——但入口要先留好，那個入口跟 M1 是同一個。</li>
+      <li><strong>不要拿它當實作依據。</strong>現況欄依 README 與 PRD 判讀，未逐一核對原始碼。這張圖適合排序與對外說明，動工前每一站要回去驗。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="context">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">延伸</span><h2>上下文維度</h2></div>
+    <p class="lede">這一節不在 playbook 裡，也不在 14 條 Play 裡。它是把「上下文管理」疊到這張圖上之後才長出來的兩件事——一件讓表縮短，一件讓表變長。</p>
+
+    <h3>一、錨點少了一個欄位</h3>
+    <p>現在每個錨點記錄「<strong>產出了什麼</strong>」，沒記錄「<strong>產出者當時看得到什麼</strong>」。同一份 PRD，在不同的 <code>CLAUDE.md</code>、不同 skill 版本、不同模型下跑，產出不一樣。<strong>治理鏈把產物釘死了，把產物的生成條件放生了。</strong></p>
+    <p>這不是 B2 那條「把 <code>CLAUDE.md</code> 納入監看」。監看給的是 changelog，上下文出處給的是 lockfile：</p>
+
+    <div class="pair">
+      <b>changelog（B2 給的）</b>
+      <span>CLAUDE.md 在 9/1 變過</span>
+    </div>
+    <div class="pair">
+      <b>lockfile（上下文出處給的）</b>
+      <span>這個 PR 由 CLAUDE.md@a3f2 ＋ skills[x@2, y@1] ＋ plan.md@rev4 ＋ model=opus-5 產出</span>
+    </div>
+
+    <p>前者讓你<strong>查</strong>，後者讓你<strong>重播</strong>。差別在能不能回答「它為什麼會那樣做」與「換一次它還會不會那樣做」。</p>
+
+    <h4>四列塌成一件事</h4>
+    <p>一旦這樣看，表裡四列不是四個功能，是同一個機制的四個切面：</p>
+  </div>
+
+  <div class="mini">
+    <table>
+      <thead><tr><th style="width:180px">原本的列</th><th>它其實在要的東西</th></tr></thead>
+      <tbody>
+        <tr><td><b>D1</b> 需求與設計合併</td><td>記錄「PRD 寫作當時生效的 skill 版本」</td></tr>
+        <tr><td><b>B1</b> Plan mode</td><td>plan 與 diff 是否還吻合——<b>plan 本身就是 context 的一部分</b></td></tr>
+        <tr><td><b>B2</b> CLAUDE.md</td><td><code>CLAUDE.md</code>／<code>skills</code>／<code>settings</code> 進軌跡</td></tr>
+        <tr><td><b>B3</b> Skills 作為機構知識</td><td>「這份 PRD 是在哪一版政策下寫的」</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p><strong>B3 那句話是原文自己寫的。</strong>它就是上下文出處，只是沒被命名——所以它被切成四塊散在表裡，看起來像四個中等優先的改良，實際上是一件事。</p>
+
+    <h4>四類上下文，各自缺在哪</h4>
+  </div>
+
+  <div class="mini">
+    <table>
+      <thead><tr><th style="width:130px">上下文類別</th><th style="width:30%">具體是什麼</th><th style="width:24%">現在在哪</th><th>進得了軌跡嗎</th></tr></thead>
+      <tbody>
+        <tr><td><b>doctrine</b></td><td><code>CLAUDE.md</code>、專案內規則</td><td>git，但 App 不知道它存在</td><td><span class="tag t-gap">否</span></td></tr>
+        <tr><td><b>政策 / skills</b></td><td><code>.claude/skills/</code>、掛載中的政策</td><td>檔案系統</td><td><span class="tag t-gap">否</span></td></tr>
+        <tr><td><b>plan</b></td><td><code>plans/*.md</code></td><td>Anchorline 已經在讀</td><td><span class="tag t-part">讀得到，沒版本綁定</span></td></tr>
+        <tr><td><b>執行者</b></td><td>模型、agent 族系、worktree</td><td><code>authorAgentFamily</code> 已進鏈</td><td><span class="tag t-have">四分之一已具備</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p><strong>最後一列是關鍵：Anchorline 已經做了這件事的四分之一，只是沒意識到。</strong><code>authorAgentFamily</code> 不是一條孤立的職責分離規則——它是「把執行者的身分綁進錨點」，也就是上下文出處的第一個欄位。剩下三類是同一個欄位往外長。</p>
+
+    <blockquote>
+      <p><strong>前置依賴：這件事不是免費的。</strong>要拿到「當時哪些 skill 生效」，資料只有一個來源——hook log 或 OpenTelemetry。B4 建議的那半（讀 log、把 allow／block／ask 畫進鏈）<strong>不是一個獨立的低優先功能，是這件事的進料管</strong>。原文把 B4 判成優先度最低，那個判斷在加入上下文維度之後要翻過來。</p>
+    </blockquote>
+
+    <h3>二、表上沒有的第 15 格</h3>
+    <p>B5 原文問的是「一個人審查得過來幾條線」。從上下文角度看，瓶頸不是審查吞吐量，是<strong>每條 session 有自己的 context window，彼此看不見</strong>。</p>
+    <p>兩個 agent 在兩個 worktree 上，可以做出互相矛盾的決定，而且<strong>各自都會通過自己那關的 gate</strong>——因為 gate 檢查的是這條線的內部一致性，不是跨線的一致性。PR 雷達看得到兩個 PR，看不到兩者衝突。</p>
+    <p>playbook 沒有這條，14 條 Play 也沒有這條。<strong>它只有在把上下文當成一等公民之後才會出現。</strong></p>
+
+    <h4>為什麼是 Anchorline 該做</h4>
+    <p>偵測跨 session 矛盾，需要<strong>同時握著兩條線的錨點</strong>。CI 沒有，GitHub 沒有，agent 自己更沒有——它的 context window 裡看不到另一條線。Anchorline 有，而且是唯一有的。</p>
+
+    <h4>最小可行版</h4>
+    <ul>
+      <li><strong>兩份在途的 plan 碰到同一個錨點 → 標記。</strong>不需要理解語意，只需要算交集。這是今天就寫得出來的東西。</li>
+      <li>升一級：同一檔案在兩條線上都被列為「要改」，但兩份 plan 的敘述不一致 → 升為違規，走 <code>authorAgentFamily</code> 同一套 replay。</li>
+      <li>目前的解法是在 <code>PROJECTS.md</code> 手寫一段「跨 session 接縫」——<strong>人工的上下文同步，不進軌跡，靠記得</strong>。這正是它該被機器接手的訊號。</li>
+    </ul>
+
+    <h3>對這張圖的影響：不改</h3>
+    <p>上下文出處是<strong>第二個累積狀態</strong>，而迴圈圖只能有一個中心——兩個中心就是兩張圖。它不是第八站，是<strong>中心的第二個欄位</strong>：現在存「產出了什麼」，該存「產出了什麼 × 產出者看得到什麼」。真要畫，是另一張矩陣圖，不是往這張塞。</p>
+  </div>
+</section>
+
+<section id="table">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">對照</span><h2>14 條 Play 的判定</h2></div>
+    <p class="lede">圖只畫了七站；playbook 的 14 條 Play 逐條判定在這裡。<strong>缺口 5、部分 8、已具備 1。</strong>掛<span class="ctx-mark">上下文出處</span>的四列不是四個功能，是<a href="#context">同一個機制的四個切面</a>。</p>
+  </div>
+
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th style="width:120px">Play</th><th style="width:28%">Anchorline 現況</th><th style="width:72px">判定</th><th>改版建議</th></tr></thead>
+      <tbody>
+        <tr><td><b>P1</b> 捕捉 intent.md</td><td>治理鏈從 <b>PRD 撰寫</b>起手。沒有更早、更粗、非工程師可寫的入口。</td><td><span class="tag t-gap">缺口</span></td><td>在編輯台前面加一層 <code>intent/</code>：欄位極少的 proto-spec（問題／預期成果／受影響系統／限制／開放問題），<b>一建立就配錨點</b>。PRD 變成 intent 的下游。</td></tr>
+        <tr><td><b>D1</b> 需求與設計合併<span class="ctx-mark">上下文出處</span></td><td>編輯台已有 PRD 引導撰寫 ＋ <b>結構 gate</b> ＋ Markdown 即時預覽。</td><td><span class="tag t-part">部分</span></td><td>把品牌／安全／合規／UX 政策做成可掛載的 skill 清單，並在 PRD 上記錄「當時生效的 skill 版本」。</td></tr>
+        <tr><td><b>B1</b> Plan mode / plan.md<span class="ctx-mark">上下文出處</span></td><td>Task Tracking 讀 <code>plans/*.md</code>，checkbox 可勾、右欄三層稽核軌跡。</td><td><span class="tag t-part">部分</span></td><td>缺<b>對照</b>：merge 的 diff 是否還吻合 plan？把「plan.md 未同步」做成治理鏈上的違規標記。</td></tr>
+        <tr><td><b>B2</b> CLAUDE.md<span class="ctx-mark">上下文出處</span></td><td>repo 有 <code>CLAUDE.md</code>，但它不是 Anchorline 的治理對象——App 不知道它存在。</td><td><span class="tag t-gap">缺口</span></td><td>把 <code>CLAUDE.md</code>、<code>.claude/skills/</code>、<code>.claude/settings.json</code> 納入監看清單。<b>操縱 agent 的設定本身就該是被治理的產物</b>。</td></tr>
+        <tr><td><b>B3</b> Skills 作為機構知識<span class="ctx-mark">上下文出處</span></td><td>Agents 頁已有 agent 角色、prompt、進場作業。</td><td><span class="tag t-part">部分</span></td><td>從「agent 名冊」擴成「<b>policy → skill → 負責人</b>」登錄表：每條政策一位負責人、一份真相來源、一個 skill 版本。</td></tr>
+        <tr><td><b>B4</b> Hooks 建置護欄</td><td>無。Anchorline 不介入 agent 的執行期。</td><td><span class="tag t-gap">缺口</span></td><td>不建議自己做 hook runtime。但可以<b>把 hook 決定收進稽核軌跡</b>：讀 OpenTelemetry 或 hook log，把 allow／block／ask 畫在鏈上。<br><b style="color:var(--indigo)">⚠ 優先度翻轉：</b>加入<a href="#context">上下文維度</a>後，這條不再是最低優先——它是上下文出處唯一的進料管。</td></tr>
+        <tr><td><b>B5</b> 平行 session 與 subagent</td><td>Agents 頁 ＋ 跨 repo PR 雷達已接近「多線在飛」的視圖。</td><td><span class="tag t-part">部分</span></td><td>PR 雷達再往前一步：顯示<b>還沒變成 PR 的在途 worktree／session</b>。「一個人審查得過來幾條線」目前沒有畫面在回答。<br><b style="color:var(--indigo)">＋ 表上沒有的：</b><a href="#context">跨 session 矛盾偵測</a>——兩條線各自過 gate，卻互相衝突。</td></tr>
+        <tr><td><b>T1</b> 回饋迴圈</td><td>UAT 是<b>人眼</b>迴圈：逐題勾選，失敗與不測必填說明，結果寫回同一份 markdown。</td><td><span class="tag t-part">部分</span></td><td>缺<b>機器迴圈的證據</b>：<code>make test</code> 輸出、build log、截圖差異目前不進治理鏈。收進來，「證據來自工具鏈」才成立。</td></tr>
+        <tr><td><b>T2</b> 持續 evals</td><td>無。</td><td><span class="tag t-gap">缺口</span></td><td>全套 eval 太重。<b>最小可行版</b>：UAT 失敗題與事故各留一則案例，在 <code>CLAUDE.md</code> 或 skills 變更時提醒重跑。</td></tr>
+        <tr><td><b>R1</b> PR 審查迴圈</td><td>跨 repo PR 雷達已有；<code>authorAgentFamily</code> 的職責分離比原文更嚴。</td><td><span class="tag t-part">部分</span></td><td>缺 <code>REVIEW.md</code> 這一層，且<b>審查發現本身沒進軌跡</b>——它是 playbook 明列的六份產物之一。</td></tr>
+        <tr><td><b>R2</b> Hooks 核准閘</td><td>審閱／簽核畫面：<b>gate 未過擋核准</b>；replay 會標出違規。</td><td><span class="tag t-have">已具備</span></td><td>概念上就是 playbook 的 ask-hook。可補「<b>封鎖必須自己解釋自己</b>」：擋下時顯示理由與取得核准的途徑。</td></tr>
+        <tr><td><b>R3</b> CI/CD 與部署</td><td>發布頁追蹤 release；鏈的末端是 <code>commits → PR → release</code>。</td><td><span class="tag t-part">部分</span></td><td>缺 <b>rollback</b>。原文說它應該是整條 pipeline 中被演練得最熟的路徑。補一個 rollback 事件型別，鏈才走得回來。</td></tr>
+        <tr><td><b>M1</b> 閉環</td><td>無。UAT 失敗、gate 未過、PR 失敗都停在畫面上等人看。</td><td><span class="tag t-gap">缺口</span></td><td><b>最大的一塊，也最像 Anchorline 該做的事。</b>讓訊號自動生成帶錨點的 <code>intent.md</code> 草稿丟回 P1。做到這裡，才從「看板」變成「迴圈」。</td></tr>
+        <tr><td><b>M2/M3</b> 掃描與 on-call</td><td>無。</td><td><span class="tag t-gap">缺口</span></td><td>對單人情境優先度最低，且高度依賴 Claude Enterprise。<b>先不做</b>，但把「發現 → intent.md」的入口先留好——跟 M1 是同一個。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <h3>三個結構性判斷</h3>
+    <ol>
+      <li><strong>鏈少了最前面一段。</strong>playbook 的鏈是 intent → spec → plan → diff → PR → incident；Anchorline 的是 PRD → gate → 簽核 → openspec → commits → PR → release。從 PRD 起手，等於默認「已經有人把想法寫成規格了」。補上 intent 層是投報率最高的一步，也最便宜。</li>
+      <li><strong>迴圈沒有閉合，所以它現在是一條線。</strong>四種訊號都已經有錨點，缺的只是「自動寫回一份意圖」。<strong>這一步做完，README 上那句「一條治理鏈」才會真的變成迴圈。</strong></li>
+      <li><strong>操縱 agent 的設定本身沒有被治理。</strong>對一個主打「證明 agent 做的事被治理過」的產品來說，<strong>這是定位上的漏洞而不只是功能缺口</strong>。</li>
+    </ol>
+  </div>
+</section>
+
+<footer>
+  <div class="col">
+    來源：docs/ai-native-sdlc-playbook.html § 05 對照 Anchorline<br>
+    現況判讀依 README.md 與 docs/PRD.md，未逐一核對原始碼<br>
+    圖：Loop（7 站 ＋ 1 中心）· 色票沿用 playbook
+  </div>
+</footer>
+
+</div>
+</body>
+</html>
