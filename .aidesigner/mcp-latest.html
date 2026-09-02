@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anchorline - Project Dashboard</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- Tailwind Config for precise colors and fonts -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            amber: '#f5a524',
+                            amberHover: '#ffb540',
+                            dark: '#101115',
+                            surface: '#161920',
+                            card: '#1a1d24',
+                            cardHover: '#222630',
+                            border: '#2e323d',
+                            borderLight: '#3f4451',
+                            text: '#e2e8f0',
+                            muted: '#8b94a5'
+                        }
+                    },
+                    boxShadow: {
+                        'glow': '0 0 20px rgba(245, 165, 36, 0.15)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Scrollbar for desktop app feel */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2e323d;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3f4451;
+        }
+
+        /* Base styles */
+        body {
+            background-color: #101115;
+            color: #e2e8f0;
+            overflow: hidden; /* App shell doesn't scroll, content areas do */
+        }
+
+        /* Reveal Animations */
+        .reveal-item {
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .reveal-item.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Pulse for active node */
+        @keyframes subtlePulse {
+            0% { box-shadow: 0 0 0 0 rgba(245, 165, 36, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(245, 165, 36, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(245, 165, 36, 0); }
+        }
+        .node-active-pulse {
+            animation: subtlePulse 2s infinite;
+        }
+
+        /* Progress bar animation */
+        .progress-bar-fill {
+            width: 0%;
+            transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        /* Typography tweaks for readability */
+        .text-micro { font-size: 11px; line-height: 16px; }
+        .text-body { font-size: 13px; line-height: 20px; }
+    </style>
+</head>
+<body class="flex h-screen w-full antialiased selection:bg-brand-amber/30 selection:text-white">
+
+    <!-- App Shell: Left Navigation Rail -->
+    <aside class="w-[240px] flex-shrink-0 flex flex-col border-r border-brand-border bg-brand-dark z-20">
+        <!-- Logo Area -->
+        <div class="h-[60px] flex items-center px-5 border-b border-white/5">
+            <i class="ph ph-anchor text-brand-amber text-lg mr-2.5"></i>
+            <span class="font-semibold text-sm tracking-wide">Anchorline</span>
+            <i class="ph ph-caret-double-left ml-auto text-brand-muted hover:text-white cursor-pointer text-sm"></i>
+        </div>
+
+        <!-- Main Menu -->
+        <nav class="flex-1 py-4 overflow-y-auto">
+            <ul class="space-y-0.5 px-3">
+                <li>
+                    <a href="#" class="flex items-center px-3 py-2 text-body font-medium text-brand-amber bg-brand-amber/10 rounded-md border border-brand-amber/20">
+                        <i class="ph ph-house text-lg mr-3"></i> 工作台
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="flex items-center px-3 py-2 text-body font-medium text-brand-muted hover:text-white hover:bg-white/5 rounded-md transition-colors">
+                        <i class="ph ph-link text-lg mr-3"></i> 工作鏈
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="flex items-center px-3 py-2 text-body font-medium text-brand-muted hover:text-white hover:bg-white/5 rounded-md transition-colors">
+                        <i class="ph ph-file-text text-lg mr-3"></i> 規格
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="flex items-center px-3 py-2 text-body font-medium text-brand-muted hover:text-white hover:bg-white/5 rounded-md transition-colors">
+                        <i class="ph ph-clock-counter-clockwise text-lg mr-3"></i> 執行記錄
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="flex items-center px-3 py-2 text-body font-medium text-brand-muted hover:text-white hover:bg-white/5 rounded-md transition-colors">
+                        <i class="ph ph-git-merge text-lg mr-3"></i> 變更
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="flex items-center px-3 py-2 text-body font-medium text-brand-muted hover:text-white hover:bg-white/5 rounded-md transition-colors">
+                        <i class="ph ph-robot text-lg mr-3"></i> 代理程式
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="flex items-center px-3 py-2 text-body font-medium text-brand-muted hover:text-white hover:bg-white/5 rounded-md transition-colors">
+                        <i class="ph ph-gear text-lg mr-3"></i> 設定
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Project Tree -->
+            <div class="mt-8 px-6">
+                <div class="flex items-center justify-between text-xs font-semibold text-brand-muted uppercase tracking-wider mb-3">
+                    專案
+                    <i class="ph ph-plus cursor-pointer hover:text-white"></i>
+                </div>
+                <div class="flex items-center text-body text-white mb-2">
+                    <i class="ph-fill ph-folder-notch text-brand-amber mr-2"></i> Anchorline
+                </div>
+                <ul class="pl-5 space-y-1.5 border-l border-brand-border ml-1.5">
+                    <li class="flex items-center text-body text-brand-muted hover:text-white cursor-pointer relative before:content-[''] before:absolute before:-left-[7px] before:top-1/2 before:-translate-y-1/2 before:w-[6px] before:h-px before:bg-brand-border">
+                        <i class="ph ph-caret-right text-xs mr-1.5"></i> <i class="ph ph-folder mr-1.5"></i> docs
+                    </li>
+                    <li class="flex items-center text-body text-brand-muted hover:text-white cursor-pointer relative before:content-[''] before:absolute before:-left-[7px] before:top-1/2 before:-translate-y-1/2 before:w-[6px] before:h-px before:bg-brand-border">
+                        <i class="ph ph-caret-right text-xs mr-1.5"></i> <i class="ph ph-folder mr-1.5"></i> specs
+                    </li>
+                    <li class="flex items-center text-body text-brand-muted hover:text-white cursor-pointer relative before:content-[''] before:absolute before:-left-[7px] before:top-1/2 before:-translate-y-1/2 before:w-[6px] before:h-px before:bg-brand-border">
+                        <i class="ph ph-caret-right text-xs mr-1.5"></i> <i class="ph ph-folder mr-1.5"></i> src
+                    </li>
+                    <li class="flex items-center text-body text-brand-muted hover:text-white cursor-pointer relative before:content-[''] before:absolute before:-left-[7px] before:top-1/2 before:-translate-y-1/2 before:w-[6px] before:h-px before:bg-brand-border">
+                        <i class="ph ph-caret-right text-xs mr-1.5"></i> <i class="ph ph-folder mr-1.5"></i> tests
+                    </li>
+                    <li class="flex items-center text-body text-brand-muted hover:text-white cursor-pointer relative before:content-[''] before:absolute before:-left-[7px] before:top-1/2 before:-translate-y-1/2 before:w-[6px] before:h-px before:bg-brand-border">
+                        <i class="ph ph-caret-right text-xs mr-1.5"></i> <i class="ph ph-folder mr-1.5"></i> scripts
+                    </li>
+                    <li class="flex items-center text-body text-brand-muted hover:text-white cursor-pointer relative before:content-[''] before:absolute before:-left-[7px] before:top-1/2 before:-translate-y-1/2 before:w-[6px] before:h-px before:bg-brand-border">
+                        <i class="ph ph-file-text mr-1.5 ml-3"></i> README.md
+                    </li>
+                    <li class="flex items-center text-body text-brand-muted hover:text-white cursor-pointer relative before:content-[''] before:absolute before:-left-[7px] before:top-1/2 before:-translate-y-1/2 before:w-[6px] before:h-px before:bg-brand-border">
+                        <i class="ph ph-file-code mr-1.5 ml-3"></i> anchorline.toml
+                    </li>
+                    <li class="flex items-center text-body text-brand-muted hover:text-white cursor-pointer relative before:content-[''] before:absolute before:-left-[7px] before:top-1/2 before:-translate-y-1/2 before:w-[6px] before:h-px before:bg-brand-border">
+                        <i class="ph ph-file-text mr-1.5 ml-3"></i> CHANGELOG.md
+                    </li>
+                </ul>
+            </div>
+        </nav>
+
+        <!-- User Profile -->
+        <div class="p-4 border-t border-brand-border">
+            <div class="flex items-center justify-between mb-3 cursor-pointer group">
+                <div class="flex items-center">
+                    <div class="w-8 h-8 rounded-full border border-brand-amber text-brand-amber flex items-center justify-center text-xs font-semibold mr-3 group-hover:bg-brand-amber/10 transition-colors">AC</div>
+                    <div>
+                        <div class="text-sm font-medium text-white">Alex Chen</div>
+                        <div class="flex items-center text-micro text-brand-muted mt-0.5">
+                            本機模式 <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-1.5 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>
+                        </div>
+                    </div>
+                </div>
+                <i class="ph ph-caret-right text-brand-muted"></i>
+            </div>
+            <div class="text-micro text-brand-muted font-mono flex items-center mb-1">~/projects/anchorline</div>
+            <div class="text-micro text-brand-muted flex items-center">
+                <i class="ph ph-git-branch mr-1"></i> main <i class="ph ph-check-circle text-emerald-500 ml-1.5"></i>
+            </div>
+        </div>
+    </aside>
+
+    <!-- App Main Content Area -->
+    <main class="flex-1 flex flex-col h-full bg-brand-surface relative z-10 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
+
+        <!-- Header -->
+        <header class="h-[72px] flex-shrink-0 flex items-center justify-between px-8 border-b border-brand-border bg-brand-surface/90 backdrop-blur-md sticky top-0 z-50">
+            <div>
+                <h1 class="text-xl font-semibold text-white tracking-wide">Anchorline</h1>
+                <div class="flex items-center text-micro text-brand-muted mt-1 font-mono">
+                    <span class="font-sans">本機工作區</span><span class="mx-2">·</span>v0.8.4<span class="mx-2">·</span>git 3c9d2b1
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <button class="px-4 py-2 rounded-md border border-brand-border text-sm font-medium text-brand-text hover:bg-white/5 transition-colors">
+                    查看變更
+                </button>
+                <button class="px-5 py-2 rounded-md bg-brand-amber text-black text-sm font-semibold hover:bg-brand-amberHover transition-colors shadow-glow">
+                    繼續下一步
+                </button>
+                <button class="w-9 h-9 rounded-md border border-brand-border flex items-center justify-center text-brand-text hover:bg-white/5 transition-colors ml-1">
+                    <i class="ph ph-dots-three-vertical text-lg"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Scrollable Canvas -->
+        <div class="flex-1 overflow-y-auto p-8 pt-6">
+            <div class="max-w-[1280px] mx-auto space-y-5">
+
+                <!-- Hero Action Card -->
+                <section class="reveal-item border border-brand-borderLight rounded-xl bg-brand-card p-6 relative overflow-hidden">
+                    <!-- Subtle glow behind card -->
+                    <div class="absolute -top-24 -right-24 w-64 h-64 bg-brand-amber/5 rounded-full blur-3xl pointer-events-none"></div>
+
+                    <div class="flex items-center mb-4 relative z-10">
+                        <i class="ph ph-file-text text-brand-amber text-xl mr-3"></i>
+                        <h2 class="text-lg font-medium text-brand-amber tracking-wide">下一步</h2>
+                        <span class="ml-4 text-sm text-brand-muted">目前唯一需要處理的工作</span>
+                    </div>
+
+                    <div class="border border-white/5 rounded-lg bg-brand-cardHover p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
+                        <div class="flex items-start flex-1">
+                            <div class="w-10 h-10 rounded-lg bg-brand-amber/10 border border-brand-amber/20 flex items-center justify-center mr-4 flex-shrink-0 mt-1">
+                                <i class="ph ph-file-text text-brand-amber text-xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-semibold text-white mb-1.5">審閱並核准資料同步規格</h3>
+                                <p class="text-body text-brand-muted mb-3 max-w-xl">
+                                    檢閱資料同步規格 v3 的內容與變更，確認可落地性與相容性，並核准以推進實作與測試。
+                                </p>
+                                <div class="flex items-center text-micro text-brand-muted">
+                                    <i class="ph ph-check-circle mr-1.5 text-emerald-500/70"></i> 完成後將建立 sign-off 並更新執行鏈
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col items-end gap-3 flex-shrink-0">
+                            <div class="flex items-center gap-3">
+                                <span class="font-mono text-sm tracking-wider px-3 py-1.5 rounded border border-dashed border-white/20 text-white/80 bg-black/20">
+                                    AL-042
+                                </span>
+                                <span class="flex items-center px-2.5 py-1.5 rounded bg-blue-500/10 text-blue-400 text-xs font-medium border border-blue-500/10">
+                                    <i class="ph ph-clock mr-1.5"></i> 待處理
+                                </span>
+                            </div>
+                            <button class="group px-6 py-2.5 rounded-md bg-brand-amber text-black font-semibold hover:bg-brand-amberHover transition-all flex items-center text-base mt-2 shadow-glow w-full lg:w-auto justify-center">
+                                開始處理 <i class="ph ph-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></i>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Stats Row -->
+                <section class="reveal-item border border-brand-border rounded-xl bg-brand-card flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-brand-border overflow-hidden" style="transition-delay: 50ms;">
+                    <!-- Stat 1 -->
+                    <div class="flex-1 p-5 relative overflow-hidden group">
+                        <div class="flex items-center justify-center text-sm text-brand-muted mb-3">
+                            <i class="ph ph-pie-chart mr-2"></i> 進度
+                        </div>
+                        <div class="text-center font-mono text-3xl font-light text-white flex items-baseline justify-center">
+                            18 <span class="text-xl text-brand-muted mx-2">/</span> 27
+                        </div>
+                        <!-- Progress Bar -->
+                        <div class="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
+                            <div class="h-full bg-brand-amber progress-bar-fill" data-progress="66%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Stat 2 -->
+                    <div class="flex-1 p-5 relative">
+                        <div class="flex items-center justify-center text-sm text-brand-muted mb-3">
+                            <i class="ph ph-flag mr-2"></i> 目前階段
+                        </div>
+                        <div class="text-center text-2xl font-medium text-white flex items-center justify-center">
+                            實作中 <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 ml-3 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></div>
+                        </div>
+                    </div>
+
+                    <!-- Stat 3 -->
+                    <div class="flex-1 p-5 relative">
+                        <div class="flex items-center justify-center text-sm text-brand-muted mb-3">
+                            <i class="ph ph-clock mr-2"></i> 待處理
+                        </div>
+                        <div class="text-center text-3xl font-mono text-red-400">
+                            3
+                        </div>
+                    </div>
+
+                    <!-- Stat 4 -->
+                    <div class="flex-1 p-5 relative">
+                        <div class="flex items-center justify-center text-sm text-brand-muted mb-3">
+                            <i class="ph ph-clock-counter-clockwise mr-2"></i> 最後活動
+                        </div>
+                        <div class="text-center text-2xl font-medium text-white flex items-baseline justify-center">
+                            27 <span class="text-base text-brand-muted ml-2 font-sans">分鐘前</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Middle Grid: Chain & Activity -->
+                <div class="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-5">
+
+                    <!-- Execution Chain Graphic -->
+                    <section class="reveal-item border border-brand-border rounded-xl bg-brand-card p-6 flex flex-col" style="transition-delay: 100ms;">
+                        <div class="flex items-center justify-between mb-8">
+                            <div class="flex items-center">
+                                <i class="ph ph-link text-brand-muted text-lg mr-2"></i>
+                                <h3 class="text-base font-medium text-white">工作鏈</h3>
+                                <i class="ph ph-info text-brand-muted ml-2 cursor-pointer hover:text-white transition-colors"></i>
+                            </div>
+                        </div>
+
+                        <!-- Chain Visualization -->
+                        <div class="relative flex items-start justify-between w-full px-2 mt-4 flex-1">
+
+                            <!-- Background connecting lines -->
+                            <div class="absolute top-[20px] left-[5%] right-[5%] flex items-center z-0">
+                                <div class="w-1/4 h-px border-b border-emerald-500/50 relative"><i class="ph-fill ph-caret-right text-micro absolute -right-1.5 -top-[7px] text-emerald-500/50"></i></div>
+                                <div class="w-1/4 h-px border-b border-white/20 relative"><i class="ph-fill ph-caret-right text-micro absolute -right-1.5 -top-[7px] text-white/20"></i></div>
+                                <div class="w-1/4 h-px border-b border-dashed border-white/20 relative"></div>
+                                <div class="w-1/4 h-px border-b border-dashed border-white/20 relative"></div>
+                            </div>
+
+                            <!-- Nodes -->
+                            <!-- Node 1 -->
+                            <div class="flex flex-col items-center z-10 bg-brand-card px-2 min-w-[70px]">
+                                <div class="text-micro text-brand-muted mb-4">計畫</div>
+                                <div class="w-[42px] h-[42px] rounded-full border-2 border-emerald-500/50 flex items-center justify-center bg-brand-card text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.1)]">
+                                    <i class="ph ph-check text-xl"></i>
+                                </div>
+                                <div class="mt-4 text-xs text-emerald-500">已完成</div>
+                                <div class="mt-1 text-[10px] text-brand-muted font-mono text-center">2025-05-09<br>10:14</div>
+                            </div>
+
+                            <!-- Node 2 (Active Anchor) -->
+                            <div class="flex flex-col items-center z-10 bg-brand-card px-2 min-w-[70px]">
+                                <div class="text-micro text-brand-muted mb-4">錨點 (Anchor)</div>
+                                <div class="w-[42px] h-[42px] rounded-full border-2 border-brand-amber flex items-center justify-center bg-brand-card text-brand-amber shadow-[0_0_15px_rgba(245,165,36,0.2)] node-active-pulse">
+                                    <i class="ph ph-anchor text-xl"></i>
+                                </div>
+                                <div class="mt-4 text-xs font-mono text-white tracking-wider">AL-042</div>
+                                <div class="mt-1.5 px-2 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/10">進行中</div>
+                            </div>
+
+                            <!-- Node 3 -->
+                            <div class="flex flex-col items-center z-10 bg-brand-card px-2 min-w-[70px]">
+                                <div class="text-micro text-brand-muted mb-4">Commit</div>
+                                <div class="w-[42px] h-[42px] rounded-full border-2 border-blue-400/50 flex items-center justify-center bg-brand-card text-blue-400">
+                                    <i class="ph ph-git-commit text-xl"></i>
+                                </div>
+                                <div class="mt-4 text-xs font-mono text-white tracking-wider">8f3c1a2</div>
+                                <div class="mt-1 text-[10px] text-brand-muted font-mono text-center">2025-05-11<br>14:32</div>
+                            </div>
+
+                            <!-- Node 4 (Pending Action) -->
+                            <div class="flex flex-col items-center z-10 bg-brand-card px-2 min-w-[70px]">
+                                <div class="text-micro text-brand-muted mb-4">Sign-off</div>
+                                <div class="w-[42px] h-[42px] rounded-full border-2 border-red-500 flex items-center justify-center bg-brand-card text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.1)]">
+                                    <i class="ph ph-shield-check text-xl"></i>
+                                </div>
+                                <div class="mt-4 text-xs text-red-400">待核准</div>
+                                <div class="mt-1.5 px-2 py-0.5 rounded text-[10px] bg-white/5 text-white/50 border border-white/5">待處理</div>
+                            </div>
+
+                            <!-- Node 5 -->
+                            <div class="flex flex-col items-center z-10 bg-brand-card px-2 min-w-[70px]">
+                                <div class="text-micro text-brand-muted mb-4">規格修訂</div>
+                                <div class="w-[42px] h-[42px] rounded-full border-2 border-blue-400 flex items-center justify-center bg-brand-card text-blue-400">
+                                    <i class="ph ph-file-text text-xl"></i>
+                                </div>
+                                <div class="mt-4 text-xs font-mono text-white tracking-wider">v3</div>
+                                <div class="mt-1 text-[10px] text-brand-muted font-mono text-center">2025-05-11<br>14:10</div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Recent Activity List -->
+                    <section class="reveal-item border border-brand-border rounded-xl bg-brand-card flex flex-col overflow-hidden" style="transition-delay: 150ms;">
+                        <div class="flex items-center justify-between p-5 border-b border-brand-border bg-brand-surface/30">
+                            <div class="flex items-center">
+                                <i class="ph ph-clock text-brand-muted text-lg mr-2"></i>
+                                <h3 class="text-base font-medium text-white">最近活動</h3>
+                            </div>
+                            <a href="#" class="text-xs text-brand-amber hover:text-brand-amberHover flex items-center transition-colors">
+                                查看全部 <i class="ph ph-arrow-right ml-1"></i>
+                            </a>
+                        </div>
+                        <div class="flex-1 overflow-y-auto">
+                            <ul class="divide-y divide-brand-border">
+                                <!-- Activity Item 1 -->
+                                <li class="flex items-center px-5 py-3.5 hover:bg-white/[0.02] transition-colors group">
+                                    <span class="w-[85px] text-micro text-brand-muted font-mono flex-shrink-0">27 分鐘前</span>
+                                    <span class="w-[100px] text-body text-brand-muted font-mono truncate flex-shrink-0">alex.chen</span>
+                                    <div class="flex-1 flex items-center overflow-hidden min-w-0 pr-4">
+                                        <i class="ph ph-file-text text-brand-muted mr-2.5 text-base flex-shrink-0"></i>
+                                        <span class="text-body text-white truncate">規格已更新</span>
+                                    </div>
+                                    <span class="font-mono text-[11px] px-2 py-0.5 rounded border border-white/10 text-white/50 flex-shrink-0">AL-042</span>
+                                </li>
+                                <!-- Activity Item 2 -->
+                                <li class="flex items-center px-5 py-3.5 hover:bg-white/[0.02] transition-colors group">
+                                    <span class="w-[85px] text-micro text-brand-muted font-mono flex-shrink-0">58 分鐘前</span>
+                                    <span class="w-[100px] text-body text-brand-muted font-mono truncate flex-shrink-0">agent-syncer</span>
+                                    <div class="flex-1 flex items-center overflow-hidden min-w-0 pr-4">
+                                        <i class="ph ph-robot text-brand-muted mr-2.5 text-base flex-shrink-0"></i>
+                                        <span class="text-body text-white truncate">Agent 完成實作</span>
+                                    </div>
+                                    <span class="font-mono text-[11px] px-2 py-0.5 rounded border border-white/10 text-white/50 flex-shrink-0">AL-042</span>
+                                </li>
+                                <!-- Activity Item 3 -->
+                                <li class="flex items-center px-5 py-3.5 hover:bg-white/[0.02] transition-colors group">
+                                    <span class="w-[85px] text-micro text-brand-muted font-mono flex-shrink-0">1 小時前</span>
+                                    <span class="w-[100px] text-body text-brand-muted font-mono truncate flex-shrink-0">agent-syncer</span>
+                                    <div class="flex-1 flex items-center overflow-hidden min-w-0 pr-4">
+                                        <i class="ph ph-git-commit text-brand-muted mr-2.5 text-base flex-shrink-0"></i>
+                                        <span class="text-body text-white truncate">Commit 已建立</span>
+                                        <span class="ml-2 font-mono text-micro text-blue-400 bg-blue-400/10 px-1 rounded">8f3c1a2</span>
+                                    </div>
+                                    <span class="font-mono text-[11px] px-2 py-0.5 rounded border border-white/10 text-white/50 flex-shrink-0">AL-042</span>
+                                </li>
+                                <!-- Activity Item 4 -->
+                                <li class="flex items-center px-5 py-3.5 hover:bg-white/[0.02] transition-colors group">
+                                    <span class="w-[85px] text-micro text-brand-muted font-mono flex-shrink-0">1 小時 12 分前</span>
+                                    <span class="w-[100px] text-body text-brand-muted font-mono truncate flex-shrink-0">alex.chen</span>
+                                    <div class="flex-1 flex items-center overflow-hidden min-w-0 pr-4">
+                                        <i class="ph ph-shield-check text-brand-muted mr-2.5 text-base flex-shrink-0"></i>
+                                        <span class="text-body text-white truncate">核准要求已送出</span>
+                                    </div>
+                                    <span class="font-mono text-[11px] px-2 py-0.5 rounded border border-white/10 text-white/50 flex-shrink-0">AL-042</span>
+                                </li>
+                                <!-- Activity Item 5 -->
+                                <li class="flex items-center px-5 py-3.5 hover:bg-white/[0.02] transition-colors group">
+                                    <span class="w-[85px] text-micro text-brand-muted font-mono flex-shrink-0">2 小時前</span>
+                                    <span class="w-[100px] text-body text-brand-muted font-mono truncate flex-shrink-0">alex.chen</span>
+                                    <div class="flex-1 flex items-center overflow-hidden min-w-0 pr-4">
+                                        <i class="ph ph-file-plus text-brand-muted mr-2.5 text-base flex-shrink-0"></i>
+                                        <span class="text-body text-white truncate">計畫項目已建立</span>
+                                    </div>
+                                    <span class="font-mono text-[11px] px-2 py-0.5 rounded border border-white/10 text-white/50 flex-shrink-0">AL-042</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Bottom Row: 4 Column Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-5 pb-6">
+
+                    <!-- Unfinished Work (col-span-4) -->
+                    <section class="reveal-item xl:col-span-4 border border-brand-border rounded-xl bg-brand-card flex flex-col overflow-hidden" style="transition-delay: 200ms;">
+                        <div class="flex items-center p-4 border-b border-brand-border">
+                            <i class="ph ph-squares-four text-brand-muted text-lg mr-2"></i>
+                            <h3 class="text-base font-medium text-white">專案概覽</h3>
+                        </div>
+                        <div class="p-4 flex-1">
+                            <h4 class="text-xs font-semibold text-brand-muted mb-3">未完成工作</h4>
+                            <ul class="space-y-2">
+                                <li class="flex items-center py-1">
+                                    <i class="ph ph-square text-brand-muted mr-2.5 text-lg hover:text-white cursor-pointer transition-colors"></i>
+                                    <span class="px-1.5 py-0.5 rounded text-[10px] bg-red-500/10 text-red-400 mr-2 flex-shrink-0">P0</span>
+                                    <span class="font-mono text-[11px] text-brand-muted mr-3 flex-shrink-0">AL-041</span>
+                                    <span class="text-body text-white truncate flex-1 pr-2">資料同步效能基準測試</span>
+                                    <span class="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-400 flex-shrink-0 border border-blue-500/10">進行中</span>
+                                </li>
+                                <li class="flex items-center py-1">
+                                    <i class="ph ph-square text-brand-muted mr-2.5 text-lg hover:text-white cursor-pointer transition-colors"></i>
+                                    <span class="px-1.5 py-0.5 rounded text-[10px] bg-brand-amber/10 text-brand-amber mr-2 flex-shrink-0">P1</span>
+                                    <span class="font-mono text-[11px] text-brand-muted mr-3 flex-shrink-0">AL-043</span>
+                                    <span class="text-body text-white truncate flex-1 pr-2">衝突解決策略設計</span>
+                                    <span class="px-1.5 py-0.5 rounded text-[10px] bg-white/5 text-brand-muted flex-shrink-0 border border-white/5">待處理</span>
+                                </li>
+                                <li class="flex items-center py-1">
+                                    <i class="ph ph-square text-brand-muted mr-2.5 text-lg hover:text-white cursor-pointer transition-colors"></i>
+                                    <span class="px-1.5 py-0.5 rounded text-[10px] bg-brand-amber/10 text-brand-amber mr-2 flex-shrink-0">P1</span>
+                                    <span class="font-mono text-[11px] text-brand-muted mr-3 flex-shrink-0">AL-044</span>
+                                    <span class="text-body text-white truncate flex-1 pr-2">錯誤回復機制實作</span>
+                                    <span class="px-1.5 py-0.5 rounded text-[10px] bg-white/5 text-brand-muted flex-shrink-0 border border-white/5">待處理</span>
+                                </li>
+                            </ul>
+                        </div>
+                        <a href="#" class="block p-3 text-center text-xs text-brand-amber hover:bg-white/[0.02] border-t border-brand-border transition-colors flex items-center justify-between px-5">
+                            查看全部 (3) <i class="ph ph-caret-right"></i>
+                        </a>
+                    </section>
+
+                    <!-- Spec Changes (col-span-3) -->
+                    <section class="reveal-item xl:col-span-3 border border-brand-border rounded-xl bg-brand-card flex flex-col overflow-hidden" style="transition-delay: 250ms;">
+                        <div class="flex items-center p-4 border-b border-brand-border">
+                            <i class="ph ph-file-text text-brand-muted text-lg mr-2"></i>
+                            <h3 class="text-base font-medium text-white">規格變更</h3>
+                        </div>
+                        <div class="p-4 flex-1">
+                            <ul class="space-y-4">
+                                <li>
+                                    <div class="flex items-baseline justify-between mb-1">
+                                        <span class="text-sm font-medium text-blue-400">v3 (最新)</span>
+                                        <span class="text-micro text-brand-muted font-mono">2025-05-11 14:10 · alex.chen</span>
+                                    </div>
+                                    <p class="text-xs text-brand-muted line-clamp-2">調整衝突處理流程與欄位對應規則</p>
+                                </li>
+                                <li class="pt-3 border-t border-white/5">
+                                    <div class="flex items-baseline justify-between mb-1">
+                                        <span class="text-sm font-medium text-white/70">v2</span>
+                                        <span class="text-micro text-brand-muted font-mono">2025-05-09 16:22 · alex.chen</span>
+                                    </div>
+                                    <p class="text-xs text-brand-muted line-clamp-2">新增批次同步與重試策略</p>
+                                </li>
+                            </ul>
+                        </div>
+                        <a href="#" class="block p-3 text-center text-xs text-brand-amber hover:bg-white/[0.02] border-t border-brand-border transition-colors flex items-center justify-between px-5">
+                            查看全部 (2) <i class="ph ph-caret-right"></i>
+                        </a>
+                    </section>
+
+                    <!-- Execution Summary (col-span-2) -->
+                    <section class="reveal-item xl:col-span-2 border border-brand-border rounded-xl bg-brand-card flex flex-col overflow-hidden" style="transition-delay: 300ms;">
+                        <div class="flex items-center p-4 border-b border-brand-border">
+                            <i class="ph ph-chart-bar text-brand-muted text-lg mr-2"></i>
+                            <h3 class="text-base font-medium text-white">執行摘要</h3>
+                        </div>
+                        <div class="p-5 flex-1 flex flex-col justify-center">
+                            <div class="space-y-4">
+                                <div class="flex justify-between items-end border-b border-white/5 pb-2">
+                                    <span class="text-xs text-brand-muted">活躍 Agent</span>
+                                    <span class="text-base font-mono text-white">3</span>
+                                </div>
+                                <div class="flex justify-between items-end border-b border-white/5 pb-2">
+                                    <span class="text-xs text-brand-muted">今日執行次數</span>
+                                    <span class="text-base font-mono text-white">12</span>
+                                </div>
+                                <div class="flex justify-between items-end border-b border-white/5 pb-2">
+                                    <span class="text-xs text-brand-muted">成功率</span>
+                                    <span class="text-base font-mono text-emerald-400">92%</span>
+                                </div>
+                                <div class="flex justify-between items-end">
+                                    <span class="text-xs text-brand-muted">最近成功執行</span>
+                                    <span class="text-sm font-mono text-white">27 分鐘前</span>
+                                </div>
+                            </div>
+                        </div>
+                        <a href="#" class="block p-3 text-center text-xs text-brand-amber hover:bg-white/[0.02] border-t border-brand-border transition-colors flex items-center justify-between px-5">
+                            查看詳情 <i class="ph ph-caret-right"></i>
+                        </a>
+                    </section>
+
+                    <!-- Empty State Guide (col-span-3) -->
+                    <section class="reveal-item xl:col-span-3 border border-dashed border-white/20 rounded-xl bg-brand-surface flex flex-col items-center justify-center p-6 text-center" style="transition-delay: 350ms;">
+                        <div class="mb-4 text-white/40">
+                            <h3 class="text-base font-medium text-white mb-4">還沒有工作鏈</h3>
+                            <div class="w-12 h-12 rounded-full border border-dashed border-white/20 mx-auto flex items-center justify-center mb-4 text-white/30">
+                                <i class="ph ph-link text-2xl"></i>
+                            </div>
+                            <p class="text-xs text-brand-muted leading-relaxed mb-1">建立第一個工作單元以開始執行鏈。</p>
+                            <p class="text-xs text-brand-muted leading-relaxed mb-6 font-mono text-[11px]">建議使用 Anchor 格式: AL-000。</p>
+                        </div>
+                        <button class="px-5 py-2 rounded-md border border-brand-amber/50 text-brand-amber text-sm font-medium hover:bg-brand-amber/10 transition-colors">
+                            建立第一個工作單元
+                        </button>
+                    </section>
+
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- UI Interaction Scripts -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Setup Intersection Observer for reveal animations
+            const observerOptions = {
+                root: null,
+                rootMargin: '0px',
+                threshold: 0.1
+            };
+
+            const observer = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('active');
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, observerOptions);
+
+            // Observe all reveal items
+            document.querySelectorAll('.reveal-item').forEach(el => {
+                observer.observe(el);
+            });
+
+            // Trigger progress bar animation after a slight delay
+            setTimeout(() => {
+                const progressBar = document.querySelector('.progress-bar-fill');
+                if (progressBar) {
+                    progressBar.style.width = progressBar.getAttribute('data-progress');
+                }
+            }, 600);
+        });
+    </script>
+</body>
+</html>

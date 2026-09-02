@@ -1,0 +1,19 @@
+{
+  "id": "2026-09-02T04-16-52-355Z-anchorline-v3-debug-ui-stepper-a-472",
+  "createdAt": "2026-09-02T04:16:52.360Z",
+  "prompt": "Anchorline 專案儀表板 v3 — 把四檔治理路線（新產品／新專案 · 功能建構／迭代優化 · 試作／探索 · Debug／維運，不得出現檔位編號）與『自簽＝作者自己核准自己』畫進常駐 UI；誠實呈現『已自簽但專案狀態仍是草稿』；錨點站改縱向清單解決爆版；刪掉頂部 stepper 與頁尾稽核總表等重複文字（畫面 A 472→326 漢字、畫面 B 342→200）。GitHub 深色 token、零外部相依、無進場動畫、繁體中文。",
+  "mode": null,
+  "url": null,
+  "viewport": "desktop",
+  "repoRoot": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat",
+  "cwd": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat",
+  "requestPath": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat/.aidesigner/runs/2026-09-02T04-16-52-355Z-anchorline-v3-debug-ui-stepper-a-472/request.json",
+  "repoContextPath": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat/.aidesigner/runs/2026-09-02T04-16-52-355Z-anchorline-v3-debug-ui-stepper-a-472/repo-context.json",
+  "designHtmlPath": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat/.aidesigner/runs/2026-09-02T04-16-52-355Z-anchorline-v3-debug-ui-stepper-a-472/design.html",
+  "previewPath": null,
+  "previewError": "Preview rendering requires puppeteer. Install it in the repo or alongside @aidesigner/agent-skills.",
+  "parentRunId": null,
+  "usage": null,
+  "transport": "mcp",
+  "remoteRunId": "736afe2e-fc5d-43fb-abcb-626ca2e2afbb"
+}

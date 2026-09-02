@@ -1,0 +1,19 @@
+{
+  "id": "2026-09-01T18-50-25-802Z-anchorline-project-dashboard-redesig",
+  "createdAt": "2026-09-01T18:50:25.805Z",
+  "prompt": "Anchorline project dashboard redesign — governance-chain desktop workbench, zh-TW, dark amber developer instrument",
+  "mode": null,
+  "url": null,
+  "viewport": "desktop",
+  "repoRoot": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat",
+  "cwd": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat",
+  "requestPath": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat/.aidesigner/runs/2026-09-01T18-50-25-802Z-anchorline-project-dashboard-redesig/request.json",
+  "repoContextPath": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat/.aidesigner/runs/2026-09-01T18-50-25-802Z-anchorline-project-dashboard-redesig/repo-context.json",
+  "designHtmlPath": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat/.aidesigner/runs/2026-09-01T18-50-25-802Z-anchorline-project-dashboard-redesig/design.html",
+  "previewPath": null,
+  "previewError": "Preview rendering requires puppeteer. Install it in the repo or alongside @aidesigner/agent-skills.",
+  "parentRunId": null,
+  "usage": null,
+  "transport": "mcp",
+  "remoteRunId": "6012b709-e67b-4cbc-9a97-94d2c6f7a6a0"
+}

@@ -1,0 +1,19 @@
+{
+  "id": "2026-09-02T03-04-59-775Z-anchorline-v2-commit-sign-off-releas",
+  "createdAt": "2026-09-02T03:04:59.788Z",
+  "prompt": "Anchorline 專案儀表板重設計 v2 — 治理鏈即頁面骨架：計畫→錨點→Commit→Sign-off→規格修訂→Release 垂直鏈，當前站 Sign-off 為全頁最強元素；含未綁定磁碟資料夾的整頁空狀態。GitHub 深色 token、零外部相依、無進場動畫、繁體中文。",
+  "mode": null,
+  "url": null,
+  "viewport": "desktop",
+  "repoRoot": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat",
+  "cwd": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat",
+  "requestPath": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat/.aidesigner/runs/2026-09-02T03-04-59-775Z-anchorline-v2-commit-sign-off-releas/request.json",
+  "repoContextPath": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat/.aidesigner/runs/2026-09-02T03-04-59-775Z-anchorline-v2-commit-sign-off-releas/repo-context.json",
+  "designHtmlPath": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat/.aidesigner/runs/2026-09-02T03-04-59-775Z-anchorline-v2-commit-sign-off-releas/design.html",
+  "previewPath": null,
+  "previewError": "Preview rendering requires puppeteer. Install it in the repo or alongside @aidesigner/agent-skills.",
+  "parentRunId": null,
+  "usage": null,
+  "transport": "mcp",
+  "remoteRunId": null
+}
