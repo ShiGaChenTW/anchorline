@@ -594,14 +594,32 @@ describe("canSignAnyStage", () => {
 // 出理由、事件 subject 帶 `anc:t=` 前綴（join key 與其他 writer 同形）。
 
 describe("canSelfSign", () => {
-  const vibe = () => proj({ route: "vibe" });
+  /**
+   * `proj()` 預設 `status: "review"`（那是 `canSignStage` 那一批的情境）。
+   * 自簽的前提正好相反 —— 已送審就不給自簽，所以這裡一律覆寫成 draft。
+   */
+  const vibe = (over: Partial<Project> = {}) => proj({ route: "vibe", status: "draft", ...over });
 
   test("vibe 檔＋有簽核權限 → 可以自簽（豁免的是「人的自審」那一條，族系隔離照擋）", () => {
     expect(canSelfSign(emp({ id: "u9" }), vibe(), kase())).toEqual({ can: true });
     // authorId 就是簽的人 —— 一般簽核會被職責分立擋下，自簽不會
-    expect(canSelfSign(emp({ id: "u9" }), proj({ route: "vibe", authorId: "u9" }), kase())).toEqual({
+    expect(canSelfSign(emp({ id: "u9" }), vibe({ authorId: "u9" }), kase())).toEqual({
       can: true,
     });
+  });
+
+  test("已送出正式審閱就不給自簽 —— 關卡已指派給人，一鍵核准全部等於單方面終結一輪審閱", () => {
+    const r = canSelfSign(emp(), vibe({ status: "review" }), kase());
+    expect(r.can).toBe(false);
+    // 訊息要說得出下一步 —— 而那個下一步只有審閱佇列一條
+    expect((r as { reason: string }).reason).toContain("審閱佇列");
+    /**
+     * **不准再拿抽單當解法。** 舊文案寫「或先抽單把球拿回來再自簽」，而
+     * `withdrawCase` 同時寫 `p.status = "withdrawn"` 與 `c.withdrawn = true` ——
+     * 照做的人抽完單再按自簽，會被下一條 `c?.withdrawn` 擋掉。訊息明講的那條路
+     * 100% 失敗。真路徑的證據在 `vibe-route-store.test.ts`（送審 → 抽單 → 自簽）。
+     */
+    expect((r as { reason: string }).reason).not.toContain("抽單");
   });
 
   test("沒有個案也可以自簽 —— 個案由 store 補建", () => {
@@ -616,9 +634,13 @@ describe("canSelfSign", () => {
     }
   });
 
-  test("已抽單擋下來", () => {
+  test("已抽單擋下來，而且講得出還走得通的下一步（重新送審）", () => {
     const r = canSelfSign(emp(), vibe(), kase({ withdrawn: true }));
+    expect(r.can).toBe(false);
     expect((r as { reason: string }).reason).toContain("抽單");
+    // 使用者正是在「抽單完想自簽」時撞到這裡 —— 只回一句狀態等於把他留在死路上。
+    // 重新送審是真的走得通：`submitForReview` 會把 `withdrawn` 清回 false。
+    expect((r as { reason: string }).reason).toContain("重新送出正式審閱");
   });
 
   test("已核准鎖定的案子擋下來", () => {
@@ -654,14 +676,14 @@ describe("canSelfSign", () => {
 
   test("同族系 agent 不能自簽自己家寫的文件 —— 族系隔離沒有自簽豁免（D3：沒有 admin 例外）", () => {
     const agent = emp({ kind: "agent", agentFamily: "claude", accessRole: "admin" });
-    const r = canSelfSign(agent, proj({ route: "vibe", authorAgentFamily: "claude" }), kase());
+    const r = canSelfSign(agent, vibe({ authorAgentFamily: "claude" }), kase());
     expect(r.can).toBe(false);
     expect((r as { reason: string }).reason).toContain("claude");
   });
 
   test("不同族系的 agent 有簽核權限就可以自簽", () => {
     const agent = emp({ kind: "agent", agentFamily: "codex" });
-    expect(canSelfSign(agent, proj({ route: "vibe", authorAgentFamily: "claude" }), kase())).toEqual({
+    expect(canSelfSign(agent, vibe({ authorAgentFamily: "claude" }), kase())).toEqual({
       can: true,
     });
   });

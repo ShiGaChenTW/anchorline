@@ -1005,7 +1005,10 @@ if (!requireAuth()) {
       title,
       customName: undefined,
       status: "draft",
-      pct: 18,
+      // 佔位，不是進度。真值由 `store.addProject()` 依章節內容推導
+      // （`prd-progress.ts`）—— 寫死 18 的舊值永遠低於 L4 的 25% 門檻，
+      // 於是手動新建的草稿寫得再完整，流程條的 L4 也不會亮。
+      pct: 0,
       owner: user.name,
       ownerId: user.id,
       authorId: user.id,
