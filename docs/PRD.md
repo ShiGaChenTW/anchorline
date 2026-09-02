@@ -35,6 +35,7 @@ owner: Scott
 | 2026-09-02 | v0.2 | Scott 拍板/Miles 代筆 | 2.3、10 | Q-01/Q-02 暫時不對外(暫緩)、Q-03 兩段式、Q-06 共存規則釐清 | — |
 | 2026-09-02 | v0.3 | Scott 拍板/Miles 代筆 | 10 | 檔位系統 P1 五題定案(Q-08~Q-12),規格落 `openspec/changes/add-vibe-route/` | — |
 | 2026-09-02 | v0.4 | Miles(代筆) | 7(新增) | Prior Art:27 組 GitHub 關鍵字 + 3 次 WebSearch,8 候選皆部分滿足,決策全新開發、僅架構參考 | — |
+| 2026-09-02 | v0.4.1 | Miles(代筆) | 4 | §4 補記第四檔 vibe 路線(tiamat-fe 交叉比對抓到的漏記) | — |
 
 ## 2. 背景、目標與需求來源
 
@@ -133,7 +134,7 @@ owner: Scott
 | 20 個畫面 | 專案總覽(焦點卡＋PR 雷達＋UAT 待測)、編輯台、審閱／簽核、Task Tracking、UAT、OpenSpec 工作區、檔案歷史、發布、Agents、設定等 |
 | 簽核流程重設計(Wave 1+2) | 關卡骨架=範本分類(lean/narrative/enterprise/agile/technical)+領域包疊加;流程第一次送審落地到專案;agent 結果先看後存(`landed: pending`);族系隔離為主要守門;送審預檢提到對話框前 |
 | Agent 執行後端(W1–W4) | API 與本機 CLI 雙通路;CLI 白名單 4 個(claude/grok/pi/agy),prompt 走 stdin 不進 argv;CLI 不可用時明確拒絕不靜默回退 |
-| PRD 路線與檔案版本 | full/lite/openspec 路線持久化;狀態轉換自動寫 `docs/PRD.md` 與 `.anchorline/prd/` 快照 |
+| PRD 路線與檔案版本 | full/lite/vibe/openspec 四檔路線持久化(`src/lib/prd-triage.ts` `PRD_ROUTES`;vibe=「試作／探索」,`6dcd5c9`);狀態轉換自動寫 `docs/PRD.md` 與 `.anchorline/prd/` 快照 |
 | ADHD 機制 | 反轉揭露(快過關才展開)、專注模式、進度膠囊、起手式填空、hyperfocus 守門、中斷復原、untouched≠錯 |
 | 原生對話框遷移 | `src/lib/ask.ts` 取代全部 alert/confirm/prompt,修掉 tauri-plugin-dialog 恆真守門失效 |
 | 散佈 | MIT、GitHub Releases 三平台、brew cask(未簽章)、landing page |
