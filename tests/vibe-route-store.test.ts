@@ -83,6 +83,22 @@ afterAll(() => {
   store.setCurrentUser(PREV_USER);
 });
 
+/**
+ * 讓這個專案通過 `VIBE_GATE_SPEC` 的兩道 block（摘要「做什麼」有填、
+ * Non-Goals 至少 1 條）。
+ *
+ * 自簽現在會查結構 gate —— spec 明寫 vibe 的這兩條**仍為 block**，
+ * 而 `freshProject` 建出來的是空白袋。沒有這一步，下面每一條自簽測試
+ * 都會被 gate 擋在門口，而那正好是新增的守門在做它該做的事。
+ */
+function fillVibeGate(id: string) {
+  const prev = store.get().activeProjectId;
+  store.setActiveProject(id);
+  store.setSectionValues("summary", { what: "把試作檔的治理鏈接起來" });
+  store.setSectionValues("goals", { nongoals: "- 不做多人簽核" });
+  if (prev && prev !== id) store.setActiveProject(prev);
+}
+
 /** id 一律帶檔名前綴 —— `bun test` 把所有檔跑在同一個 process 裡，store 是單例 */
 function freshProject(id: string, extra: Record<string, unknown> = {}): string {
   if (!store.get().projects.some((p) => p.id === id)) {
@@ -162,6 +178,7 @@ describe("gateSpecFor 依 route 選 spec", () => {
 describe("selfSignVibe", () => {
   test("vibe 檔自簽：關卡全過、決策紀錄帶錨點、案子不鎖", () => {
     const id = freshProject("vrs-selfsign", { route: "vibe" });
+    fillVibeGate(id);
     const r = store.selfSignVibe(id);
     expect(r.ok).toBe(true);
     // 錨點是 8 碼 Crockford —— 跟 plan/UAT 錨點同一套字元集
@@ -179,6 +196,40 @@ describe("selfSignVibe", () => {
     }
     // **不鎖案** —— 鎖了 setProjectRoute 就拒絕換路線，試作檔升不了檔
     expect(c.locked).toBe(false);
+  });
+
+  test("結構 gate 沒過就自簽不了 —— vibe 的兩道 block 是 spec 明訂的「仍為 block」", () => {
+    const id = freshProject("vrs-selfsign-gate", { route: "vibe" });
+    const prev = store.get().activeProjectId;
+
+    // 空白袋：兩道 block 都沒過。自簽是這一檔唯一的治理動作，
+    // 不查 block 的話最小治理實質歸零。
+    const blocked = store.selfSignVibe(id);
+    expect(blocked.ok).toBe(false);
+    // 斷言要咬住 **gate 報告**，不是咬住串在後面的固定字尾。舊寫法查的是
+    // 「BLOCK」這四個字母，而那是呼叫端自己接上去的字面值 —— `gateSummaryLine`
+    // 整支退化成空字串它也照樣綠。這裡改查 gate 真的數出來的東西。
+    const blockRules = store
+      .gateSpecFor(id)
+      .groups.flatMap((g) => g.rules)
+      .filter((r) => r.level === "block");
+    expect(blocked.reason).toContain("必填章節");
+    expect(blocked.reason).toContain(`${blockRules.length} 個必填章節`);
+    // 「還沒開始」不得與「請先補齊 BLOCK 項」混講 —— 兩種敘事在同一句裡打架，
+    // 而 `gateSummaryLine` 的分岔正是為了避免這件事
+    expect(blocked.reason).not.toContain("BLOCK");
+    // 擋下來就不准留痕跡 —— 半套自簽（有決策沒核准）比不自簽更難查
+    expect(store.get().cases[id]?.log ?? []).toHaveLength(0);
+
+    // 只補摘要還不夠：Non-Goals 是這一檔唯一擋 scope 膨脹的欄杆
+    store.setActiveProject(id);
+    store.setSectionValues("summary", { what: "只寫了做什麼，沒寫不做什麼" });
+    expect(store.selfSignVibe(id).ok).toBe(false);
+
+    store.setSectionValues("goals", { nongoals: "- 不做多人簽核" });
+    expect(store.selfSignVibe(id).ok).toBe(true);
+
+    if (prev) store.setActiveProject(prev);
   });
 
   test("升檔＝自簽核准不帶進正式流程：stages 回 pending，log 決策與錨點仍在", () => {
@@ -202,20 +253,65 @@ describe("selfSignVibe", () => {
     expect(r.reason).toContain("已經自簽過");
   });
 
-  test("自簽不翻「要求修改」—— 審閱者的負向決策不是一顆自簽鈕能撤銷的", () => {
+  test("送進正式審閱之後按不動自簽 —— 一鍵核准全部 pending 等於單方面終結一輪多人審閱", () => {
     const id = freshProject("vrs-cr", { route: "vibe" });
+    fillVibeGate(id);
     store.setActiveProject(id);
     store.submitForReview(id, "c-vrs-cr-1");
     const before = store.get().cases[id]!;
     const target = [...before.stages].sort((a, b) => a.order - b.order)[0]!;
     expect(store.requestChanges(target.id, "先修這裡").ok).toBe(true);
+
     const r = store.selfSignVibe(id);
-    expect(r.ok).toBe(true);
+    expect(r.ok).toBe(false);
+    // 訊息要說得出下一步，不能只說「不行」
+    expect(r.reason).toContain("審閱佇列");
+
+    // 審閱者的負向決策原樣還在，其他關卡也沒有被順手核准
     const c = store.get().cases[id]!;
     expect(c.stages.find((s) => s.id === target.id)!.state).toBe("changes_requested");
-    for (const s of c.stages) {
-      if (s.id !== target.id) expect(s.state, s.name).toBe("approved");
-    }
+    expect(c.stages.some((s) => s.state === "approved")).toBe(false);
+  });
+
+  /**
+   * 送審 → 抽單 → 自簽，走 store 的真路徑。
+   *
+   * `signoff.test.ts` 原本有一條「抽單之後又可以自簽」，用
+   * `canSelfSign(emp(), vibe({ status: "withdrawn" }), kase())` 組出
+   * `project.status === "withdrawn"` 但 `case.withdrawn === false` 的狀態 ——
+   * 而 `withdrawCase` **一定同時**寫兩個欄位，那個組合在產品裡不可達，
+   * 綠燈給的保證是假的。這一條把它換成真的走得到的路徑。
+   */
+  test("送審 → 抽單 → 自簽：抽單之後仍然自簽不了，而訊息指的重新送審真的走得通", () => {
+    const id = freshProject("vrs-withdraw", { route: "vibe" });
+    fillVibeGate(id);
+    store.setActiveProject(id);
+    store.submitForReview(id, "c-vrs-withdraw-1");
+    expect(store.get().projects.find((p) => p.id === id)!.status).toBe("review");
+
+    // 送審中按自簽：訊息**不得**再拿抽單當解法 —— 照做的人會撞上下一條守門
+    const inReview = store.selfSignVibe(id);
+    expect(inReview.ok).toBe(false);
+    expect(inReview.reason).toContain("審閱佇列");
+    expect(inReview.reason).not.toContain("抽單");
+
+    // 真的抽單。兩個欄位同時被寫 —— 這是產品裡唯一到得了的「已抽單」狀態
+    expect(store.withdrawCase(id, "改個方向").ok).toBe(true);
+    expect(store.get().projects.find((p) => p.id === id)!.status).toBe("withdrawn");
+    expect(store.get().cases[id]!.withdrawn).toBe(true);
+
+    // 進過正式流程就回不到自簽 —— 守門維持嚴格，改的是那句在說謊的文案
+    const after = store.selfSignVibe(id);
+    expect(after.ok).toBe(false);
+    expect(after.reason).toContain("抽單");
+    expect(after.reason).toContain("重新送出正式審閱");
+    // 擋下來就不准留痕跡（同結構 gate 那一條）
+    expect(store.get().cases[id]!.log).toHaveLength(0);
+
+    // 訊息指的那條路要真的走得通，否則只是換一句新的謊
+    store.submitForReview(id, "c-vrs-withdraw-2");
+    expect(store.get().cases[id]!.withdrawn).toBe(false);
+    expect(store.get().projects.find((p) => p.id === id)!.status).toBe("review");
   });
 
   test("無編輯權限的角色按不動自簽 —— 同 setProjectRoute 的守門", () => {
@@ -263,5 +359,20 @@ describe("selfSignVibe 的稽核接線（形狀）", () => {
   test("以 selfSignSubject（anc:t= 前綴）當 subject 呼叫 audit，kind 是 review.approve", () => {
     expect(body).toContain('audit(state, projectId, "review.approve", subject');
     expect(body).toContain("selfSignSubject(anchorId)");
+  });
+
+  /**
+   * `changes_requested` 不被自簽翻掉這一條，行為上已經構不到了 ——
+   * 要有 `changes_requested` 就得先送審，而送審之後 `canSelfSign` 就擋在門口
+   * （新增的 `status === "review"` 守門）。這條內層防線因此變成第二道保險：
+   * 沒有任何測試情境走得到，刪掉它也不會有測試變紅。用形狀盯住它。
+   */
+  test("open() 只認 pending / empty —— 自簽不得把「要求修改」翻成核准", () => {
+    expect(body).toContain('const open = (s: CaseStage) => s.state === "pending" || s.state === "empty"');
+  });
+
+  test("自簽前呼叫 evaluatePrdGates，並在 canSubmit 為 false 時擋下", () => {
+    expect(body).toContain("evaluatePrdGates(");
+    expect(body).toContain("if (!gate.canSubmit)");
   });
 });

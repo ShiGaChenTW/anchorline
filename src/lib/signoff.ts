@@ -631,7 +631,7 @@ export function selfSignSubject(anchorId: string): string {
  *
  * `reason` 是使用者會讀到的解釋，同 `canSignStage` 的規矩。
  * 順序也照那邊的原則：先講路線（這顆鈕存在的前提），再講案子層級的阻擋
- * （抽單／鎖定／已自簽過），再講族系隔離，最後才是權限。
+ * （已送審／抽單／鎖定／已自簽過），再講族系隔離，最後才是權限。
  *
  * 「已自簽過」查的是 `c.log` 裡有沒有自簽決策，**不用** `allStagesSettled`：
  * 全 skipped 的舊個案會被那支判成 settled，vibe 檔從此永遠簽不了 ——
@@ -646,7 +646,31 @@ export function canSelfSign(
   if (projectRoute(project) !== "vibe") {
     return { can: false, reason: "只有「試作／探索」路線可以一鍵自簽 —— 其他路線走正式簽核" };
   }
-  if (c?.withdrawn) return { can: false, reason: "此案已抽單" };
+  // 已進正式審閱就不給自簽。這一顆鈕的前提是「還沒有別人在審」——
+  // 專案一旦送審，關卡已經指派給人，一鍵核准全部 pending 等於作者單方面
+  // 終結一輪多人審閱，而畫面上跟真正的多方核准長得一模一樣。
+  // 與 Cato 修掉的「切 vibe → 自簽 → 切回」同族：那次擋的是切回時帶走核准，
+  // 這次擋的是「已經在正式流程裡」——**進去了就回不到自簽**，抽單也一樣：
+  // `withdrawCase` 同時寫 `p.status = "withdrawn"` 與 `c.withdrawn = true`，
+  // 抽完球雖然回到作者身上，但下一條就把它擋住。
+  //
+  // 所以這句話**不能拿抽單當解法**：照著做的人抽完單再按自簽，會撞上下一條
+  // 守門。寫一條 100% 走不通的路在錯誤訊息裡，比不解釋更糟。
+  if (project.status === "review") {
+    return {
+      can: false,
+      reason: "已送出正式審閱 —— 請到審閱佇列逐關簽核；一鍵自簽只在送出審閱之前可用",
+    };
+  }
+  // 抽單之後照樣不給自簽（上一段講的同一件事）。文案要指得出**還走得通**的
+  // 下一步 —— 使用者正是在「抽單完想自簽」時撞到這裡，只回一句狀態等於死路。
+  // 重新送審是真的走得通：`submitForReview` 會把 `withdrawn` 清回 false。
+  if (c?.withdrawn) {
+    return {
+      can: false,
+      reason: "此案已抽單 —— 進過正式流程就回不到一鍵自簽，改完請重新送出正式審閱",
+    };
+  }
   if (c?.locked) return { can: false, reason: "已核准鎖定 —— 不能再自簽" };
   if (c?.log?.some((d) => d.kind === "approved" && d.comment.startsWith(SELF_SIGN_NOTE))) {
     return { can: false, reason: "已經自簽過 —— 決策紀錄裡已有帶錨點的自簽事件" };

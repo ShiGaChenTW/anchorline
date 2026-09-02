@@ -15,6 +15,14 @@ export type FlowLayer = {
   done: boolean;
   active: boolean;
   hint: string;
+  /**
+   * 「何時會亮綠」的實際文案。
+   *
+   * 放在 layer 上而不是只查 `FLOW_LAYER_DOCS`：L2 的判定依 gate spec 而變，
+   * 而 spec 只有 `deriveFlowLayers` 手上有 —— 說明卡是點開才渲染的，那時候
+   * 已經拿不到 spec 了。其餘層直接沿用 `FLOW_LAYER_DOCS` 的靜態值。
+   */
+  passWhen: string;
 };
 
 export const FLOW_LAYER_DEFS: readonly { id: FlowLayerId; code: string; name: string }[] = [
@@ -87,7 +95,28 @@ export function deriveFlowLayers(
     done: doneMap[d.id],
     active: d.id === activeId && !doneMap.l6,
     hint: FLOW_LAYER_DOCS[d.id].next,
+    // L2 是唯一由資料決定文案的一層 —— 判定就是這份 spec 本身
+    passWhen: d.id === "l2" ? l2PassWhenText(opts.gateSpec) : FLOW_LAYER_DOCS[d.id].passWhen,
   }));
+}
+
+/**
+ * L2「何時會亮綠」的文案，數字一律從 gate spec 讀出來。
+ *
+ * 原本硬寫「Non-Goals 至少 3 條、指標可量測等」—— 那是 `_base` 的規則，
+ * 對 vibe（1 條、沒有指標類 gate）與自帶規則的領域包都是假的。而這是
+ * 使用者點 L2 時看到的**唯一**判定說明，四檔裡有一檔在說謊比沒有說明更貴。
+ *
+ * 只挑 `non-goals-min` 逐字列出，不是偏心：它是唯一帶「數量」的 block，
+ * 其餘規則的門檻（字數）講出來對使用者沒有可操作性。條數則直接數 spec，
+ * 領域包多掛一條 block 就會反映在這一句上。
+ */
+export function l2PassWhenText(spec: GateSpec): string {
+  const blocks = spec.groups.flatMap((g) => g.rules).filter((r) => r.level === "block");
+  const nonGoals = blocks.find((r) => r.id === "non-goals-min");
+  const tail =
+    nonGoals?.require.kind === "bullets" ? `，其中 Non-Goals 至少 ${nonGoals.require.min} 條` : "";
+  return `所有送審 gate 都通過 —— 這份 PRD 目前有 ${blocks.length} 道 BLOCK 規則${tail}。`;
 }
 
 /**
@@ -99,7 +128,13 @@ export function deriveFlowLayers(
 export type FlowLayerDoc = {
   /** 這一層在做什麼 */
   what: string;
-  /** 什麼條件會讓它變綠（判定依據，對應 deriveFlowLayers 的 doneMap） */
+  /**
+   * 什麼條件會讓它變綠（判定依據，對應 deriveFlowLayers 的 doneMap）。
+   *
+   * L2 的實際文案由 `l2PassWhenText(gateSpec)` 生成並寫進 `FlowLayer.passWhen`；
+   * 這裡留的是拿不到 spec 時的通用說法，**不得寫任何具體數字** —— 那正是
+   * 「Non-Goals 至少 3 條」對 vibe 說謊的來源。
+   */
   passWhen: string;
   /** 還沒完成時現在該做什麼 */
   next: string;
@@ -116,7 +151,7 @@ export const FLOW_LAYER_DOCS: Record<FlowLayerId, FlowLayerDoc> = {
   },
   l2: {
     what: "規格要完整到能被審閱 —— 也就是通過送審 gate 的檢查。",
-    passWhen: "所有送審 gate 都通過（Non-Goals 至少 3 條、指標可量測等）。",
+    passWhen: "所有送審 gate 都通過。BLOCK 規則的條數與門檻依路線與領域包而不同。",
     next: "看編輯頁的 gate 檢查，把紅色項目補齊。",
     goto: { href: "editor.html", label: "去補規格" },
   },
@@ -155,6 +190,8 @@ function statusOf(l: FlowLayer): keyof typeof STATUS_TEXT {
 /** 單層說明卡（純函式，方便測試） */
 export function flowLayerDetailHtml(l: FlowLayer, currentPage = ""): string {
   const doc = FLOW_LAYER_DOCS[l.id];
+  // 判定說明取 layer 上的那一份（L2 是依 gate spec 生成的）；沒有就退回靜態值
+  const passWhen = l.passWhen || doc.passWhen;
   const st = statusOf(l);
   // 已經在目的頁就別給按鈕 —— 點了只會重載並丟掉現場
   const goto =
@@ -168,7 +205,7 @@ export function flowLayerDetailHtml(l: FlowLayer, currentPage = ""): string {
     </div>
     <p class="fsd-what">${doc.what}</p>
     <dl class="fsd-dl">
-      <dt>何時會亮綠</dt><dd>${doc.passWhen}</dd>
+      <dt>何時會亮綠</dt><dd>${passWhen}</dd>
       ${l.done ? "" : `<dt>現在該做</dt><dd>${doc.next}</dd>`}
     </dl>
     ${goto}`;

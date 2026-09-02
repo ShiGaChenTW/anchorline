@@ -97,7 +97,8 @@ import {
   withMigratedBackends,
   type BackendPatch,
 } from "../lib/agent-backend";
-import { BASE_GATE_SPEC, VIBE_GATE_SPEC } from "../lib/prd-gates";
+import { BASE_GATE_SPEC, evaluatePrdGates, gateSummaryLine, VIBE_GATE_SPEC } from "../lib/prd-gates";
+import { derivePrdPct } from "../lib/prd-progress";
 import type { GateSpec } from "../lib/gate-rules";
 import type { ProjectCandidate } from "../lib/folder-import";
 import { mapCandidateToSectionValues } from "../lib/folder-import";
@@ -535,7 +536,9 @@ function seedState(): AppState {
     }
   }
 
-  return {
+  // 種子的 `pct` 是編出來的數字（82 / 41 / 18 …），與這幾份專案實際有多少
+  // 正文無關 —— 走同一支移轉，第一次開 App 的人看到的就是真的完成度。
+  return withDerivedPct({
     projects,
     sections,
     sectionValues,
@@ -570,7 +573,7 @@ function seedState(): AppState {
     agentJobs: [],
     releases: [],
     onboardingComplete: isTest,
-  };
+  });
 }
 
 /**
@@ -663,6 +666,91 @@ function touchProjectMeta(projectId: string | undefined) {
       p.id === projectId
         ? { ...p, updated: "剛剛", lastFileAt: iso }
         : p,
+    ),
+  };
+  syncDerivedPct(projectId);
+}
+
+/**
+ * 這個專案當下的推導完成度。
+ *
+ * 正文來源要分兩路：active 專案的最新內容在 `state.sectionValues`，其他專案在
+ * `projectSectionValues`。拿錯一路的症狀是「編輯台改了、清單上的百分比不動」，
+ * 而兩邊各自都不會報錯（同 `overview.ts` 的 `gateOf`）。
+ *
+ * 分母走 `sectionsForProject()`，不是 `state.sections` —— 後者是 active 專案的
+ * 章節，拿去算別的專案時路線與領域都可能對不上。
+ */
+function derivedPctFor(p: Project): number {
+  return derivedPctIn(p, state);
+}
+
+/**
+ * `derivedPctFor` 的無 state 版本。
+ *
+ * 分出來的唯一理由：`load()` / `seedState()` / `importState()` 要在模組層的
+ * `state` 還不存在（或即將被換掉）的時候算同一個數字。同一份算法兩個抄本
+ * 的下場，這個檔上面已經寫過三遍。
+ */
+type DerivedPctCtx = Pick<
+  AppState,
+  "activeProjectId" | "sectionValues" | "projectSectionValues" | "projectSectionMeta"
+> &
+  Partial<Pick<AppState, "projectSections" | "projectNoCustom">>;
+
+function derivedPctIn(p: Project, ctx: DerivedPctCtx): number {
+  const docs =
+    p.id === ctx.activeProjectId ? ctx.sectionValues : (ctx.projectSectionValues?.[p.id] ?? {});
+  return derivePrdPct(
+    sectionsForProject(p, ctx.projectSectionMeta, ctx.projectSections, ctx.projectNoCustom),
+    docs,
+  );
+}
+
+/**
+ * 一次性移轉：把整份專案清單的 `pct` 換成推導值。
+ *
+ * ## 為什麼光有 `syncDerivedPct` 不夠
+ *
+ * `migrateProject` 是 `pct: Number(raw.pct ?? 0)` —— **原樣讀回，不重算**。
+ * 於是既有使用者重新載入 App，一個寫得很滿的舊草稿 `pct` 仍是 localStorage
+ * 裡的 18，`flow-layers.ts` 的 L4（`draft && pct >= 25`）照樣不亮：推導接好了，
+ * 對已經在用的人卻等於沒修，直到他剛好去編輯某一節觸發 `touchProjectMeta`
+ * 才會突然跳一大格。種子寫死的 82 / 41 / 18 … 也是同一種假資料。
+ *
+ * 掛在三條讀取路徑上（`load()` / `seedState()` / `importState()`）——
+ * 那是 `Project[]` 進入 state 的全部入口。少掛一條的症狀同樣是「百分比不動」，
+ * 沒有錯誤訊息（`withMigratedBackends` 當年就是這樣漏掉 `importState`）。
+ *
+ * 已核准的專案跳過，理由與 `syncDerivedPct` 同一條：`approveAndLock` 的
+ * `allDone ? 100` 是既有語意，核准的是「完整的那一份」。
+ */
+export function withDerivedPct<T extends DerivedPctCtx & { projects: Project[] }>(s: T): T {
+  return {
+    ...s,
+    projects: s.projects.map((p) =>
+      p.status === "approved" ? p : { ...p, pct: derivedPctIn(p, s) },
+    ),
+  };
+}
+
+/**
+ * 重算並寫回 `pct`。
+ *
+ * 掛在 `touchProjectMeta` 上 —— 那是每一條會改到正文或骨架的路徑的共同出口
+ * （`setSectionValues` / `setSectionField` / `saveSections` / `applyStructure` …）。
+ * 讓每個 setter 各自記得算一次的話，漏掉的那一條不會報錯，只會讓百分比停住，
+ * 正是這次要修的那種靜默失效。換路線不經過 `touchProjectMeta`（它自己就改了
+ * `updated`），所以 `setProjectRoute` 另外呼叫一次 —— 路線換掉的是**分母**。
+ *
+ * 已核准的專案跳過：`approveAndLock` 的 `allDone ? 100` 是既有語意，核准的是
+ * 「完整的那一份」，事後任何一次 touch 都不該把它從 100 拉下來。
+ */
+function syncDerivedPct(projectId: string) {
+  state = {
+    ...state,
+    projects: state.projects.map((p) =>
+      p.id === projectId && p.status !== "approved" ? { ...p, pct: derivedPctFor(p) } : p,
     ),
   };
 }
@@ -920,7 +1008,10 @@ function load(): AppState {
       parsed.projectNoCustom as AppState["projectNoCustom"],
     );
 
-    return {
+    // 一次性移轉：舊存檔的 `pct` 是寫死的數字（建案 18、Markdown 匯入 8），
+    // `migrateProject` 原樣讀回。不在這裡重算的話，推導接線對既有使用者等於
+    // 沒生效 —— L4 照樣不亮，而且沒有任何症狀指向資料。見 `withDerivedPct`。
+    return withDerivedPct({
       ...base,
       ...parsed,
       projects: APP_VARIANT === "prod" ? withDomain.filter((p) => !p.isSample) : withDomain,
@@ -987,7 +1078,7 @@ function load(): AppState {
         : [],
       releases: Array.isArray(parsed.releases) ? (parsed.releases as Release[]) : [],
       onboardingComplete,
-    };
+    });
   } catch {
     return seedState();
   }
@@ -1277,7 +1368,9 @@ export const store = {
       title,
       customName: undefined,
       status: "draft",
-      pct: 8,
+      // 佔位。真值由 `addProject` → `syncDerivedPct` 依章節內容推導，
+      // 下面塞完摘要／背景之後 `setSectionField` 會再算一次。
+      pct: 0,
       owner: user.name,
       ownerId: user.id,
       authorId: user.id,
@@ -1363,6 +1456,9 @@ export const store = {
       projects: [p, ...state.projects],
       projectSectionValues: bag,
     };
+    // 進度由正文袋推導 —— 呼叫端傳進來的 `pct` 不是資料，是佔位。
+    // 手動新建時這裡會算出 0（袋子是空白的），摘要寫進去之後才開始往上走。
+    syncDerivedPct(p.id);
     emit();
   },
 
@@ -1429,7 +1525,10 @@ export const store = {
         // 未自訂名稱時顯示資料夾名
         customName: undefined,
         status: "draft",
-        pct: Math.max(5, Math.min(95, c.progressPct)),
+        // 佔位。掃描分數留在 `importSummary.progressPct`（資料夾裡有多少檔案齊備），
+        // `pct` 一律是「這份 PRD 寫了多少章」—— 兩個問題共用一個欄位的話，
+        // L4 的 25% 門檻對匯入專案與手動專案量的就不是同一件事。
+        pct: 0,
         owner: user.name,
         ownerId: user.id,
         authorId: user.id,
@@ -1474,6 +1573,9 @@ export const store = {
       activeProjectId: firstId,
       sectionValues: structuredClone(firstDocs),
     };
+    // 正文袋補完之後才算得出進度 —— 匯入是唯一一條「專案與內容同時落地」的路徑，
+    // 不在這裡算的話，每個匯入專案都要等使用者手動編輯一次百分比才會出現。
+    for (const id of ids) syncDerivedPct(id);
     syncApprovalsFromActiveCase();
     emit();
     for (const id of ids) syncProfile(state, id);
@@ -1958,6 +2060,9 @@ export const store = {
             )
           : state.sections,
     };
+    // 換路線改的是完成度的**分母**（full 15 / lite 8 / vibe 3）—— 不重算的話，
+    // 降級後的專案會頂著上一檔的百分比，而那個數字對新章節數是錯的。
+    syncDerivedPct(projectId);
     // `decision.record`：降級改變的是「這份 PRD 要寫到多細」，不是某一節的內容。
     // 用 `prd.section.edit` 會讓它混進逐節編輯的統計裡，而它其實是一次範圍決策。
     audit(state, projectId, "decision.record", `route:${route}`, { route });
@@ -1972,6 +2077,10 @@ export const store = {
    * `approved` 決策進 `log`，replay 讀得到），並寫一筆帶 `anc:t=` 錨點的
    * `review.approve` 事件進稽核軌跡。**不跳過簽核** —— 完全跳過的代價是
    * 轉正時治理鏈沒有起點可 replay。
+   *
+   * 守門有兩層：`canSelfSign`（路線／抽單／鎖定／已自簽／族系隔離／權限／
+   * 已進正式審閱）與這裡的**結構 gate**。後者不能省 —— 少了它，vibe 唯一的
+   * 治理動作就繞過了 spec 明訂「仍為 block」的那兩條規則。
    *
    * 三個刻意的決定：
    * - **不動鎖態（`locked` 原樣帶過）**：`approveAndLock` 簽完會鎖，而
@@ -1998,6 +2107,42 @@ export const store = {
     const u = state.currentUser;
     const ability = canSelfSign(u, p, c0);
     if (!ability.can) return { ok: false, reason: ability.reason };
+
+    // 結構 gate 照擋。`VIBE_GATE_SPEC` 只剩兩道 block（摘要「做什麼」有填、
+    // Non-Goals ≥ 1 條），spec 明寫它們**仍為 block** —— 自簽是這一檔唯一的
+    // 治理動作，不查 block 等於最小治理歸零。正式路徑在送審處擋
+    // （`editor.ts` 的 `btn-submit`）；自簽這條原本沒有對應的門。
+    //
+    // 正文與章節都要換成**這個專案自己的**：`evaluatePrdGates` 讀
+    // `state.sectionValues`／`state.sections`，那是 active 專案的東西，
+    // 拿去算別的專案時路線與領域都可能對不上（同 `overview.ts` 的 `gateOf`）。
+    const docs =
+      projectId === state.activeProjectId
+        ? state.sectionValues
+        : (state.projectSectionValues?.[projectId] ?? {});
+    const gate = evaluatePrdGates(
+      {
+        ...state,
+        sectionValues: docs,
+        sections: sectionsForProject(p, state.projectSectionMeta, state.projectSections, state.projectNoCustom),
+      },
+      this.gateSpecFor(projectId),
+    );
+    if (!gate.canSubmit) {
+      // 兩種情況要各講各的。`gateSummaryLine` 在「一項 block 都沒動過」時走的是
+      // 「PRD 還沒開始」那一支 —— 那個分岔本來就是為了不把「還沒寫」講成「做錯了」，
+      // 串上「請先補齊 BLOCK 項」等於把它接回去，一句話裡兩種敘事打架。
+      //
+      // 講「N 個必填章節還沒開始寫」而不是「這份 PRD 還沒開始」：只剩最後一節
+      // 沒寫時也會走到這一支，那時說整份沒開始是錯的，而數字兩種情況都對。
+      return {
+        ok: false,
+        reason:
+          gate.activeBlocks === 0
+            ? `${gate.blocks} 個必填章節還沒開始寫 —— 補完才能自簽`
+            : `${gateSummaryLine(gate)} — 請先補齊 BLOCK 項再自簽`,
+      };
+    }
 
     const c = c0 ?? caseForProject(projectId);
     const at = nowIso();
@@ -3624,10 +3769,13 @@ export const store = {
     // 匯入的備份可能是 Comment 還沒有 projectId 的年代產生的。
     // 載入路徑有跑 migration，匯入路徑原本沒有 —— 於是舊備份匯進來之後
     // 所有留言都被專案過濾掉，看起來像是留言全部消失。
-    state = {
+    // `pct` 走跟 `load()` 同一支移轉：匯入的備份跟 localStorage 是同一份資料，
+    // 只有一條路重算的話，「匯入備份之後百分比全部停住」會是下一個沒人回報的
+    // 靜默失效（`withMigratedBackends` 當年漏的就是這一條）。
+    state = withDerivedPct({
       ...merged,
       comments: migrateComments(merged.comments ?? [], merged.activeProjectId ?? ""),
-    };
+    });
     emit();
   },
 
