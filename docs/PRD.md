@@ -36,6 +36,9 @@ owner: Scott
 | 2026-09-02 | v0.3 | Scott 拍板/Miles 代筆 | 10 | 檔位系統 P1 五題定案(Q-08~Q-12),規格落 `openspec/changes/add-vibe-route/` | — |
 | 2026-09-02 | v0.4 | Miles(代筆) | 7(新增) | Prior Art:27 組 GitHub 關鍵字 + 3 次 WebSearch,8 候選皆部分滿足,決策全新開發、僅架構參考 | — |
 | 2026-09-02 | v0.4.1 | Miles(代筆) | 4 | §4 補記第四檔 vibe 路線(tiamat-fe 交叉比對抓到的漏記) | — |
+| 2026-09-02 | v0.4.2 | Miles(代筆) | 7 | Prior Art 重跑:補 agent-sop / Okto Pulse / AGT 等;結論仍全新開發 | — |
+| 2026-09-03 | v0.4.3 | Miles(代筆) | 7 | 補 Plannotator 深度對照(與 Okto Pulse 三方比較);並存建議 | — |
+| 2026-09-03 | v0.4.4 | Miles(代筆) | 7 | Plannotator 導入 D1 拍板:**暫緩**;A 路線規劃＋擬真效果見 `docs/prior-art-plannotator-route-a.html` | — |
 
 ## 2. 背景、目標與需求來源
 
@@ -155,38 +158,88 @@ PRD 編輯台(引導撰寫+結構 gate) → 送審(預檢→逐關指派→commi
 
 邏輯規則的單一真相在程式碼與其檔頭註解(`governance.ts`、`focus-card.ts`、`log-views.ts`),本 PRD 不複寫細節——複寫會分岔。
 
-## 7. Prior Art(2026-09-02,PriorArt 搜尋)
+## 7. Prior Art(2026-09-02 起;v0.4.3 補 Plannotator)
 
-**結論:全新開發(已在做),沒有可直接採用的現成方案。** 跑了 27 組 GitHub 關鍵字(spec-driven development / PRD / openspec / audit trail / approval / governance / task tracker / tauri 等)加 3 次 WebSearch;去重後最接近的 8 個候選如下,覆蓋度全部停在「部分滿足」。
+**結論:全新開發(已在做),沒有可直接採用的現成方案。**
+
+搜尋歷程:兩輪 GitHub 關鍵字 + WebSearch;2026-09-03 另做 [Plannotator](https://plannotator.ai/) 與 Okto Pulse 的深度三方對照(§7.5)。去重後最接近候選如下——覆蓋度仍全部停在「部分滿足」或「不相關」(Plannotator 標為**互補層**,非替代)。
+
+### 7.1 比較表
 
 | repo | stars | 授權 | 最後 push | 功能覆蓋度 | 與需求的差距 |
 |---|---|---|---|---|---|
-| [Pimzino/spec-workflow-mcp](https://github.com/Pimzino/spec-workflow-mcp) | 4.3k | **GPL-3.0** | 2026-07-03(作者宣告暫停) | 部分滿足 | 有 dashboard + 簽核 + 修訂 + task 進度 + 實作 log,是最像的一個;但是 MCP server + 網頁,不是本機 App;沒有錨點 join key、沒有 agent 族系隔離、沒有 replay;GPL 進 MIT 專案合規成本不划算 |
-| [Lumiaqian/openspec-mcp](https://github.com/Lumiaqian/openspec-mcp) | 31 | MIT | 2026-01-12(可能棄坑) | 部分滿足 | 直接包 OpenSpec 的 dashboard + approval + review comment,形狀與本專案的 OpenSpec 工作區重疊;但只有 openspec 一段,沒有 PRD 編輯台、UAT、稽核鏈 |
-| [MrLesk/Backlog.md](https://github.com/MrLesk/Backlog.md) | 6.6k | MIT | 2026-09-01 | 部分滿足 | markdown-native 任務 + AC + DoD + 三道 review checkpoint,理念相鄰;但是 Kanban 形狀(D-scope 明確不做),沒有簽核關卡、族系隔離、稽核軌跡 |
-| [Trusted-Autonomy/TrustedAutonomy](https://github.com/Trusted-Autonomy/TrustedAutonomy) | 7 | Apache-2.0 | 2026-08-28 | 部分滿足 | 「agent 產出先審後落地」+ 稽核軌跡,精神最接近 Q4;但解的是 runtime 檔案層(staging copy + diff 審核),不是文件治理層;Rust alpha,沒有 UI |
-| [Chappygo-OS/Atomic-Spec](https://github.com/Chappygo-OS/Atomic-Spec) | 10 | MIT | 2026-08-23 | 部分滿足 | spec-kit 的強制版:gate 未過不得進下一站、4 個 human sign-off 點、traceability 矩陣;但是 prompt/CLI 框架,無 GUI、無 append-only 軌跡、無族系概念 |
-| [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) | 66.9k | MIT | 2026-09-01 | 部分滿足 | 本專案已當上游依賴(D10 只走官方 CLI `--json`),它負責 change 生命週期,不負責簽核、UAT、稽核 |
-| [github/spec-kit](https://github.com/github/spec-kit) | 132.9k | MIT | 2026-09-01 | 部分滿足 | constitution + spec 範本;沒有 GUI、簽核、軌跡;Python |
-| [BloopAI/vibe-kanban](https://github.com/BloopAI/vibe-kanban) | 28k | Apache-2.0 | 2026-09-01 | 不相關 | agent 派工／並行執行,正是本專案「不做」那一格(agent 派工執行、Kanban) |
+| [backnotprop/plannotator](https://github.com/backnotprop/plannotator) ([plannotator.ai](https://plannotator.ai/)) | 8.4k | **MIT OR Apache-2.0** | 2026-09-02 | 部分滿足(互補) | **人類審 plan／diff 的本機 UI**:hook 攔截 plan 核准、inline 批註回傳 agent、code review、版本歷史;不負責 PRD 編輯台、錨點 join key、族系簽核、UAT、openspec 鏈、append-only 稽核——與本專案層次互補,不是替代 |
+| [ythx-101/agent-sop](https://github.com/ythx-101/agent-sop) | 69 | MIT | 2026-08-09 | 部分滿足 | **精神最接近族系隔離**:sole-writer + 跨廠商 reviewer + 人類簽核閘門;但是 Markdown skill／SOP,不是本機 App,沒有 PRD 編輯台、錨點 join key、UAT、append-only 稽核 UI |
+| [OktoLabsAI/okto-pulse](https://github.com/OktoLabsAI/okto-pulse) | 34 | **Elastic-2.0** | 2026-09-02 | 部分滿足 | **產品形狀最像**:local-first SDLC 工作台 + 17 個 governance gate + MCP 給 agent 操作;但是 ELv2 不可當 managed service、sprint／board 形狀(本專案明確不做 Kanban)、資料在 `~/.okto-pulse/` 而非 markdown 錨點串接、無 agent 族系自審禁制 |
+| [Pimzino/spec-workflow-mcp](https://github.com/Pimzino/spec-workflow-mcp) | 4.3k | **GPL-3.0** | 2026-07-03 | 部分滿足 | dashboard + 簽核 + task 進度 + 實作 log;MCP＋網頁非本機 App;無錨點／族系／replay;GPL 進 MIT 合規成本不划算 |
+| [MrLesk/Backlog.md](https://github.com/MrLesk/Backlog.md) | 6.6k | MIT | 2026-09-01 | 部分滿足 | markdown-native 任務 + AC + DoD + 三道 review checkpoint;Kanban 形狀(D-scope 不做);無簽核關卡、族系、稽核軌跡 |
+| [Trusted-Autonomy/TrustedAutonomy](https://github.com/Trusted-Autonomy/TrustedAutonomy) | 7 | Apache-2.0 | 2026-09-02 | 部分滿足 | staging copy → 審後落地 + 稽核,精神近 Q4;runtime 檔案層不是文件治理;無 GUI |
+| [microsoft/agent-governance-toolkit](https://github.com/microsoft/agent-governance-toolkit) | 6.2k | MIT | 2026-09-02 | 不相關(層次錯) | OWASP agentic 政策／沙箱／tool-call 攔截——**runtime 控制面**,不是 PRD／簽核／UAT 文件工作台 |
+| [Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec) | 67k | MIT | 2026-09-02 | 部分滿足 | 已當上游依賴(D10);只管 change 生命週期 |
+| [github/spec-kit](https://github.com/github/spec-kit) | 133k | MIT | 2026-09-01 | 部分滿足 | constitution + spec 範本;無 GUI／簽核／軌跡 |
+| [Chappygo-OS/Atomic-Spec](https://github.com/Chappygo-OS/Atomic-Spec) | 10 | MIT | 2026-08-23 | 部分滿足 | gate 強制 + human sign-off;prompt／CLI 框架,無 GUI／族系／稽核 UI |
+| [BloopAI/vibe-kanban](https://github.com/BloopAI/vibe-kanban) | 28k | Apache-2.0 | 2026-04-24 | 不相關 | agent 派工／Kanban——明確非目標 |
+| [openchamber/openchamber](https://github.com/openchamber/openchamber) | 9.5k | MIT | 2026-09-01 | 不相關 | 監督 agent 執行與跨裝置接續——執行層,非文件治理 |
+| [rasimme/FlowBoard](https://github.com/rasimme/FlowBoard) | 94 | MIT | 2026-08-28 | 不相關 | agent 用 Kanban + 專案 context;落在不做的格子 |
+| [veritasfuji-japan/veritas_os](https://github.com/veritasfuji-japan/veritas_os) | 35 | **專有 EULA**(Core) | 2026-09-02 | 部分滿足→不可用 | decision／bind boundary + hash-chained evidence;核心專有授權,程式碼不可引用,僅能看公開 README 敘事 |
 
-另有 [eyaltoledano/claude-task-master](https://github.com/eyaltoledano/claude-task-master)(28k,授權 NOASSERTION——LICENSE 非標準條文,程式碼不可引用)、gemini-cli-extensions/conductor(3.7k,Apache,spec→plan→implement 外掛,無 GUI)、joshrotenberg/adrs(127,Apache,Rust ADR CLI)——皆只覆蓋單一段。
+另有: [Lumiaqian/openspec-mcp](https://github.com/Lumiaqian/openspec-mcp)(31,MIT,2026-01 可能棄坑)、[preloop/preloop](https://github.com/preloop/preloop)／[sseshachala/conductai](https://github.com/sseshachala/conductai)(runtime control plane)、[felipefontoura/pi-sdd-kit](https://github.com/felipefontoura/pi-sdd-kit)(Pi skill 管線)、[buildermethods/agent-os](https://github.com/buildermethods/agent-os)(standards／spec shaping)——皆只覆蓋單一段。
 
-**沒有任何候選做到的三件事**(本專案的差異化,與 §2.3 目標 1、2 對應):
+### 7.2 沒有任何候選同時做到的三件事
 
 1. 跨四種身分(plan checkbox / commit / 簽核 / openspec change)的穩定錨點 join key。
-2. `authorAgentFamily` 族系隔離——同族 agent 不得核准同族文件,replay 會標違規。
+2. `authorAgentFamily` 族系隔離——同族 agent 不得核准同族文件,replay 會標違規。(agent-sop 的「跨廠商 reviewer」最接近,但是 skill 約定而非 App 內可 replay 的硬閘門。)
 3. ADHD-first 編輯台(反轉揭露、卡住時變安靜)+ UAT 結果寫回同一份 markdown 讓 agent 讀回。
 
-**決策:**
+### 7.3 決策
 
-- 採用線:無。
-- 借用線:**只作架構參考,不引用程式碼**。Backlog.md 的「三道 review checkpoint」與 Atomic-Spec 的「gate 未過不得進站」可作簽核關卡設計的對照;spec-workflow-mcp 的實作 log 可作稽核軌跡呈現的對照。GPL 的那一份連參考也只看 README 與畫面,不讀原始碼。
-- 排除:vibe-kanban / claude-task-master 落在明確不做的格子;openspec-mcp 半年沒動且只包 openspec 一段。
+- **採用線:無**(沒有產品覆蓋 Anchorline 整條治理鏈)。
+- **並存線(工具層):Plannotator 適合與 Anchorline 並存**——它是「當下審 plan／diff 的人機介面」,不是第二套進度系統;見 §7.5。**導入拍板(2026-09-03):D1=暫緩**——A 路線(外掛薄橋)規劃與擬真效果見 `docs/prior-art-plannotator-route-a.html`;未重開前不開工。
+- **借用線:只作架構參考,不引用程式碼。**
+  - Plannotator → 錨定批註回傳 agent、plan 版本 diff、`--gate` 人機核准出口(UX 靈感;不取代簽核／族系硬閘)。
+  - agent-sop → 跨廠商獨立審查／sole-writer 的流程對照(族系隔離設計靈感)。
+  - Backlog.md → 三道 review checkpoint。
+  - Atomic-Spec → gate 未過不得進站。
+  - TrustedAutonomy → staging／審後落地的 Q4 敘事對照。
+  - Okto Pulse → 只讀公開文件看「governance gate 命名與 SDLC 階段切分」;ELv2 不合規進 MIT 產品,不讀／不引核心碼。
+  - GPL(spec-workflow-mcp)→ 只看 README／畫面,不讀原始碼。
+- **排除:** vibe-kanban／FlowBoard／OpenChamber／AGT／preloop／conductai——要嘛落在「agent 派工／Kanban／runtime 防火牆」非目標,要嘛層次完全不同;openspec-mcp 半年沒動且只包 openspec 一段;veritas Core 專有授權。Okto Pulse **不宜長期雙主系統**(見先前並存判定)。
 
-**三個月後要記得的事:** 這一輪的市場結論是「2026 的 SDD 工具全在解『讓 agent 跑更多』,治理／稽核那一層只有 TrustedAutonomy 與幾個 <10 stars 的 audit-trail 小專案在做,而且全在 runtime 層」。若日後出現同時做「文件治理 + 族系隔離 + 本機 App」的專案,再重跑一次 PriorArt。
+### 7.4 三個月後要記得的事
 
-參考:[Augment Code SDD 工具比較](https://www.augmentcode.com/tools/best-spec-driven-development-tools)、[BMAD vs Spec Kit vs OpenSpec](https://reenbit.com/bmad-vs-spec-kit-vs-openspec-choosing-your-spec-driven-ai-framework/)、[awesome-agent-orchestrators](https://github.com/andyrewlee/awesome-agent-orchestrators)。
+市場其實是**三堆**,不是兩堆:
+
+1. **SDD／讓 agent 跑更多**(Spec Kit、OpenSpec、GSD、vibe-kanban)
+2. **runtime 治理**(AGT、Preloop、ConductAI、TrustedAutonomy)
+3. **人機審核表面**(Plannotator——plan／diff 批註回傳 agent)
+
+文件層「本機 App + 錨點 join key + 族系自審禁制 + UAT 寫回」這條縫仍然空。Okto Pulse 是形狀上最近的新進者,但 ELv2 + board 形狀把它擋在採用線外。Plannotator 填的是「審的當下 UX」,不是「治理鏈的持久證明」。若日後出現 **MIT／Apache + 本機文件治理 + 族系隔離** 的專案,再重跑 PriorArt。
+
+### 7.5 三方深度對照:Anchorline · Okto Pulse · Plannotator
+
+| 維度 | **Anchorline** | **Okto Pulse** | **Plannotator** |
+|---|---|---|---|
+| 一句定位 | 文件／交付身分的治理工作台 | Spec-Driven SDLC 控制面 | Agent plan／diff 的本機審核 UI |
+| 站點／repo | 本專案 | [oktolabs.ai/platform/pulse](https://oktolabs.ai/platform/pulse/) · `OktoLabsAI/okto-pulse` | [plannotator.ai](https://plannotator.ai/) · `backnotprop/plannotator` |
+| 授權 | MIT | Elastic-2.0(不可競品衍生／SaaS) | MIT OR Apache-2.0 |
+| 形態 | Tauri 桌面 App | Python serve + Web UI + MCP | CLI + 本機瀏覽器 session(+ hooks) |
+| 真相放哪 | repo 內 md／git／openspec | `~/.okto-pulse/` SQLite + KG | 當次 session + `~/.plannotator` 計畫版本;反饋進 agent stdout |
+| 治理是什麼 | 簽核關卡 + `authorAgentFamily` + 錨點 replay | 17 gates + Validator／Executor **角色** preset | **人類** Approve／Send Feedback(可 `--gate`);無族系／無跨交付身分 join key |
+| 與 agent 介面 | CLI 後端／文件寫回 | MCP(~200–300 tools) | Hooks／slash／stdout 結構化反饋 |
+| Kanban／Sprint | 明確不做 | 核心 | 無 |
+| PRD 編輯／ADHD | 核心 | 厚 Spec,非 ADHD-first | 可 annotate md／plan,非編輯台 |
+| UAT 寫回 md | 核心 | 系統內 test evidence | 無 |
+| 最適合並存? | — | 僅短期實驗且 Anchorline 為唯一進度真相 | **是**(審核層,不搶「下一步」主畫面) |
+
+**層次圖(並存時):**
+
+```text
+Plannotator  →  當下:攔截 plan／批註 diff → 反饋回 agent
+Anchorline   →  持久:PRD 簽核 · 族系 · 錨點 · UAT · openspec · 稽核
+Okto Pulse   →  旁路(可選):厚 Spec／KG／MCP board —— 不宜當第二進度源
+```
+
+參考:[Best Spec-Driven Development Tools 2026](https://codemyspec.com/blog/best-spec-driven-development-tools)、[BMAD vs Spec Kit vs OpenSpec](https://tooltwist.com/insights/spec-driven-frameworks-cxo-guide)、[awesome-ai-agent-governance](https://github.com/systempromptio/awesome-ai-agent-governance)、[Plannotator docs](https://docs.plannotator.ai/open-source/start/installation)。
 
 ## 8. 驗收標準(與成功指標分開;這些才 gate release)
 

@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>路線 A · Plannotator 外掛薄橋 — 規劃與擬真效果（暫緩）</title>
+<style>
+  :root {
+    --ink: #1c1914;
+    --ink-soft: #4a453c;
+    --paper: #f6f1e6;
+    --paper-2: #ebe4d4;
+    --rail: #d9d0bc;
+    --bridge: #a65b2b;
+    --bridge-deep: #7a3f1a;
+    --ledger: #1e3a3a;
+    --ledger-glow: #2a6b6b;
+    --ok: #2f6b3a;
+    --warn: #9a6b12;
+    --bad: #8b2e2e;
+    --deferred: #6b3a4a;
+    --focus: #1c5a7a;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: "Avenir Next", "Segoe UI", "PingFang TC", "Noto Sans TC", sans-serif;
+    --display: "Iowan Old Style", "Palatino Linotype", Palatino, "Songti TC", serif;
+    --radius: 6px;
+    --shadow: 0 1px 0 rgba(28,25,20,.06), 0 12px 32px rgba(28,25,20,.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #efe8d8;
+      --ink-soft: #b8b09c;
+      --paper: #17150f;
+      --paper-2: #221e16;
+      --rail: #3a3428;
+      --bridge: #d4894a;
+      --bridge-deep: #f0b27a;
+      --ledger: #9fd4d0;
+      --ledger-glow: #5aa8a4;
+      --ok: #7dba88;
+      --warn: #e0b45a;
+      --bad: #e08a8a;
+      --deferred: #e0a0b0;
+      --focus: #7eb8d8;
+      --shadow: 0 1px 0 rgba(0,0,0,.4), 0 16px 40px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --ink: #1c1914; --ink-soft: #4a453c; --paper: #f6f1e6; --paper-2: #ebe4d4;
+    --rail: #d9d0bc; --bridge: #a65b2b; --bridge-deep: #7a3f1a;
+    --ledger: #1e3a3a; --ledger-glow: #2a6b6b; --ok: #2f6b3a; --warn: #9a6b12;
+    --bad: #8b2e2e; --deferred: #6b3a4a; --focus: #1c5a7a;
+    --shadow: 0 1px 0 rgba(28,25,20,.06), 0 12px 32px rgba(28,25,20,.08);
+  }
+  :root[data-theme="dark"] {
+    --ink: #efe8d8; --ink-soft: #b8b09c; --paper: #17150f; --paper-2: #221e16;
+    --rail: #3a3428; --bridge: #d4894a; --bridge-deep: #f0b27a;
+    --ledger: #9fd4d0; --ledger-glow: #5aa8a4; --ok: #7dba88; --warn: #e0b45a;
+    --bad: #e08a8a; --deferred: #e0a0b0; --focus: #7eb8d8;
+    --shadow: 0 1px 0 rgba(0,0,0,.4), 0 16px 40px rgba(0,0,0,.35);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 600px at 10% -10%, color-mix(in oklab, var(--bridge) 12%, transparent), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, color-mix(in oklab, var(--ledger-glow) 10%, transparent), transparent 55%),
+      var(--paper);
+    line-height: 1.55;
+  }
+  a { color: var(--bridge-deep); }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .wrap { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; padding: 1.25rem 0 4rem; }
+
+  .stamp-bar {
+    display: flex; flex-wrap: wrap; gap: .75rem; align-items: center;
+    justify-content: space-between; margin-bottom: 1.5rem;
+  }
+  .stamp {
+    display: inline-flex; align-items: center; gap: .5rem;
+    padding: .35rem .7rem;
+    border: 2px solid var(--deferred);
+    color: var(--deferred);
+    font-family: var(--mono); font-size: .75rem; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase;
+    transform: rotate(-2deg);
+    background: color-mix(in oklab, var(--deferred) 8%, var(--paper));
+  }
+  .stamp::before { content: "◉"; font-size: .65rem; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  .chip {
+    font-family: var(--mono); font-size: .7rem; letter-spacing: .04em;
+    padding: .2rem .45rem; border: 1px solid var(--rail); border-radius: 999px;
+    color: var(--ink-soft); background: var(--paper-2);
+  }
+  .theme-toggle {
+    font: inherit; font-size: .8rem; cursor: pointer;
+    border: 1px solid var(--rail); background: var(--paper-2); color: var(--ink);
+    border-radius: var(--radius); padding: .35rem .65rem;
+  }
+
+  h1 {
+    font-family: var(--display); font-weight: 600; font-size: clamp(1.6rem, 3.5vw, 2.35rem);
+    line-height: 1.2; text-wrap: balance; margin: 0 0 .5rem;
+  }
+  .lede { max-width: 42rem; color: var(--ink-soft); margin: 0 0 1.75rem; font-size: 1.02rem; }
+
+  .tabs {
+    display: flex; gap: .35rem; flex-wrap: wrap;
+    border-bottom: 1px solid var(--rail); margin-bottom: 1.25rem;
+  }
+  .tab {
+    font: inherit; cursor: pointer; border: 0; background: transparent;
+    color: var(--ink-soft); padding: .65rem .9rem; border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--bridge); font-weight: 600; }
+
+  .panel[hidden] { display: none !important; }
+
+  .grid-2 {
+    display: grid; gap: 1.25rem;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 880px) {
+    .grid-2 { grid-template-columns: 1.05fr .95fr; align-items: start; }
+  }
+
+  .card {
+    background: var(--paper-2); border: 1px solid var(--rail);
+    border-radius: calc(var(--radius) + 2px); box-shadow: var(--shadow);
+    padding: 1rem 1.1rem 1.15rem;
+  }
+  .card h2 {
+    font-family: var(--display); font-size: 1.15rem; margin: 0 0 .75rem;
+    font-weight: 600;
+  }
+  .card h3 { font-size: .92rem; margin: 1rem 0 .4rem; }
+  .card p, .card li { font-size: .92rem; color: var(--ink-soft); }
+  .card ul { margin: .35rem 0 .75rem; padding-left: 1.15rem; }
+  .card strong { color: var(--ink); font-weight: 600; }
+
+  .bridge-diagram {
+    display: grid; grid-template-columns: 1fr auto 1fr; gap: .5rem; align-items: stretch;
+    margin: .75rem 0 1rem;
+  }
+  .rail-box {
+    border: 1px dashed var(--rail); border-radius: var(--radius);
+    padding: .7rem .75rem; background: color-mix(in oklab, var(--paper) 70%, transparent);
+  }
+  .rail-box .label {
+    font-family: var(--mono); font-size: .65rem; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--ink-soft); margin-bottom: .35rem;
+  }
+  .rail-box .title { font-weight: 650; font-size: .95rem; color: var(--ink); }
+  .span {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-width: 4.5rem; color: var(--bridge); font-family: var(--mono); font-size: .68rem;
+    letter-spacing: .04em; text-align: center; gap: .25rem;
+  }
+  .span-line {
+    width: 100%; height: 3px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--ledger-glow), var(--bridge), var(--ledger-glow));
+  }
+
+  table.cmp {
+    width: 100%; border-collapse: collapse; font-size: .82rem; margin: .5rem 0 0;
+  }
+  table.cmp th, table.cmp td {
+    text-align: left; padding: .45rem .4rem; border-bottom: 1px solid var(--rail);
+    vertical-align: top;
+  }
+  table.cmp th { font-family: var(--mono); font-size: .68rem; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
+  .scroll-x { overflow-x: auto; }
+
+  .checklist { list-style: none; padding: 0; margin: 0; }
+  .checklist li {
+    display: grid; grid-template-columns: 1.2rem 1fr; gap: .45rem;
+    padding: .4rem 0; border-bottom: 1px solid var(--rail); color: var(--ink-soft); font-size: .9rem;
+  }
+  .checklist li:last-child { border-bottom: 0; }
+  .box { font-family: var(--mono); color: var(--bridge); }
+
+  /* —— Mock chrome —— */
+  .mock-shell {
+    border: 1px solid var(--rail); border-radius: calc(var(--radius) + 4px);
+    overflow: hidden; background: var(--paper); box-shadow: var(--shadow);
+  }
+  .mock-titlebar {
+    display: flex; align-items: center; gap: .5rem; padding: .45rem .75rem;
+    background: color-mix(in oklab, var(--ink) 6%, var(--paper-2));
+    border-bottom: 1px solid var(--rail); font-family: var(--mono); font-size: .72rem;
+    color: var(--ink-soft);
+  }
+  .dots { display: flex; gap: .3rem; }
+  .dots i { width: .55rem; height: .55rem; border-radius: 50%; display: block; background: var(--rail); }
+  .mock-nav {
+    display: flex; gap: .25rem; flex-wrap: wrap; padding: .4rem .6rem;
+    border-bottom: 1px solid var(--rail); background: var(--paper-2);
+  }
+  .mock-nav button {
+    font: inherit; font-size: .78rem; border: 0; background: transparent;
+    color: var(--ink-soft); padding: .35rem .55rem; border-radius: var(--radius); cursor: pointer;
+  }
+  .mock-nav button[aria-current="page"] {
+    background: color-mix(in oklab, var(--bridge) 16%, transparent); color: var(--ink); font-weight: 600;
+  }
+  .mock-body { padding: .9rem; min-height: 280px; }
+  .mock-view[hidden] { display: none !important; }
+
+  .field { margin-bottom: .85rem; }
+  .field label { display: block; font-size: .78rem; font-weight: 600; margin-bottom: .3rem; }
+  .field .hint { font-size: .75rem; color: var(--ink-soft); margin-top: .25rem; }
+  .row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  input[type="text"] {
+    flex: 1; min-width: 12rem; font: inherit; font-family: var(--mono); font-size: .85rem;
+    padding: .45rem .55rem; border: 1px solid var(--rail); border-radius: var(--radius);
+    background: var(--paper); color: var(--ink);
+  }
+  .btn {
+    font: inherit; font-size: .85rem; cursor: pointer; border-radius: var(--radius);
+    padding: .45rem .75rem; border: 1px solid var(--rail); background: var(--paper-2); color: var(--ink);
+  }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary {
+    background: var(--bridge); border-color: var(--bridge); color: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    .btn-primary { color: #1c1914; }
+  }
+  :root[data-theme="dark"] .btn-primary { color: #1c1914; }
+  :root[data-theme="light"] .btn-primary { color: #fff; }
+
+  .status {
+    display: inline-flex; align-items: center; gap: .35rem;
+    font-family: var(--mono); font-size: .72rem; padding: .2rem .45rem;
+    border-radius: 999px; border: 1px solid var(--rail);
+  }
+  .status.ok { color: var(--ok); border-color: color-mix(in oklab, var(--ok) 40%, var(--rail)); }
+  .status.bad { color: var(--bad); border-color: color-mix(in oklab, var(--bad) 40%, var(--rail)); }
+  .status.warn { color: var(--warn); border-color: color-mix(in oklab, var(--warn) 40%, var(--rail)); }
+
+  .prd-preview {
+    border: 1px solid var(--rail); border-radius: var(--radius); padding: .75rem .85rem;
+    background: color-mix(in oklab, var(--paper-2) 50%, var(--paper));
+    font-size: .88rem; margin-bottom: .85rem;
+  }
+  .prd-preview .sec { font-family: var(--mono); font-size: .68rem; color: var(--ink-soft); margin-bottom: .25rem; }
+  .prd-preview p { margin: 0; color: var(--ink); }
+
+  .modal-back {
+    position: fixed; inset: 0; background: rgba(20,16,10,.45);
+    display: grid; place-items: center; padding: 1rem; z-index: 40;
+  }
+  .modal-back[hidden] { display: none !important; }
+  .modal {
+    width: min(420px, 100%); background: var(--paper); border: 1px solid var(--rail);
+    border-radius: calc(var(--radius) + 4px); box-shadow: var(--shadow); padding: 1rem 1.1rem;
+  }
+  .modal h3 { margin: 0 0 .35rem; font-family: var(--display); font-size: 1.1rem; }
+  .modal p { margin: 0 0 .85rem; font-size: .88rem; color: var(--ink-soft); }
+  .modal .actions { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: flex-end; }
+
+  .cli {
+    font-family: var(--mono); font-size: .75rem; background: #12100c; color: #d8d0c0;
+    border-radius: var(--radius); padding: .65rem .75rem; overflow-x: auto;
+    border: 1px solid #2a261c; margin: .5rem 0 .85rem;
+  }
+
+  .audit {
+    border: 1px solid var(--rail); border-radius: var(--radius); overflow: hidden;
+  }
+  .audit-hd {
+    display: flex; justify-content: space-between; align-items: center; gap: .5rem;
+    padding: .45rem .65rem; background: color-mix(in oklab, var(--ledger-glow) 12%, var(--paper-2));
+    border-bottom: 1px solid var(--rail); font-size: .78rem; font-weight: 600;
+  }
+  .audit ul { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow: auto; }
+  .audit li {
+    padding: .55rem .65rem; border-bottom: 1px solid var(--rail); font-size: .8rem;
+    font-family: var(--mono);
+  }
+  .audit li:last-child { border-bottom: 0; }
+  .audit .kind { color: var(--ledger); }
+  .audit .note { color: var(--ink-soft); display: block; margin-top: .2rem; font-family: var(--sans); font-size: .78rem; }
+  .empty { padding: .85rem; color: var(--ink-soft); font-size: .85rem; }
+
+  .callout {
+    border-left: 3px solid var(--bridge); padding: .55rem .75rem;
+    background: color-mix(in oklab, var(--bridge) 8%, var(--paper));
+    font-size: .86rem; color: var(--ink-soft); margin: .75rem 0;
+  }
+  .callout strong { color: var(--ink); }
+
+  .toast {
+    position: fixed; bottom: 1rem; right: 1rem; z-index: 50;
+    background: var(--ink); color: var(--paper); padding: .55rem .8rem;
+    border-radius: var(--radius); font-size: .85rem; box-shadow: var(--shadow);
+    max-width: min(360px, calc(100% - 2rem));
+  }
+  .toast[hidden] { display: none !important; }
+
+  footer.page-foot {
+    margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--rail);
+    font-size: .78rem; color: var(--ink-soft);
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="stamp-bar">
+      <div class="stamp" title="D1 拍板：暫緩">Deferred · 暫緩開工</div>
+      <div class="meta-row">
+        <span class="chip">路線 A · 外掛薄橋</span>
+        <span class="chip">2026-09-03</span>
+        <span class="chip">docs/PRD.md §7</span>
+        <button type="button" class="theme-toggle" id="themeToggle" aria-label="切換亮暗主題">主題</button>
+      </div>
+    </div>
+
+    <h1>Plannotator → Anchorline：路線 A 規劃與擬真效果</h1>
+    <p class="lede">
+      不重做批註 UI。本機繼續用 <strong>plannotator</strong> 審當下；Anchorline 最多加一條薄橋：探測 CLI、一鍵開啟 PRD／plan、可選把決策寫進稽核——且<strong>永不自動簽核</strong>。
+      本頁上半是規劃口徑，下半是可點的擬真效果（非產品實作）。
+    </p>
+
+    <div class="tabs" role="tablist" aria-label="內容分區">
+      <button type="button" class="tab" role="tab" id="tab-plan" aria-controls="panel-plan" aria-selected="true">規劃</button>
+      <button type="button" class="tab" role="tab" id="tab-mock" aria-controls="panel-mock" aria-selected="false">擬真效果</button>
+    </div>
+
+    <!-- ========== PLAN ========== -->
+    <div class="panel" id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
+      <div class="grid-2">
+        <section class="card">
+          <h2>為什麼是薄橋，不是移植</h2>
+          <div class="bridge-diagram" aria-hidden="true">
+            <div class="rail-box">
+              <div class="label">Governance rail</div>
+              <div class="title">Anchorline</div>
+              <p style="margin:.35rem 0 0;font-size:.8rem;color:var(--ink-soft)">簽核 · 族系 · 錨點 · UAT · 稽核</p>
+            </div>
+            <div class="span">
+              <span>薄橋</span>
+              <div class="span-line"></div>
+              <span>~3 人日</span>
+            </div>
+            <div class="rail-box">
+              <div class="label">Review rail</div>
+              <div class="title">Plannotator</div>
+              <p style="margin:.35rem 0 0;font-size:.8rem;color:var(--ink-soft)">選字批註 · Approve／Feedback · hooks</p>
+            </div>
+          </div>
+          <ul>
+            <li><strong>Plannotator Approve</strong>＝這輪 agent 可繼續實作</li>
+            <li><strong>Anchorline 簽核</strong>＝治理關卡正式通過（可含族系檢查）</li>
+            <li>兩者語意不同；混用會讓「過了」失去證明力</li>
+          </ul>
+          <div class="callout">
+            <strong>暫緩含義：</strong>D1 不開工。本 HTML 只固定口徑與擬真，方便之後重開時不用重推一次。
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>範圍（做／不做）</h2>
+          <h3>做</h3>
+          <ul class="checklist">
+            <li><span class="box">[ ]</span><span>設定頁探測 <code>plannotator</code>（比照 openspec／gh：指定路徑 → PATH → 常見安裝點）</span></li>
+            <li><span class="box">[ ]</span><span>review／tracking：「用 Plannotator 開啟」→ <code>annotate &lt;path&gt; --gate --json</code></span></li>
+            <li><span class="box">[ ]</span><span>可選：JSON 決策寫成稽核一筆（路徑 + decision + 摘要）</span></li>
+          </ul>
+          <h3>不做</h3>
+          <ul>
+            <li>不重做 annotate／code review UI</li>
+            <li>不 hook ExitPlanMode、不 spawn coding agent（D7）</li>
+            <li>不讓 Plannotator Approve 觸發 <code>approveAndLock</code></li>
+            <li>不做 PR diff 檢視器（SCOPE 禁令）</li>
+          </ul>
+        </section>
+
+        <section class="card">
+          <h2>實作步驟（重開時）</h2>
+          <ol style="margin:0;padding-left:1.2rem;color:var(--ink-soft);font-size:.9rem">
+            <li><strong style="color:var(--ink)">探測模組</strong> — 純函式 + 測試（仿 openspec 探測形狀）</li>
+            <li><strong style="color:var(--ink)">設定 UI</strong> — 路徑欄、狀態 pill、找不到時安裝提示（不崩潰）</li>
+            <li><strong style="color:var(--ink)">開啟動作</strong> — 原生端只跑白名單子指令；回傳 JSON／exit</li>
+            <li><strong style="color:var(--ink)">稽核映射（可選）</strong> — <code>plannotator.decision</code> 事件；明確標「非簽核」</li>
+            <li><strong style="color:var(--ink)">UAT</strong> — 找到／找不到／Approve／Annotated／Dismissed 五題</li>
+          </ol>
+        </section>
+
+        <section class="card">
+          <h2>效果對照</h2>
+          <div class="scroll-x">
+            <table class="cmp">
+              <thead>
+                <tr><th>場景</th><th>現況</th><th>路線 A 之後</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>審 PRD 選字</td>
+                  <td>章節級留言；或另開終端跑 plannotator</td>
+                  <td>App 一鍵開同一檔；批註仍在 Plannotator</td>
+                </tr>
+                <tr>
+                  <td>Agent 當輪等待</td>
+                  <td>靠 hooks／手動</td>
+                  <td>仍靠 Plannotator hooks（不進 Tauri）</td>
+                </tr>
+                <tr>
+                  <td>治理證明</td>
+                  <td>簽核 + 族系 + 錨點</td>
+                  <td>不變；最多多一筆「外審決策」稽核</td>
+                </tr>
+                <tr>
+                  <td>未裝 CLI</td>
+                  <td>—</td>
+                  <td>提示安裝指令；功能降級，不擋簽核</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- ========== MOCK ========== -->
+    <div class="panel" id="panel-mock" role="tabpanel" aria-labelledby="tab-mock" hidden>
+      <p class="callout" style="margin-top:0">
+        <strong>擬真說明：</strong>下列畫面模擬「設定探測 → 開啟 PRD → Plannotator 決策 → 稽核一筆」。
+        不會真的呼叫 CLI；簽核條保持未變，用來對照「Approve ≠ 簽核」。
+      </p>
+
+      <div class="mock-shell" aria-label="Anchorline 擬真視窗">
+        <div class="mock-titlebar">
+          <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+          <span>Anchorline · 擬真（路線 A）</span>
+          <span style="margin-left:auto" id="mockClock">local</span>
+        </div>
+        <nav class="mock-nav" aria-label="擬真頁面">
+          <button type="button" data-view="settings" aria-current="page">設定</button>
+          <button type="button" data-view="review">審閱</button>
+          <button type="button" data-view="audit">稽核軌跡</button>
+        </nav>
+        <div class="mock-body">
+          <!-- Settings -->
+          <div class="mock-view" id="view-settings">
+            <h2 style="font-family:var(--display);font-size:1.15rem;margin:0 0 .75rem">外掛 · Plannotator</h2>
+            <div class="field">
+              <label for="cliPath">CLI 路徑</label>
+              <div class="row">
+                <input id="cliPath" type="text" value="/opt/homebrew/bin/plannotator" autocomplete="off" />
+                <button type="button" class="btn" id="btnDetect">重新探測</button>
+              </div>
+              <p class="hint">順序：設定路徑 → PATH → 常見安裝點。找不到不報錯崩潰，只顯示安裝提示。</p>
+            </div>
+            <div class="row" style="margin-bottom:.85rem">
+              <span class="status ok" id="detectStatus" role="status">● 已找到 · v0.27+</span>
+            </div>
+            <label class="row" style="gap:.5rem;font-size:.88rem;cursor:pointer">
+              <input type="checkbox" id="writeAudit" checked />
+              決策寫入稽核軌跡（不觸發簽核）
+            </label>
+            <div class="cli" id="installHint" hidden>curl -fsSL https://plannotator.ai/install.sh | bash</div>
+          </div>
+
+          <!-- Review -->
+          <div class="mock-view" id="view-review" hidden>
+            <div class="row" style="justify-content:space-between;margin-bottom:.65rem">
+              <h2 style="font-family:var(--display);font-size:1.15rem;margin:0">審閱 · PRD</h2>
+              <span class="status warn" id="signoffPill">簽核 0/3 · 未鎖定</span>
+            </div>
+            <div class="prd-preview">
+              <div class="sec">§ 2.1 摘要 · docs/PRD.md</div>
+              <p>給每個工作單元一個穩定錨點，把 PRD、簽核、plan、openspec、commit 串成可 replay 的治理鏈……</p>
+            </div>
+            <div class="row">
+              <button type="button" class="btn btn-primary" id="btnOpenPlan">用 Plannotator 開啟</button>
+              <button type="button" class="btn" id="btnCopyHandoff">複製交接指令</button>
+            </div>
+            <p class="hint" style="margin-top:.55rem;font-size:.78rem;color:var(--ink-soft)">
+              開啟後由本機 Plannotator 阻塞等待人類決策；App 只收 JSON 結果。
+            </p>
+            <div class="cli" id="cliPreview">$ plannotator annotate docs/PRD.md --gate --json</div>
+          </div>
+
+          <!-- Audit -->
+          <div class="mock-view" id="view-audit" hidden>
+            <div class="audit">
+              <div class="audit-hd">
+                <span>稽核軌跡（三行預設）</span>
+                <span class="chip" id="auditCount">0 筆本次</span>
+              </div>
+              <ul id="auditList">
+                <li class="empty" id="auditEmpty">尚無 Plannotator 決策。從「審閱」開啟並送出 Approve／Feedback 後會出現在這裡。</li>
+              </ul>
+            </div>
+            <div class="callout">
+              <strong>對照：</strong>右側簽核條仍是「0/3 · 未鎖定」——證明外審決策沒有偷跑成治理核准。
+            </div>
+            <div class="row">
+              <span class="status warn" id="signoffPill2">簽核 0/3 · 未鎖定</span>
+              <button type="button" class="btn" id="btnClearAudit">清空本次擬真紀錄</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="page-foot">
+      來源：PriorArt／導入評估 · D1=暫緩 · 路線 A 粗估 ~3 人日 ·
+      相關：<a href="./PRD.md">docs/PRD.md §7</a> ·
+      <a href="https://plannotator.ai/">plannotator.ai</a>
+      · 本檔為規格展示，非 App 功能。
+    </footer>
+  </div>
+
+  <!-- Plannotator decision modal (mock) -->
+  <div class="modal-back" id="planModal" hidden role="presentation">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="planModalTitle">
+      <h3 id="planModalTitle">Plannotator · 擬真決策</h3>
+      <p>模擬 <code>--gate --json</code> 回傳。選一個結果看稽核如何落筆。</p>
+      <div class="actions">
+        <button type="button" class="btn" data-decision="dismissed">Dismiss</button>
+        <button type="button" class="btn" data-decision="annotated">Send Feedback</button>
+        <button type="button" class="btn btn-primary" data-decision="approved">Approve</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+  /* theme */
+  const root = document.documentElement;
+  const themeBtn = $("#themeToggle");
+  const saved = localStorage.getItem("route-a-theme");
+  if (saved) root.setAttribute("data-theme", saved);
+  themeBtn.addEventListener("click", () => {
+    const next = root.getAttribute("data-theme") === "dark" ? "light"
+      : root.getAttribute("data-theme") === "light" ? "dark"
+      : (matchMedia("(prefers-color-scheme: dark)").matches ? "light" : "dark");
+    root.setAttribute("data-theme", next);
+    localStorage.setItem("route-a-theme", next);
+  });
+
+  /* tabs */
+  const tabPlan = $("#tab-plan");
+  const tabMock = $("#tab-mock");
+  const panelPlan = $("#panel-plan");
+  const panelMock = $("#panel-mock");
+  function selectTab(which) {
+    const plan = which === "plan";
+    tabPlan.setAttribute("aria-selected", plan ? "true" : "false");
+    tabMock.setAttribute("aria-selected", plan ? "false" : "true");
+    panelPlan.hidden = !plan;
+    panelMock.hidden = plan;
+  }
+  tabPlan.addEventListener("click", () => selectTab("plan"));
+  tabMock.addEventListener("click", () => selectTab("mock"));
+
+  /* mock nav */
+  const views = {
+    settings: $("#view-settings"),
+    review: $("#view-review"),
+    audit: $("#view-audit"),
+  };
+  $$(".mock-nav button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.view;
+      $$(".mock-nav button").forEach((b) => b.removeAttribute("aria-current"));
+      btn.setAttribute("aria-current", "page");
+      Object.entries(views).forEach(([k, el]) => { el.hidden = k !== id; });
+    });
+  });
+
+  /* detect */
+  const pathInput = $("#cliPath");
+  const detectStatus = $("#detectStatus");
+  const installHint = $("#installHint");
+  const btnOpen = $("#btnOpenPlan");
+
+  function setFound(found) {
+    detectStatus.className = "status " + (found ? "ok" : "bad");
+    detectStatus.textContent = found ? "● 已找到 · v0.27+" : "● 未找到 · 請安裝或填絕對路徑";
+    installHint.hidden = found;
+    btnOpen.disabled = !found;
+  }
+  $("#btnDetect").addEventListener("click", () => {
+    const v = pathInput.value.trim();
+    const found = /plannotator/i.test(v) && v.length > 3;
+    setFound(found);
+    toast(found ? "探測成功（擬真）" : "探測失敗（擬真）：路徑不像 plannotator");
+  });
+  pathInput.addEventListener("change", () => {
+    setFound(/plannotator/i.test(pathInput.value.trim()));
+  });
+
+  /* toast */
+  const toastEl = $("#toast");
+  let toastTimer;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toastEl.hidden = true; }, 2600);
+  }
+
+  /* modal */
+  const modal = $("#planModal");
+  const writeAudit = $("#writeAudit");
+  const auditList = $("#auditList");
+  const auditEmpty = $("#auditEmpty");
+  const auditCount = $("#auditCount");
+  let events = [];
+
+  function openModal() {
+    modal.hidden = false;
+    modal.querySelector("[data-decision='approved']").focus();
+  }
+  function closeModal() {
+    modal.hidden = true;
+    btnOpen.focus();
+  }
+  $("#btnOpenPlan").addEventListener("click", () => {
+    if (btnOpen.disabled) return;
+    openModal();
+  });
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeModal();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.hidden) closeModal();
+  });
+
+  function renderAudit() {
+    auditCount.textContent = events.length + " 筆本次";
+    if (!events.length) {
+      auditList.innerHTML = "";
+      auditList.appendChild(auditEmpty);
+      auditEmpty.hidden = false;
+      return;
+    }
+    auditEmpty.hidden = true;
+    auditList.innerHTML = events.map((ev) => `
+      <li>
+        <span class="kind">plannotator.decision · ${ev.decision}</span>
+        <span class="note">${ev.note} · 非簽核 · ${ev.at}</span>
+      </li>
+    `).join("");
+  }
+
+  $$("[data-decision]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const decision = btn.dataset.decision;
+      const notes = {
+        approved: "人類核准此版 PRD 可繼續由 agent 實作（擬真）",
+        annotated: "送回結構化批註；agent 應改寫後再提（擬真）",
+        dismissed: "關閉未核准；無反饋正文（擬真）",
+      };
+      const json = {
+        decision,
+        feedback: decision === "annotated" ? "§2.1：請補成功指標可觀測定義" : decision === "approved" ? "" : null,
+        path: "docs/PRD.md",
+      };
+      closeModal();
+      if (writeAudit.checked) {
+        events.unshift({
+          decision,
+          note: notes[decision],
+          at: new Date().toLocaleTimeString("zh-Hant", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          raw: json,
+        });
+        renderAudit();
+        // jump to audit view
+        $$(".mock-nav button").forEach((b) => {
+          const on = b.dataset.view === "audit";
+          if (on) b.setAttribute("aria-current", "page");
+          else b.removeAttribute("aria-current");
+        });
+        Object.entries(views).forEach(([k, el]) => { el.hidden = k !== "audit"; });
+      }
+      // signoff pills unchanged
+      toast(
+        decision === "approved"
+          ? "已記錄 Approve（擬真）· 簽核仍為 0/3"
+          : decision === "annotated"
+            ? "已記錄 Feedback（擬真）· 簽核未變"
+            : "已 Dismiss（擬真）· 簽核未變"
+      );
+    });
+  });
+
+  $("#btnClearAudit").addEventListener("click", () => {
+    events = [];
+    renderAudit();
+    toast("已清空擬真稽核");
+  });
+
+  $("#btnCopyHandoff").addEventListener("click", async () => {
+    const text = "請依 docs/PRD.md §2.1 補成功指標的可觀測定義，改完再開 Plannotator 送審。";
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("已複製交接指令（擬真）");
+    } catch {
+      toast("無法寫入剪貼簿（環境限制）");
+    }
+  });
+
+  renderAudit();
+})();
+</script>
+</body>
+</html>
