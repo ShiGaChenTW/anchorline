@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anchorline — 啟動首頁（重新設計）</title>
+<!--
+  AIDesigner run 6c033a0b-2782-475b-a531-f87495194dbf · 2026-09-03
+  目標檔：index.html（啟動首頁主內容區）
+  本機修正：移除生成器注入的 Tailwind CDN、補齊未定義 class、日期統一到 2026-09
+-->
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --accent: #2f81f7;
+    --accent-hover: #58a6ff;
+    --success: #3fb950;
+    --warn: #d29922;
+    --danger: #f85149;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  /* 字級：只用 12/14/16/20/24/28/32 */
+  .t-12 { font-size: 12px; }
+  .t-14 { font-size: 14px; }
+  .t-16 { font-size: 16px; }
+  .t-20 { font-size: 20px; }
+  .t-24 { font-size: 24px; }
+  .t-28 { font-size: 28px; }
+  .t-32 { font-size: 32px; }
+
+  .font-mono { font-family: var(--font-mono); }
+  .font-semibold { font-weight: 600; }
+  .font-bold { font-weight: 700; }
+
+  .text-fg { color: var(--fg); }
+  .text-muted { color: var(--muted); }
+  .text-accent { color: var(--accent); }
+  .text-success { color: var(--success); }
+  .text-warn { color: var(--warn); }
+  .text-danger { color: var(--danger); }
+  .text-border { color: var(--border); }
+
+  .flex { display: flex; }
+  .flex-col { flex-direction: column; }
+  .items-center { align-items: center; }
+  .items-start { align-items: flex-start; }
+  .items-end { align-items: flex-end; }
+  .justify-between { justify-content: space-between; }
+  .flex-1 { flex: 1; min-width: 0; }
+  .shrink-0 { flex-shrink: 0; }
+
+  .gap-4 { gap: 4px; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .gap-16 { gap: 16px; }
+  .gap-24 { gap: 24px; }
+
+  .p-8 { padding: 8px; }
+  .p-20 { padding: 20px; }
+  .p-24 { padding: 24px; }
+  .p-32 { padding: 32px; }
+  .px-24 { padding-left: 24px; padding-right: 24px; }
+  .py-8 { padding-top: 8px; padding-bottom: 8px; }
+  .py-16 { padding-top: 16px; padding-bottom: 16px; }
+  .py-40 { padding-top: 40px; padding-bottom: 40px; }
+  .pb-8 { padding-bottom: 8px; }
+
+  .mt-4 { margin-top: 4px; }
+  .mt-16 { margin-top: 16px; }
+  .mb-16 { margin-bottom: 16px; }
+  .mb-40 { margin-bottom: 40px; }
+  .ml-auto { margin-left: auto; }
+
+  .container { max-width: 1120px; margin: 0 auto; width: 100%; }
+
+  .r-6 { border-radius: 6px; }
+  .r-12 { border-radius: 12px; }
+  .r-full { border-radius: 9999px; }
+
+  .bg-bg { background-color: var(--bg); }
+  .bg-surface { background-color: var(--surface); }
+
+  .border-soft { border: 1px solid var(--border-soft); }
+  .border-b-soft { border-bottom: 1px solid var(--border-soft); }
+  .border-l-accent { border-left: 4px solid var(--accent); }
+
+  /* 按鈕 */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-family: inherit;
+    color: inherit;
+  }
+  .btn-primary { background-color: var(--accent); color: var(--fg); padding: 8px 16px; }
+  .btn-primary:hover { background-color: var(--accent-hover); }
+  .btn-secondary { background-color: var(--surface); color: var(--fg); border: 1px solid var(--border); padding: 8px 16px; }
+  .btn-secondary:hover { border-color: var(--muted); }
+  .btn-large { padding: 12px 24px; }
+  .btn-sm { padding: 6px 12px; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border: 1px solid var(--border-soft);
+    background-color: var(--surface);
+  }
+  .badge-outline { border: 1px solid var(--border); background: transparent; }
+
+  .card { background-color: var(--bg); border: 1px solid var(--border-soft); }
+  .card:hover { border-color: var(--border); }
+  .card-elevated { background-color: var(--surface); border: 1px solid var(--border); }
+
+  /* 治理強度計：四段，亮的段數＝路線的重量 */
+  .signal-bars { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
+  .signal-bar { width: 3px; border-radius: 9999px; }
+  .signal-bar-1 { height: 4px; }
+  .signal-bar-2 { height: 6px; }
+  .signal-bar-3 { height: 9px; }
+  .signal-bar-4 { height: 12px; }
+  .bg-fill { background-color: var(--fg); }
+  .bg-empty { background-color: var(--border); }
+
+  /* 治理鏈 */
+  .gov-chain { display: flex; align-items: center; width: 100%; }
+  .gov-node { display: flex; flex-direction: column; align-items: center; position: relative; z-index: 2; }
+  .node-dot { width: 12px; height: 12px; border-radius: 9999px; background-color: var(--border-soft); flex-shrink: 0; }
+  .node-dot.done { background-color: var(--success); }
+  .node-dot.active { background-color: var(--accent); box-shadow: 0 0 0 3px var(--bg), 0 0 0 4px var(--accent); }
+  .card-elevated .node-dot.active { box-shadow: 0 0 0 3px var(--surface), 0 0 0 4px var(--accent); }
+  .node-label { position: absolute; top: 20px; white-space: nowrap; }
+  .gov-line { flex: 1; height: 2px; background-color: var(--border-soft); margin: 0 8px; }
+  .gov-line.done { background-color: var(--success); }
+  .gov-chain-macro .gov-line { position: relative; top: -12px; }
+  .gov-chain-compact { width: 140px; }
+
+  /* 章節完成度 */
+  .chapter-track { display: flex; gap: 2px; height: 6px; width: 100px; }
+  .chapter-block { flex: 1; background-color: var(--border-soft); border-radius: 9999px; }
+  .chapter-block.done { background-color: var(--success); }
+  .chapter-block.active { background-color: var(--accent); }
+
+  .code-snippet {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: var(--bg);
+    border: 1px solid var(--border-soft);
+    padding: 4px 8px;
+    color: var(--fg);
+    align-self: flex-start;
+  }
+
+  svg { display: block; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<header class="border-b-soft py-16 px-24 bg-bg flex justify-between items-center">
+  <div class="flex items-center gap-12">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--fg)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+    </svg>
+    <span class="t-20 font-mono font-bold text-fg">Anchorline</span>
+  </div>
+
+  <div class="flex items-center gap-12">
+    <button class="btn btn-secondary r-6 t-14 font-semibold">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      匯入資料夾
+    </button>
+    <button class="btn btn-primary r-6 t-14 font-semibold">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      開新專案
+    </button>
+  </div>
+</header>
+
+<main class="container px-24 py-40">
+
+  <!-- 唯一的主要動作：回到那一件未完成的事 -->
+  <section class="mb-40">
+    <div class="flex items-center gap-8 mb-16">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <h2 class="t-16 font-semibold text-fg">接續作業</h2>
+      <span class="t-14 text-muted font-mono ml-auto">2026-09-03（今日）</span>
+    </div>
+
+    <div class="card-elevated r-12 p-32 border-l-accent flex flex-col gap-24">
+
+      <div class="flex justify-between items-start gap-24">
+        <div class="flex flex-col gap-8">
+          <div class="flex items-center gap-8">
+            <div class="signal-bars" title="治理強度：功能建構／迭代優化">
+              <div class="signal-bar signal-bar-1 bg-fill"></div>
+              <div class="signal-bar signal-bar-2 bg-fill"></div>
+              <div class="signal-bar signal-bar-3 bg-fill"></div>
+              <div class="signal-bar signal-bar-4 bg-empty"></div>
+            </div>
+            <span class="t-12 text-muted font-mono badge r-full">功能建構／迭代優化</span>
+          </div>
+          <h1 class="t-32 font-bold text-fg">AI Agent 任務排程中樞</h1>
+          <span class="t-14 text-muted font-mono">最後編輯：昨天 16:30</span>
+        </div>
+
+        <div class="flex flex-col items-end gap-12 shrink-0">
+          <button class="btn btn-primary btn-large r-6 t-16 font-bold">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            繼續撰寫（05 功能需求）
+          </button>
+          <div class="flex items-center gap-8">
+            <span class="t-12 text-muted font-mono">章節 5 / 8</span>
+            <div class="chapter-track">
+              <div class="chapter-block done"></div>
+              <div class="chapter-block done"></div>
+              <div class="chapter-block done"></div>
+              <div class="chapter-block done"></div>
+              <div class="chapter-block active"></div>
+              <div class="chapter-block"></div>
+              <div class="chapter-block"></div>
+              <div class="chapter-block"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-16 p-24 bg-bg border-soft r-6">
+        <div class="gov-chain gov-chain-macro">
+          <div class="gov-node"><div class="node-dot active"></div><span class="node-label t-12 text-fg font-semibold">計畫</span></div>
+          <div class="gov-line"></div>
+          <div class="gov-node"><div class="node-dot"></div><span class="node-label t-12 text-muted">錨點</span></div>
+          <div class="gov-line"></div>
+          <div class="gov-node"><div class="node-dot"></div><span class="node-label t-12 text-muted">Commit</span></div>
+          <div class="gov-line"></div>
+          <div class="gov-node"><div class="node-dot"></div><span class="node-label t-12 text-muted">Sign-off</span></div>
+          <div class="gov-line"></div>
+          <div class="gov-node"><div class="node-dot"></div><span class="node-label t-12 text-muted">規格修訂</span></div>
+          <div class="gov-line"></div>
+          <div class="gov-node"><div class="node-dot"></div><span class="node-label t-12 text-muted">Release</span></div>
+        </div>
+        <div style="height: 20px;"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 其餘專案：依急迫度排序，不是等權重的卡片牆 -->
+  <section>
+    <div class="flex items-center justify-between mb-16 border-b-soft pb-8">
+      <div class="flex items-center gap-8">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <h2 class="t-16 font-semibold text-fg">進行中專案</h2>
+      </div>
+      <span class="t-12 text-muted font-mono">3 件追蹤中</span>
+    </div>
+
+    <div class="flex flex-col gap-12">
+
+      <div class="card r-6 p-20 flex items-center justify-between gap-16">
+        <div class="flex items-start gap-16 flex-1">
+          <div class="signal-bars mt-4" title="治理強度：新產品／新專案">
+            <div class="signal-bar signal-bar-1 bg-fill"></div>
+            <div class="signal-bar signal-bar-2 bg-fill"></div>
+            <div class="signal-bar signal-bar-3 bg-fill"></div>
+            <div class="signal-bar signal-bar-4 bg-fill"></div>
+          </div>
+
+          <div class="flex flex-col gap-8 flex-1">
+            <div class="flex items-center gap-12">
+              <h3 class="t-16 font-bold text-fg">行動支付對帳中心</h3>
+              <span class="t-12 text-muted font-mono badge-outline r-full">新產品／新專案</span>
+            </div>
+
+            <div class="flex items-center gap-16">
+              <div class="gov-chain gov-chain-compact">
+                <div class="node-dot done"></div><div class="gov-line done"></div>
+                <div class="node-dot done"></div><div class="gov-line done"></div>
+                <div class="node-dot done"></div><div class="gov-line done"></div>
+                <div class="node-dot active"></div><div class="gov-line"></div>
+                <div class="node-dot"></div><div class="gov-line"></div>
+                <div class="node-dot"></div>
+              </div>
+              <span class="t-14 text-fg font-semibold">Sign-off（第 2 關）</span>
+              <div class="flex items-center gap-4 text-warn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span class="t-14 font-mono">等 周敏珊 簽核 · 已 2 天</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col items-end gap-8 shrink-0">
+          <span class="t-12 text-muted font-mono">章節 12 / 15</span>
+          <button class="btn btn-secondary btn-sm r-6 t-12 font-semibold">檢視進度</button>
+        </div>
+      </div>
+
+      <div class="card r-6 p-20 flex items-center justify-between gap-16">
+        <div class="flex items-start gap-16 flex-1">
+          <div class="signal-bars mt-4" title="治理強度：試作／探索">
+            <div class="signal-bar signal-bar-1 bg-fill"></div>
+            <div class="signal-bar signal-bar-2 bg-fill"></div>
+            <div class="signal-bar signal-bar-3 bg-empty"></div>
+            <div class="signal-bar signal-bar-4 bg-empty"></div>
+          </div>
+
+          <div class="flex flex-col gap-12 flex-1">
+            <div class="flex items-center gap-12">
+              <h3 class="t-16 font-bold text-fg">批次同步驗證回報</h3>
+              <span class="t-12 text-muted font-mono badge-outline r-full">試作／探索</span>
+            </div>
+
+            <div class="flex items-center gap-16">
+              <div class="gov-chain gov-chain-compact">
+                <div class="node-dot done"></div><div class="gov-line done"></div>
+                <div class="node-dot done"></div><div class="gov-line done"></div>
+                <div class="node-dot done"></div><div class="gov-line done"></div>
+                <div class="node-dot done"></div><div class="gov-line done"></div>
+                <div class="node-dot active"></div><div class="gov-line"></div>
+                <div class="node-dot"></div>
+              </div>
+              <span class="t-14 text-fg font-semibold">規格修訂</span>
+              <span class="t-14 text-success font-mono flex items-center gap-4">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                已自簽 · 不推進專案狀態
+              </span>
+            </div>
+
+            <div class="code-snippet r-6 t-12 font-mono">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="3"/><line x1="12" y1="22" x2="12" y2="8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></svg>
+              <span class="text-accent">anc:t=3f9a2c14</span>
+              <span class="text-muted">→</span>
+              <span>src/sync/engine.ts:45-67</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col items-end gap-8 shrink-0">
+          <span class="t-12 text-muted font-mono">章節 3 / 3</span>
+          <button class="btn btn-primary btn-sm r-6 t-12 font-semibold">執行修訂</button>
+        </div>
+      </div>
+
+      <div class="card r-6 p-20 flex items-center justify-between gap-16">
+        <div class="flex items-start gap-16 flex-1">
+          <div class="signal-bars mt-4" title="治理強度：功能建構／迭代優化">
+            <div class="signal-bar signal-bar-1 bg-fill"></div>
+            <div class="signal-bar signal-bar-2 bg-fill"></div>
+            <div class="signal-bar signal-bar-3 bg-fill"></div>
+            <div class="signal-bar signal-bar-4 bg-empty"></div>
+          </div>
+
+          <div class="flex flex-col gap-8 flex-1">
+            <div class="flex items-center gap-12">
+              <h3 class="t-16 font-bold text-fg">客服工單分流</h3>
+              <span class="t-12 text-muted font-mono badge-outline r-full">功能建構／迭代優化</span>
+            </div>
+
+            <div class="flex items-center gap-16">
+              <div class="gov-chain gov-chain-compact">
+                <div class="node-dot active"></div><div class="gov-line"></div>
+                <div class="node-dot"></div><div class="gov-line"></div>
+                <div class="node-dot"></div><div class="gov-line"></div>
+                <div class="node-dot"></div><div class="gov-line"></div>
+                <div class="node-dot"></div><div class="gov-line"></div>
+                <div class="node-dot"></div>
+              </div>
+              <span class="t-14 text-fg font-semibold">計畫（草稿）</span>
+              <div class="flex items-center gap-4 text-danger">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span class="t-14 font-mono">停滯 · 最後更新 2026-08-20</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col items-end gap-8 shrink-0">
+          <span class="t-12 text-muted font-mono">章節 3 / 8</span>
+          <button class="btn btn-secondary btn-sm r-6 t-12 font-semibold">開啟草稿</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+</body>
+</html>

@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anchorline — PRD 撰寫工作台（重新設計）</title>
+<!--
+  AIDesigner run bbcd96bc-ca3c-4551-bccf-b2b6852d92d1 · 2026-09-03
+  目標檔：editor.html（主內容區；左側導覽 rail 不在本輪範圍）
+  本機修正：移除生成器注入的 Tailwind CDN、移除 emoji、補齊未定義 class
+-->
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --accent: #2f81f7;
+    --accent-hover: #58a6ff;
+    --success: #3fb950;
+    --warn: #d29922;
+    --danger: #f85149;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  button { font-family: inherit; border: none; background: none; cursor: pointer; color: inherit; }
+  ul, ol { list-style: none; }
+  svg { display: block; flex-shrink: 0; }
+
+  .fs-12 { font-size: 12px; }
+  .fs-14 { font-size: 14px; }
+  .fs-16 { font-size: 16px; }
+  .fs-20 { font-size: 20px; }
+  .fs-24 { font-size: 24px; }
+  .fs-28 { font-size: 28px; }
+  .fs-32 { font-size: 32px; }
+
+  .br-6 { border-radius: 6px; }
+  .br-12 { border-radius: 12px; }
+  .br-9999 { border-radius: 9999px; }
+
+  .text-fg { color: var(--fg); }
+  .text-muted { color: var(--muted); }
+  .text-accent { color: var(--accent); }
+  .text-success { color: var(--success); }
+  .text-warn { color: var(--warn); }
+  .text-danger { color: var(--danger); }
+  .text-border { color: var(--border); }
+
+  .bg-bg { background-color: var(--bg); }
+  .bg-surface { background-color: var(--surface); }
+
+  .border { border: 1px solid var(--border); }
+  .border-soft { border: 1px solid var(--border-soft); }
+  .border-b { border-bottom: 1px solid var(--border); }
+  .border-l { border-left: 1px solid var(--border); }
+  .border-danger { border-color: var(--danger); }
+  .border-warn { border-color: var(--warn); }
+
+  .font-mono { font-family: var(--font-mono); }
+  .font-bold { font-weight: 600; }
+
+  .d-flex { display: flex; }
+  .flex-col { flex-direction: column; }
+  .items-center { align-items: center; }
+  .items-start { align-items: flex-start; }
+  .justify-between { justify-content: space-between; }
+  .flex-1 { flex: 1; min-width: 0; }
+
+  .gap-4 { gap: 4px; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .gap-16 { gap: 16px; }
+  .gap-24 { gap: 24px; }
+
+  .w-full { width: 100%; }
+
+  .p-4 { padding: 4px; }
+  .p-8 { padding: 8px; }
+  .p-12 { padding: 12px; }
+  .p-16 { padding: 16px; }
+  .p-24 { padding: 24px; }
+  .px-8 { padding-left: 8px; padding-right: 8px; }
+  .px-12 { padding-left: 12px; padding-right: 12px; }
+  .px-16 { padding-left: 16px; padding-right: 16px; }
+  .px-24 { padding-left: 24px; padding-right: 24px; }
+  .py-4 { padding-top: 4px; padding-bottom: 4px; }
+  .py-8 { padding-top: 8px; padding-bottom: 8px; }
+  .py-16 { padding-top: 16px; padding-bottom: 16px; }
+
+  .mt-4 { margin-top: 4px; }
+  .mt-8 { margin-top: 8px; }
+  .mb-4 { margin-bottom: 4px; }
+  .mb-8 { margin-bottom: 8px; }
+  .mb-12 { margin-bottom: 12px; }
+  .mb-16 { margin-bottom: 16px; }
+  .mb-24 { margin-bottom: 24px; }
+  .mr-16 { margin-right: 16px; }
+
+  .app-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 6px 16px;
+    font-weight: 500;
+    border: 1px solid transparent;
+  }
+  .btn-primary { background-color: var(--success); color: var(--bg); }
+  .btn-primary:hover { background-color: var(--bg); color: var(--success); border-color: var(--success); }
+  .btn-outline { background-color: transparent; border-color: var(--border); color: var(--fg); }
+  .btn-outline:hover { border-color: var(--muted); background-color: var(--surface); }
+  .btn-ghost { color: var(--muted); }
+  .btn-ghost:hover { color: var(--fg); background-color: var(--surface); }
+
+  /* 治理強度計：四格，亮的格數＝路線的重量 */
+  .gov-meter { display: flex; gap: 4px; }
+  .gov-node { width: 12px; height: 12px; background-color: var(--border-soft); border-radius: 6px; }
+  .gov-node.active { background-color: var(--accent); }
+
+  .workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 32px;
+    padding: 24px 32px;
+    flex: 1;
+  }
+
+  .editor-wrapper { display: flex; flex-direction: column; gap: 24px; }
+
+  .markdown-surface {
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    height: 600px;
+  }
+
+  .editor-tabs { display: flex; background-color: var(--surface); border-bottom: 1px solid var(--border); }
+  .editor-tab { padding: 8px 24px; color: var(--muted); border-right: 1px solid var(--border); cursor: pointer; }
+  .editor-tab.active {
+    background-color: var(--bg);
+    color: var(--fg);
+    border-top: 2px solid var(--accent);
+    margin-top: -1px;
+  }
+
+  .editor-body { display: flex; flex: 1; overflow: hidden; }
+  .editor-gutter {
+    width: 48px;
+    background-color: var(--surface);
+    border-right: 1px solid var(--border-soft);
+    padding: 16px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: var(--border);
+    user-select: none;
+  }
+  .editor-content {
+    flex: 1;
+    padding: 16px 24px;
+    color: var(--fg);
+    line-height: 1.8;
+    overflow-y: auto;
+  }
+  .editor-caret {
+    background-color: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-left: 2px solid var(--accent);
+    padding: 4px 8px;
+    color: var(--muted);
+    border-radius: 6px;
+  }
+
+  /* 教練意見與正在寫的那一節綁在一起 */
+  .coach-focus-alert {
+    background-color: rgba(248, 81, 73, 0.1);
+    border: 1px solid var(--danger);
+    position: relative;
+  }
+  .coach-focus-alert::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background-color: var(--danger);
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
+  }
+  .coach-action {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--bg);
+    border: 1px solid var(--danger);
+    border-radius: 6px;
+    padding: 8px 12px;
+    width: 100%;
+  }
+
+  .radar-card { background-color: var(--surface); border: 1px solid var(--border); }
+
+  .progress-track { width: 100%; height: 8px; background-color: var(--border-soft); overflow: hidden; }
+  .progress-fill { height: 100%; background-color: var(--accent); width: 80%; }
+
+  .toc-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 12px;
+    color: var(--muted);
+    border-left: 2px solid transparent;
+    cursor: pointer;
+  }
+  .toc-item:hover { background-color: var(--border-soft); color: var(--fg); }
+  .toc-item.active { background-color: var(--bg); color: var(--fg); border-left-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <header class="d-flex items-center justify-between px-24 py-16 border-b bg-surface gap-16">
+
+    <div class="d-flex items-center gap-16">
+      <div class="d-flex items-center gap-8 text-muted fs-14">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>
+        </svg>
+        <span class="font-mono fs-14">main</span>
+      </div>
+      <div class="d-flex items-center gap-8 text-muted fs-14 border-l px-16">
+        <span class="font-mono">最後更新 2026-09-01 18:42</span>
+        <span>鄭雅筑</span>
+      </div>
+    </div>
+
+    <!-- 路線不再是下拉選單：治理強度是有序量，畫成強度計 -->
+    <div class="d-flex items-center gap-16 bg-bg border px-16 py-8 br-9999">
+      <div class="d-flex items-center gap-8">
+        <span class="text-muted fs-12">治理強度</span>
+        <div class="gov-meter">
+          <div class="gov-node active"></div>
+          <div class="gov-node active"></div>
+          <div class="gov-node active"></div>
+          <div class="gov-node active"></div>
+        </div>
+      </div>
+      <div class="d-flex items-center gap-8 border-l px-8">
+        <span class="text-fg font-bold fs-14">新產品／新專案</span>
+        <span class="text-accent fs-12 bg-surface px-8 py-4 br-9999">正式多方簽核</span>
+      </div>
+    </div>
+
+    <div class="d-flex items-center gap-12">
+      <span class="text-muted fs-14 mr-16">狀態：<span class="text-fg">草稿</span></span>
+      <button class="btn btn-outline br-6 fs-14">匯出 Markdown</button>
+      <button class="btn btn-primary br-6 fs-14">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+        </svg>
+        送出審閱
+      </button>
+    </div>
+  </header>
+
+  <main class="workspace">
+
+    <div class="editor-wrapper">
+
+      <div class="d-flex items-center justify-between gap-16">
+        <div class="d-flex items-center gap-12 text-muted fs-14">
+          <span>行動支付對帳中心</span>
+          <span>/</span>
+          <span class="text-fg">章節 12 / 15</span>
+        </div>
+        <div class="d-flex items-center gap-8 font-mono fs-12 text-muted bg-surface border px-8 py-4 br-6">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="5" r="3"/><line x1="12" y1="22" x2="12" y2="8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/>
+          </svg>
+          anc:t=9d41ba07
+        </div>
+      </div>
+
+      <h1 class="fs-32 text-fg font-bold">04 目標與非目標</h1>
+
+      <!-- 下一步只有一個 -->
+      <div class="coach-focus-alert br-6 p-16 d-flex items-start gap-12">
+        <div class="text-danger mt-4">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <div class="flex-1">
+          <h3 class="fs-16 font-bold text-danger mb-4">本節尚未達標：非目標數量不足</h3>
+          <p class="fs-14 text-fg mb-8">目前只列出 1 條非目標。「新產品／新專案」路線要求至少 3 條，用來把開發與維運的邊界寫清楚。</p>
+          <div class="coach-action mt-8">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+            <span class="fs-14 text-fg font-bold">建議行動：在下方編輯器補上 2 條非目標。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="markdown-surface br-6">
+        <div class="editor-tabs">
+          <div class="editor-tab active fs-14 font-bold">撰寫</div>
+          <div class="editor-tab fs-14">預覽</div>
+          <div class="editor-tab fs-14">分割</div>
+          <div class="flex-1"></div>
+          <button class="btn btn-ghost fs-14 px-16">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="editor-body">
+          <div class="editor-gutter font-mono fs-12">
+            <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+            <span>7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span>
+          </div>
+          <div class="editor-content font-mono fs-14">
+            <div class="text-accent">### 目標</div>
+            <div>1. 建立集中化的對帳系統，支援每日百萬筆交易核對。</div>
+            <div>2. 提供自動化異常報表，把營運人工作業時間降低 60%。</div>
+            <div>3. 系統需符合 PCI-DSS 支付安全規範。</div>
+            <div>&nbsp;</div>
+            <div class="text-accent">### 非目標</div>
+            <div>1. 本階段不處理跨國多幣別的即時匯率轉換對帳。</div>
+            <div class="d-flex items-center gap-8 mt-4">
+              <span class="text-muted">2.</span>
+              <span class="editor-caret">請在此輸入第 2 條非目標</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex flex-col gap-24">
+
+      <div class="radar-card br-12 p-24">
+        <div class="d-flex items-center justify-between mb-16">
+          <h2 class="fs-16 font-bold text-fg">送審準備度</h2>
+          <span class="fs-24 font-bold text-accent font-mono">12<span class="fs-14 text-muted">/15</span></span>
+        </div>
+        <div class="progress-track br-9999 mb-24">
+          <div class="progress-fill br-9999"></div>
+        </div>
+
+        <h3 class="fs-14 font-bold text-muted mb-12 d-flex items-center gap-8">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          阻礙送審的問題（2）
+        </h3>
+
+        <ul class="d-flex flex-col gap-12">
+          <li class="bg-bg border border-danger br-6 p-12">
+            <div class="fs-12 text-muted mb-4">04 目標與非目標（目前位置）</div>
+            <div class="fs-14 text-danger font-bold">非目標數量不足，缺 2 條</div>
+          </li>
+          <li class="bg-bg border border-warn br-6 p-12">
+            <div class="fs-12 text-muted mb-4">05 功能需求</div>
+            <div class="fs-14 text-warn font-bold">缺少驗收條件</div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="radar-card br-12 p-16 flex-1">
+        <h3 class="fs-14 font-bold text-muted mb-16 px-12">章節治理軌跡</h3>
+
+        <ul class="d-flex flex-col">
+          <li class="toc-item br-6">
+            <svg class="text-success mt-4" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <div class="fs-14">01 文件概況與修訂紀錄</div>
+          </li>
+          <li class="toc-item br-6">
+            <svg class="text-success mt-4" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <div class="fs-14">02 摘要</div>
+          </li>
+          <li class="toc-item br-6">
+            <svg class="text-success mt-4" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <div class="fs-14">03 專案背景與佐證</div>
+          </li>
+
+          <li class="toc-item active br-6">
+            <svg class="text-danger mt-4" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <div>
+              <div class="fs-14 font-bold">04 目標與非目標</div>
+              <div class="fs-12 text-muted mt-4">寫作中 · 1 個修正建議</div>
+            </div>
+          </li>
+
+          <li class="toc-item br-6">
+            <svg class="text-warn mt-4" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <div class="fs-14">05 功能需求</div>
+          </li>
+
+          <li class="toc-item br-6">
+            <svg class="text-border mt-4" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+            <div class="fs-14 text-muted">06 使用者流程</div>
+          </li>
+
+          <li class="p-12 mt-8" style="text-align: center;">
+            <span class="fs-12 text-muted">其餘 9 個章節</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </main>
+</div>
+
+</body>
+</html>
