@@ -58,9 +58,16 @@
 
   **現況：`tsc` exit 0、`bun test` 2132 pass / 0 fail（原始基線 2098，+34）。仍未 commit。**
 
-### 唯一待辦：Scott 拍板要不要 commit
+### ✅ 已 commit（2026-09-02，Scott 拍板）
 
-本地分支 commit，**不 push**（push 要等 Scott 的 8 題 vibe UAT，且 main 已領先 origin 5 個）。
+- `a2b5d0b fix(governance): 治理底座四個真 bug — pct 講真話、自簽補上守門`
+- `5674a37 docs(plans): 全 app 介面改版的調查、計劃與交接`
+
+**未 push。** 本分支領先 `origin/main` **5** 個 commit。
+⛔ **push 要問過 Scott**，且要等他的 8 題 vibe UAT。
+退回單一 commit 用 `git revert <sha>`；退回整批用 `git reset --hard 6dcd5c9`。
+
+`.aidesigner/`（設計產物 v2/v3/v4）**仍是未追蹤**，要不要進 repo 未定。
 
 ### 跨 session 協調：已全部收斂（2026-09-02 下午）
 
