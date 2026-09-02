@@ -154,3 +154,183 @@ test("dashboardHeadHtml / measuredLineHtml 帶契約 class、不得出現 L0–L
   expect(head).not.toMatch(/L[0-4]/);
   expect(measured).not.toMatch(/L[0-4]/);
 });
+
+// ── 來源欄位執法：欄位真的進了輸出（防「宣告卻沒接」再犯）────────────────
+
+test("coverageLine 真的進了計劃站微列", () => {
+  const out = buildDashboardChainInput(
+    source({ hasPlanSteps: true, coverageLine: "已治理 42 件" }),
+  );
+  expect(out.content.l3.items).toContain("已治理 42 件");
+});
+
+test("anchors 真的進了計劃站微列", () => {
+  const out = buildDashboardChainInput(
+    source({ hasPlanSteps: true, coverageLine: "尚無覆蓋率", anchors: 17, ungoverned: 0 }),
+  );
+  expect(out.content.l3.items.join("|")).toContain("17 個錨點");
+});
+
+test("ungoverned 真的進了計劃站微列", () => {
+  const out = buildDashboardChainInput(
+    source({ hasPlanSteps: true, ungoverned: 9 }),
+  );
+  expect(out.content.l3.items).toContain("9 件未治理");
+});
+
+test("prdPct 真的進了規格站微列", () => {
+  const out = buildDashboardChainInput(source({ prdPct: { done: 5, total: 11 } }));
+  expect(out.content.l2.items).toContain("5/11 節已完成");
+});
+
+test("branches 真的進了實作站微列", () => {
+  const out = buildDashboardChainInput(source({ branches: 7, worktrees: 0 }));
+  expect(out.content.l4.items.join("|")).toContain("7 條分支");
+});
+
+test("worktrees 真的進了實作站微列", () => {
+  const out = buildDashboardChainInput(source({ branches: 0, worktrees: 4 }));
+  expect(out.content.l4.items.join("|")).toContain("4 個 worktree");
+});
+
+// ── 零值／空字串不留空殼微列 ────────────────────────────────────────────
+
+test("coverageLine 為空字串時計劃站微列不含空殼", () => {
+  const out = buildDashboardChainInput(source({ hasPlanSteps: true, coverageLine: "" }));
+  expect(out.content.l3.items).not.toContain("");
+  expect(out.content.l3.items.join("|")).not.toContain("0 件");
+});
+
+test("anchors 為 0 時不出現「0 個錨點」", () => {
+  const out = buildDashboardChainInput(
+    source({ hasPlanSteps: true, coverageLine: "尚無覆蓋", anchors: 0, ungoverned: 0 }),
+  );
+  expect(out.content.l3.items.join("|")).not.toContain("0 個");
+});
+
+test("ungoverned 為 0 時不出現「0 件未治理」", () => {
+  const out = buildDashboardChainInput(
+    source({ hasPlanSteps: true, coverageLine: "已治理全部", ungoverned: 0 }),
+  );
+  expect(out.content.l3.items.join("|")).not.toContain("0 件");
+});
+
+test("prdPct.done 為 0 時不出現「0/0」空殼", () => {
+  const out = buildDashboardChainInput(source({ prdPct: { done: 0, total: 0 } }));
+  expect(out.content.l2.items.join("|")).not.toContain("0/0");
+  expect(out.content.l2.items.join("|")).not.toContain("0 節");
+});
+
+test("branches 為 0 時不出現「0 條分支」", () => {
+  const out = buildDashboardChainInput(source({ branches: 0, worktrees: 2 }));
+  expect(out.content.l4.items.join("|")).not.toContain("0 條");
+});
+
+test("worktrees 為 0 時不出現「0 個 worktree」", () => {
+  const out = buildDashboardChainInput(source({ branches: 3, worktrees: 0 }));
+  expect(out.content.l4.items.join("|")).not.toContain("0 個");
+});
+
+// ── wsLine OR 判準 ───────────────────────────────────────────────────────
+
+test("branches:3 worktrees:0 → 含「3 條分支」且不含 worktree", () => {
+  const out = buildDashboardChainInput(source({ branches: 3, worktrees: 0 }));
+  expect(out.content.l4.items).toContain("3 條分支");
+  expect(out.content.l4.items.join("|")).not.toContain("worktree");
+});
+
+test("branches:0 worktrees:2 → 含「2 個 worktree」且不含條分支", () => {
+  const out = buildDashboardChainInput(source({ branches: 0, worktrees: 2 }));
+  expect(out.content.l4.items).toContain("2 個 worktree");
+  expect(out.content.l4.items.join("|")).not.toContain("條分支");
+});
+
+test("branches:3 worktrees:2 → 單一字串「3 條分支 · 2 個 worktree」", () => {
+  const out = buildDashboardChainInput(source({ branches: 3, worktrees: 2 }));
+  expect(out.content.l4.items).toContain("3 條分支 · 2 個 worktree");
+  expect(out.content.l4.items.filter((s) => s.includes("分支") || s.includes("worktree"))).toHaveLength(1);
+});
+
+test("branches:0 worktrees:0 → l4 不含分支也不含 worktree", () => {
+  const out = buildDashboardChainInput(source({ branches: 0, worktrees: 0 }));
+  expect(out.content.l4.items.join("|")).not.toContain("分支");
+  expect(out.content.l4.items.join("|")).not.toContain("worktree");
+});
+
+// ── 總閘：全部來源欄位餵獨特值，該可見的都要出現 ─────────────────────────
+
+test("全部來源欄位餵獨特值時，該可見的欄位都進了輸出", () => {
+  const out = buildDashboardChainInput(
+    source({
+      layers: fakeLayers(),
+      planStepsKnown: true,
+      hasPlanSteps: true,
+      summaryFilled: true,
+      summaryFindings: ["意圖缺陷ZX91"],
+      gateSummary: "規格結論QW37",
+      prdPct: { done: 3, total: 8 },
+      gateFindings: [
+        { text: "block發現TY55", level: "block" },
+        { text: "warn發現UV66", level: "warn" },
+      ],
+      coverageLine: "覆蓋率說明MN44",
+      anchors: 13,
+      ungoverned: 19,
+      gitHeadline: "git標題PL22",
+      recentCommits: ["commit甲AA11", "commit乙BB22"],
+      branches: 6,
+      worktrees: 2,
+      statusText: "驗證狀態CD33",
+      openFixes: 4,
+      submittedAt: "送審時間EF77",
+      approvedAt: "核准時間GH88",
+      version: "v9.9.9-IJ99",
+      tags: ["標籤KL12"],
+      versionPolicyLine: "版號政策OP34",
+    }),
+  );
+
+  const blob = [
+    out.content.l1.lead,
+    ...out.content.l1.items,
+    out.content.l2.lead,
+    ...out.content.l2.items,
+    out.content.l3.lead,
+    ...out.content.l3.items,
+    out.content.l4.lead,
+    ...out.content.l4.items,
+    out.content.l5.lead,
+    ...out.content.l5.items,
+    out.content.l6.lead,
+    ...out.content.l6.items,
+  ].join("|");
+
+  // 意圖站
+  expect(blob).toContain("三行摘要已填妥");
+  expect(blob).toContain("意圖缺陷ZX91");
+  // 規格站
+  expect(blob).toContain("規格結論QW37");
+  expect(blob).toContain("3/8 節已完成");
+  expect(blob).toContain("block發現TY55");
+  expect(blob).toContain("warn發現UV66");
+  // 計劃站（ungoverned>0 時走未治理列；anchors 與之互斥，由專測覆蓋）
+  expect(blob).toContain("覆蓋率說明MN44");
+  expect(blob).toContain("19 件未治理");
+  // 實作站
+  expect(blob).toContain("git標題PL22");
+  expect(blob).toContain("commit甲AA11");
+  expect(blob).toContain("commit乙BB22");
+  expect(blob).toContain("6 條分支 · 2 個 worktree");
+  // 驗證站
+  expect(blob).toContain("驗證狀態CD33");
+  expect(blob).toContain("本專案待修 4 題");
+  expect(blob).toContain("送審時間EF77");
+  expect(blob).toContain("核准時間GH88");
+  // 交付站
+  expect(blob).toContain("v9.9.9-IJ99");
+  expect(blob).toContain("標籤KL12");
+  expect(blob).toContain("版號政策OP34");
+  // passWhen 來自 layers
+  expect(out.content.l1.passWhen).toBe("假門檻:l1");
+  expect(out.content.l6.passWhen).toBe("假門檻:l6");
+});

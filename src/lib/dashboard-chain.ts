@@ -111,11 +111,17 @@ export function buildDashboardChainInput(src: DashboardChainSource): ChainInput 
     l3Items.push(src.anchors > 0 ? `plans 有 ${src.anchors} 個錨點，但還沒有工作掛上去` : "");
   }
 
-  // 實作站微列：最近 2 筆 commit ＋ 分支／worktree 一列。任一為 0 就整列不渲染，不留「0 條」。
-  const wsLine =
-    src.branches > 0 && src.worktrees > 0
-      ? `${src.branches} 條分支 · ${src.worktrees} 個 worktree`
-      : "";
+  // 實作站微列：最近 2 筆 commit ＋ 分支／worktree 一列。
+  // 判準是 OR 不是 AND：多數專案沒有 worktree，AND 會讓「3 條分支」這個真實資訊
+  // 跟著一起消失。改成各自成段、以 · 相接 —— 零值那一段不出現，不留「0 個」空殼。
+  // 仍然是**一列**而不是兩列：l4 已有 2 筆 commit，AUDIT_ITEM_CAP 是 3，
+  // 拆成兩列會讓第二列被截掉。
+  const wsLine = [
+    src.branches > 0 ? `${src.branches} 條分支` : "",
+    src.worktrees > 0 ? `${src.worktrees} 個 worktree` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   // 驗證站微列：待修題數 ＋ 送審／核准時間。零題待修時 fixLine 是空字串，不會出現「0 題」。
   const fixLine = src.openFixes > 0 ? `本專案待修 ${src.openFixes} 題` : "";
