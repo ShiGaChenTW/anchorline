@@ -440,4 +440,4 @@
 - `openspec/`：`add-vibe-route` 已在 `6dcd5c9` 落地；之後只有 `openspec archive add-vibe-route`，等 8 題 UAT 過。P2 / P3 已規劃未開工。
 - 短期會進 main 的兩件：PRD 草稿 add（等 Scott 審）、openspec archive（等 UAT）。皆只動 `docs/` 與 `openspec/`。main 領先 origin 3 commit，push 要問過 Scott。
 - 對方回覆：零風險；他們不新增主題，落點 `shared.css` 與 `src/pages/dashboard.ts`，動到建案流程或 route 卡片前會先知會。
-- ⚠️ 對方提到主 repo 上另有一條 `project-anchorline-3b` session 也在做 add-vibe-route（名稱不同，內容同指 `6dcd5c9`）。若為舊 session 殘留，兩條同在主 repo 工作樹寫 `docs/PRD.md` 或跑 `openspec archive` 會撞。**待 Scott 確認是否關掉。**
+- ⚠️ 對方提到主 repo 上另有一條 `project-anchorline-3b` session 也在做 add-vibe-route（名稱不同，內容同指 `6dcd5c9`）。若為舊 session 殘留，兩條同在主 repo 工作樹寫 `docs/PRD.md` 或跑 `openspec archive` 會撞。**待 Scott 確認是否關掉。** → 後續確認（同日 13:47）：3b 是活的、合法的 spec-research 線，在主 repo main 上寫（`9555e93`、`d8bcb15`）；Q-13（自簽轉正沿用關卡之洞）歸 3b，不歸 tiamat-fe。主 repo 現有兩條寫入線：本線只動 `docs/` 與 `plans/`，3b 動 `docs/` 與 `openspec/`。
