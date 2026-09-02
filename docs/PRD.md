@@ -214,6 +214,7 @@ PRD 編輯台(引導撰寫+結構 gate) → 送審(預檢→逐關指派→commi
 | Q-10 | 升檔訊號閾值(P3 用,P1 先靜態文案) | 實測後調 | **已拍板(09-02):6 個 change / 3 題 UAT 失敗起步** |
 | Q-11 | vibe 檔要不要產 openspec change | 升檔時重看 | **已拍板(09-02):不產,追蹤先用 plans 檔** |
 | Q-12 | gate 的領域包 × 路線交叉優先序 | — | **已拍板(09-02):vibe 一律忽略領域包;lite/full 維持現行** |
+| Q-13 | ⚠️ 待拍板:vibe 自簽後轉正,`caseHasRun` 判 true → 沿用建案當下全域關卡且畫面零提示(Cato 殘留①=tiamat-fe 缺口 #10,歸本線)。選項:轉正時重建關卡 vs 沿用+明確提示 | UAT 後、archive 前 | 待決 |
 
 > 檔位系統的完整規格不在本 PRD 複寫——單一真相在 `openspec/changes/add-vibe-route/`(P1 開工單)。
 

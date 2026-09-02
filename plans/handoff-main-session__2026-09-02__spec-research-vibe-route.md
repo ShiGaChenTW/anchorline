@@ -102,6 +102,14 @@
 - **接縫**:`.route-grid`(四欄,1100px→2 欄、900px→1 欄)——任一方動它先知會
 - 對方動建案流程/route 卡片前敲本線;本線 **P2 開工前必敲對方**(onboarding/first-run-tour/rail-nav 是對方腹地)
 - 協議同步記在 `~/.claude/LIFEOS/USER/PROJECTS/PROJECTS.md`
+- **接縫擴充(2026-09-02 第二輪,tiamat-fe 提出、本線接受)**:
+  - S-1 `plans/` 重整(建議 [5])開工前敲對方(其 worktree 有 4 個交叉引用的未追蹤檔);方案須含改名對照表
+  - S-2 `status-bar.ts` 暫歸對方獨佔;本線線頭 #8 未拍板不動;若拍板,需求交對方併進其 P1-1 一次改
+  - S-3 對方 `SECTION_SUBSTANCE_MIN`(12 字)刻意不對齊 gate 門檻=設計決策(gate 答合格、pct 答進度),**不得當 bug 修**;建議 [15]/[17] 動工前知會
+  - S-4 對方實測:`syncPrdFiles` 只掛 `store.ts:1957`(送審)/`:2001`(核准),自簽不觸發——手寫 PRD 不會被自簽蓋掉
+  - S-5 建議 [11] 慣例搬家前敲對方,附新舊段落對照
+  - **歸屬:Cato 殘留①=對方缺口 #10(自簽後轉正沿用建案當下關卡、零提示)歸本線,立為 PRD Q-13,UAT 後 archive 前處理**
+  - 對方 Phase 0 已實作未 commit(store/flow-layers/signoff/projects+測試,零 UI/CSS),已提醒對 6dcd5c9 重驗(deriveFlowLayers 簽名已變)
 
 ## 9. 下一步(依序)
 
