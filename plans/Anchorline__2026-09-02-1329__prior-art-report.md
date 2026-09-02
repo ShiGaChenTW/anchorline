@@ -378,7 +378,7 @@
 
 ### 其他只覆蓋單一段的
 
-- **eyaltoledano/claude-task-master** — 28041 ★ · **NOASSERTION**（LICENSE 非標準 SPDX 條文）· push 2026-04-28 · JavaScript。無授權聲明或非標準授權 = 預設保留所有權利，**程式碼不可引用**，連架構參考都排除以免麻煩。
+- **eyaltoledano/claude-task-master** — 28041 ★ · **NOASSERTION**（LICENSE 非標準 SPDX 條文）· push 2026-04-28 · JavaScript。LICENSE 檔存在但為非標準條文（GitHub License API 比不到 SPDX），本輪未逐條核對，**未核對前不引用程式碼**；架構參考不受限，但本輪不投入核對成本。（原版誤寫成「預設保留所有權利」的法律結論——判定來源只是 `spdx_id`，沒開過那份 LICENSE；tiamat-fe 交叉比對抓到，已改。）
 - **gemini-cli-extensions/conductor** — 3720 ★ · Apache-2.0。Context → Spec & Plan → Implement 的 agent plugin（Antigravity / Claude Code），無 GUI。
 - **joshrotenberg/adrs** — 127 ★ · Apache-2.0 · Rust ADR CLI。只對應 Q3（為什麼變成這樣）一段。
 - **arthurpanhku/dvalincode** — 113 ★ · MIT。安全驗證層（scan / repair / prove），非文件治理。
@@ -408,7 +408,7 @@
 - MIT（Backlog.md、Atomic-Spec、openspec-mcp、spec-kit、OpenSpec）：相容，可引用；但實際上本專案已建成，沒有可直接 fork 的區塊，**降為架構參考**
 - Apache-2.0（TrustedAutonomy、conductor、adrs、vibe-kanban）：相容（需保留 NOTICE），同上降為架構參考
 - GPL-3.0（spec-workflow-mcp）：合規成本不划算，**只看 README 與畫面，不讀原始碼**
-- NOASSERTION（claude-task-master）：**排除**
+- NOASSERTION（claude-task-master）：LICENSE 非標準條文，未核對前不引用程式碼；架構參考不受限，本輪不投入核對成本
 
 **最終**：
 - 採用線：無
