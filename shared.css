@@ -8876,6 +8876,236 @@ button.ft-row:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── 治理鏈頁首：專案身分 ＋ 鏈健康度一行 ── */
+.d-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+.d-head-name {
+  font-size: var(--fs-6);
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--fg);
+}
+.d-head-health {
+  margin: 0;
+  font-size: var(--fs-3);
+  color: var(--muted);
+}
+
+/* ── 治理鏈：六站直立，每站帶自己的證據 ── */
+.gov-chain {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.gc-station {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel, var(--bg));
+}
+.gc-dot {
+  align-self: center;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--border);
+}
+.gc-idx {
+  font-size: var(--fs-2);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.gc-name {
+  font-size: var(--fs-4);
+  font-weight: 620;
+  color: var(--fg);
+}
+.gc-state {
+  font-size: var(--fs-2);
+  color: var(--muted);
+}
+.gc-lead {
+  grid-column: 3 / -1;
+  margin: 0;
+  font-size: var(--fs-3);
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+.gc-details,
+.audit-trail-micro,
+.gc-note,
+.gc-todo,
+.gc-go {
+  grid-column: 1 / -1;
+}
+.gc-details {
+  margin: var(--space-1) 0 0;
+}
+.gc-summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--fs-3);
+  font-weight: 600;
+  color: var(--accent);
+}
+.gc-summary::-webkit-details-marker {
+  display: none;
+}
+.gc-summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: var(--space-1);
+  color: var(--muted);
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+.gc-details[open] .gc-summary::before {
+  transform: rotate(90deg);
+}
+.gc-pass {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-4);
+  font-size: var(--fs-3);
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+.audit-trail-micro {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+.atm-item {
+  font-size: var(--fs-2);
+  color: var(--muted);
+}
+.gc-todo {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  font-size: var(--fs-3);
+  color: var(--fg);
+}
+.gc-go {
+  justify-self: start;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-3);
+  font-weight: 600;
+  color: var(--accent-on);
+  background: var(--accent);
+  text-decoration: none;
+}
+.gc-go:hover {
+  background: var(--accent-hover);
+}
+.gc-note {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-3);
+  color: var(--fg-2);
+  background: var(--inset);
+}
+.gc-note.is-warn {
+  background: var(--warn-bg);
+  color: var(--fg);
+}
+
+/* 四種站狀態互斥；active 是整頁唯一帶「現在該做」與前往按鈕的一站 */
+.gc-station.is-done .gc-dot {
+  background: var(--success);
+}
+.gc-station.is-done .gc-state {
+  color: var(--success);
+}
+.gc-station.is-active {
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
+  background: color-mix(in oklab, var(--accent) 7%, var(--panel, var(--bg)));
+}
+.gc-station.is-active .gc-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 var(--space-1) color-mix(in oklab, var(--accent) 22%, transparent);
+}
+.gc-station.is-active .gc-name {
+  color: var(--accent);
+}
+.gc-station.is-active .gc-state {
+  color: var(--accent);
+}
+.gc-station.is-todo .gc-dot {
+  background: var(--border);
+}
+.gc-station.is-todo .gc-state {
+  color: var(--muted);
+}
+.gc-station.is-unknown .gc-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.gc-station.is-unknown .gc-state {
+  color: var(--muted);
+}
+
+/* 影子鏈：灰階、降低對比，一眼看出「還沒建立的鏈」，不宣稱任何事實 */
+.gov-chain.gc-ghost .gc-station {
+  border-style: dashed;
+  background: transparent;
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+
+/* ── 空狀態：兩欄，<900px 退單欄 ── */
+.empty-state-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+.esl-main {
+  min-width: 0;
+}
+.esl-side {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+}
+.esl-links {
+  margin: 0;
+  font-size: var(--fs-2);
+  color: var(--muted);
+}
+.esl-links a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.esl-links a:hover {
+  text-decoration: underline;
+}
+@media (max-width: 900px) {
+  .empty-state-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* 跨專案實測進度 —— 一條列，**刻意不是一張 .d-card**。
    旁邊網格裡的「待修」卡數的是本專案、這一列數的是全部專案；同單位、互斥集合、
    子集範圍，三重錯位疊在兩張同款卡上，版面會主動教人讀成「7 裡面有 2」。
@@ -8922,6 +9152,11 @@ button.ft-row:focus-visible {
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 16px;
   align-items: start;
+}
+/* 事實卡列：治理鏈改版後，事實卡降級到鏈下，改用這個修飾子。
+   刻意不叫 .d-facts —— 那個名字已被 <dl> 佔用（display:flex ＋ dt/dd）。 */
+.d-grid--facts {
+  gap: var(--space-4);
 }
 .d-card {
   padding: 20px;
@@ -9075,7 +9310,10 @@ button.ft-row:focus-visible {
   color: var(--muted);
 }
 
-/* ── 頂列：版本控制 + 版號/commit，兩張等高 ── */
+/* ── 頂列：版本控制 + 版號/commit，兩張等高 ──
+   ⚠ 孤兒規則（本輪）：治理鏈改版後 dashboard 不再用兩欄等高格線，
+   .d-top / .d-top-left 目前沒有使用者。留著不刪 —— 其他頁面可能仍引用，
+   刪除前需全 repo 查證，那不是本輪的工作。 */
 .d-top {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
@@ -9088,7 +9326,12 @@ button.ft-row:focus-visible {
 }
 /* 左欄拆成「專案」「版本控制」上下兩張卡：等高、中間留一樣的 16px。
    兩張加上中間的間距要正好等於右邊版號卡的高度，所以高度由 grid 的
-   列軌決定，不能讓每一張各自吃 var(--d-card-h)（那會變成兩倍高）。 */
+   列軌決定，不能讓每一張各自吃 var(--d-card-h)（那會變成兩倍高）。
+
+   ⚠ 孤兒規則（本輪）：同 .d-top，此布局已隨治理鏈改版退場、目前沒有
+   使用者。留著不刪，理由同上 —— 全 repo 查證前刪除有風險。上面那段
+   「為什麼高度由列軌決定」是原始設計理由，一併留著：真要復用或刪除時，
+   沒有它就只剩一堆看不出用意的數值。 */
 .d-top-left {
   display: grid;
   /* 至少維持原本一張卡的高度，內容需要更多就往下長 —— 右邊的版號卡
@@ -9236,7 +9479,9 @@ button.ft-row:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-/* ── 工作區狀態 ── */
+/* ── 工作區狀態 ──
+   事實卡已降級到鏈下：原本這兩欄事實卡是版面主角，現在只剩「建立者／目前分支」
+   這兩個作業中繼值，改成卡內的一小段補充，不再獨佔一條等高水平線。 */
 .d-facts--stack {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -26,3 +26,4 @@ fokr_source/
 
 # graphify 產出的知識圖（9.4MB，可重新產生）
 graphify-out/
+.commandcode/
