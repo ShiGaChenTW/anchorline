@@ -8,6 +8,13 @@ import {
 } from "../lib/ai-coach";
 import { askConfirm, askCustom, askText } from "../lib/ask";
 import {
+  hiddenSectionIds,
+  projectRoute,
+  type ProjectRoute,
+  routeSectionCount,
+  upgradeSeedText,
+} from "../lib/prd-triage";
+import {
   assignDialogHtml,
   buildAssignments,
   FULL_CAT_LABEL,
@@ -53,6 +60,7 @@ import {
   restoreCaret,
 } from "../lib/writing-assist";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
+import { SELF_CHECK, resolveSelfCheck } from "../lib/prd-selfcheck";
 import { DEFAULT_DOMAIN, listDomains } from "../data/domains";
 import { initTheme } from "../lib/theme";
 import { renderDiffSummary } from "../lib/diff-summary";
@@ -228,6 +236,8 @@ function renderDomainBar() {
     sel.disabled = !editable;
   }
 
+  renderRouteBar(project, editable);
+
   const orphans = store.orphanSectionIds();
   if (orphanBox) {
     orphanBox.hidden = orphans.length === 0;
@@ -235,6 +245,28 @@ function renderDomainBar() {
     orphanBox.textContent = orphans.length
       ? `${orphans.length} 個章節的內容不屬於目前領域。內容仍保留，換回原領域就會回來。`
       : "";
+  }
+}
+
+/**
+ * 路線選擇器。放在領域正下方，理由跟領域一樣：換路線最直接的後果就是
+ * 下面那份章節清單會變短，因和果要在同一個視野裡。
+ *
+ * 沒綁專案時整條藏起來 —— 一個永遠停在 Full 又按不動的下拉是雜訊。
+ */
+function renderRouteBar(project: Project | undefined, editable: boolean) {
+  const bar = document.getElementById("route-bar");
+  const sel = document.getElementById("route-select") as HTMLSelectElement | null;
+  if (!bar || !sel) return;
+  bar.hidden = !project;
+  if (!project) return;
+  sel.value = projectRoute(project);
+  sel.disabled = !editable;
+  // 自簽鈕只屬於試作檔 —— 其他路線走正式簽核，這顆鈕出現就是引人跳過流程
+  const selfSign = document.getElementById("btn-self-sign") as HTMLButtonElement | null;
+  if (selfSign) {
+    selfSign.hidden = projectRoute(project) !== "vibe";
+    selfSign.disabled = !editable;
   }
 }
 
@@ -868,6 +900,37 @@ function nothingToSubmit(): boolean {
   return store.commitPrecheck().code === "no-diff";
 }
 
+/**
+ * 送出前自檢的人工勾選，依專案分開存。
+ *
+ * 讀寫都吞掉錯誤：localStorage 在無痕視窗或關掉站台資料時會直接拋，
+ * 而一份自檢清單不該讓整個編輯台白畫面。壞掉的後果是勾選不留存，
+ * 那比看不到編輯台好得多。
+ */
+function selfCheckKey(): string {
+  return `anchorline.selfcheck.${store.get().activeProjectId ?? "_"}`;
+}
+
+function readSelfCheckTicks(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(selfCheckKey());
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, boolean>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeSelfCheckTick(id: string, on: boolean) {
+  try {
+    localStorage.setItem(selfCheckKey(), JSON.stringify({ ...readSelfCheckTicks(), [id]: on }));
+  } catch {
+    /* 存不進去就算了 —— 見上面的註解 */
+  }
+}
+
 function renderCoach() {
   const s = sections()[idx];
   if (!s) return;
@@ -891,6 +954,11 @@ function renderCoach() {
   // ADHD R1 迴路反轉：原本 `gateOpen = !gate.canSubmit`，等於「越卡住畫面越吵」。
   // 改成只在快過關時才主動展開細節；卡住時保持安靜，數量留在 summary 行。
   const gateOpen = gate.canSubmit && gate.warns > 0;
+
+  // 範本第 11 章。auto 項目由 gate 判定，人工項目存在 localStorage —— 不進
+  // AppState 是因為它是「我看過了」的個人痕跡，不是 PRD 的一部分：進了
+  // AppState 就會被匯出、被 diff、被拿去跟主線比對。
+  const selfCheck = resolveSelfCheck(gate, readSelfCheckTicks(), store.get().sectionValues);
 
   coach.innerHTML = `
     <div class="card adhd-coach-now" data-od-id="next-card">
@@ -973,6 +1041,51 @@ function renderCoach() {
       <p class="adhd-coach-link"><a href="tracking.html">開啟計劃追蹤 →</a></p>
     </details>
 
+    <details class="adhd-coach-details card" data-od-id="selfcheck-card" ${selfCheck.failing.length === 1 ? "open" : ""}>
+      <summary>送出前自檢 <span class="pill pill-warn selfcheck-wip" title="這張卡的判定還在收斂，先當提示看，不要當放行條件。細節見下方說明。">待優化</span> <span class="adhd-details-meta">${selfCheck.done}/${selfCheck.total}${
+        selfCheck.failing.length ? ` · ${selfCheck.failing.length} 項要改正文` : ""
+      }</span></summary>
+      <p class="selfcheck-wip-note">⚠️ 待優化 — 這張卡的判定還沒收斂完：<strong>${
+        SELF_CHECK.flatMap((g) => g.items).filter((i) => !i.gate).length
+      } 項只能人工勾</strong>（機器判不出來），其餘規則是啟發式比對，會有偽陽性與偽陰性。<strong>先當提示看，不要當放行條件。</strong></p>
+      ${selfCheck.groups
+        .map(
+          (g) => `<div class="selfcheck-group">
+            <p class="adhd-coach-kicker">${escapeHtml(g.title)}</p>
+            <div class="selfcheck-list">
+              ${g.items
+                .map((it) => {
+                  // auto 項目**刻意不做成可勾的 checkbox**：勾得掉就等於允許
+                  // 這份清單說謊，而它存在的唯一理由是送審前不說謊。
+                  const jump = it.section
+                    ? ` <a href="#" class="selfcheck-jump" data-sec="${escapeHtml(it.section)}">前往</a>`
+                    : "";
+                  if (!it.auto) {
+                    return `<label>
+                      <input type="checkbox" ${it.pass ? "checked" : ""} data-sc-id="${escapeHtml(it.id)}" />
+                      <span>${escapeHtml(it.label)}${jump}</span>
+                    </label>`;
+                  }
+                  // 三態各自的符號。`pending` 用中性 ○／muted —— 未嘗試就先看到
+                  // 紅叉會觸發迴避，這一點在 gate 卡那邊已經是既定作法。
+                  const icon = it.state === "pass" ? "✔" : it.state === "fail" ? "!" : "○";
+                  const color =
+                    it.state === "pass" ? "var(--success)" : it.state === "fail" ? "var(--warn)" : "var(--muted)";
+                  return `<div class="adhd-gate-row${it.state === "fail" ? " is-failing" : ""}${
+                    it.state === "pending" ? " is-untouched" : ""
+                  }">
+                    <span style="color:${color}">${icon}</span>
+                    <span>${escapeHtml(it.label)}${jump}
+                    ${it.detail ? `<span class="adhd-gate-detail"> — ${escapeHtml(it.detail)}</span>` : ""}</span>
+                  </div>`;
+                })
+                .join("")}
+            </div>
+          </div>`,
+        )
+        .join("")}
+    </details>
+
     <details class="adhd-coach-details card adhd-ai-card" data-od-id="ai-tools-card">
       <summary>AI 助教 <span class="adhd-details-meta">${
         aiReadyNow ? escapeHtml(settings.model) : "未設定"
@@ -1003,6 +1116,27 @@ function renderCoach() {
       store.setCheck(s.id, cb.dataset.cid!, cb.checked);
       renderCoach();
       renderOutline();
+    });
+  });
+
+  // 自檢清單的人工項目走自己的 class 與自己的 handler。共用 `.check-list`
+  // 會被上面那個選擇器一起抓走，然後拿 undefined 當 checkId 去呼叫
+  // `store.setCheck` —— 那是靜默寫壞資料，不是報錯。
+  coach.querySelectorAll<HTMLInputElement>(".selfcheck-list input[data-sc-id]").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      writeSelfCheckTick(cb.dataset.scId!, cb.checked);
+      renderCoach();
+    });
+  });
+
+  coach.querySelectorAll<HTMLAnchorElement>(".selfcheck-jump").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      const i = sections().findIndex((x) => x.id === a.dataset.sec);
+      if (i < 0) return;
+      store.setActiveSection(sections()[i]!.id);
+      idx = i;
+      render();
     });
   });
 
@@ -1363,6 +1497,88 @@ document.getElementById("domain-select")?.addEventListener("change", (e) => {
   if (first) store.setActiveSection(first.id);
   const orphans = store.orphanSectionIds().length;
   toast(orphans ? `已換領域 — ${orphans} 個章節的內容暫時收起，沒有刪除` : "已換領域");
+  render();
+});
+
+/**
+ * 換路線。降級要先問過 —— 章節會從清單上少掉，而使用者按下去之前看到的
+ * 只有「Lite — 簡化」四個字，那不足以預期「我寫的東西不見了」。
+ * 對話框把「藏起來、沒有刪」講清楚，是這個操作可逆這件事唯一的說明機會。
+ *
+ * 從 vibe 升檔也問一次，但講的是另一件事：種子文案「已寫的 N 節原樣保留，
+ * 新增 N 節待補」—— 升檔不藏東西，要說清楚的是「接下來多出來的空白從哪來」。
+ * lite → full 維持現行（不問，直接切）：那條路的行為不在本次 change 範圍。
+ */
+document.getElementById("route-select")?.addEventListener("change", async (e) => {
+  const sel = e.target as HTMLSelectElement;
+  const next: ProjectRoute = sel.value === "lite" || sel.value === "vibe" ? sel.value : "full";
+  const st = store.get();
+  if (!editable() || !st.activeProjectId) return;
+  const cur = projectRoute(st.projects.find((p) => p.id === st.activeProjectId));
+  if (next === cur) return;
+  const NAME: Record<ProjectRoute, string> = { full: "Full", lite: "Lite", vibe: "試作／探索" };
+  // 使用者取消時把下拉拉回去；不還原的話畫面會停在新值但實際沒切
+  const revert = () => {
+    sel.value = projectRoute(store.get().projects.find((p) => p.id === st.activeProjectId));
+  };
+  if (routeSectionCount(next) < routeSectionCount(cur)) {
+    // 降級：目標路線看不見的章節會從清單上收起
+    const hidden = hiddenSectionIds(next);
+    const kept = routeSectionCount(next);
+    const ok = await askConfirm({
+      title: `降級成 ${NAME[next]}？`,
+      body: `${hidden.length - hiddenSectionIds(cur).length} 節會從清單上收起（${routeSectionCount(cur)} → ${kept} 節）。\n\n內容不會刪除 —— 換回 ${NAME[cur]} 就原封不動回來。`,
+      confirmLabel: `降級成 ${NAME[next]}`,
+    });
+    if (!ok) return revert();
+  } else if (cur === "vibe") {
+    // 從試作升檔：種子文案講清楚保留與待補（數字從路線資料算，不寫死）
+    const ok = await askConfirm({
+      title: `升級成 ${NAME[next]}？`,
+      body: `${upgradeSeedText(cur, next)}。\n\n已寫的內容原封不動 —— 升檔只是清單上長出新的章節。\n轉正後需走正式簽核：自簽的核准不帶過去，錨點紀錄仍在。`,
+      confirmLabel: `升級成 ${NAME[next]}`,
+    });
+    if (!ok) return revert();
+  }
+  const r = store.setProjectRoute(st.activeProjectId, next);
+  if (!r.ok) {
+    revert();
+    toast(r.reason ?? "換路線失敗");
+    return;
+  }
+  // 章節集合換了，游標可能指到已經被收起的一節
+  idx = 0;
+  const first = sections()[0];
+  if (first) store.setActiveSection(first.id);
+  toast(
+    next === "full"
+      ? "已升級成 Full — 全部章節回來了"
+      : routeSectionCount(next) < routeSectionCount(cur)
+        ? `已降級成 ${NAME[next]} — ${sections().length} 節，收起的內容沒有刪除`
+        : `已升級成 ${NAME[next]} — ${sections().length} 節，原本的內容都在`,
+  );
+  render();
+});
+
+/**
+ * vibe 檔的一鍵自簽（最小治理）。按下去之前把後果講清楚 —— 這是一個
+ * 會寫進簽核紀錄與稽核軌跡的動作，不是隨手按的確認框。
+ */
+document.getElementById("btn-self-sign")?.addEventListener("click", async () => {
+  const st = store.get();
+  if (!editable() || !st.activeProjectId) return;
+  const ok = await askConfirm({
+    title: "一鍵自簽？",
+    body: "以你的名義核准所有關卡，並寫入一筆帶 anc:t= 錨點的稽核事件。\n\n檔案不會鎖定 —— 試作可以繼續改；之後升檔轉正時，治理鏈從這個錨點接回去。",
+    confirmLabel: "自簽",
+  });
+  if (!ok) return;
+  const r = store.selfSignVibe(st.activeProjectId);
+  if (!r.ok) {
+    toast(r.reason ?? "自簽失敗");
+    return;
+  }
+  toast(`已自簽 —— 錨點 anc:t=${r.anchorId}`);
   render();
 });
 

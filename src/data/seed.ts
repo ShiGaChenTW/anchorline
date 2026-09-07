@@ -447,14 +447,77 @@ export function withCustomSection(sections: Section[]): Section[] {
   ];
 }
 
+/**
+ * 通用 PRD 骨架 —— 來源是 `docs/TEMPLATE-prd-unified.md` 的第 1–10 章。
+ *
+ * ## 為什麼是 1–10 而不是 0–11
+ *
+ * 範本的第 0 章（要不要寫這份 PRD）與第 11 章（送出前自檢）**不是要填的內容**，
+ * 是兩個判定工具，各自有自己的檔：`lib/prd-triage.ts` 與 `lib/prd-selfcheck.ts`。
+ * 第 0 章問的是「這件事值不值得一份 PRD」——做成第一章就永遠只能回答「已經寫了」；
+ * 第 11 章的內容全部來自其他章節，做成最後一章等於要人手抄一份會過期的副本。
+ *
+ * ## 為什麼章節 id 沒有跟著範本重編
+ *
+ * `summary` / `problem` / `goals` / `metrics` / `stories` / `scope` / `open` 這七個 id
+ * 是 `folder-import.ts`、`beginner-flow.ts`、`file-tree.ts`、`export.ts`、`review.ts`
+ * 的鍵。範本第 2 章一章吃掉了前四個，若照範本合併成一章，那五個檔要一起改，
+ * 而且既有專案存在 localStorage 的正文會全部變成孤兒（見 `planApply` 的 orphans）。
+ * 所以取範本的**子節**當章節：語意對得上的沿用舊 id，其餘給新 id。
+ * 範本的章次記在每一節的 `desc` 末端。
+ *
+ * `n` 用連號 01–15，維持本專案「兩位數字串」的既有慣例。
+ */
 export const SEED_SECTIONS: Section[] = [
   {
-    id: "summary",
+    id: "docinfo",
     n: "01",
-    title: "三行摘要",
-    desc: "功能說明與願景 · 做什麼 · 給誰 · 為何現在 · 技術線選型",
+    title: "文件概況與修訂紀錄",
+    desc: "負責人 · 平台 · 文件狀態 · 修訂紀錄（範本 1）",
+    status: "warn",
+    guide:
+      "表頭讓人知道這份文件現在算不算數、該找誰。修訂紀錄是給直接改正文的團隊用的 —— 工程師可能已經照舊版做完，不知道需求變了，所以每次變更都要留日期、改了哪一節、通知了誰。",
+    tips: [
+      "文件狀態只有三種有意義：草稿／審閱中／已核准",
+      "利害關係人列到「會擋你」的那幾個角色，不是全公司",
+      "修訂紀錄的重點不是版本號，是「已通知」那一欄",
+    ],
+    example: "2026-08-27 · v0.2 · 林可晴 · 6.4 · 復原碼由 8 組改為 10 組 · ☑ 已於站會告知後端",
+    fields: [
+      {
+        key: "meta",
+        label: "文件紀錄",
+        hint: "專案名稱 · 負責人 · 平台 · 目前產品版號 · 文件狀態 · 利害關係人",
+        type: "textarea",
+        rows: 7,
+        value:
+          "專案名稱：Northwind SaaS 雙重驗證（2FA）\n負責人：林可晴（PM）\n平台：Web（後續評估行動端）\n目前產品版號：v4.2.0\n文件狀態：審閱中\n利害關係人：PM／UIUX／認證服務後端／前端／QA／資安／企業銷售",
+      },
+      {
+        key: "revisions",
+        label: "修訂紀錄",
+        hint: "日期 | 版本 | 修改人 | 修改章節 | 變更內容 | 已通知",
+        type: "textarea",
+        rows: 5,
+        value:
+          "日期 | 版本 | 修改人 | 修改章節 | 變更內容 | 已通知\n---|---|---|---|---|---\n2026-08-20 | v0.1 | 林可晴 | 全部 | 初版 | —\n2026-08-27 | v0.2 | 林可晴 | 需求規格 | 復原碼由 8 組改為 10 組 | 已於站會告知後端",
+      },
+    ],
+    checks: [
+      { id: "c1", label: "文件狀態明確", pass: true },
+      { id: "c2", label: "利害關係人可指認到角色", pass: true },
+      { id: "c3", label: "每次變更都標了是否已通知開發", pass: false },
+    ],
+    score: 76,
+  },
+  {
+    id: "summary",
+    n: "02",
+    title: "摘要",
+    desc: "功能說明與願景 · 做什麼 · 給誰 · 為何現在 · 技術線選型（範本 2.1）",
     status: "done",
-    guide: "開頭先用「功能說明與願景」講清楚這個專案的主要目的、軟體功能與實際要達成的事 —— 敘事給人讀動機，條列讓功能可逐項核對，人與機器都要讀得懂。接著用三句話讓忙碌的審閱者 10 秒內抓住全貌；再補技術線選型，讓工程／架構一眼知道「用什麼做、刻意不選什麼」。避免行話堆疊與無邊界的技術清單。",
+    guide:
+      "開頭先用「功能說明與願景」講清楚這個專案的主要目的、軟體功能與實際要達成的事 —— 敘事給人讀動機，條列讓功能可逐項核對，人與機器都要讀得懂。接著用三句話讓忙碌的審閱者 10 秒內抓住全貌；再補技術線選型，讓工程／架構一眼知道「用什麼做、刻意不選什麼」。避免行話堆疊與無邊界的技術清單。",
     tips: [
       "功能說明與願景：敘事開頭、條列收尾 —— 敘事講為什麼，條列讓功能與目標可逐項核對",
       "寫具體對象，不要寫「所有使用者」",
@@ -497,16 +560,17 @@ export const SEED_SECTIONS: Section[] = [
   },
   {
     id: "problem",
-    n: "02",
-    title: "問題陳述",
-    desc: "痛點、對象、佐證",
+    n: "03",
+    title: "專案背景與佐證",
+    desc: "為什麼現在做 · 目前的問題或機會 · 可追溯佐證（範本 2.2）",
     status: "done",
-    guide: "一段話說明現況傷害誰；附上一則真實引言。避免把解法寫進問題。",
-    tips: ["先寫失敗模式，再寫頻率／代價", "區分外部客戶 vs 內部營運痛點", "引言最好來自實際訪談或工單"],
+    guide:
+      "先說動機，不要一開頭就講規則細節。一段話說明現況傷害誰、多常發生、代價多少；附上一則可追溯的佐證（審查紀錄、工單或具名引言）。避免把解法寫進問題。",
+    tips: ["先寫失敗模式，再寫頻率／代價", "區分外部客戶 vs 內部營運痛點", "引言最好來自實際訪談或工單，具名或可匿名但要具體"],
     example: "「我們很喜歡產品，但兩次資安審查都卡在沒有 TOTP。補上就能簽約。」— 客戶 CTO",
     fields: [
-      { key: "problem", label: "問題段落", hint: "150–250 字", type: "textarea", rows: 6, value: "目前僅密碼守護工作區。對需符合 SOC 2 Type II 的企業租戶，這是控制面缺口而非觀感問題。近六次企業資安審查有三次將缺少第二因素列為阻擋。內部亦然：擁有正式環境存取的工程師與僅檢視權限的行銷成員共用同一驗證面，我們依賴政策而非態勢。" },
-      { key: "quote", label: "客戶／夥伴引言", hint: "一句話 + 職稱", type: "textarea", rows: 3, value: "「我們很喜歡產品，但缺少 TOTP 在三次審查中出現兩次。補上我們就能簽約。」— Maya Reddy · CTO, Pioneer Robotics" },
+      { key: "problem", label: "背景與問題", hint: "150–250 字", type: "textarea", rows: 6, value: "目前僅密碼守護工作區。對需符合 SOC 2 Type II 的企業租戶，這是控制面缺口而非觀感問題。近六次企業資安審查有三次將缺少第二因素列為阻擋。內部亦然：擁有正式環境存取的工程師與僅檢視權限的行銷成員共用同一驗證面，我們依賴政策而非控制。" },
+      { key: "quote", label: "佐證（引言／審查紀錄／工單）", hint: "一句話 + 姓名職稱 + 來源日期", type: "textarea", rows: 3, value: "「產品我們很滿意，但缺 TOTP 在三次審查中出現兩次。補上就能簽約。」— Maya Reddy · CTO, Pioneer Robotics，2026-07 資安問卷" },
     ],
     checks: [
       { id: "c1", label: "未在問題段預設解法", pass: true },
@@ -517,16 +581,17 @@ export const SEED_SECTIONS: Section[] = [
   },
   {
     id: "goals",
-    n: "03",
+    n: "04",
     title: "目標與非目標",
-    desc: "雙欄邊界",
+    desc: "雙欄邊界，非目標至少三條（範本 2.3）",
     status: "done",
-    guide: "目標可驗收；非目標明確「這次不做」。非目標能減少範圍蔓延。",
+    guide:
+      "目標可驗收；非目標明確「這次不做」並附延後理由。非目標和目標一樣重要 —— 沒有邊界的 PRD 會在開發中途被無限追加。至少寫三條。",
     tips: ["每條目標可對應測試或演示", "非目標寫「延後原因」更有說服力", "避免「提升體驗」這類無法驗收句"],
     example: "目標：付費方案支援 TOTP。非目標：簡訊 OTP（成本與 SIM 交換風險，列 Q1 評估）。",
     fields: [
       { key: "goals", label: "目標", hint: "每行一條", type: "textarea", rows: 5, value: "• 所有付費方案支援 TOTP（Authy / 1Password / Google Authenticator）\n• Enterprise 支援安全金鑰（WebAuthn）\n• 管理員可強制工作區全員啟用 2FA\n• 可列印／下載／重新產生復原碼\n• 設定、變更、移除寫入稽核日誌" },
-      { key: "nongoals", label: "非目標", hint: "每行一條", type: "textarea", rows: 4, value: "• 簡訊／語音 OTP（成本與 SIM 交換風險）\n• 生物辨識裝置綁定的跨裝置漫遊（跟 WebAuthn 路線圖）\n• 取代現有 SSO／SAML 流程\n• 強制免費方案啟用 2FA" },
+      { key: "nongoals", label: "非目標", hint: "每行一條，附延後理由", type: "textarea", rows: 4, value: "• 簡訊／語音 OTP（成本與 SIM 交換風險）\n• 生物辨識裝置綁定的跨裝置漫遊（跟 WebAuthn 路線圖，本期不做）\n• 取代現有 SSO／SAML 流程\n• 強制免費方案啟用 2FA" },
     ],
     checks: [
       { id: "c1", label: "目標可驗收", pass: true },
@@ -537,34 +602,78 @@ export const SEED_SECTIONS: Section[] = [
   },
   {
     id: "metrics",
-    n: "04",
+    n: "05",
     title: "成功指標",
-    desc: "指標 / 目標 / 量測",
+    desc: "指標 / 現況基準 / 目標值 / 量測 / 領先落後（範本 2.4）",
     status: "warn",
-    guide: "每列：指標名稱、目標值、量測方式。避免只有虛榮指標。",
+    guide:
+      "每列：指標名稱、現況基準、目標值、量測方式，並標明領先或落後。至少要有一個領先指標 —— 落後指標要等三個月才知道做錯了。避免只有虛榮指標。",
     tips: ["至少一項領先指標 + 一項落後指標", "寫清楚分母（誰算啟用）", "資安相關可加合規里程碑"],
-    example: "企業租戶 2FA 覆蓋率 ≥ 80%（90 天）· 量測：工作區政策 + 成員啟用事件。",
+    example: "企業租戶 2FA 覆蓋率 ≥ 80%（90 天）· 量測：工作區政策 + 成員啟用事件 · 落後",
     fields: [
-      { key: "m1", label: "指標列（Markdown 表可）", hint: "指標 | 目標 | 量測", type: "textarea", rows: 6, value: "指標 | 目標 | 量測\n---|---|---\n企業租戶 2FA 覆蓋率 | ≥ 80%（GA 後 90 天） | 工作區強制政策 + 成員啟用事件\n因缺少 2FA 卡住的資安審查 | 歸零（兩季內） | 銷售／資安聯合追蹤表\n2FA 設定完成率 | ≥ 70% 開始設定者完成 | 漏斗：開始 → 驗證 → 復原碼確認\n登入失敗率（2FA 相關） | < 2% 額外失敗 | 認證服務錯誤碼" },
+      { key: "m1", label: "指標列（Markdown 表可）", hint: "指標 | 現況基準 | 目標值 | 量測方式 | 領先／落後", type: "textarea", rows: 7, value: "指標 | 現況基準 | 目標值 | 量測方式 | 領先／落後\n---|---|---|---|---\n企業租戶 2FA 覆蓋率 | 0% | ≥ 80%（GA 後 90 天） | 強制政策 + 成員啟用事件 | 落後\n2FA 設定完成率 | — | ≥ 70% 開始者完成 | 漏斗：開始 → 驗證 → 復原碼確認 | 領先\n因缺 2FA 卡住的資安審查 | 3 件 | 歸零（兩季內） | 銷售／資安聯合追蹤表 | 落後\n登入失敗率（2FA 相關） | — | < 2% 額外失敗 | 認證服務錯誤碼 | 領先" },
     ],
     checks: [
-      { id: "c1", label: "每列含目標值", pass: true },
+      { id: "c1", label: "每列含目標值與現況基準", pass: true },
       { id: "c2", label: "量測方式可實作", pass: true },
-      { id: "c3", label: "含至少一個領先指標", pass: false },
+      { id: "c3", label: "含至少一個領先指標", pass: true },
     ],
-    score: 72,
+    score: 82,
+  },
+  {
+    id: "sources",
+    n: "06",
+    title: "需求來源",
+    desc: "需求 / 來源 / 提出日期 / 釐清結論（範本 2.5）",
+    status: "warn",
+    guide:
+      "畫圖前先把需求從哪裡來弄清楚。有些需求一釐清就不必進開發；也有些一釐清才發現大到會動搖產品結構，那時要回頭看它背後的商業利益。每筆都要有釐清結論。",
+    tips: ["來源要寫得出人或管道，不要寫「內部討論」", "結論只有三種：進開發／不做／延後", "不做的那幾筆要同步搬進非目標"],
+    example: "R-02 · 支援簡訊 OTP · HelpDesk 用戶回饋 · 2026-07-15 · 不做，列非目標（成本與風險）",
+    fields: [
+      { key: "reqs", label: "需求來源表", hint: "# | 需求 | 來源 | 提出日期 | 釐清結論", type: "textarea", rows: 6, value: "# | 需求 | 來源 | 提出日期 | 釐清結論\n---|---|---|---|---\nR-01 | 支援第二驗證因素 | 企業銷售（三筆合約前提） | 2026-07-08 | 進開發，列 P0\nR-02 | 支援簡訊 OTP | HelpDesk 用戶回饋 | 2026-07-15 | 不做，列非目標（成本與風險）\nR-03 | 管理員可匯出啟用紀錄 | 客戶資安團隊 | 2026-07-22 | 進開發，列 P1" },
+    ],
+    checks: [
+      { id: "c1", label: "每筆需求可追溯到人或管道", pass: true },
+      { id: "c2", label: "每筆都有釐清結論", pass: true },
+      { id: "c3", label: "不做的需求已同步到非目標", pass: false },
+    ],
+    score: 70,
+  },
+  {
+    id: "users",
+    n: "07",
+    title: "目標客群與競品",
+    desc: "主要／次要客群 · 競品作法與取捨（範本 3.1、3.4）",
+    status: "empty",
+    guide:
+      "客群分主要與次要，各自寫他最在意的那件事。競品那欄比的是行為不是功能清單 —— 重點在「可借鏡之處」與「不採用的理由」，把取捨寫下來，半年後才看得懂為什麼。",
+    tips: ["主要客群是「不服務就等於失敗」的那一群", "次要客群寫他的抵抗，不是他的需求", "競品表一定要有一欄「不採用的理由」"],
+    example: "競品 B：TOTP + 簡訊備援 → 不採用，簡訊成本與 SIM 交換風險",
+    fields: [
+      { key: "audience", label: "目標客群", hint: "主要 / 次要，各一段", type: "textarea", rows: 5, value: "" },
+      { key: "competitors", label: "競品分析", hint: "對象 | 功能 | 作法 | 可借鏡之處 | 不採用的理由", type: "textarea", rows: 6, value: "" },
+    ],
+    checks: [
+      { id: "c1", label: "主要與次要客群都有", pass: false },
+      { id: "c2", label: "競品表含「不採用的理由」", pass: false },
+      { id: "c3", label: "含本產品現況那一列", pass: false },
+    ],
+    score: 0,
   },
   {
     id: "stories",
-    n: "05",
-    title: "使用者故事",
-    desc: "As-a / I-want / So-that",
+    n: "08",
+    title: "用戶故事與流程",
+    desc: "As-a / I-want / So-that · User Journey（範本 3.2、3.3）",
     status: "done",
-    guide: "每則故事一個角色、一個意圖、一個價值。可加驗收條件。",
+    guide:
+      "每則故事一個角色、一個意圖、一個價值。必須覆蓋管理員與終端使用者，而且要有復原／例外路徑的故事。流程那欄逐步寫：角色做了什麼、系統回應什麼、在哪個畫面。",
     tips: ["角色用產品內真實角色名", "避免「作為使用者我想要系統…」", "資安故事要寫威脅模型連結"],
     example: "作為工作區管理員，我想要強制全員 2FA，以便通過客戶資安問卷。",
     fields: [
-      { key: "stories", label: "故事列表", hint: "編號 + 三句式", type: "textarea", rows: 7, value: "1. 作為成員，我想要綁定 TOTP，以便在密碼外多一層保護。\n2. 作為工作區管理員，我想要強制全員 2FA，以便通過客戶資安問卷。\n3. 作為遺失手機的成員，我想要用復原碼登入，以便不中斷工作。\n4. 作為資安審核員，我想要匯出 2FA 啟用稽核紀錄，以便佐證控制有效。\n5. 作為 Enterprise 管理員，我想要允許安全金鑰，以便符合硬體金鑰政策。" },
+      { key: "stories", label: "用戶故事", hint: "編號 + 三句式", type: "textarea", rows: 7, value: "1. 作為成員，我想要綁定 TOTP，以便在密碼外多一層保護。\n2. 作為工作區管理員，我想要強制全員 2FA，以便通過客戶資安問卷。\n3. 作為遺失手機的成員，我想要用復原碼登入，以便不中斷工作。\n4. 作為資安審核員，我想要匯出 2FA 啟用稽核紀錄，以便佐證控制有效。\n5. 作為 Enterprise 管理員，我想要允許安全金鑰，以便符合硬體金鑰政策。" },
+      { key: "journey", label: "用戶流程（User Journey）", hint: "步驟 | 角色 | 動作 | 系統回應 | 畫面", type: "textarea", rows: 6, value: "步驟 | 角色 | 動作 | 系統回應 | 畫面\n---|---|---|---|---\n1 | 成員 | 在設定頁點「啟用 2FA」 | 顯示 QR Code 與密鑰 | 設定／安全\n2 | 成員 | 掃碼後輸入 6 位數 | 驗證通過，產生 10 組復原碼 | 設定／安全\n3 | 成員 | 下載復原碼並勾選「已保存」 | 啟用完成，寫入稽核事件 | 設定／安全" },
     ],
     checks: [
       { id: "c1", label: "皆為三句式", pass: true },
@@ -575,41 +684,167 @@ export const SEED_SECTIONS: Section[] = [
   },
   {
     id: "scope",
-    n: "06",
-    title: "範圍與里程碑",
-    desc: "3–4 個階段",
+    n: "09",
+    title: "功能範圍與開發排程",
+    desc: "Phase 切分（P0 = MVP）· 本次時程（範本 4）",
     status: "warn",
-    guide: "每個里程碑：產出、依賴、大致工時。標出可單獨上線的切片。",
-    tips: ["M0 最好是可演示的垂直切片", "標出跨隊依賴（設計、法務、資安）", "不要把「研究」當唯一里程碑產出"],
-    example: "M1：TOTP 自願啟用 · M2：復原碼 + 稽核 · M3：強制政策 · M4：WebAuthn",
+    guide:
+      "盤點功能後切 Phase。Phase 0 就是 MVP —— 先把最小可運行的功能定好，再依開發資源往後切。每一段都要能單獨上線，並標出依賴或風險。",
+    tips: ["P0 最好是可演示的垂直切片", "標出跨隊依賴（設計、法務、資安）", "不要把「研究」當唯一里程碑產出"],
+    example: "P0 自願啟用 TOTP · P1 復原碼與稽核 · P2 強制政策 · P3 WebAuthn",
     fields: [
-      { key: "ms", label: "里程碑", hint: "階段 / 產出 / 時間", type: "textarea", rows: 6, value: "M1 自願 TOTP（3 週）— 設定與登入挑戰，個人設定頁\nM2 復原與稽核（2 週）— 復原碼、稽核事件、協助中心文案\nM3 工作區強制（2 週）— 管理員政策、寬限期、鎖定流程\nM4 WebAuthn Enterprise（3 週）— 安全金鑰註冊與登入" },
+      { key: "phases", label: "功能範圍（Phase）", hint: "Phase | 功能 | 對應故事 | 需求來源 | 版本號 | 上版時間 | 依賴／風險", type: "textarea", rows: 7, value: "Phase | 功能 | 對應故事 | 需求來源 | 版本號 | 上版時間 | 依賴／風險\n---|---|---|---|---|---|---\nP0 | 自願啟用 TOTP：設定與登入挑戰 | US-01 | R-01 | v4.3.0 | 2026-09-20 | 認證服務需先支援多因素狀態\nP1 | 復原碼與稽核事件 | US-03、US-04 | R-01 | v4.4.0 | 2026-10-05 | 需協助中心文案\nP2 | 工作區強制政策與寬限期 | US-02 | R-01 | v4.5.0 | 2026-10-20 | 寬限期天數未定，見開放問題\nP3 | WebAuthn 安全金鑰（Enterprise） | US-02 | R-01 | v5.0.0 | 2026-11-15 | 需瀏覽器相容性盤點" },
+      { key: "ms", label: "本次時程", hint: "階段 | 日期 | 負責人 | 備註", type: "textarea", rows: 5, value: "階段 | 日期 | 負責人 | 備註\n---|---|---|---\nPlanning | 2026-08-25 ~ 08-29 | 林可晴 | 規格審閱會\n開發 | 2026-09-01 ~ 09-16 | 周承翰 | P0\n驗收 | 2026-09-17 ~ 09-19 | QA 黃詩涵 | 依驗收標準章\n上線 | 2026-09-20 | — | 分批放量 20% → 100%" },
     ],
     checks: [
-      { id: "c1", label: "3–4 個可交付階段", pass: true },
-      { id: "c2", label: "標註依賴或風險", pass: false },
-      { id: "c3", label: "有可單獨上線切片", pass: true },
+      { id: "c1", label: "P0 是可單獨上線的 MVP", pass: true },
+      { id: "c2", label: "每段標註依賴或風險", pass: true },
+      { id: "c3", label: "時程有負責人", pass: false },
     ],
-    score: 68,
+    score: 74,
+  },
+  {
+    id: "arch",
+    n: "10",
+    title: "產品架構",
+    desc: "Function Map · 資料結構 IA · 流程圖（範本 5）",
+    status: "empty",
+    guide:
+      "Function Map 是功能模塊的集合，顆粒度取決於 RD 需要了解到多細。檢查法：拿 CRUD 逐一比對每個 Feature，看資料運算有沒有漏掉的一角。IA 讓後端在前期就能開好 DB 欄位，定義得越死，開發中途的來回越少。",
+    tips: [
+      "CRUD 掃一遍：範本的例子是復原碼漏了 Update（重新產生）",
+      "IA 每個欄位都要有型別、必填、預設值、限制",
+      "登入前／後這類會分岔出不同功能的狀況要明確寫下來",
+    ],
+    example: "復原碼：Create（產生）／Read（下載）／Delete（用掉即失效）／Update（重新產生）",
+    fields: [
+      { key: "funcmap", label: "功能心智圖（Function Map）", hint: "模塊 → 功能；已用 CRUD 檢查過", type: "textarea", rows: 6, value: "" },
+      { key: "ia", label: "資料結構圖（IA）", hint: "功能 | 欄位 | 型別 | 必填 | 預設值 | 限制 | 備註", type: "textarea", rows: 7, value: "" },
+      { key: "flow", label: "功能邏輯圖（Flow Chart）", hint: "全局與局部各一份，含分岔條件與連結", type: "textarea", rows: 5, value: "" },
+    ],
+    checks: [
+      { id: "c1", label: "Function Map 已用 CRUD 檢查過", pass: false },
+      { id: "c2", label: "IA 欄位含型別與限制", pass: false },
+      { id: "c3", label: "分岔條件已寫明", pass: false },
+    ],
+    score: 0,
+  },
+  {
+    id: "spec",
+    n: "11",
+    title: "需求規格",
+    desc: "功能描述 · 邏輯規則 · 例外流程 · 規格數值（範本 6）",
+    status: "empty",
+    guide:
+      "邏輯規則要寫齊七件事：觸發條件、輸入來源與限制、處理邏輯、輸出格式、防呆機制、資料流向、狀態轉換。例外流程是最常漏的一節 —— PRD 沒寫「API 打失敗」，測試才發現 timeout 沒有任何提示。規格數值不准模糊：不要寫「適度寬度的欄位」，要寫出數字。",
+    tips: [
+      "每個流程都要跑過一次例外：timeout、輸入錯誤、載入異常、資訊不足",
+      "例外那欄要寫「使用者看到什麼」，不只是「系統怎麼處理」",
+      "禁用「適度」「盡量」「合理」——那是把決定丟回給工程",
+    ],
+    example: "驗證碼 6 位數字，有效時窗 30 秒，容許前後各 1 個時窗；5 次失敗鎖定 15 分鐘",
+    fields: [
+      { key: "feature", label: "功能描述", hint: "使用者流程與介面元素", type: "textarea", rows: 5, value: "" },
+      { key: "logic", label: "邏輯規則", hint: "觸發條件 · 輸入限制 · 處理邏輯 · 輸出格式 · 防呆 · 資料流向 · 狀態轉換", type: "textarea", rows: 8, value: "" },
+      { key: "exception", label: "例外與錯誤流程", hint: "例外狀況 | 系統行為 | 使用者看到什麼", type: "textarea", rows: 6, value: "" },
+      { key: "numbers", label: "規格數值", hint: "欄位／元素 | 限制 | 預設值 —— 寫數字，不寫形容詞", type: "textarea", rows: 6, value: "" },
+    ],
+    checks: [
+      { id: "c1", label: "無「適度／盡量／合理」等模糊字眼", pass: false },
+      { id: "c2", label: "每個流程都寫了例外", pass: false },
+      { id: "c3", label: "規格數值都寫死", pass: false },
+    ],
+    score: 0,
+  },
+  {
+    id: "proto",
+    n: "12",
+    title: "原型、視覺與附件",
+    desc: "原型連結 · 字串表 · 切圖與文件（範本 7）",
+    status: "empty",
+    guide:
+      "線框圖與精細圖都放這一節，統一集中給 RD。工具與交付方式衡量的是時間成本，目標只有一個：溝通清晰。PRD 與設計稿的規則必須逐條比對過 —— 若有不一致，要明寫以哪份為準。",
+    tips: [
+      "每個原型都標保真度與最後更新日",
+      "「已與 PRD 對過規則」那一欄不是裝飾，是最貴的一欄",
+      "字串表用不到就刪掉，不必為了填滿而填",
+    ],
+    example: "2FA 設定流程 · Figma · 高保真 · 2026-08-27 · ☑ 復原碼組數已同步為 10",
+    fields: [
+      { key: "proto", label: "原型", hint: "功能 | 原型連結 | 保真度 | 最後更新 | 已與 PRD 對過規則", type: "textarea", rows: 5, value: "" },
+      { key: "strings", label: "字串表", hint: "Key | 繁中 | English | 使用位置 | 備註（用不到可留空）", type: "textarea", rows: 4, value: "" },
+      { key: "attach", label: "附件", hint: "類型 | 名稱 | 連結 | 提供者", type: "textarea", rows: 4, value: "" },
+    ],
+    checks: [
+      { id: "c1", label: "原型連結可開", pass: false },
+      { id: "c2", label: "已與 PRD 逐條比對規則", pass: false },
+      { id: "c3", label: "不一致處已註明以哪份為準", pass: false },
+    ],
+    score: 0,
+  },
+  {
+    id: "accept",
+    n: "13",
+    title: "驗收標準",
+    desc: "正向與反向的可判定項目（範本 8）",
+    status: "empty",
+    guide:
+      "寫出功能的最終樣貌，讓 RD 開發完能自驗、QA 能據以展開測試項目。只說「要支援 2FA」而沒定義成功長什麼樣，QA 就無從驗收。正向與反向都要有。",
+    tips: ["每一條都要能判 Pass／Fail，不能是「體驗良好」", "反向至少涵蓋：輸入錯誤、服務無回應、重複使用", "驗收項目對得回需求規格的數值"],
+    example: "AC-03 連續 5 次錯誤 → 鎖定 15 分鐘，顯示解鎖時間",
+    fields: [
+      { key: "ac", label: "驗收標準", hint: "# | 驗收項目 | 預期結果 | Pass／Fail", type: "textarea", rows: 8, value: "" },
+    ],
+    checks: [
+      { id: "c1", label: "每條可判 Pass／Fail", pass: false },
+      { id: "c2", label: "正向與反向都涵蓋", pass: false },
+      { id: "c3", label: "對得回規格數值", pass: false },
+    ],
+    score: 0,
+  },
+  {
+    id: "kpi",
+    n: "14",
+    title: "產品指標",
+    desc: "Goal → Signal → Metric → 埋點事件（範本 9）",
+    status: "empty",
+    guide:
+      "每個功能釋出前先想清楚它要達成的商業目標，再依 Goal → Signal → Metric（樹幹 → 樹枝 → 樹葉）往下拆，最後與 RD 談事件埋點。也要反覆自問：覆蓋率拉到 80%，客戶就真的會簽約嗎？指標的重要程度由產品屬性決定，不是抄來的。",
+    tips: [
+      "Goal 是商業目標，不是功能目標",
+      "Signal 是觀察得到的行為，Metric 才是數字",
+      "有些東西埋再多事件也量不出來 —— 認知負荷要靠 NASA-TLX、QUIS 這類量表做質性測試",
+    ],
+    example: "2FA 設定 → 通過企業資安審查 → 成員願意走完設定流程 → 完成率 ≥ 70% → `2fa_setup_completed`",
+    fields: [
+      { key: "gsm", label: "Goal / Signal / Metric / 埋點", hint: "功能 | Goal | Signal | Metric | 埋點事件", type: "textarea", rows: 7, value: "" },
+    ],
+    checks: [
+      { id: "c1", label: "每個功能都有 Goal → Signal → Metric", pass: false },
+      { id: "c2", label: "Metric 對得到埋點事件名", pass: false },
+      { id: "c3", label: "已自問指標與商業目標的因果", pass: false },
+    ],
+    score: 0,
   },
   {
     id: "open",
-    n: "07",
+    n: "15",
     title: "開放問題",
-    desc: "問題 + 負責人",
+    desc: "問題 · 負責人 · 期限 · 狀態（範本 10）",
     status: "empty",
-    guide: "每個問題要有 assignee 與決策期限，否則會變成永久待辦。",
+    guide:
+      "還沒決定的事寫在這裡，每題都要有負責人與期限，否則會變成永久待辦。控制在 8 題以內 —— 超過就不是開放問題，是規格還沒想清楚。",
     tips: ["寫成可回答的問題，不要寫主題標籤", "區分產品決策 vs 工程調查", "已決問題移出並記結論"],
-    example: "寬限期預設 7 天還是 14 天？→ 產品 · 8/12 前",
+    example: "Q-01 強制 2FA 的寬限期預設幾天？— 林可晴 · 2026-09-05 · 待決",
     fields: [
-      { key: "oq", label: "開放問題", hint: "問題 · 負責人 · 期限", type: "textarea", rows: 5, value: "• 強制 2FA 的寬限期預設幾天？— 林可晴 · 待決\n• 復原碼用盡後的協助流程是否走 Zendesk？— 周承翰 · 待決\n• WebAuthn 是否允許平台驗證器（Touch ID）？— 黃詩涵 · 待決" },
+      { key: "oq", label: "開放問題", hint: "問題 · 負責人 · 期限 · 狀態", type: "textarea", rows: 6, value: "• 強制 2FA 的寬限期預設幾天？— 林可晴 · 2026-09-05 · 待決\n• 復原碼用盡後的協助流程走客服工單還是自助？— 周承翰 · 2026-09-05 · 待決\n• WebAuthn 是否允許平台驗證器（Touch ID）？— 黃詩涵 · 2026-10-01 · 待決" },
     ],
     checks: [
       { id: "c1", label: "每題有負責人", pass: true },
-      { id: "c2", label: "每題有期限", pass: false },
+      { id: "c2", label: "每題有期限", pass: true },
       { id: "c3", label: "少於 8 題（避免規格癱瘓）", pass: true },
     ],
-    score: 54,
+    score: 78,
   },
 ];
 

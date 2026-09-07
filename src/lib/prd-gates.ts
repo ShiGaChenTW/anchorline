@@ -29,8 +29,20 @@ const LIST_ITEM_RE = "^\\s*(?:[-*•]|\\d+[.)])";
 const DEADLINE_RE = "\\d{1,2}\\/\\d{1,2}|Q\\d|週|前|deadline|期限";
 
 /**
- * 通用 7 章的規則。這不是「特例」，是一個叫 `_base` 的領域包——
+ * 範本第 6.4 節點名的模糊字眼。「不要寫『適度寬度的欄位』，要寫出數字。」
+ *
+ * 用在負向 lookahead 裡（`^(?![\s\S]*(?:…))`），所以這裡只列詞，不列語法。
+ */
+const VAGUE_RE = "適度|盡量|儘量|合理|視情況|大致|酌情|依實際";
+
+/**
+ * 通用 15 章的規則。這不是「特例」，是一個叫 `_base` 的領域包——
  * 領域包用同一個 `GateSpec` 形狀，差別只在它從 frontmatter 讀進來。
+ *
+ * 章節骨架與這份規則的來源是 `docs/TEMPLATE-prd-unified.md`。範本的第 0 章
+ * （要不要寫這份 PRD）與第 11 章（送出前自檢）**不是章節**，是檢核工具：
+ * 前者在 `prd-triage.ts`，後者在 `prd-selfcheck.ts`，後者的每一個自動項目
+ * 都指向下面某一條規則的 id。
  */
 export const BASE_GATE_SPEC: GateSpec = {
   groups: [
@@ -177,6 +189,215 @@ export const BASE_GATE_SPEC: GateSpec = {
         },
       ],
     },
+
+    // ── 範本第 11 節「送出前自檢」落成的規則 ────────────────────
+    //
+    // 全部是 `warn` 且 `skipWhenEmpty`，這是刻意的兩個決定：
+    //
+    // 1. **不進 block**：範本分 Lite（8 章）與 Full（15 章）。把 Full 才有的
+    //    章節做成 block，等於逼每一份 Lite PRD 都寫完 15 章才能送審——那正是
+    //    範本開頭說的「寫到 50 頁不等於完整」。門檻維持在 Lite 那幾章。
+    // 2. **空白就跳過**：新專案十幾章全空，一次噴十幾條警告會讓人直接關掉。
+    //    這些是「你寫了，但寫得不夠」的規則，不是「你還沒寫」的規則——
+    //    後者由 `emptySections` 一條講完就夠。
+    //
+    // 對照表在 `prd-selfcheck.ts`：那邊每一個 auto 項目都指向這裡的一個 id。
+    {
+      skipWhenEmpty: true,
+      rules: [
+        {
+          id: "docinfo-no-revision",
+          level: "warn",
+          label: "修訂紀錄空白",
+          detail:
+            "建議每次變更留下日期、修改章節與是否已通知開發——直接改正文的團隊尤其要留，工程師可能已照舊版做完。",
+          section: "docinfo",
+          fields: ["revisions"],
+          require: { kind: "minLength", n: 12 },
+        },
+      ],
+    },
+    {
+      skipWhenEmpty: true,
+      rules: [
+        {
+          id: "problem-no-evidence",
+          level: "warn",
+          label: "背景缺可追溯佐證",
+          detail: "建議附審查紀錄、工單編號或具名引言。沒有佐證的問題陳述等於一段意見。",
+          section: "problem",
+          fields: ["quote"],
+          require: { kind: "minLength", n: 10 },
+        },
+      ],
+    },
+    {
+      // 獨立一組而不是接在 metrics 那組後面：接上去會讓 `metrics-ok` 這條
+      // pass 連帶被領先指標卡住，而那條 pass 已經有既定語意（有可量測訊號）。
+      skipWhenEmpty: true,
+      rules: [
+        {
+          id: "metrics-no-leading",
+          level: "warn",
+          label: "成功指標缺領先指標",
+          detail:
+            "看起來只有落後指標。建議至少一個領先指標（例：設定完成率），落後指標要等三個月才知道做錯了。",
+          section: "metrics",
+          require: { kind: "match", re: "領先|leading|前置" },
+        },
+      ],
+    },
+    {
+      skipWhenEmpty: true,
+      rules: [
+        {
+          id: "sources-no-conclusion",
+          level: "warn",
+          label: "需求來源缺釐清結論",
+          detail:
+            "每筆需求要寫釐清後的判定（進開發／不做／列非目標）。有些需求一釐清就不必進開發，那正是這一節的價值。",
+          section: "sources",
+          require: { kind: "match", re: "進開發|不做|非目標|延後|待評估|P[0-3]" },
+        },
+      ],
+    },
+    {
+      skipWhenEmpty: true,
+      rules: [
+        {
+          id: "users-no-competitor",
+          level: "warn",
+          label: "缺競品對照",
+          detail: "建議列出競品作法與「可借鏡之處／不採用的理由」，把取捨寫下來。",
+          section: "users",
+          fields: ["competitors"],
+          require: { kind: "minLength", n: 20 },
+        },
+      ],
+    },
+    {
+      skipWhenEmpty: true,
+      rules: [
+        {
+          id: "scope-no-risk",
+          level: "warn",
+          label: "里程碑未標依賴或風險",
+          detail: "每一段都要能單獨上線，並標出依賴或風險，否則排程只是願望清單。",
+          section: "scope",
+          require: { kind: "match", re: "依賴|相依|風險|阻塞|blocker|risk" },
+        },
+      ],
+    },
+    {
+      skipWhenEmpty: true,
+      rules: [
+        {
+          id: "arch-no-crud",
+          level: "warn",
+          label: "Function Map 未見 CRUD 檢查",
+          detail:
+            "建議拿 CRUD 逐一比對每個 Feature，看資料運算有沒有漏掉的一角（範本的例子：復原碼漏了 Update）。",
+          section: "arch",
+          require: { kind: "match", re: "CRUD|新增|讀取|更新|刪除" },
+        },
+      ],
+    },
+    {
+      skipWhenEmpty: true,
+      rules: [
+        {
+          // 負向判定用 lookahead 表達。刻意不為此加第五個 predicate——
+          // 「不得出現 X」是 `match` 就寫得出來的東西。
+          id: "spec-vague-wording",
+          level: "warn",
+          label: "規格出現模糊字眼",
+          detail: "偵測到「適度／盡量／合理／視情況」這類字眼。規格數值要寫死，不要留給人猜。",
+          section: "spec",
+          require: { kind: "match", re: `^(?![\\s\\S]*(?:${VAGUE_RE}))` },
+        },
+        {
+          id: "spec-no-exception",
+          level: "warn",
+          label: "需求規格缺例外流程",
+          detail:
+            "最常漏的一節。每個流程都要跑過一次例外：API timeout、輸入錯誤、載入異常、資訊不足時使用者看到什麼。",
+          section: "spec",
+          require: { kind: "match", re: "例外|逾時|timeout|失敗|錯誤|異常" },
+        },
+        {
+          id: "spec-no-number",
+          level: "warn",
+          label: "規格數值未寫死",
+          detail: "建議補上具體數字：位數、秒數、次數、天數、字元上限。",
+          section: "spec",
+          require: { kind: "match", re: "\\d" },
+        },
+      ],
+      pass: { id: "spec-ok", label: "需求規格具體", detail: "含例外流程與寫死的規格數值" },
+    },
+    {
+      skipWhenEmpty: true,
+      rules: [
+        {
+          id: "proto-no-crosscheck",
+          level: "warn",
+          label: "原型未與 PRD 逐條比對",
+          detail:
+            "PRD 寫 8 組復原碼、設計稿標 10 組這種矛盾，開發到一半才發現的成本最高。比對過就註明以哪份為準。",
+          section: "proto",
+          require: { kind: "match", re: "已對|比對|同步|為準" },
+        },
+      ],
+    },
+    {
+      skipWhenEmpty: true,
+      rules: [
+        {
+          id: "accept-thin",
+          level: "warn",
+          label: "驗收標準不足 3 項",
+          detail: "目前約 {count} 項。只說「要支援 X」而沒定義成功長什麼樣，QA 無從展開測試。",
+          section: "accept",
+          require: { kind: "bullets", min: 3 },
+        },
+        {
+          id: "accept-no-negative",
+          level: "warn",
+          label: "驗收標準只有正向路徑",
+          detail: "正向與反向都要有：輸入錯誤、服務無回應、重複使用時各該發生什麼。",
+          section: "accept",
+          require: { kind: "match", re: "失敗|錯誤|拒絕|無回應|逾時|過期|重複|已使用" },
+        },
+      ],
+      pass: { id: "accept-ok", label: "驗收標準可展開測試", detail: "已有 {count} 項，含反向路徑" },
+    },
+    {
+      skipWhenEmpty: true,
+      rules: [
+        {
+          id: "kpi-no-gsm",
+          level: "warn",
+          label: "產品指標未拆到埋點",
+          detail: "建議依 Goal → Signal → Metric 往下拆，最後對到埋點事件名，否則量不出來。",
+          section: "kpi",
+          require: { kind: "match", re: "Goal|Signal|Metric|埋點|事件" },
+        },
+      ],
+    },
+    {
+      skipWhenEmpty: true,
+      rules: [
+        {
+          id: "open-too-many",
+          level: "warn",
+          label: "開放問題超過 8 題",
+          detail: "目前約 {count} 題。超過 8 題就不是開放問題，是規格還沒想清楚。",
+          section: "open",
+          fields: ["oq"],
+          require: { kind: "bullets", min: 0, max: 8 },
+        },
+      ],
+    },
   ],
   // 只給寫作教練看的軟提示。這些原本寫死在 ai-coach.ts 的 if/else 裡，
   // 搬成資料之後領域包也能自帶自己的 hints，教練不必再認得章節 id。
@@ -229,6 +450,55 @@ export const BASE_GATE_SPEC: GateSpec = {
     label: "多個章節仍空白",
     detail: "{count} 個章節標記為空白",
   },
+};
+
+/**
+ * 試作／探索（vibe）的最小規則組 —— 獨立一份純資料，不是 `_base` 的濾鏡。
+ *
+ * 一頁意圖只有三節，gate 只剩兩道 block：
+ * - 三行摘要**只查「做什麼」**——給誰／為何現在在「還不確定要不要做」的
+ *   階段常常答不出來，逼著填只會逼人編
+ * - Non-Goals 降為至少 1 條（**仍是 block**）——「刻意不做什麼」是這一檔
+ *   唯一擋 scope 膨脹的欄杆，歸零等於治理歸零
+ *
+ * 指標類 gate、warn 組與 hints、空章節檢查**全部不載入**：vibe 檔的空白
+ * 是常態不是欠債，對一頁意圖噴警告是把人趕回「乾脆不進 App」那條爛路。
+ *
+ * 規則 id 沿用 `_base` 的同名 id（`summary-incomplete`／`non-goals-min`），
+ * 自檢對照表與畫面上的既有文案映射才接得上。
+ */
+export const VIBE_GATE_SPEC: GateSpec = {
+  groups: [
+    {
+      rules: [
+        {
+          id: "summary-incomplete",
+          level: "block",
+          label: "三行摘要不完整",
+          detail: "缺少欄位：{missing}（做什麼）",
+          section: "summary",
+          fields: ["what"],
+          require: { kind: "present" },
+        },
+      ],
+      pass: { id: "summary-ok", label: "三行摘要完整", detail: "「做什麼」已有內容（試作檔只查這一欄）" },
+    },
+    {
+      rules: [
+        {
+          id: "non-goals-min",
+          level: "block",
+          label: "Non-Goals 不足 1 條",
+          detail: "目前約 {count} 條。試作檔也要至少 1 條「刻意不做」—— 那是唯一擋 scope 膨脹的欄杆。",
+          section: "goals",
+          fields: ["nongoals"],
+          require: { kind: "bullets", min: 1 },
+        },
+      ],
+      pass: { id: "non-goals-ok", label: "Non-Goals 達標", detail: "已有 {count} 條非目標" },
+    },
+  ],
+  // hints 與 emptySections 刻意缺席 —— 不是漏寫。見上方檔頭說明。
 };
 
 /** 領域包接進來時，把 spec 換掉即可；預設走 `_base`。 */

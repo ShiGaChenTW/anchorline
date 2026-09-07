@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-TW" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>新增 PRD — Anchorline（第三代 · agentctx 排版）</title>
+<!--
+  第三代設計 · 2026-09-03
+  排版語言取自 /Users/scottchen/Documents/20_Projects/agentctx（gui/src/EditorPane.tsx + styles/tokens.css）
+  這一頁移植的元素：
+    1. 網格畫布 + 浮起的表單卡（--doc-w / --r-lg 14px / --shadow-card）
+    2. 三條建案路徑改用 seg 凹槽分段控制器，取代底線分頁
+    3. 左欄 .row 網格帶色標與節數
+    4. 表單欄位收斂到 agentctx .search 的尺寸語彙（34px 高 / --r 8px / bg 為 --bg）
+    5. chip 狀態徽；11px uppercase +0.06em 區塊標籤
+    6. 底部 28px 狀態列
+  沿用第二代：雙主題 22 變數（hex）、零外部相依、零進場動畫、全繁中、無 emoji、
+             三條路徑共用同一組欄位、右側路線比較表帶建議標記、底下先講「這份之後由誰審」
+  調整：圓角 6/12 → 8/14；字級加入 11 / 13 / 15 三階
+-->
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --elev: #1c2128;
+    --hover: #21262d;
+    --active: #2a313a;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --faint: #6e7681;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --grid: #1b2027;
+    --accent: #2f81f7;
+    --accent-hover: #58a6ff;
+    --success: #3fb950;
+    --warn: #d29922;
+    --danger: #f85149;
+    --on-solid: #0d1117;
+    --shadow-card: 0 20px 25px -5px rgba(0,0,0,0.45), 0 8px 10px -6px rgba(0,0,0,0.35);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.30), 0 1px 2px -1px rgba(0,0,0,0.25);
+    --r: 8px;
+    --r-lg: 14px;
+    --r-pill: 9999px;
+    --doc-w: 720px;
+    --grid-size: 24px;
+  }
+
+  [data-theme="light"] {
+    --bg: #f5f4ed;
+    --surface: #faf9f5;
+    --elev: #fffef9;
+    --hover: #ecebe1;
+    --active: #e2e0d3;
+    --fg: #141413;
+    --muted: #504e49;
+    --faint: #8a877e;
+    --border: #e8e6dc;
+    --border-soft: #e5e3d8;
+    --grid: #eae8dd;
+    --accent: #1b365d;
+    --accent-hover: #2d5a8a;
+    --success: #4a6b3a;
+    --warn: #8a6b1f;
+    --danger: #8a3a30;
+    --on-solid: #faf9f5;
+    --shadow-card: 0 20px 25px -5px rgba(20,20,19,0.10), 0 8px 10px -6px rgba(20,20,19,0.08);
+    --shadow-sm: 0 1px 3px rgba(20,20,19,0.08), 0 1px 2px -1px rgba(20,20,19,0.06);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: system-ui, -apple-system, "Noto Sans TC", "PingFang TC", sans-serif;
+    background-color: var(--bg); color: var(--fg);
+    height: 100vh; font-size: 13px;
+    display: flex; justify-content: center; overflow: hidden;
+  }
+  [data-theme="light"] body { font-family: "Source Han Serif TC", "Noto Serif CJK TC", "Songti TC", Georgia, serif; }
+  [data-theme="light"] .sans { font-family: system-ui, -apple-system, sans-serif; }
+
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+
+  .t11 { font-size: 11px; line-height: 1.4; }
+  .t12 { font-size: 12px; line-height: 1.45; }
+  .t13 { font-size: 13px; line-height: 1.5; }
+  .t15 { font-size: 15px; line-height: 1.6; }
+  .t16 { font-size: 16px; line-height: 1.5; }
+  .t20 { font-size: 20px; line-height: 1.4; }
+  .t24 { font-size: 24px; line-height: 1.3; }
+
+  .label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+
+  .text-fg { color: var(--fg); }
+  .text-muted { color: var(--muted); }
+  .text-faint { color: var(--faint); }
+  .text-accent { color: var(--accent); }
+  .text-success { color: var(--success); }
+  .text-warn { color: var(--warn); }
+  .semibold { font-weight: 600; }
+  .bold { font-weight: 700; }
+  .inline { display: inline-flex; align-items: center; gap: 6px; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--r-pill); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* ─── 外殼 ─────────────────────────────────────────────────── */
+  .shell { width: 100%; max-width: 1600px; height: 100vh; display: grid; grid-template-rows: auto 1fr 28px; background: var(--bg); }
+  .topbar { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .topbar-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .statusbar { display: flex; align-items: center; gap: 16px; padding: 0 12px; border-top: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 11px; }
+  .statusbar .push { margin-left: auto; }
+
+  .main { display: flex; min-height: 0; }
+  .sidebar { width: 232px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; background: var(--surface); border-right: 1px solid var(--border); }
+  .center { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .details { width: 340px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; background: var(--surface); border-left: 1px solid var(--border); }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+
+  /* ─── 元件 ─────────────────────────────────────────────────── */
+  .chip {
+    display: inline-flex; align-items: center; height: 22px; padding: 0 8px;
+    border-radius: var(--r-pill); font-size: 11px; color: var(--fg); white-space: nowrap;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .chip-ok { background: color-mix(in srgb, var(--success) 16%, transparent); border-color: color-mix(in srgb, var(--success) 35%, transparent); }
+  .chip-warn { background: color-mix(in srgb, var(--warn) 16%, transparent); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+  .chip-neutral { background: color-mix(in srgb, var(--muted) 14%, transparent); border-color: var(--border); color: var(--muted); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 28px; padding: 0 10px; border-radius: var(--r);
+    border: 1px solid var(--hover); background: var(--bg); color: var(--fg);
+    font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap;
+    cursor: default; box-shadow: var(--shadow-sm);
+  }
+  .btn-ghost { border: 0; box-shadow: none; background: color-mix(in srgb, var(--hover) 55%, transparent); color: var(--muted); font-size: 12px; }
+  .btn-bare { border: 0; box-shadow: none; background: transparent; color: var(--muted); font-size: 12px; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-solid); }
+  .btn-lg { height: 38px; padding: 0 20px; font-size: 15px; font-weight: 600; }
+  .btn-block { width: 100%; }
+
+  .icon { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; display: inline-block; vertical-align: middle; }
+  .icon-lg { width: 18px; height: 18px; }
+
+  .mark { display: inline-block; flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; }
+  .mark-accent { background: var(--accent); }
+  .mark-warn { background: var(--warn); }
+  .mark-ok { background: var(--success); }
+  .mark-muted { background: var(--muted); }
+  .mark-empty { background: transparent; border: 1px solid var(--border); }
+
+  .fam {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: 50%;
+    font-size: 11px; font-weight: 700;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    border: 1px solid var(--border); background: var(--hover); color: var(--fg);
+  }
+  .fam-lg { width: 28px; height: 28px; font-size: 13px; }
+  .fam-c { border-color: color-mix(in srgb, var(--success) 55%, transparent); color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+  .fam-g { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+  .seg {
+    display: inline-flex; align-items: center; gap: 2px;
+    background: color-mix(in srgb, var(--hover) 55%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    border-radius: 10px; padding: 2px; height: 34px;
+  }
+  .seg button {
+    border: 0; background: transparent; color: var(--muted);
+    height: 28px; padding: 0 14px; border-radius: var(--r);
+    font: inherit; font-size: 12px; cursor: default; white-space: nowrap;
+  }
+  .seg button[aria-pressed="true"] { background: var(--bg); color: var(--fg); box-shadow: var(--shadow-sm); }
+
+  /* 左欄 */
+  .row {
+    display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center;
+    width: 100%; padding: 6px 12px; text-align: left; text-decoration: none;
+    border: 0; background: transparent; color: var(--muted); font-size: 13px;
+  }
+  .row:hover { background: var(--hover); color: var(--fg); }
+  .row[aria-current="true"] { background: var(--active); color: var(--fg); }
+  .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .num { color: var(--faint); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  .side-cap { padding: 14px 12px 6px; }
+  .side-foot { padding: 10px 12px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
+
+  /* ─── 中欄 ─────────────────────────────────────────────────── */
+  .page-bar {
+    display: flex; align-items: baseline; gap: 12px;
+    width: 100%; max-width: var(--doc-w); margin: 0 auto; padding: 20px 24px 0;
+  }
+  .crumb { font-size: 12px; color: var(--muted); }
+  .path-bar { width: 100%; max-width: var(--doc-w); margin: 0 auto; padding: 14px 24px 0; }
+
+  .canvas {
+    flex: 1; min-height: 0; overflow: auto; padding: 16px 24px 48px;
+    background-color: var(--bg);
+    background-image:
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+      linear-gradient(var(--grid) 1px, transparent 1px);
+    background-size: var(--grid-size) var(--grid-size);
+  }
+  .card {
+    width: 100%; max-width: var(--doc-w); margin: 0 auto 20px;
+    border: 1px solid var(--border); border-radius: var(--r-lg);
+    background: var(--elev); box-shadow: var(--shadow-card); overflow: hidden;
+  }
+  .card-head {
+    display: flex; align-items: center; gap: 8px; min-height: 36px;
+    padding: 0 12px 0 14px; color: var(--muted); font-size: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .card-head .push { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .card-pad { padding: 20px 24px 22px; }
+
+  /* 表單：欄位尺寸取自 agentctx .search */
+  .field { margin-bottom: 16px; }
+  .field > .label { display: block; margin-bottom: 6px; }
+  .input {
+    width: 100%; height: 34px;
+    border: 1px solid var(--border); border-radius: var(--r);
+    background: var(--bg); color: var(--fg);
+    padding: 0 10px; font: inherit; font-size: 13px; outline: none;
+  }
+  .input:focus { border-color: var(--accent); }
+  .input-group { display: flex; gap: 8px; }
+  .input-group .input { flex: 1; }
+  .input-group .btn { height: 34px; }
+
+  .qlist { border: 1px solid var(--border); border-radius: var(--r); background: var(--bg); overflow: hidden; }
+  .q {
+    display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: center;
+    padding: 9px 12px; border-top: 1px solid var(--border-soft);
+  }
+  .q:first-child { border-top: 0; }
+  .q-now { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .qn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: 50%;
+    font-size: 11px; font-weight: 700;
+    border: 1px solid var(--border); background: var(--hover); color: var(--faint);
+  }
+  .q-now .qn { background: var(--accent); border-color: var(--accent); color: var(--on-solid); }
+  .q .qt { font-size: 13px; color: var(--muted); }
+  .q-now .qt { color: var(--fg); }
+
+  .card-foot {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 24px; border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .card-foot .push { margin-left: auto; }
+
+  /* ─── 右欄：路線比較 ───────────────────────────────────────── */
+  .rail-block { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .rail-block:last-child { border-bottom: 0; }
+  .rail-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+
+  .rt-head {
+    display: grid; grid-template-columns: 18px 1fr 52px 56px; gap: 8px;
+    padding: 0 6px 6px; font-size: 11px; letter-spacing: 0.04em; color: var(--faint);
+    border-bottom: 1px solid var(--border);
+  }
+  .rt {
+    display: grid; grid-template-columns: 18px 1fr 52px 56px; gap: 8px; align-items: center;
+    padding: 10px 6px; border-top: 1px solid var(--border-soft); font-size: 12px; color: var(--muted);
+  }
+  .rt:hover { background: color-mix(in srgb, var(--hover) 55%, transparent); }
+  .rt-on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .radio {
+    width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+    border: 1px solid var(--border); background: transparent;
+  }
+  .rt-on .radio { border-color: var(--accent); border-width: 4px; }
+  .rt .rn { color: var(--fg); font-size: 13px; }
+  .rt-on .rn { font-weight: 600; }
+  .rt .rs { font-size: 11px; margin-top: 2px; }
+  .rt .rc { text-align: right; }
+
+  .note {
+    display: flex; gap: 8px; align-items: flex-start;
+    margin-top: 12px; padding: 10px;
+    border: 1px solid var(--border); border-radius: var(--r);
+    background: var(--bg); font-size: 11px; color: var(--muted); line-height: 1.6;
+  }
+
+  .flow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px; border: 1px solid var(--border); border-radius: var(--r);
+    background: var(--bg);
+  }
+  .flow-col { display: flex; flex-direction: column; gap: 4px; }
+  .flow-col .cap { font-size: 11px; color: var(--muted); }
+  .flow-col .who { font-size: 13px; font-weight: 600; color: var(--fg); }
+  .flow .arrow { color: var(--faint); margin: 0 2px; }
+  .flow .push { margin-left: auto; }
+
+  .anchor-line {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: var(--muted);
+  }
+  .anchor-tag {
+    padding: 2px 6px; border-radius: var(--r);
+    border: 1px solid var(--border); background: var(--bg);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <header class="topbar">
+    <svg class="icon icon-lg text-muted" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+    <span class="t13 semibold">建立一份新的 PRD</span>
+    <span class="chip chip-neutral">草稿未建立</span>
+    <span class="t12 text-muted">先選對治理路線，再開始寫下第一句話。</span>
+    <div class="topbar-actions">
+      <button class="btn btn-bare" onclick="toggleTheme()" title="切換深色／淺色" aria-label="切換深色／淺色">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+      </button>
+      <button class="btn btn-ghost">稍後再決定</button>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <aside class="sidebar">
+      <div class="side-cap label">建案路徑</div>
+      <a class="row" href="#" aria-current="true"><span class="mark mark-accent"></span><span class="name">從空白開始</span></a>
+      <a class="row" href="#"><span class="mark mark-empty"></span><span class="name">匯入 Markdown</span></a>
+      <a class="row" href="#"><span class="mark mark-empty"></span><span class="name">綁定程式碼資料夾</span></a>
+
+      <div class="side-cap label">路線與節數</div>
+      <a class="row" href="#" aria-current="true"><span class="mark mark-accent"></span><span class="name">新產品／新專案</span><span class="num">15</span></a>
+      <a class="row" href="#"><span class="mark mark-warn"></span><span class="name">功能建構／迭代</span><span class="num">8</span></a>
+      <a class="row" href="#"><span class="mark mark-ok"></span><span class="name">試作／探索</span><span class="num">3</span></a>
+      <a class="row" href="#"><span class="mark mark-muted"></span><span class="name">Debug／維運</span><span class="num">—</span></a>
+
+      <div class="scroll"></div>
+      <div class="side-foot">三條路徑共用同一組欄位，換路徑不會丟掉已填的內容。</div>
+    </aside>
+
+    <section class="center">
+      <div class="page-bar">
+        <span class="crumb">PRD / 新增</span>
+      </div>
+
+      <div class="path-bar">
+        <div class="seg" role="tablist" aria-label="建案路徑">
+          <button type="button" aria-pressed="true">從空白開始</button>
+          <button type="button" aria-pressed="false">匯入 Markdown</button>
+          <button type="button" aria-pressed="false">綁定程式碼資料夾</button>
+        </div>
+      </div>
+
+      <div class="canvas">
+        <div class="card">
+          <div class="card-head">
+            <span class="label">基本資料</span>
+            <span class="push">
+              <span class="chip">新產品／新專案</span>
+              <span class="chip chip-neutral">15 節草稿</span>
+            </span>
+          </div>
+
+          <div class="card-pad">
+            <div class="field">
+              <span class="label">PRD 名稱</span>
+              <input class="input sans" type="text" value="行動支付對帳中心">
+            </div>
+
+            <div class="field">
+              <span class="label">專案資料夾</span>
+              <div class="input-group">
+                <input class="input mono" type="text" value="~/Developer/pay-recon">
+                <button class="btn">選擇資料夾</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <span class="label">預設分支</span>
+              <input class="input mono" type="text" value="main">
+            </div>
+
+            <div class="field" style="margin-bottom:0;">
+              <span class="label">先寫下方向</span>
+              <div class="qlist">
+                <div class="q q-now"><span class="qn">1</span><span class="qt">這份 PRD 要解決什麼問題？</span></div>
+                <div class="q"><span class="qn">2</span><span class="qt">主要使用者是誰？</span></div>
+                <div class="q"><span class="qn">3</span><span class="qt">為什麼現在要做？</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-foot">
+            <span class="t12 text-muted">將建立 15 節草稿 · 首次簽核由 GPT 家族</span>
+            <span class="push"><button class="btn btn-primary btn-lg">開始撰寫 PRD</button></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="details">
+      <div class="rail-block">
+        <div class="rail-head">
+          <span class="label">建議的治理路線</span>
+          <span class="chip">依目前資訊</span>
+        </div>
+
+        <div class="rt-head">
+          <span></span><span>路線</span><span class="rc">寫作</span><span class="rc">開工</span>
+        </div>
+
+        <div class="rt rt-on">
+          <span class="radio"></span>
+          <div><div class="rn">新產品／新專案</div><div class="rs">正式多方簽核</div></div>
+          <span class="rc text-fg">15 節</span>
+          <span class="rc"><span class="chip">建議</span></span>
+        </div>
+
+        <div class="rt">
+          <span class="radio"></span>
+          <div><div class="rn">功能建構／迭代優化</div><div class="rs">正式多方簽核</div></div>
+          <span class="rc">8 節</span>
+          <span class="rc"><span class="chip chip-neutral">中等</span></span>
+        </div>
+
+        <div class="rt">
+          <span class="radio"></span>
+          <div><div class="rn">試作／探索</div><div class="rs">一鍵自簽</div></div>
+          <span class="rc">3 節</span>
+          <span class="rc"><span class="chip chip-ok">快速</span></span>
+        </div>
+
+        <div class="rt">
+          <span class="radio"></span>
+          <div><div class="rn">Debug／維運</div><div class="rs">改走 OpenSpec</div></div>
+          <span class="rc">不寫</span>
+          <span class="rc"><span class="chip chip-neutral">視情況</span></span>
+        </div>
+
+        <div class="note">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span>路線決定文件深度、簽核成本與後續治理鏈。選錯了之後可以改，但已簽的關卡要重跑。</span>
+        </div>
+      </div>
+
+      <div class="scroll">
+        <div class="rail-block">
+          <div class="rail-head"><span class="label">這份之後由誰審</span></div>
+          <div class="flow">
+            <span class="fam fam-lg fam-c">C</span>
+            <div class="flow-col"><span class="cap">實作</span><span class="who">Claude 家族</span></div>
+            <span class="arrow">→</span>
+            <div class="flow-col"><span class="cap">審查與核准</span><span class="who">GPT 家族</span></div>
+            <span class="push"><span class="fam fam-lg fam-g">G</span></span>
+          </div>
+          <div class="note">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            <span>實作的 AI 家族不得核准自己的實作。這條規則在建案時就決定，之後不能自己放寬。</span>
+          </div>
+        </div>
+
+        <div class="rail-block">
+          <div class="rail-head"><span class="label">起始錨點</span></div>
+          <div class="anchor-line">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="5" r="3"></circle><line x1="12" y1="22" x2="12" y2="8"></line><path d="M5 12H2a10 10 0 0 0 20 0h-3"></path></svg>
+            治理鏈會從 <span class="anchor-tag">anc:t=7f3a91c2</span> 開始追蹤
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span>從空白開始 · 新產品／新專案</span>
+    <span>15 節草稿</span>
+    <span class="mono">~/Developer/pay-recon · main</span>
+    <span class="push">首次簽核 GPT 家族</span>
+    <span class="mono">anc:t=7f3a91c2</span>
+  </footer>
+</div>
+
+<script>
+  function toggleTheme() {
+    const doc = document.documentElement;
+    doc.dataset.theme = doc.dataset.theme === 'light' ? 'dark' : 'light';
+  }
+</script>
+</body>
+</html>

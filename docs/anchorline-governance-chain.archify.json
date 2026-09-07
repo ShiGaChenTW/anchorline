@@ -1,0 +1,274 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Anchorline 治理鏈：現況、缺口與回流",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1000,
+      600
+    ],
+    "views": [
+      {
+        "id": "have",
+        "label": "已經站得住的那一段",
+        "focus": [
+          "prdgate",
+          "signoff",
+          "runwork"
+        ],
+        "note": "PRD 到簽核是目前最完整的鏈，簽核閘門擋得住同族系 agent 自審。"
+      },
+      {
+        "id": "gaps",
+        "label": "三個缺口",
+        "focus": [
+          "intentmd",
+          "newintent",
+          "agentcfg"
+        ],
+        "note": "最前面少一段、最後面沒接回來、旁邊的 agent 設定沒被治理。"
+      },
+      {
+        "id": "loop",
+        "label": "把線接成迴圈",
+        "focus": [
+          "uat",
+          "deliver",
+          "newintent",
+          "intentmd"
+        ],
+        "note": "四種訊號都已經有錨點，差的只是自動寫回一份意圖。"
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "people",
+      "label": "人：提出 · 核准 · 驗收"
+    },
+    {
+      "id": "app",
+      "label": "Anchorline：撰寫 · 閘門 · 追蹤"
+    },
+    {
+      "id": "ship",
+      "label": "交付"
+    },
+    {
+      "id": "gapline",
+      "label": "缺口：回流與設定治理",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "intentmd",
+    "prdgate",
+    "signoff",
+    "runwork",
+    "deliver"
+  ],
+  "nodes": [
+    {
+      "id": "intentmd",
+      "lane": "people",
+      "col": 0,
+      "type": "external",
+      "label": "intent.md",
+      "sublabel": "提出者的原話",
+      "tag": "缺口",
+      "width": 84
+    },
+    {
+      "id": "prdgate",
+      "lane": "app",
+      "col": 1,
+      "type": "frontend",
+      "label": "PRD 編輯台",
+      "sublabel": "引導撰寫 + 結構 gate",
+      "tag": "缺政策約束",
+      "width": 118
+    },
+    {
+      "id": "signoff",
+      "lane": "people",
+      "col": 3,
+      "type": "security",
+      "label": "簽核",
+      "sublabel": "gate 未過擋核准",
+      "tag": "已具備",
+      "width": 110
+    },
+    {
+      "id": "runwork",
+      "lane": "app",
+      "col": 4,
+      "type": "database",
+      "label": "執行與追蹤",
+      "sublabel": "openspec · plans checkbox",
+      "width": 118
+    },
+    {
+      "id": "uat",
+      "lane": "people",
+      "col": 5,
+      "type": "frontend",
+      "label": "UAT 驗收",
+      "sublabel": "失敗與不測必填說明",
+      "width": 96
+    },
+    {
+      "id": "deliver",
+      "lane": "ship",
+      "col": 5,
+      "type": "cloud",
+      "label": "交付",
+      "sublabel": "commits · PR · release",
+      "tag": "缺 rollback",
+      "width": 96
+    },
+    {
+      "id": "newintent",
+      "lane": "gapline",
+      "col": 5,
+      "type": "messagebus",
+      "label": "回流意圖",
+      "sublabel": "違規或失敗自動寫回",
+      "tag": "缺口",
+      "width": 96
+    },
+    {
+      "id": "agentcfg",
+      "lane": "gapline",
+      "col": 3,
+      "type": "security",
+      "label": "agent 設定",
+      "sublabel": "CLAUDE.md · skills · hooks",
+      "tag": "缺口",
+      "width": 118
+    }
+  ],
+  "edges": [
+    {
+      "from": "intentmd",
+      "to": "prdgate",
+      "label": "被接受",
+      "variant": "emphasis",
+      "role": "main",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "prdgate",
+      "to": "signoff",
+      "label": "送審",
+      "variant": "emphasis",
+      "role": "main",
+      "route": "up-channel",
+      "fromSide": "top",
+      "toSide": "top"
+    },
+    {
+      "from": "signoff",
+      "to": "runwork",
+      "variant": "emphasis",
+      "role": "main",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "runwork",
+      "to": "deliver",
+      "label": "推送",
+      "variant": "emphasis",
+      "role": "main",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "runwork",
+      "to": "uat",
+      "label": "待實機驗收",
+      "role": "branch",
+      "route": "up-channel",
+      "fromSide": "top",
+      "toSide": "top"
+    },
+    {
+      "from": "uat",
+      "to": "newintent",
+      "label": "失敗題",
+      "role": "error",
+      "variant": "security",
+      "route": "outside-right",
+      "fromSide": "right",
+      "toSide": "right"
+    },
+    {
+      "from": "deliver",
+      "to": "newintent",
+      "label": "release 異常",
+      "role": "error",
+      "variant": "security",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 26
+    },
+    {
+      "from": "newintent",
+      "to": "intentmd",
+      "label": "重啟迴圈",
+      "role": "return",
+      "variant": "dashed",
+      "route": "bottom-channel",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "channelY": 545
+    },
+    {
+      "from": "agentcfg",
+      "to": "runwork",
+      "label": "設定變更未入軌跡",
+      "role": "async",
+      "variant": "dashed",
+      "route": "up-channel",
+      "fromSide": "top",
+      "toSide": "top",
+      "labelDx": -96,
+      "labelDy": 8
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "什麼時候打開這張圖",
+      "items": [
+        "排下一版範圍：先看三個缺口",
+        "有人問「到底管到哪」：這是邊界",
+        "跟 SDLC playbook 逐段對齊時"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "缺口的日常樣貌",
+      "items": [
+        "想法沒成形也只能先寫 PRD",
+        "UAT 失敗題不會自己變成工作",
+        "改完 CLAUDE.md，軌跡上沒紀錄"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "補完順序（依賴，非重要性）",
+      "items": [
+        "先補意圖層，最便宜",
+        "再接回流，錨點都已經有",
+        "最後才治理 agent 設定"
+      ]
+    }
+  ]
+}

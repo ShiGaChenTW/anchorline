@@ -1,0 +1,35 @@
+{
+  "id": "2026-09-01T18-50-25-802Z-anchorline-project-dashboard-redesig",
+  "createdAt": "2026-09-01T18:50:35.490Z",
+  "repoRoot": "/Users/scottchen/orca/workspaces/Project_Anchorline/tiamat",
+  "prompt": "Anchorline project dashboard redesign — governance-chain desktop workbench, zh-TW, dark amber developer instrument",
+  "targetRouteHint": null,
+  "targetFileHint": null,
+  "detectedFrameworks": [],
+  "componentLibraries": [],
+  "stylingSystems": [],
+  "routeCandidates": [],
+  "tokenSources": [],
+  "componentDirectories": [],
+  "htmlStructure": {
+    "title": "Anchorline - Project Dashboard",
+    "primaryHeading": "Anchorline",
+    "sectionCount": 8,
+    "buttonCount": 5,
+    "formCount": 0,
+    "cardLikeCount": 18,
+    "hasNavigation": true,
+    "hasFooter": false,
+    "hasPricingSignals": false,
+    "hasDashboardSignals": true
+  },
+  "recommendations": [
+    "Break the artifact into section-level components before editing details.",
+    "Use the generated preview as the visual truth source while porting the layout."
+  ],
+  "warnings": [
+    "No frontend framework was detected. Validate the target surface manually before porting.",
+    "No obvious route targets were detected. Choose a target file deliberately before editing.",
+    "The artifact looks dashboard-like, but no dashboard route was detected automatically."
+  ]
+}

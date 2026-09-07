@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh-TW" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRD 撰寫工作台 — Anchorline（ultradesign）</title>
+<!--
+  AIDesigner ultradesign · canvas be5782d8-772c-4d74-aa46-a9267119f9cf · 2026-09-03
+  （這一輪 MCP transport 中斷、run id 遺失，HTML 由 canvas 取回）
+  目標檔：editor.html 主內容區
+  本機修正：移除注入的 Tailwind CDN、白色改走 var(--bg)、移除游標閃爍動畫、修錯字
+-->
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --accent: #2f81f7;
+    --accent-hover: #58a6ff;
+    --success: #3fb950;
+    --warn: #d29922;
+    --danger: #f85149;
+  }
+
+  [data-theme="light"] {
+    --bg: #f5f4ed;
+    --surface: #faf9f5;
+    --fg: #141413;
+    --muted: #504e49;
+    --border: #e8e6dc;
+    --border-soft: #e5e3d8;
+    --accent: #1b365d;
+    --accent-hover: #2d5a8a;
+    --success: #4a6b3a;
+    --warn: #8a6b1f;
+    --danger: #8a3a30;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: system-ui, -apple-system, "Noto Sans TC", "PingFang TC", sans-serif;
+    background-color: var(--bg);
+    color: var(--fg);
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  [data-theme="light"] body {
+    font-family: "Source Han Serif TC", "Noto Serif CJK TC", "Songti TC", Georgia, serif;
+  }
+  /* 編輯區在淺色主題維持無襯線，寫作手感不變 */
+  [data-theme="light"] .editor-preserve-font {
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+
+  .text-12 { font-size: 12px; line-height: 1.4; }
+  .text-14 { font-size: 14px; line-height: 1.5; }
+  .text-16 { font-size: 16px; line-height: 1.5; }
+  .text-20 { font-size: 20px; line-height: 1.4; }
+  .text-24 { font-size: 24px; line-height: 1.3; }
+  .text-28 { font-size: 28px; line-height: 1.2; }
+  .text-32 { font-size: 32px; line-height: 1.2; }
+
+  .bg-bg { background-color: var(--bg); }
+  .bg-surface { background-color: var(--surface); }
+  .bg-accent { background-color: var(--accent); color: var(--bg); }
+  .bg-accent-soft { background-color: color-mix(in srgb, var(--accent) 15%, transparent); }
+  .text-fg { color: var(--fg); }
+  .text-muted { color: var(--muted); }
+  .text-accent { color: var(--accent); }
+  .text-success { color: var(--success); }
+  .text-warn { color: var(--warn); }
+  .text-danger { color: var(--danger); }
+  .border-line { border: 1px solid var(--border); }
+  .border-b-line { border-bottom: 1px solid var(--border); }
+  .border-r-line { border-right: 1px solid var(--border); }
+  .border-soft-line { border: 1px solid var(--border-soft); }
+
+  .rounded-6 { border-radius: 6px; }
+  .rounded-12 { border-radius: 12px; }
+  .rounded-full { border-radius: 9999px; }
+
+  .app-container {
+    width: 100%;
+    max-width: 1600px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg);
+  }
+
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 64px; padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .header-center { display: flex; align-items: center; }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+
+  /* 路線＝有序的治理強度，不是下拉選單 */
+  .gov-tabs {
+    display: flex;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    padding: 4px;
+  }
+  .gov-tab {
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 4px 16px; border-radius: 9999px;
+    color: var(--muted); position: relative; cursor: default;
+  }
+  .gov-tab.active {
+    background-color: var(--bg);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+  .gov-tab-title { font-weight: 600; margin-bottom: 2px; }
+  .gov-tab-desc { opacity: 0.7; }
+
+  .main-content { display: flex; flex: 1; overflow: hidden; }
+
+  .col-left {
+    width: 280px; display: flex; flex-direction: column;
+    border-right: 1px solid var(--border); background-color: var(--bg);
+  }
+  .col-editor {
+    flex: 1; display: flex; flex-direction: column;
+    background-color: var(--bg); min-width: 0;
+  }
+  .col-right {
+    width: 320px; display: flex; flex-direction: column;
+    border-left: 1px solid var(--border); background-color: var(--surface);
+  }
+
+  .scrollable { flex: 1; overflow-y: auto; overflow-x: hidden; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  .badge {
+    display: inline-flex; align-items: center; padding: 2px 8px;
+    border: 1px solid var(--border); color: var(--muted);
+  }
+  .badge-outline { border: 1px solid var(--border); background: transparent; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    background-color: var(--surface); color: var(--fg);
+    cursor: pointer; outline: none; gap: 6px; font-family: inherit;
+  }
+  .btn-primary { background-color: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .btn-ghost { background: transparent; border-color: transparent; }
+
+  .icon {
+    width: 16px; height: 16px; fill: none; stroke: currentColor;
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+    display: inline-block; vertical-align: middle; flex-shrink: 0;
+  }
+  .icon-sm { width: 14px; height: 14px; }
+  .icon-lg { width: 20px; height: 20px; }
+
+  .outline-header { padding: 24px; border-bottom: 1px solid var(--border); }
+  .progress-bar-bg { height: 4px; background-color: var(--border); margin-top: 12px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background-color: var(--accent); width: 80%; }
+
+  .outline-list { list-style: none; padding: 12px 0; }
+  .outline-item {
+    display: flex; align-items: center; padding: 10px 24px;
+    color: var(--muted); cursor: default; gap: 12px; position: relative;
+  }
+  .outline-item.active { color: var(--fg); }
+  .outline-item.active::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; background-color: var(--accent);
+  }
+  .outline-item-icon { margin-left: auto; display: flex; align-items: center; }
+
+  .left-footer {
+    padding: 16px 24px; border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+
+  .editor-top-bar { padding: 16px 24px; display: flex; justify-content: space-between; align-items: flex-end; }
+
+  .editor-toolbar {
+    display: flex; align-items: center;
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px; gap: 24px; background-color: var(--bg);
+  }
+  .toolbar-tabs { display: flex; gap: 16px; }
+  .toolbar-tab { padding: 12px 0; color: var(--muted); border-bottom: 2px solid transparent; cursor: default; }
+  .toolbar-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .toolbar-actions { display: flex; align-items: center; gap: 12px; color: var(--muted); }
+
+  .editor-area { display: flex; padding: 24px 0; }
+  .line-numbers {
+    width: 48px; text-align: right; padding-right: 16px;
+    color: var(--muted); user-select: none; flex-shrink: 0;
+  }
+  .editor-text-content {
+    flex: 1; padding-right: 24px; white-space: pre-wrap;
+    outline: none; line-height: 1.6;
+  }
+
+  .inline-warning-block {
+    border: 1px solid var(--warn);
+    background-color: color-mix(in srgb, var(--warn) 10%, transparent);
+    padding: 12px 16px; margin: 16px 0;
+    display: flex; align-items: center; gap: 12px; color: var(--warn);
+  }
+
+  .editor-footer {
+    padding: 16px 24px; border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    background-color: var(--bg);
+  }
+
+  .review-flow {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .flow-path { display: flex; align-items: center; gap: 12px; }
+  .flow-node { display: flex; align-items: center; gap: 6px; }
+
+  .coach-header { padding: 24px 24px 16px 24px; }
+  .coach-stats { display: flex; gap: 16px; padding: 0 24px 16px 24px; }
+
+  .feedback-card {
+    margin: 0 24px 16px 24px; padding: 16px;
+    border: 1px solid var(--border); background-color: var(--bg);
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .card-warn { border-color: var(--warn); }
+  .card-header { display: flex; align-items: center; justify-content: space-between; }
+  .card-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+
+  .global-issues { padding: 24px; border-top: 1px solid var(--border); }
+  .issue-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px; border: 1px solid var(--border);
+    background-color: var(--bg); margin-top: 12px;
+  }
+
+  .cta-container {
+    padding: 24px; border-top: 1px solid var(--border);
+    background-color: var(--surface);
+    display: flex; flex-direction: column; gap: 12px; margin-top: auto;
+  }
+  .btn-block { width: 100%; padding: 12px; justify-content: center; }
+
+  .flex-between { display: flex; justify-content: space-between; align-items: center; }
+  .flex-center { display: flex; align-items: center; gap: 8px; }
+  .text-nowrap { white-space: nowrap; }
+
+  .mt-4 { margin-top: 4px; }
+  .mt-auto { margin-top: auto; }
+  .font-semibold { font-weight: 600; }
+  .caret { display: inline-block; width: 2px; height: 20px; background-color: var(--accent); vertical-align: middle; }
+  .dot-warn { display: inline-block; width: 6px; height: 6px; background-color: var(--warn); border-radius: 9999px; }
+  .tb-divider { border-left: 1px solid var(--border); height: 16px; margin: 0 4px; }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <header class="header">
+    <div class="header-left">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+      <span class="text-16 font-semibold">行動支付對帳中心</span>
+      <span class="badge rounded-6 text-12">草稿</span>
+      <div class="flex-center text-muted">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 3v12"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
+        <span class="text-14">main</span>
+      </div>
+      <div class="flex-center text-muted">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+        <span class="text-14 mono">anc:t=9d41ba07</span>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="gov-tabs text-12">
+        <div class="gov-tab active">
+          <span class="gov-tab-title">新產品／新專案</span>
+          <span class="gov-tab-desc">15 節 · 正式多方簽核</span>
+        </div>
+        <div class="gov-tab">
+          <span class="gov-tab-title">功能建構／迭代優化</span>
+          <span class="gov-tab-desc">8 節</span>
+        </div>
+        <div class="gov-tab">
+          <span class="gov-tab-title">試作／探索</span>
+          <span class="gov-tab-desc">3 節 · 一鍵自簽</span>
+        </div>
+        <div class="gov-tab">
+          <span class="gov-tab-title">Debug／維運</span>
+          <span class="gov-tab-desc">不寫 PRD · OpenSpec</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-right text-12">
+      <span class="text-muted">最後更新 2026-09-01 18:42</span>
+      <button class="btn btn-ghost rounded-full" style="padding: 6px;" onclick="toggleTheme()" title="切換深色／淺色" aria-label="切換深色／淺色">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+      </button>
+      <button class="btn rounded-6 text-12">匯出 MD</button>
+      <button class="btn rounded-6 text-12">預覽審閱</button>
+      <button class="btn btn-primary rounded-6 text-12">送出審閱</button>
+    </div>
+  </header>
+
+  <main class="main-content">
+
+    <aside class="col-left">
+      <div class="outline-header">
+        <div class="flex-between">
+          <span class="text-20 font-semibold">12 / 15 <span class="text-16 text-muted">節完成</span></span>
+        </div>
+        <div class="progress-bar-bg rounded-full">
+          <div class="progress-bar-fill rounded-full"></div>
+        </div>
+      </div>
+
+      <div class="scrollable">
+        <div class="text-12 text-muted" style="padding: 16px 24px 8px 24px;">PRD 結構</div>
+        <ul class="outline-list text-14">
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            01 文件概況與修訂紀錄
+            <div class="outline-item-icon text-success">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            </div>
+          </li>
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            02 摘要
+            <div class="outline-item-icon text-success">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            </div>
+          </li>
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            03 專案背景與佐證
+            <div class="outline-item-icon text-success">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            </div>
+          </li>
+          <li class="outline-item active bg-accent-soft">
+            <svg class="icon icon-sm" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"></circle></svg>
+            04 目標與非目標
+            <div class="outline-item-icon text-accent text-12">編輯中</div>
+          </li>
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            05 功能需求
+            <div class="outline-item-icon text-warn">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </div>
+          </li>
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            06 使用者流程
+            <div class="outline-item-icon text-muted"><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg></div>
+          </li>
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            07 資料設計
+            <div class="outline-item-icon text-muted"><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg></div>
+          </li>
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            08 系統介面與整合
+            <div class="outline-item-icon text-muted"><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg></div>
+          </li>
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            09 權限與角色
+            <div class="outline-item-icon text-muted"><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg></div>
+          </li>
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            10 安全與合規
+            <div class="outline-item-icon text-muted"><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg></div>
+          </li>
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            11 營運與監控
+            <div class="outline-item-icon text-muted"><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg></div>
+          </li>
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            12 風險與假設
+            <div class="outline-item-icon text-muted"><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg></div>
+          </li>
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            13 專案里程碑
+            <div class="outline-item-icon text-muted"><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg></div>
+          </li>
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            14 附錄
+            <div class="outline-item-icon text-muted"><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg></div>
+          </li>
+          <li class="outline-item">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg>
+            15 參考文件
+            <div class="outline-item-icon text-muted"><svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle></svg></div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="left-footer text-12 text-muted">
+        <div class="flex-center">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+          領域：金融科技
+        </div>
+        <div class="flex-center">孤兒內容 2 <span class="dot-warn"></span></div>
+      </div>
+    </aside>
+
+    <section class="col-editor">
+      <div class="border-b-line" style="display: flex; gap: 24px; padding: 12px 24px; background-color: var(--surface); align-items: center;">
+        <div class="flex-center text-14">
+          <svg class="icon icon-sm text-warn" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          <span class="text-warn font-semibold">2</span>
+          <span>非目標還差 2 條</span>
+        </div>
+        <div class="flex-center text-14" style="padding-left: 24px; border-left: 1px solid var(--border);">
+          <svg class="icon icon-sm text-warn" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          <span class="text-warn font-semibold">1</span>
+          <span>功能需求缺少驗收條件</span>
+        </div>
+        <div style="margin-left: auto;">
+          <button class="btn btn-primary rounded-6 text-14" style="padding: 4px 16px;">現在先補：非目標第 2 條</button>
+        </div>
+      </div>
+
+      <div class="editor-top-bar">
+        <div class="flex-center" style="gap: 16px;">
+          <span class="text-24 font-semibold">04 目標與非目標</span>
+          <span class="badge rounded-6 text-12 bg-surface text-accent border-line">正在編輯</span>
+        </div>
+      </div>
+
+      <div class="editor-toolbar text-14">
+        <div class="toolbar-tabs">
+          <div class="toolbar-tab active"><span class="badge rounded-6 bg-accent" style="border: none; padding: 4px 12px;">撰寫</span></div>
+          <div class="toolbar-tab" style="padding: 12px;">預覽</div>
+          <div class="toolbar-tab" style="padding: 12px;">分割</div>
+        </div>
+        <div class="toolbar-actions text-16">
+          <span style="font-weight: bold;">H1</span>
+          <span style="font-weight: bold;">H2</span>
+          <span style="font-weight: bold;">H3</span>
+          <span class="tb-divider"></span>
+          <span style="font-weight: bold;">B</span>
+          <span style="font-style: italic;">I</span>
+          <span style="text-decoration: line-through;">S</span>
+          <span class="tb-divider"></span>
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+        </div>
+      </div>
+
+      <div class="scrollable">
+        <div class="editor-area text-16">
+          <div class="line-numbers mono">
+            1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16<br>17
+          </div>
+          <div class="editor-text-content editor-preserve-font">## 目標
+
+- 讓財務團隊在每日結算前確認所有支付交易已完成對帳。
+- 建立可追溯的差異處理流程，讓每筆人工調整都有原因與批准人。
+- 提供清晰的對帳狀態與報表，支援稽核與內部控管。
+
+## 非目標
+
+- 不在本階段整合其他第三方支付業者。
+
+<div class="inline-warning-block rounded-6">
+  <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+  這條路線至少需要 3 條非目標，目前 1 / 3
+</div>
+&gt; 提示：補上其他非目標，避免範圍擴張與期待落差。
+
+<span class="caret"></span></div>
+        </div>
+      </div>
+
+      <div class="editor-footer text-14">
+        <div class="text-muted">第 18 行 · 最後修改 2026-09-01 18:42</div>
+        <div class="flex-center" style="gap: 16px;">
+          <button class="btn rounded-6 border-soft-line">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            上一節：03 專案背景與佐證
+          </button>
+          <button class="btn rounded-6 border-soft-line">
+            下一節：05 功能需求
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="col-right">
+      <div class="review-flow text-14 text-muted">
+        <div class="text-12" style="text-align: center; margin-bottom: 4px;">送出後由 GPT 家族審查</div>
+        <div class="flow-path" style="justify-content: center;">
+          <div class="flow-node">
+            <svg class="icon icon-sm text-accent" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+            <span class="text-fg">Claude</span> <span class="text-12">家族代筆</span>
+          </div>
+          <svg class="icon icon-sm" style="width: 32px;" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+          <div class="flow-node">
+            <span class="text-fg">GPT</span> <span class="text-12">家族審查</span>
+            <svg class="icon icon-sm text-success" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="scrollable" style="display: flex; flex-direction: column;">
+        <div class="coach-header">
+          <div class="text-16 font-semibold">本節教練</div>
+          <div class="text-14 text-muted mt-4">04 目標與非目標</div>
+        </div>
+
+        <div class="coach-stats text-14">
+          <div style="flex: 1;"><span class="text-warn font-semibold">1</span> 個阻塞項目</div>
+          <div style="flex: 1;"><span class="text-accent font-semibold">2</span> 個建議</div>
+        </div>
+
+        <div class="feedback-card card-warn rounded-12">
+          <div class="card-header text-14">
+            <div class="card-title text-warn">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+              阻塞 1
+            </div>
+          </div>
+          <div class="text-14 text-muted" style="line-height: 1.6;">
+            非目標只有 1 條，<br>這條路線要求至少 3 條。
+          </div>
+          <div style="text-align: right;">
+            <button class="btn rounded-6 text-12">跳到非目標</button>
+          </div>
+        </div>
+
+        <div class="feedback-card rounded-12">
+          <div class="card-header text-14">
+            <div class="card-title text-success">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+              建議 1 <span class="text-12" style="font-weight: normal; opacity: 0.8;">（已通過）</span>
+            </div>
+          </div>
+          <div class="text-14 text-muted">目標具備可驗證結果。</div>
+        </div>
+
+        <div class="feedback-card rounded-12">
+          <div class="card-header text-14">
+            <div class="card-title text-muted">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              建議 2
+            </div>
+          </div>
+          <div class="text-14 text-muted">可考慮加入目標的量化指標。</div>
+        </div>
+
+        <div class="global-issues mt-auto">
+          <div class="text-16 font-semibold">全文件待處理</div>
+          <div class="issue-row rounded-6">
+            <div class="flex-center text-14 text-muted">
+              <svg class="icon icon-sm text-warn" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+              <span class="text-nowrap" style="overflow: hidden; text-overflow: ellipsis; max-width: 140px;">05 功能需求缺少驗收條件</span>
+            </div>
+            <button class="btn rounded-6 text-12">前往第 05 節</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="cta-container">
+        <div class="text-14 text-muted">
+          <div class="font-semibold text-fg" style="margin-bottom: 4px;">建議現在處理</div>
+          下一步：補上第 2 條非目標
+        </div>
+        <button class="btn btn-primary btn-block rounded-6 text-16 font-semibold" style="padding: 16px 0;">
+          補上第 2 條非目標
+        </button>
+      </div>
+    </aside>
+
+  </main>
+</div>
+
+<script>
+  function toggleTheme() {
+    const doc = document.documentElement;
+    doc.dataset.theme = doc.dataset.theme === 'light' ? 'dark' : 'light';
+  }
+</script>
+</body>
+</html>

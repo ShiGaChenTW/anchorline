@@ -690,6 +690,27 @@ html[data-theme="terminal"] body {
   border-color: color-mix(in oklab, var(--danger) 35%, var(--border));
   background: color-mix(in oklab, var(--danger) 10%, transparent);
 }
+/*
+ * 路線籤（新產品／新專案 · 功能建構／迭代優化 · 試作／探索）。
+ *
+ * 沿用 `.app-status-pill` 的尺寸與邊框，只換顏色 —— 少一組尺寸常數就少一個
+ * 會跟旁邊那顆狀態 pill 對不齊的地方。`flex-shrink: 0` 也是從基底繼承的：
+ * 左欄擠不下時先讓專案名 ellipsis，路線籤不縮（縮 `.app-status-project`
+ * 的 28ch 是跨頁面共用面，動它會牽到每一頁）。
+ */
+.app-status-route {
+  color: var(--muted);
+}
+/*
+ * `vibe` 走 warn 色相，`full` / `lite` 維持中性。
+ * 「最低治理強度」全站同色相 —— P1-2 的自簽語彙用同一組，看到黃色就知道
+ * 這條線的治理是自己扛的。配方結構照抄 `.app-status-pill--review`。
+ */
+.app-status-route--vibe {
+  color: color-mix(in oklab, var(--warn) 55%, var(--fg));
+  border-color: color-mix(in oklab, var(--warn) 35%, var(--border));
+  background: color-mix(in oklab, var(--warn) 10%, transparent);
+}
 .app-status-gate,
 .app-status-ephemeral {
   overflow: hidden;
@@ -2049,12 +2070,14 @@ table.data tbody tr.selected td.col-actions {
   font-weight: 500;
   color: var(--fg);
 }
-.check-list {
+.check-list,
+.selfcheck-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.check-list label {
+.check-list label,
+.selfcheck-list label {
   display: flex;
   gap: 8px;
   align-items: flex-start;
@@ -2062,7 +2085,8 @@ table.data tbody tr.selected td.col-actions {
   cursor: pointer;
   color: var(--fg-2);
 }
-.check-list input {
+.check-list input,
+.selfcheck-list input {
   margin-top: 3px;
   accent-color: var(--fg-2);
 }
@@ -2195,6 +2219,44 @@ table.data tbody tr.selected td.col-actions {
 }
 .approval-card.is-empty .name {
   color: var(--muted);
+}
+/* 自簽核准 —— 一鍵自簽跟四個人真的逐關看過再簽，在這條列上本來一個字都不差。
+   斜線底紋負責「這張不一樣」，`.ap-selfsign` 那一行負責說清楚哪裡不一樣。
+   幾何走 --space-* 當週期（45deg 與百分比不是長度，不觸發硬編限制）。
+
+   ⚠️ 選擇器帶 `.approval-strip` 是**必要的**，不是順手寫長。主題 chrome 區的
+   `html[data-theme="github"] .approval-card` 與 terminal 的那一條（本檔 :3791
+   與 :3835）用 `background` **簡寫**把每張卡片拍平，簡寫會把 background-image
+   一起歸零，而它們的權重是 (0,2,1)、位置又在後面。少了這一層祖先，
+   底紋與邊框都會被靜默吃掉 —— 規則明明在樣式表裡，computed style 卻是
+   `none`（2026-09-02 實測）。加祖先把權重提到 (0,3,0)，比在主題區再開一個
+   分叉好：底紋只有一份，不用跟著主題數量長。 */
+.approval-strip .approval-card.is-self-signed {
+  border-color: color-mix(in oklab, var(--warn) 45%, var(--border));
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in oklab, var(--warn) 8%, transparent) 0,
+    color-mix(in oklab, var(--warn) 8%, transparent) var(--space-1),
+    transparent var(--space-1),
+    transparent var(--space-3)
+  );
+}
+/* terminal 的底是極暗色，8% 的 warn 疊上去視覺為零 —— 提到 14% 才看得見。
+   只調百分比，不新增 token、不新增主題。 */
+html[data-theme="terminal"] .approval-strip .approval-card.is-self-signed {
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in oklab, var(--warn) 14%, transparent) 0,
+    color-mix(in oklab, var(--warn) 14%, transparent) var(--space-1),
+    transparent var(--space-1),
+    transparent var(--space-3)
+  );
+}
+.approval-card .ap-selfsign {
+  grid-column: 2;
+  font-size: var(--fs-1);
+  line-height: 1.35;
+  color: color-mix(in oklab, var(--warn) 72%, var(--fg));
 }
 .approval-meta {
   margin-left: auto;
@@ -6871,6 +6933,7 @@ html.adhd-calm .adhd-editor-hint {
   white-space: nowrap;
 }
 .adhd-coach-details .check-list,
+.adhd-coach-details .selfcheck-group,
 .adhd-coach-details .example,
 .adhd-coach-details .adhd-ai-actions,
 .adhd-coach-details .adhd-ai-prompt-row,
@@ -8813,6 +8876,236 @@ button.ft-row:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── 治理鏈頁首：專案身分 ＋ 鏈健康度一行 ── */
+.d-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+.d-head-name {
+  font-size: var(--fs-6);
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--fg);
+}
+.d-head-health {
+  margin: 0;
+  font-size: var(--fs-3);
+  color: var(--muted);
+}
+
+/* ── 治理鏈：六站直立，每站帶自己的證據 ── */
+.gov-chain {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.gc-station {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: var(--space-2);
+  row-gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel, var(--bg));
+}
+.gc-dot {
+  align-self: center;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--border);
+}
+.gc-idx {
+  font-size: var(--fs-2);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.gc-name {
+  font-size: var(--fs-4);
+  font-weight: 620;
+  color: var(--fg);
+}
+.gc-state {
+  font-size: var(--fs-2);
+  color: var(--muted);
+}
+.gc-lead {
+  grid-column: 3 / -1;
+  margin: 0;
+  font-size: var(--fs-3);
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+.gc-details,
+.audit-trail-micro,
+.gc-note,
+.gc-todo,
+.gc-go {
+  grid-column: 1 / -1;
+}
+.gc-details {
+  margin: var(--space-1) 0 0;
+}
+.gc-summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--fs-3);
+  font-weight: 600;
+  color: var(--accent);
+}
+.gc-summary::-webkit-details-marker {
+  display: none;
+}
+.gc-summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: var(--space-1);
+  color: var(--muted);
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+.gc-details[open] .gc-summary::before {
+  transform: rotate(90deg);
+}
+.gc-pass {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-4);
+  font-size: var(--fs-3);
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+.audit-trail-micro {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+.atm-item {
+  font-size: var(--fs-2);
+  color: var(--muted);
+}
+.gc-todo {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  font-size: var(--fs-3);
+  color: var(--fg);
+}
+.gc-go {
+  justify-self: start;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-3);
+  font-weight: 600;
+  color: var(--accent-on);
+  background: var(--accent);
+  text-decoration: none;
+}
+.gc-go:hover {
+  background: var(--accent-hover);
+}
+.gc-note {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-3);
+  color: var(--fg-2);
+  background: var(--inset);
+}
+.gc-note.is-warn {
+  background: var(--warn-bg);
+  color: var(--fg);
+}
+
+/* 四種站狀態互斥；active 是整頁唯一帶「現在該做」與前往按鈕的一站 */
+.gc-station.is-done .gc-dot {
+  background: var(--success);
+}
+.gc-station.is-done .gc-state {
+  color: var(--success);
+}
+.gc-station.is-active {
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
+  background: color-mix(in oklab, var(--accent) 7%, var(--panel, var(--bg)));
+}
+.gc-station.is-active .gc-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 var(--space-1) color-mix(in oklab, var(--accent) 22%, transparent);
+}
+.gc-station.is-active .gc-name {
+  color: var(--accent);
+}
+.gc-station.is-active .gc-state {
+  color: var(--accent);
+}
+.gc-station.is-todo .gc-dot {
+  background: var(--border);
+}
+.gc-station.is-todo .gc-state {
+  color: var(--muted);
+}
+.gc-station.is-unknown .gc-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.gc-station.is-unknown .gc-state {
+  color: var(--muted);
+}
+
+/* 影子鏈：灰階、降低對比，一眼看出「還沒建立的鏈」，不宣稱任何事實 */
+.gov-chain.gc-ghost .gc-station {
+  border-style: dashed;
+  background: transparent;
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+
+/* ── 空狀態：兩欄，<900px 退單欄 ── */
+.empty-state-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+.esl-main {
+  min-width: 0;
+}
+.esl-side {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+}
+.esl-links {
+  margin: 0;
+  font-size: var(--fs-2);
+  color: var(--muted);
+}
+.esl-links a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.esl-links a:hover {
+  text-decoration: underline;
+}
+@media (max-width: 900px) {
+  .empty-state-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* 跨專案實測進度 —— 一條列，**刻意不是一張 .d-card**。
    旁邊網格裡的「待修」卡數的是本專案、這一列數的是全部專案；同單位、互斥集合、
    子集範圍，三重錯位疊在兩張同款卡上，版面會主動教人讀成「7 裡面有 2」。
@@ -8859,6 +9152,11 @@ button.ft-row:focus-visible {
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 16px;
   align-items: start;
+}
+/* 事實卡列：治理鏈改版後，事實卡降級到鏈下，改用這個修飾子。
+   刻意不叫 .d-facts —— 那個名字已被 <dl> 佔用（display:flex ＋ dt/dd）。 */
+.d-grid--facts {
+  gap: var(--space-4);
 }
 .d-card {
   padding: 20px;
@@ -9012,7 +9310,10 @@ button.ft-row:focus-visible {
   color: var(--muted);
 }
 
-/* ── 頂列：版本控制 + 版號/commit，兩張等高 ── */
+/* ── 頂列：版本控制 + 版號/commit，兩張等高 ──
+   ⚠ 孤兒規則（本輪）：治理鏈改版後 dashboard 不再用兩欄等高格線，
+   .d-top / .d-top-left 目前沒有使用者。留著不刪 —— 其他頁面可能仍引用，
+   刪除前需全 repo 查證，那不是本輪的工作。 */
 .d-top {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
@@ -9025,7 +9326,12 @@ button.ft-row:focus-visible {
 }
 /* 左欄拆成「專案」「版本控制」上下兩張卡：等高、中間留一樣的 16px。
    兩張加上中間的間距要正好等於右邊版號卡的高度，所以高度由 grid 的
-   列軌決定，不能讓每一張各自吃 var(--d-card-h)（那會變成兩倍高）。 */
+   列軌決定，不能讓每一張各自吃 var(--d-card-h)（那會變成兩倍高）。
+
+   ⚠ 孤兒規則（本輪）：同 .d-top，此布局已隨治理鏈改版退場、目前沒有
+   使用者。留著不刪，理由同上 —— 全 repo 查證前刪除有風險。上面那段
+   「為什麼高度由列軌決定」是原始設計理由，一併留著：真要復用或刪除時，
+   沒有它就只剩一堆看不出用意的數值。 */
 .d-top-left {
   display: grid;
   /* 至少維持原本一張卡的高度，內容需要更多就往下長 —— 右邊的版號卡
@@ -9173,7 +9479,9 @@ button.ft-row:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-/* ── 工作區狀態 ── */
+/* ── 工作區狀態 ──
+   事實卡已降級到鏈下：原本這兩欄事實卡是版面主角，現在只剩「建立者／目前分支」
+   這兩個作業中繼值，改成卡內的一小段補充，不再獨佔一條等高水平線。 */
 .d-facts--stack {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -11908,6 +12216,15 @@ p.gd-warn {
   gap: 8px;
   padding: 6px 12px 8px;
 }
+/* `display:flex` 蓋過 [hidden] 的 UA `display:none` —— 沒有這一條，
+   `bar.hidden = true` 什麼都不會發生，而且不會有任何錯誤。 */
+.domain-bar[hidden] {
+  display: none;
+}
+/* 路線緊接在領域下面，兩條各自帶上下 padding 會撐出 14px 的空隙 */
+#route-bar {
+  padding-top: 0;
+}
 .domain-bar-label {
   font-size: var(--fs-1);
   letter-spacing: 0.04em;
@@ -13757,6 +14074,8 @@ p.gd-warn {
   overflow-wrap: anywhere;
 }
 .sg-log--approve .sg-log-when { color: var(--success); }
+/* 自簽是核准，但不是「有人審過了」—— 時間戳走警示色，不走成功綠 */
+.sg-log--selfsign .sg-log-when { color: var(--warn); }
 .sg-log--withdraw .sg-log-when { color: var(--danger); }
 .sg-log--merge .sg-log-when { color: var(--accent); }
 @media (max-width: 640px) {
@@ -13882,6 +14201,31 @@ p.gd-warn {
 }
 .sg-stage--changes_requested .sg-stage-comment {
   color: var(--danger);
+}
+/* 自簽過的關卡：斜線底紋。
+   跟上面那條退回列刻意用不同的「材質」而不只是不同顏色 —— 兩者在畫面上
+   都是「這一關不對勁」，但色彩是三個主題各自變動的東西，紋理不是。
+   幾何走 --space-* token（4/12），角度與百分比不是長度，不吃硬編 px 的限制。 */
+.sg-stage--self-signed {
+  background: repeating-linear-gradient(
+    45deg,
+    color-mix(in oklab, var(--warn) 8%, transparent),
+    color-mix(in oklab, var(--warn) 8%, transparent) var(--space-1),
+    transparent var(--space-1),
+    transparent var(--space-3)
+  );
+  border-radius: var(--radius-sm);
+}
+/* 「自簽」徽章。跟 .sg-mode（串行／並行）同一個位置、同一級字，但那組是
+   關卡的性質、這一個是警訊，所以帶底色 —— 灰字小標會被當成又一個性質標籤。 */
+.sg-selfsign {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-1);
+  font-weight: 400;
+  color: var(--warn);
+  background: color-mix(in oklab, var(--warn) 18%, transparent);
 }
 .sg-sign-head {
   margin: 0 0 6px;
@@ -15430,4 +15774,167 @@ p.gd-warn {
   color: var(--muted);
   font-size: var(--fs-2);
   line-height: 1.6;
+}
+
+/* 送出前自檢（範本第 11 章）。auto 項目沿用 .adhd-gate-row 的排版，
+   這裡只補分組標題的間距與「前往」連結。 */
+.selfcheck-group + .selfcheck-group {
+  padding-top: 0 !important;
+}
+.selfcheck-group .adhd-coach-kicker {
+  margin: 0 0 6px;
+}
+.selfcheck-jump {
+  margin-left: 6px;
+  font-size: var(--fs-1);
+  color: var(--accent, var(--fg-2));
+  text-decoration: none;
+  white-space: nowrap;
+}
+.selfcheck-jump:hover {
+  text-decoration: underline;
+}
+.adhd-gate-row.is-failing .adhd-gate-detail {
+  color: var(--fg-2);
+}
+
+/* 送出前自檢的「待優化」標示。這張卡的判定規則還沒收斂，視覺上必須跟
+   結構 gate 分開 —— gate 是放行條件，這張卡目前只是提示。 */
+.selfcheck-wip {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.selfcheck-wip-note {
+  margin: 0;
+  padding: 8px 12px 10px;
+  font-size: var(--fs-1);
+  line-height: 1.6;
+  color: var(--fg-2);
+  background: var(--warn-bg);
+  border-top: 1px solid color-mix(in oklab, var(--warn) 24%, transparent);
+  border-bottom: 1px solid color-mix(in oklab, var(--warn) 24%, transparent);
+}
+
+/* 範本第 0 章：這次要寫哪一種。三欄並排是刻意的 —— 三條路線是對照關係，
+   上下排會讓它們讀成一串平行清單，比較關係消失。滿版容器由 .modal-sheet 提供。 */
+.modal-back.is-sheet {
+  padding: 0;
+}
+.modal.modal-sheet {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+}
+.modal.modal-sheet > .body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+}
+.route-grid {
+  display: grid;
+  /* 四條路線（full／lite／vibe／openspec）。寬螢幕四欄一排；卡片數再變時
+     這裡要跟著改 —— 寫死欄數換來的是欄寬不會因為少一張卡而跳動 */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+  max-width: 1280px;
+}
+@media (max-width: 1100px) {
+  .route-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: 760px;
+  }
+}
+@media (max-width: 900px) {
+  .route-grid {
+    grid-template-columns: 1fr;
+    max-width: 560px;
+  }
+  .modal.modal-sheet > .body {
+    align-items: flex-start;
+  }
+}
+.route-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+  text-align: left;
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+}
+.route-card:hover,
+.route-card:focus-visible {
+  border-color: var(--accent, var(--fg-2));
+  background: var(--inset);
+  transform: translateY(-2px);
+}
+.route-name {
+  font-size: var(--fs-4);
+  line-height: 1.4;
+}
+.route-scale {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-1);
+  color: var(--fg-2);
+  background: var(--inset);
+  border: 1px solid var(--border);
+}
+.route-card.is-openspec .route-scale {
+  background: var(--warn-bg);
+  border-color: color-mix(in oklab, var(--warn) 30%, transparent);
+}
+.route-desc {
+  font-size: var(--fs-2);
+  line-height: 1.6;
+  color: var(--fg-2);
+}
+.route-cases-head {
+  margin-top: 4px;
+  font-size: var(--fs-1);
+  color: var(--muted);
+}
+.route-cases {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-1);
+  line-height: 1.6;
+  color: var(--fg-2);
+}
+.route-timing {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: var(--fs-1);
+  line-height: 1.6;
+  color: var(--muted);
+}
+.route-go {
+  margin-top: auto;
+  padding-top: 12px;
+  font-size: var(--fs-2);
+  color: var(--muted);
+}
+.route-card:hover .route-go,
+.route-card:focus-visible .route-go {
+  color: var(--fg);
 }

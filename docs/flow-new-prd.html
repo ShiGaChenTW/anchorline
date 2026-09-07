@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>新增 PRD 流程</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --ground: #f2f5f8;
+    --surface: #ffffff;
+    --surface-2: #e8edf3;
+    --ink: #131922;
+    --body: #3b4756;
+    --muted: #6c7a8b;
+    --line: #d5dde6;
+    --rail: #a8b6c6;
+    --accent: #2a5fb8;
+    --accent-soft: #e4ecfa;
+    --warn: #8f6410;
+    --warn-soft: #faf1da;
+    --good: #226245;
+    --good-soft: #dcefe5;
+    --stop: #98383a;
+    --stop-soft: #f7e5e5;
+
+    --display: "Noto Serif TC", "Songti TC", Georgia, serif;
+    --sans: "Noto Sans TC", "PingFang TC", -apple-system, "Helvetica Neue", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --step: clamp(1rem, 0.65rem + 1.2vw, 1.4rem);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e1219; --surface: #161c25; --surface-2: #1e2632;
+      --ink: #e8edf4; --body: #bfc9d7; --muted: #8492a5;
+      --line: #29323e; --rail: #465363;
+      --accent: #7ba9f1; --accent-soft: #1a2942;
+      --warn: #d5ab53; --warn-soft: #2b2416;
+      --good: #6fc79e; --good-soft: #142a21;
+      --stop: #df8a8a; --stop-soft: #2d1b1b;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e1219; --surface: #161c25; --surface-2: #1e2632;
+    --ink: #e8edf4; --body: #bfc9d7; --muted: #8492a5;
+    --line: #29323e; --rail: #465363;
+    --accent: #7ba9f1; --accent-soft: #1a2942;
+    --warn: #d5ab53; --warn-soft: #2b2416;
+    --good: #6fc79e; --good-soft: #142a21;
+    --stop: #df8a8a; --stop-soft: #2d1b1b;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--body);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: calc(var(--step) * 2) var(--step) calc(var(--step) * 4);
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--step) * 2);
+  }
+
+  /* ── 頁首 + 圖例 ─────────────────────────────────────────── */
+  header.top { display: flex; flex-direction: column; gap: 0.6rem; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--muted); margin: 0;
+  }
+  h1 {
+    font-family: var(--display); font-weight: 600; margin: 0;
+    font-size: clamp(1.8rem, 1.2rem + 2.4vw, 2.7rem);
+    line-height: 1.2; color: var(--ink); text-wrap: balance;
+  }
+  .lede { margin: 0; max-width: 62ch; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 0.5rem 1.4rem;
+    padding: 0.7rem 0.9rem; margin-top: 0.4rem;
+    border: 1px solid var(--line); border-radius: 4px;
+    background: var(--surface); font-size: 0.78rem;
+  }
+  .legend-item { display: flex; align-items: center; gap: 0.45rem; }
+  .swatch { width: 26px; height: 14px; border-radius: 2px; border: 1px solid var(--rail); flex: none; }
+  .swatch.step { background: var(--surface-2); }
+  .swatch.dec { background: var(--accent-soft); border-color: var(--accent); }
+  .swatch.stop { background: var(--stop-soft); border-color: var(--stop); }
+  .swatch.go { background: var(--good-soft); border-color: var(--good); }
+  .legend .lit { font-size: 0.74rem; }
+
+  /* ── 流程圖 ─────────────────────────────────────────────── */
+  .diagram { display: flex; flex-direction: column; gap: 0; }
+
+  .stage { display: grid; grid-template-columns: 4.2rem 1fr; gap: 0 var(--step); }
+  @media (max-width: 640px) { .stage { grid-template-columns: 1fr; } }
+  .stage-rail {
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.08em;
+    color: var(--muted); padding-top: 0.35rem; text-align: right;
+  }
+  @media (max-width: 640px) { .stage-rail { text-align: left; padding-bottom: 0.3rem; } }
+  .stage-rail b { display: block; color: var(--accent); font-weight: 500; }
+  .stage-body { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+
+  .group {
+    border: 1px dashed var(--rail); border-radius: 5px;
+    padding: 0.85rem; display: flex; flex-direction: column; gap: 0.6rem;
+    background: color-mix(in oklab, var(--surface) 55%, transparent);
+  }
+  .group-label {
+    font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin: 0;
+  }
+  .group-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; }
+
+  /* 節點 */
+  .node {
+    display: block; width: 100%; text-align: left;
+    font: inherit; color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--rail); border-radius: 4px;
+    padding: 0.6rem 0.75rem; cursor: pointer;
+    transition: box-shadow 0.12s ease, border-color 0.12s ease;
+  }
+  .node:hover { border-color: var(--accent); }
+  .node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .node .n-title { display: block; font-weight: 500; font-size: 0.92rem; line-height: 1.45; }
+  .node .n-sub {
+    display: block; margin-top: 0.25rem;
+    font-family: var(--mono); font-size: 0.72rem; color: var(--muted); line-height: 1.55;
+  }
+  .node[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  .node.decision { background: var(--accent-soft); border-color: var(--accent); }
+  .node.decision .n-title::before { content: "◆ "; color: var(--accent); }
+  .node.is-stop { background: var(--stop-soft); border-color: color-mix(in oklab, var(--stop) 45%, transparent); }
+  .node.is-go { background: var(--good-soft); border-color: color-mix(in oklab, var(--good) 45%, transparent); }
+  .node.terminal { border-radius: 999px; background: transparent; border-style: dashed; cursor: default; }
+  .node.terminal:hover { border-color: var(--rail); }
+  .node.store { border-style: dashed; background: transparent; cursor: default; }
+  .node.store:hover { border-color: var(--rail); }
+
+  /* 直連結線 */
+  .link { position: relative; height: 30px; }
+  .link::before {
+    content: ""; position: absolute; left: 50%; top: 0; bottom: 0;
+    width: 2px; background: var(--rail); transform: translateX(-50%);
+  }
+  .link::after {
+    content: ""; position: absolute; left: 50%; bottom: 0;
+    border: 5px solid transparent; border-top-color: var(--rail);
+    transform: translateX(-50%);
+  }
+  .link .edge {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--ground); padding: 0 0.4rem;
+    font-family: var(--mono); font-size: 0.7rem; color: var(--muted); white-space: nowrap;
+  }
+
+  /* 分支：gap 為 0，內距放在 cell，欄心才會剛好對上橫軌兩端 */
+  /* 留白放在 .cell 而不是 .branch —— 加在 branch 上時格子頂端等於卡片頂端，
+     stem 與分支標籤會畫進卡片裡。這是實機截圖抓到的。 */
+  .branch {
+    --cols: 2;
+    display: grid; grid-template-columns: repeat(var(--cols), 1fr); gap: 0;
+    position: relative;
+  }
+  .branch::before {
+    content: ""; position: absolute; top: 0; height: 2px;
+    left: calc(50% / var(--cols)); right: calc(50% / var(--cols));
+    background: var(--rail);
+  }
+  .cell { position: relative; padding: 48px 6px 0; }
+  .cell::before {
+    content: ""; position: absolute; top: 0; left: 50%;
+    width: 2px; height: 48px; background: var(--rail); transform: translateX(-50%);
+  }
+  .cell .edge {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    background: var(--ground); padding: 0 0.4rem; z-index: 1;
+    font-family: var(--mono); font-size: 0.7rem; color: var(--muted); white-space: nowrap;
+  }
+  @media (max-width: 640px) {
+    .branch { grid-template-columns: 1fr; gap: 0.6rem; }
+    .branch::before { display: none; }
+    .cell { padding: 34px 0 0; }
+    .cell::before { height: 34px; }
+    .cell .edge { top: 7px; }
+  }
+
+  /* 匯流回主線 */
+  .merge { position: relative; height: 34px; }
+  .merge::before {
+    content: ""; position: absolute; top: 0; height: 2px;
+    left: 16%; right: 16%; background: var(--rail);
+  }
+  .merge::after {
+    content: ""; position: absolute; left: 50%; top: 0; height: 34px;
+    width: 2px; background: var(--rail); transform: translateX(-50%);
+  }
+
+  /* ── 逐字文案 ───────────────────────────────────────────── */
+  .lit {
+    font-family: var(--mono); font-size: 0.85em;
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 3px; padding: 0.05em 0.35em; color: var(--ink);
+    word-break: break-word;
+  }
+  .node .lit { background: transparent; border: none; padding: 0; }
+
+  h2 {
+    font-family: var(--display); font-weight: 600; margin: 0;
+    font-size: clamp(1.25rem, 1rem + 0.9vw, 1.6rem); color: var(--ink); line-height: 1.3;
+  }
+  .sec-head {
+    display: flex; align-items: baseline; gap: 0.8rem;
+    padding-bottom: 0.5rem; border-bottom: 1px solid var(--line);
+  }
+  .sec-n { font-family: var(--mono); font-size: 0.78rem; color: var(--accent); flex: none; }
+  section { display: flex; flex-direction: column; gap: var(--step); }
+
+  .copy-card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--line); border-radius: 4px;
+    padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.7rem;
+    scroll-margin-top: 1rem;
+  }
+  .copy-card:target, .copy-card.flash { border-left-color: var(--accent); }
+  .copy-card h3 {
+    font-size: 0.95rem; font-weight: 700; color: var(--ink); margin: 0;
+    display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap;
+  }
+  .copy-card h3 span.tag {
+    font-family: var(--mono); font-size: 0.68rem; font-weight: 400;
+    color: var(--muted); letter-spacing: 0.06em;
+  }
+  .rows { display: flex; flex-direction: column; gap: 0.5rem; }
+  .row { display: grid; grid-template-columns: minmax(6.5rem, 9rem) 1fr; gap: 0.3rem 0.9rem; align-items: start; font-size: 0.88rem; }
+  @media (max-width: 560px) { .row { grid-template-columns: 1fr; } }
+  .row dt { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); padding-top: 0.2rem; }
+  .row dd { margin: 0; }
+  dl { margin: 0; }
+
+  .note {
+    background: var(--warn-soft); border: 1px solid color-mix(in oklab, var(--warn) 30%, transparent);
+    border-radius: 4px; padding: 0.8rem 1rem; font-size: 0.87rem;
+  }
+  .note b { color: var(--warn); }
+
+  .decisions { display: grid; gap: var(--step); grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .why {
+    background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent); border-radius: 3px;
+    padding: 0.9rem 1rem; font-size: 0.88rem;
+    display: flex; flex-direction: column; gap: 0.4rem;
+  }
+  .why h3 { margin: 0; font-size: 0.9rem; color: var(--ink); }
+  .why p { margin: 0; }
+
+  footer {
+    padding-top: var(--step); border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 0.7rem; color: var(--muted); line-height: 1.9;
+  }
+  a { color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <p class="eyebrow">Anchorline · Process</p>
+    <h1>新增 PRD 流程</h1>
+    <p class="lede">從按下「新建 PRD」到落進編輯台，使用者會經過的每一關、每一個分支，以及每一步他實際看到的字。文案逐字取自程式碼，不是重寫過的敘述。</p>
+    <div class="legend">
+      <span class="legend-item"><span class="swatch step"></span>步驟</span>
+      <span class="legend-item"><span class="swatch dec"></span>◆ 分支</span>
+      <span class="legend-item"><span class="swatch stop"></span>導向停止</span>
+      <span class="legend-item"><span class="swatch go"></span>導向繼續</span>
+      <span class="legend-item"><span class="lit">等寬字</span> ＝ 畫面上的原字</span>
+      <span class="legend-item">點任一節點 → 跳到它的逐字文案</span>
+    </div>
+  </header>
+
+  <!-- ── 圖 ─────────────────────────────────────────────── -->
+  <div class="diagram">
+
+    <div class="stage">
+      <div class="stage-rail"><b>01</b>入口</div>
+      <div class="stage-body">
+        <div class="group">
+          <p class="group-label">五個入口，全部匯流到同一關</p>
+          <div class="group-row">
+            <button class="node" data-go="c-entry"><span class="n-title">專案清單 · 新建 PRD</span></button>
+            <button class="node" data-go="c-entry"><span class="n-title">專案清單 · 🌱 新手引導</span></button>
+            <button class="node" data-go="c-entry"><span class="n-title">空狀態卡 · 開始新手引導</span></button>
+            <button class="node" data-go="c-entry"><span class="n-title">側欄 ＋</span></button>
+            <button class="node" data-go="c-entry"><span class="n-title">其他頁 · 新建專案 →</span><span class="n-sub">projects.html?new=1</span></button>
+          </div>
+        </div>
+        <div class="link"></div>
+        <button class="node decision" data-go="c-entry"><span class="n-title">有編輯權限？</span></button>
+        <div class="branch" style="--cols:2">
+          <div class="cell"><span class="edge">否</span>
+            <button class="node is-stop" data-go="c-entry"><span class="n-title">toast 擋下</span><span class="n-sub">核准人員無法新建或編輯內文<br>■ 到此為止，不會進第 0 關</span></button>
+          </div>
+          <div class="cell"><span class="edge">是</span>
+            <button class="node is-go" data-go="c-triage"><span class="n-title">進第 0 關</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="link"></div>
+
+    <div class="stage">
+      <div class="stage-rail"><b>02</b>第 0 關</div>
+      <div class="stage-body">
+        <button class="node" id="n-triage" data-go="c-triage">
+          <span class="n-title">要不要寫這份 PRD？</span>
+          <span class="n-sub">左欄「要寫」4 條 ｜ 右欄「不用寫，開 Ticket 就好」4 條</span>
+        </button>
+        <div class="link"><span class="edge">勾選即時重算</span></div>
+        <button class="node decision" data-go="c-verdict"><span class="n-title">判定</span></button>
+        <div class="branch" style="--cols:3">
+          <div class="cell"><span class="edge">0 條「要寫」</span>
+            <button class="node is-stop" data-go="c-verdict"><span class="n-title">→ 開 Ticket 就好</span><span class="n-sub">主按鈕改為「還是要寫，繼續」</span></button>
+          </div>
+          <div class="cell"><span class="edge">lite 訊號</span>
+            <button class="node is-go" data-go="c-verdict"><span class="n-title">→ 寫 PRD · Lite</span><span class="n-sub">列出 8 章重點章節</span></button>
+          </div>
+          <div class="cell"><span class="edge">任一 full 訊號</span>
+            <button class="node is-go" data-go="c-verdict"><span class="n-title">→ 寫 PRD · Full</span><span class="n-sub">全 15 章</span></button>
+          </div>
+        </div>
+        <div class="merge"></div>
+        <button class="node decision" data-go="c-triage"><span class="n-title">三個出口</span></button>
+        <div class="branch" style="--cols:3">
+          <div class="cell"><span class="edge">關閉</span>
+            <div class="node terminal"><span class="n-title">■ 離開，不建立</span></div>
+          </div>
+          <div class="cell"><span class="edge">跳過判定，直接建立</span>
+            <button class="node is-go" data-go="c-wizard"><span class="n-title">進精靈</span><span class="n-sub">確認頁不顯示「判定」列</span></button>
+          </div>
+          <div class="cell"><span class="edge">繼續</span>
+            <button class="node is-go" data-go="c-wizard"><span class="n-title">進精靈</span><span class="n-sub">判定帶到確認頁</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="merge"></div>
+
+    <div class="stage">
+      <div class="stage-rail"><b>03</b>三題精靈</div>
+      <div class="stage-body">
+        <button class="node" data-go="c-wizard"><span class="n-title">Q1 這次要交什麼？</span></button>
+        <div class="link"><span class="edge">下一題 / 先跳過</span></div>
+        <button class="node" data-go="c-wizard"><span class="n-title">Q2 這是給誰用的？</span></button>
+        <div class="link"><span class="edge">下一題 / 先跳過</span></div>
+        <button class="node" data-go="c-wizard"><span class="n-title">Q3 為什麼是現在？</span></button>
+        <div class="link"><span class="edge">看一下再建立</span></div>
+        <button class="node" data-go="c-confirm"><span class="n-title">確認頁 · 這樣就可以開始了</span><span class="n-sub">標題／做什麼／給誰／為何現在／判定 ＋ 進階設定</span></button>
+        <div class="branch" style="--cols:2">
+          <div class="cell"><span class="edge">上一題</span>
+            <div class="node store"><span class="n-title">回 Q3</span></div>
+          </div>
+          <div class="cell"><span class="edge">建立並開始寫</span>
+            <button class="node is-go" data-go="c-after"><span class="n-title">建立專案</span><span class="n-sub">寫入 summary 的 what／who／why</span></button>
+          </div>
+        </div>
+        <div class="link"><span class="edge">每次輸入都存草稿</span></div>
+        <div class="node store"><span class="n-title">localStorage · anchorline:new-prd-draft:v1</span><span class="n-sub">再開啟時接續，並 toast「接續上次未完成的草稿」</span></div>
+      </div>
+    </div>
+
+    <div class="link"></div>
+
+    <div class="stage">
+      <div class="stage-rail"><b>04</b>建立之後</div>
+      <div class="stage-body">
+        <button class="node decision" data-go="c-after"><span class="n-title">走的是哪條路？</span></button>
+        <div class="branch" style="--cols:2">
+          <div class="cell"><span class="edge">新手引導</span>
+            <button class="node" data-go="c-after"><span class="n-title">toast</span><span class="n-sub">已建立「X」· 新手教練會帶你逐節寫</span></button>
+          </div>
+          <div class="cell"><span class="edge">新建 PRD</span>
+            <button class="node" data-go="c-after"><span class="n-title">toast</span><span class="n-sub">已建立「X」</span></button>
+          </div>
+        </div>
+        <div class="merge"></div>
+        <button class="node" data-go="c-folder"><span class="n-title">「X」還沒有對應的資料夾</span></button>
+        <div class="branch" style="--cols:2">
+          <div class="cell"><span class="edge">稍後再說</span>
+            <button class="node" data-go="c-folder"><span class="n-title">不綁定，直接進編輯台</span></button>
+          </div>
+          <div class="cell"><span class="edge">選擇或新增資料夾</span>
+            <button class="node" data-go="c-folder"><span class="n-title">綁定成功</span><span class="n-sub">等 toast 看得到再跳頁</span></button>
+          </div>
+        </div>
+        <div class="merge"></div>
+        <button class="node decision" data-go="c-editor"><span class="n-title">進哪一種編輯台？</span></button>
+        <div class="branch" style="--cols:2">
+          <div class="cell"><span class="edge">新手引導</span>
+            <button class="node is-go" data-go="c-editor"><span class="n-title">editor.html?beginner=1</span><span class="n-sub">逐節教練六步</span></button>
+          </div>
+          <div class="cell"><span class="edge">新建 PRD</span>
+            <button class="node is-go" data-go="c-editor"><span class="n-title">editor.html</span><span class="n-sub">安靜進入，右欄結構 gate 接手</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note"><b>兩個地方都不擋人。</b>三題全空也能往下走（<span class="lit">validateWizardStep</span> 永遠回 true）；判定為「開 Ticket 就好」時也只是換按鈕文字，仍然放行。</div>
+
+  <!-- ── 逐字文案 ────────────────────────────────────────── -->
+  <section>
+    <div class="sec-head"><span class="sec-n">COPY</span><h2>每一步的逐字文案</h2></div>
+
+    <div class="copy-card" id="c-entry">
+      <h3>01 入口與權限 <span class="tag">projects.html · projects.ts</span></h3>
+      <dl class="rows">
+        <div class="row"><dt>清單 header</dt><dd><span class="lit">新建 PRD</span> ／ <span class="lit">🌱 新手引導</span>（tooltip <span class="lit">一步步帶你寫出第一份 PRD</span>）</dd></div>
+        <div class="row"><dt>空狀態卡</dt><dd><span class="lit">第一次寫 PRD？</span><br><span class="lit">用新手撰寫流程，7 步完成摘要、問題、邊界與成功指標，再進入編輯台補細節。</span><br>按鈕 <span class="lit">開始新手引導</span> ／ <span class="lit">先看範例 2FA</span></dd></div>
+        <div class="row"><dt>其他頁</dt><dd><span class="lit">新建專案 →</span>（工作台、簽核頁）</dd></div>
+        <div class="row"><dt>權限不足</dt><dd>toast <span class="lit">核准人員無法新建或編輯內文</span></dd></div>
+      </dl>
+    </div>
+
+    <div class="copy-card" id="c-triage">
+      <h3>02 第 0 關 · 要不要寫這份 PRD <span class="tag">prd-triage.ts</span></h3>
+      <dl class="rows">
+        <div class="row"><dt>標題</dt><dd><span class="lit">要不要寫這份 PRD？</span></dd></div>
+        <div class="row"><dt>副標</dt><dd><span class="lit">不是每個需求都值得一份文件。勾符合的，10 秒。</span></dd></div>
+        <div class="row"><dt>左欄標頭</dt><dd><span class="lit">要寫（新頁面／新邏輯／新機制）</span></dd></div>
+        <div class="row"><dt>左欄 1</dt><dd><span class="lit">新型需求，需要釐清邏輯</span><br>例：<span class="lit">AI 生成商品敘述——input 來源、觸發時機、output 格式都待定</span></dd></div>
+        <div class="row"><dt>左欄 2</dt><dd><span class="lit">既有功能但有迭代新邏輯</span><br>例：<span class="lit">會員制度調整、訂單流程重構</span></dd></div>
+        <div class="row"><dt>左欄 3</dt><dd><span class="lit">新機制：跨流程改寫、新政策或新稽核事件</span><br>例：<span class="lit">登入流程加入第二因素，牽涉管理員政策與稽核日誌</span></dd></div>
+        <div class="row"><dt>左欄 4</dt><dd><span class="lit">新產品或大型改版（多模組，需要功能地圖與 IA）</span><br>例：<span class="lit">整個後台重做、開一條新產品線</span></dd></div>
+        <div class="row"><dt>右欄標頭</dt><dd><span class="lit">不用寫，開 Ticket 就好</span></dd></div>
+        <div class="row"><dt>右欄四條</dt><dd><span class="lit">前端介面顯示：按鈕調整、文案修正、Tooltips</span><br><span class="lit">後端欄位調整：欄位限制、阻擋條件</span><br><span class="lit">特殊開關設定</span><br><span class="lit">日常維運：壓資料、刪資料</span></dd></div>
+        <div class="row"><dt>頁尾</dt><dd><span class="lit">關閉</span> ／ <span class="lit">跳過判定，直接建立</span> ／ <span class="lit">繼續</span>（判定為 ticket 時改為 <span class="lit">還是要寫，繼續</span>）</dd></div>
+      </dl>
+    </div>
+
+    <div class="copy-card" id="c-verdict">
+      <h3>02b 三種判定的完整句子 <span class="tag">即時重算，勾一下就換</span></h3>
+      <dl class="rows">
+        <div class="row"><dt>一條都沒勾</dt><dd><span class="lit">→ 開 Ticket 就好 — 沒有任何「要寫」的理由成立。不是每個需求都值得一份文件，先開 Ticket。</span></dd></div>
+        <div class="row"><dt>只勾右欄</dt><dd><span class="lit">→ 開 Ticket 就好 — 只命中「不用寫」的情況，開 Ticket 即可——重點放在工單記錄清楚。</span></dd></div>
+        <div class="row"><dt>lite</dt><dd><span class="lit">→ 寫 PRD · Lite — 單一功能或迭代需求（〈命中的判準〉），寫 Lite：8 章即可。</span><br><span class="lit">重點章節：8 章（文件概況／摘要／背景／目標／指標／需求規格／驗收標準／開放問題），其餘進編輯台再看要不要補。</span></dd></div>
+        <div class="row"><dt>full</dt><dd><span class="lit">→ 寫 PRD · Full — 屬於新機制或大型改版（〈命中的判準〉），寫 Full：全 15 章。</span></dd></div>
+      </dl>
+    </div>
+
+    <div class="copy-card" id="c-wizard">
+      <h3>03 三題精靈 <span class="tag">標題「建立新 PRD」</span></h3>
+      <dl class="rows">
+        <div class="row"><dt>副標·未開始</dt><dd><span class="lit">3 個問題，約 90 秒。答不出來可以先跳過。</span></dd></div>
+        <div class="row"><dt>副標·作答中</dt><dd><span class="lit">第 N 題 / 共 3 · 約還需 X 秒</span></dd></div>
+        <div class="row"><dt>Q1</dt><dd><span class="lit">這次要交什麼？</span><br><span class="lit">一句話寫可交付的東西，不要寫口號。標題留白的話我幫你用這句。</span><br>placeholder <span class="lit">例如：在登入流程加入 TOTP 與 WebAuthn</span></dd></div>
+        <div class="row"><dt>Q2</dt><dd><span class="lit">這是給誰用的？</span><br><span class="lit">寫得出角色就好，不用寫到人名。</span><br>placeholder <span class="lit">例如：租戶管理員、資安團隊</span></dd></div>
+        <div class="row"><dt>Q3</dt><dd><span class="lit">為什麼是現在？</span><br><span class="lit">外部壓力、合約、法規、內部期限。有數字最好。</span><br>placeholder <span class="lit">例如：兩家企業客戶把 2FA 列為續約條件，Q3 到期</span></dd></div>
+        <div class="row"><dt>範例句按鈕</dt><dd><span class="lit">不知道怎麼寫？先用這句</span>，按下後 toast <span class="lit">放進去了 — 直接改成你的版本</span></dd></div>
+        <div class="row"><dt>會填進去的句子</dt><dd>Q1 <span class="lit">在登入流程加入 TOTP 與 WebAuthn 第二因素，並支援工作區強制政策。</span><br>Q2 <span class="lit">租戶管理員與資安團隊；一般使用者為受影響對象。</span><br>Q3 <span class="lit">兩家企業客戶把 2FA 列為續約條件，合約在 Q3 到期。</span></dd></div>
+        <div class="row"><dt>草稿</dt><dd><span class="lit">已自動存草稿，關掉再回來會接續</span>；再開啟時 toast <span class="lit">接續上次未完成的草稿</span></dd></div>
+        <div class="row"><dt>頁尾按鈕</dt><dd><span class="lit">上一題</span> ／ <span class="lit">先跳過</span> ／ <span class="lit">下一題</span> ／ <span class="lit">看一下再建立</span> ／ <span class="lit">建立並開始寫</span></dd></div>
+      </dl>
+    </div>
+
+    <div class="copy-card" id="c-confirm">
+      <h3>03b 確認頁 <span class="tag">這樣就可以開始了</span></h3>
+      <dl class="rows">
+        <div class="row"><dt>表列</dt><dd><span class="lit">標題</span> ／ <span class="lit">做什麼</span> ／ <span class="lit">給誰</span> ／ <span class="lit">為何現在</span> ／ <span class="lit">判定</span>（按「跳過判定」時不顯示）</dd></div>
+        <div class="row"><dt>跳過的欄位</dt><dd><span class="lit">（跳過了 — 進編輯台再補）</span></dd></div>
+        <div class="row"><dt>下方說明</dt><dd><span class="lit">問題陳述、非目標、成功指標進編輯台再補。那裡有起手骨架和結構檢查帶著你寫。</span></dd></div>
+        <div class="row"><dt>副標·新手</dt><dd><span class="lit">建立後新手教練會在編輯台逐節帶你寫。</span></dd></div>
+        <div class="row"><dt>副標·一般</dt><dd><span class="lit">答不出來的欄位進編輯台再補就好。</span></dd></div>
+        <div class="row"><dt>進階設定</dt><dd><span class="lit">標題</span>、<span class="lit">範本類型</span>（不套範本／平台／資安／成長）、<span class="lit">領域</span>、<span class="lit">目標發布</span><br>領域說明 <span class="lit">決定 PRD 有哪些章節與哪些結構檢查。之後在編輯台還能改。</span></dd></div>
+      </dl>
+    </div>
+
+    <div class="copy-card" id="c-after">
+      <h3>04 建立後的 toast</h3>
+      <dl class="rows">
+        <div class="row"><dt>新建 PRD</dt><dd><span class="lit">已建立「〈標題〉」</span></dd></div>
+        <div class="row"><dt>新手引導</dt><dd><span class="lit">已建立「〈標題〉」· 新手教練會帶你逐節寫</span></dd></div>
+        <div class="row"><dt>標題怎麼來</dt><dd>留白就用 Q1 那句；Q1 也空的話用 <span class="lit">新功能規格</span></dd></div>
+      </dl>
+    </div>
+
+    <div class="copy-card" id="c-folder">
+      <h3>04b 資料夾詢問 <span class="tag">project-folder.ts</span></h3>
+      <dl class="rows">
+        <div class="row"><dt>標題</dt><dd><span class="lit">「〈標題〉」還沒有對應的資料夾</span></dd></div>
+        <div class="row"><dt>說明</dt><dd><span class="lit">綁定之後，編輯台左側會顯示這個資料夾的檔案結構，你也才看得出哪些檔是 PRD 來源、哪些是 OpenSpec 產出。</span></dd></div>
+        <div class="row"><dt>桌面版</dt><dd><span class="lit">在系統對話框裡可以直接用左下角「新增資料夾」建一個新的。</span></dd></div>
+        <div class="row"><dt>瀏覽器</dt><dd><span class="lit">瀏覽器只能選擇既有資料夾，不能新建。要新建請改用桌面版 App，或先在 Finder 建好再回來選。</span></dd></div>
+        <div class="row"><dt>安全說明</dt><dd><span class="lit">綁定只記錄對應關係，不會掃描覆蓋你剛寫的內容。</span></dd></div>
+        <div class="row"><dt>按鈕</dt><dd><span class="lit">稍後再說</span> ／ <span class="lit">選擇或新增資料夾</span>（桌面）｜<span class="lit">選擇資料夾</span>（瀏覽器）</dd></div>
+        <div class="row"><dt>取消時</dt><dd>toast <span class="lit">已取消，稍後可從專案儀表板的「指定專案資料夾」再指定</span></dd></div>
+      </dl>
+    </div>
+
+    <div class="copy-card" id="c-editor">
+      <h3>04c 新手路徑的編輯台教練六步 <span class="tag">beginner-flow.ts</span></h3>
+      <dl class="rows">
+        <div class="row"><dt>1 一句話</dt><dd><span class="lit">標題與交付物</span> — <span class="lit">用一句話講清「這次要交付什麼」。標題要能獨立被搜尋；「做什麼」避免口號，寫成可交付物。</span></dd></div>
+        <div class="row"><dt>2 對象</dt><dd><span class="lit">給誰 · 為何現在</span> — <span class="lit">受益者要寫成角色（管理員、成員、資安），不要寫「所有人」。為何現在需要可驗證的壓力：合約、法規、事件、期限。</span></dd></div>
+        <div class="row"><dt>3 問題</dt><dd><span class="lit">問題陳述</span> — <span class="lit">只寫痛點與佐證，不要先寫解法。一段話說明誰受傷、多常發生、代價是什麼。</span></dd></div>
+        <div class="row"><dt>4 邊界</dt><dd><span class="lit">目標與非目標</span> — <span class="lit">目標是可驗收結果；非目標是這次刻意不做的範圍。至少 3 條 Non-Goals，否則結構 gate 會擋送審。</span></dd></div>
+        <div class="row"><dt>5 指標</dt><dd><span class="lit">成功指標</span> — <span class="lit">至少一個能量測的數字：覆蓋率、時間、錯誤率、簽約解鎖數。寫「指標 | 目標 | 量測方式」。</span></dd></div>
+        <div class="row"><dt>6 建立</dt><dd><span class="lit">確認並建立</span> — <span class="lit">建立後會開啟工作台-PRD，並顯示新手教練列。依章節繼續補使用者故事、開放問題，再送審。</span></dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="sec-n">WHY</span><h2>三個決定了流程形狀的選擇</h2></div>
+    <div class="decisions">
+      <div class="why">
+        <h3>第 0 關在精靈之前</h3>
+        <p>第 0 章問的是「這件事值不值得一份 PRD」。做成精靈的第 0 題，就變成「已經在建了才問要不要建」—— 那個問題永遠只有一個答案。</p>
+      </div>
+      <div class="why">
+        <h3>判定不擋人</h3>
+        <p>判成「開 Ticket 就好」時只換按鈕文字。擋下去會讓人學會敷衍地勾一條「新機制」繞過，判定就從此失去意義。</p>
+      </div>
+      <div class="why">
+        <h3>判定結果不入庫</h3>
+        <p>只顯示在確認頁，不寫進 Project。Lite/Full 還不是可切換的模式；先存一個沒人讀的欄位，換來的是一次 schema 變更加一次 migration，然後在真的要用時發現當初存錯了形狀。</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Anchorline · docs/FLOW-new-prd.md · 對照日 2026-08-31<br>
+    文案來源：projects.html、src/pages/projects.ts、src/lib/prd-triage.ts、src/lib/project-folder.ts、src/lib/beginner-flow.ts<br>
+    UI 文案改了這份就過期 —— 過期的流程圖比沒有流程圖更貴。
+  </footer>
+</div>
+
+<script>
+  // 點節點 → 捲到它的逐字文案並標記。沒有 JS 時所有文案依然完整可讀，
+  // 這段只是省掉「自己往下找」那一步。
+  (function () {
+    var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var cards = document.querySelectorAll(".copy-card");
+    var nodes = document.querySelectorAll(".node[data-go]");
+    function go(id, btn) {
+      var card = document.getElementById(id);
+      if (!card) return;
+      cards.forEach(function (c) { c.classList.remove("flash"); });
+      nodes.forEach(function (n) { n.setAttribute("aria-current", "false"); });
+      card.classList.add("flash");
+      if (btn) btn.setAttribute("aria-current", "true");
+      card.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+      card.setAttribute("tabindex", "-1");
+      card.focus({ preventScroll: true });
+    }
+    nodes.forEach(function (n) {
+      n.setAttribute("aria-current", "false");
+      n.addEventListener("click", function () { go(n.dataset.go, n); });
+    });
+  })();
+</script>
+
+</body>
+</html>

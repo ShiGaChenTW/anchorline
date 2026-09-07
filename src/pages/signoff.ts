@@ -28,6 +28,7 @@ import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import { initHelpOverlay } from "../lib/help-overlay";
 import { beginBootOverlay, endBootOverlay, failBootOverlay } from "../lib/loading-overlay";
 import { syncRailContext } from "../lib/rail-projects";
+import { timelineRowHtml } from "../lib/signoff-log";
 import {
   groupTimelineByRound,
   signoffCta,
@@ -36,6 +37,14 @@ import {
   signoffTimeline,
   type SignoffStageView,
 } from "../lib/signoff";
+import { isNative, native } from "../lib/native";
+import {
+  lastApprovedFile,
+  PRD_MAIN_PATH,
+  PRD_VERSION_DIR,
+  sortPrdFileVersions,
+  type PrdFileVersion,
+} from "../lib/prd-file";
 import {
   ACT_LABEL,
   NEEDS_REASON,
@@ -43,7 +52,6 @@ import {
   type StagePending,
 } from "../lib/signoff-stages";
 import { initTheme } from "../lib/theme";
-import { sinceLabel } from "../lib/time-format";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 
 // 第一行：攔截要先裝好才擋得住後面任何一行的 throw。8 秒硬上限只是最後一道
@@ -162,14 +170,7 @@ if (!requireAuth()) {
     const entries = signoffTimeline({ c: st.cases[p.id], versions: store.prdVersionsOf(p.id) });
     const groups = groupTimelineByRound(entries);
 
-    const rowHtml = (e: (typeof entries)[0]) => `<li class="sg-log sg-log--${e.kind}">
-      <span class="sg-log-when mono">${escapeHtml(e.at ? sinceLabel(e.at, Date.now()) : "時間不詳")}</span>
-      <span class="sg-log-body">
-        <b>${escapeHtml(e.title)}</b>
-        <span class="sg-log-who">${escapeHtml(e.who)}</span>
-        <span class="sg-log-detail">${escapeHtml(e.detail)}</span>
-      </span>
-    </li>`;
+    const rowHtml = (e: (typeof entries)[0]) => timelineRowHtml(e);
 
     // 依輪分組，最新一輪展開，其餘收合 —— 平鋪的時間軸在多輪之後讀不出因果，
     // 「要求修改」會跟三筆核准混在一起，看不出哪幾筆發生在同一份內容上
@@ -190,6 +191,68 @@ if (!requireAuth()) {
           ? `${body}<p class="aiw-note">「時間不詳」是這一版之前的舊資料 —— 決策紀錄是後來才開始留的，補不回來。</p>`
           : `<p class="aiw-card-sub">還沒有任何簽核動作。送出審閱之後這裡就會開始長。</p>`
       }
+    </details>`;
+  }
+
+  // ── PRD 檔案版本 ────────────────────────────────────────────
+  //
+  // App 裡的版本線（`prdVersions`）活在 localStorage、而且 `capVersions` 會把
+  // 舊 commit 丟掉。這一塊看的是**落在專案資料夾裡的那份**，它進 git、
+  // clone 得下來、清瀏覽器資料也不會消失。兩者是同一批版本的兩個副本。
+
+  /** 這個專案的檔案版本，非同步讀進來。key = projectId */
+  const fileVersions = new Map<string, PrdFileVersion[]>();
+
+  /**
+   * 讀一次資料夾。**讀完才重畫**，而且只在拿到東西時重畫 ——
+   * 每次 render 都無條件觸發一次讀取＋重畫的話會變成無窮迴圈。
+   */
+  function loadFileVersions(p: Project): void {
+    const root = p.importSummary?.rootPath;
+    if (!isNative() || !root || fileVersions.has(p.id)) return;
+    fileVersions.set(p.id, []); // 先佔位，擋掉重入
+    void native
+      .listPrdVersions(root)
+      .then((files) => {
+        fileVersions.set(p.id, sortPrdFileVersions(files));
+        render({ skipAutoShow: true });
+      })
+      .catch(() => {
+        /* 讀不到就維持空清單 —— 面板自己會說原因 */
+      });
+  }
+
+  function prdFilesHtml(p: Project): string {
+    const root = p.importSummary?.rootPath;
+    const list = fileVersions.get(p.id) ?? [];
+    const approved = lastApprovedFile(list);
+    const body = !isNative()
+      ? `<p class="aiw-card-sub">瀏覽器版讀不到專案資料夾。PRD 檔案版本只在桌面版看得到。</p>`
+      : !root
+        ? `<p class="aiw-card-sub">這個專案還沒綁定資料夾，PRD 沒有地方可以落地。綁定之後，每次送審與核准都會自動寫一份。</p>`
+        : !list.length
+          ? `<p class="aiw-card-sub">還沒有任何檔案版本。送出審閱之後，<code>${escapeHtml(PRD_MAIN_PATH)}</code> 與 <code>${escapeHtml(PRD_VERSION_DIR)}/</code> 就會開始長。</p>`
+          : `<ul class="sg-logs">${list
+              .map(
+                (v) => `<li class="sg-log sg-log--${v.kind === "merge" ? "approve" : "submit"}">
+        <span class="sg-log-when mono">${escapeHtml(v.at.toLocaleString("zh-TW"))}</span>
+        <span class="sg-log-body">
+          <b>${v.kind === "merge" ? "核准版" : v.kind === "commit" ? "送審版" : "未知"}</b>
+          <span class="sg-log-detail mono">${escapeHtml(v.name)}</span>
+        </span>
+      </li>`,
+              )
+              .join("")}</ul>
+      <p class="aiw-note">${
+        approved
+          ? `最近一次核准：<code>${escapeHtml(approved.name)}</code>。主檔 <code>${escapeHtml(PRD_MAIN_PATH)}</code> 永遠是最新的那一版，逐次歷史看 git。`
+          : `還沒有核准版 —— 清單裡都是送審版。`
+      }</p>`;
+
+    return `<details class="card aiw-fold" data-od-id="sg-prd-files">
+      <summary>PRD 檔案版本 <span class="aiw-fold-meta">${list.length} 份</span></summary>
+      ${body}
+      ${root && isNative() ? `<div class="aiw-actions"><button type="button" class="btn btn-ghost" id="btn-sg-open-prd">開啟版本資料夾</button></div>` : ""}
     </details>`;
   }
 
@@ -416,7 +479,8 @@ if (!requireAuth()) {
       </section>`;
       return;
     }
-    root.innerHTML = `${heroHtml(p, view)}${stageListHtml(p, view)}<div class="aiw-folds">${timelineHtml(p)}${caseOpsHtml(p)}</div>`;
+    loadFileVersions(p);
+    root.innerHTML = `${heroHtml(p, view)}${stageListHtml(p, view)}<div class="aiw-folds">${timelineHtml(p)}${prdFilesHtml(p)}${caseOpsHtml(p)}</div>`;
     bind(p);
     if (pending) document.getElementById("sg-comment")?.focus();
     // 跑完自動跳窗掛在 render 的最後：工作單完成時 store 會 emit → subscribe →
@@ -425,6 +489,13 @@ if (!requireAuth()) {
   }
 
   function bind(p: Project) {
+    document.getElementById("btn-sg-open-prd")?.addEventListener("click", () => {
+      const root = p.importSummary?.rootPath;
+      if (!root) return;
+      // `.anchorline` 是隱藏資料夾 —— Finder 裡找不到，所以只能由這裡開
+      void native.openPath(`${root}/${PRD_VERSION_DIR}`);
+    });
+
     document.querySelectorAll<HTMLElement>("[data-sg-analyze]").forEach((b) => {
       b.addEventListener("click", () => {
         const stageId = b.dataset.sgAnalyze!;

@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anchorline Project Dashboard v4</title>
+    <style>
+        /* 零、絕對禁止：只使用系統字體、禁外部資源、禁定義外數值 */
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --fg: #e6edf3;
+            --muted: #8b949e;
+            --border: #30363d;
+            --border-soft: #21262d;
+            --accent: #2f81f7;
+            --accent-hover: #58a6ff;
+            --success: #3fb950;
+            --warn: #d29922;
+            --danger: #f85149;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: var(--bg);
+            color: var(--fg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Noto Sans TC", sans-serif;
+            -webkit-font-smoothing: antialiased;
+            line-height: 1.5;
+            padding: 32px;
+        }
+        
+        /* Typography Constraints: 12, 14, 16, 20, 24, 28, 32 */
+        .font-mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace; }
+        .text-12 { font-size: 12px; } .text-14 { font-size: 14px; } .text-16 { font-size: 16px; }
+        .text-20 { font-size: 20px; } .text-24 { font-size: 24px; } .text-28 { font-size: 28px; } .text-32 { font-size: 32px; }
+        
+        /* Text Colors */
+        .text-fg { color: var(--fg); } .text-muted { color: var(--muted); } .text-accent { color: var(--accent); }
+        .text-success { color: var(--success); } .text-warn { color: var(--warn); } .text-danger { color: var(--danger); }
+        
+        /* Font Weights */
+        .fw-400 { font-weight: 400; } .fw-500 { font-weight: 500; } .fw-600 { font-weight: 600; } .fw-bold { font-weight: 600; }
+        
+        /* Utilities */
+        .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .nowrap { white-space: nowrap; }
+        .inline-block { display: inline-block; }
+        .opacity-60 { opacity: 0.6; }
+        
+        /* Layout & Spacing */
+        .flex { display: flex; } .flex-col { display: flex; flex-direction: column; }
+        .items-center { align-items: center; } .items-start { align-items: flex-start; } .items-end { align-items: flex-end; }
+        .justify-center { justify-content: center; } .justify-between { justify-content: space-between; } .justify-end { justify-content: flex-end; }
+        .gap-4 { gap: 4px; } .gap-8 { gap: 8px; } .gap-12 { gap: 12px; } .gap-16 { gap: 16px; } .gap-24 { gap: 24px; } .gap-32 { gap: 32px; } .gap-48 { gap: 48px; }
+        .flex-1 { flex: 1; } .w-full { width: 100%; } .w-200 { width: 200px; } .h-full { height: 100%; }
+        
+        .m-0 { margin: 0; }
+        .mt-4 { margin-top: 4px; } .mt-8 { margin-top: 8px; } .mt-12 { margin-top: 12px; } .mt-16 { margin-top: 16px; } .mt-24 { margin-top: 24px; }
+        .mb-4 { margin-bottom: 4px; } .mb-8 { margin-bottom: 8px; } .mb-12 { margin-bottom: 12px; } .mb-16 { margin-bottom: 16px; } .mb-24 { margin-bottom: 24px; } .mb-32 { margin-bottom: 32px; } .mb-48 { margin-bottom: 48px; }
+        
+        .p-12 { padding: 12px; } .p-16 { padding: 16px; } .p-24 { padding: 24px; } .p-32 { padding: 32px; } .p-48 { padding: 48px; }
+        .px-8 { padding-left: 8px; padding-right: 8px; } .px-12 { padding-left: 12px; padding-right: 12px; } .px-16 { padding-left: 16px; padding-right: 16px; } .px-24 { padding-left: 24px; padding-right: 24px; }
+        .py-4 { padding-top: 4px; padding-bottom: 4px; } .py-8 { padding-top: 8px; padding-bottom: 8px; } .py-12 { padding-top: 12px; padding-bottom: 12px; } .py-16 { padding-top: 16px; padding-bottom: 16px; }
+        .pt-12 { padding-top: 12px; } .pt-16 { padding-top: 16px; }
+        .pb-16 { padding-bottom: 16px; } .pb-24 { padding-bottom: 24px; }
+        .pl-12 { padding-left: 12px; } .pl-16 { padding-left: 16px; } .pl-24 { padding-left: 24px; }
+        
+        /* Borders */
+        .border-l { border-left: 1px solid var(--border-soft); }
+        .border-l-3-warn { border-left: 3px solid var(--warn); }
+        .border-r { border-right: 1px solid var(--border-soft); }
+        .border-t { border-top: 1px solid var(--border); }
+        .border-t-soft { border-top: 1px solid var(--border-soft); }
+        .border-b { border-bottom: 1px solid var(--border); }
+        .border-b-soft { border-bottom: 1px solid var(--border-soft); }
+        .border-b-2-transparent { border-bottom: 2px solid transparent; }
+        .border-b-2-warn { border-bottom: 2px solid var(--warn); }
+        .border-b-2-accent { border-bottom: 2px solid var(--accent); }
+        .border-1 { border: 1px solid var(--border); }
+        .border-dashed { border: 1px dashed var(--border); }
+        
+        /* Border Radius Constraints: 6, 12, 9999 */
+        .radius-6 { border-radius: 6px; } .radius-12 { border-radius: 12px; } .radius-full { border-radius: 9999px; }
+        
+        /* Backgrounds */
+        .bg-bg { background-color: var(--bg); }
+        .bg-surface { background-color: var(--surface); }
+        .bg-accent-5 { background-color: color-mix(in srgb, var(--accent) 5%, transparent); }
+        .bg-warn-10 { background-color: color-mix(in srgb, var(--warn) 10%, transparent); }
+        .bg-accent-20 { background-color: color-mix(in srgb, var(--accent) 20%, transparent); }
+        
+        /* Shell Elements */
+        .app-container { max-width: 1600px; margin: 0 auto; overflow-x: hidden; }
+        .screen-label { background-color: var(--surface); color: var(--fg); border: 1px solid var(--border); font-size: 16px; font-weight: 600; padding: 6px 16px; border-radius: 6px; display: inline-block; margin-bottom: 8px; }
+        .panel { background-color: var(--bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 48px; }
+        .screen-divider { border: none; border-top: 1px dashed var(--border); margin: 48px 0 32px 0; }
+        
+        /* Badges */
+        .badge { font-size: 12px; padding: 2px 8px; border-radius: 9999px; border: 1px solid var(--border); display: inline-flex; align-items: center; gap: 4px; line-height: 1.2; }
+        .badge-success { color: var(--success); border-color: var(--success); }
+        .badge-warn { color: var(--warn); border-color: var(--warn); }
+        .badge-danger { color: var(--danger); border-color: var(--danger); }
+        .badge-accent { color: var(--accent); border-color: var(--accent); }
+        .badge-solid-muted { background-color: var(--border); color: var(--fg); font-weight: 600; border-color: transparent; }
+        .badge-solid-accent { background-color: var(--accent); color: var(--bg); font-weight: 600; border-color: transparent; }
+        
+        /* Buttons & Links */
+        .btn { display: inline-flex; align-items: center; justify-content: center; padding: 6px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid transparent; text-decoration: none; }
+        .btn-primary { background-color: var(--accent); color: #ffffff; }
+        .btn-primary:hover { background-color: var(--accent-hover); }
+        .btn-secondary { background-color: var(--surface); color: var(--fg); border-color: var(--border); }
+        .btn-secondary:hover { border-color: var(--muted); }
+        .link { color: var(--accent); text-decoration: none; cursor: pointer; }
+        .link:hover { text-decoration: underline; }
+        
+        svg { flex-shrink: 0; width: 16px; height: 16px; fill: currentColor; }
+        
+        /* Read-only Route Indicator */
+        .route-segment { flex: 1; padding: 16px 24px; }
+        .route-segment:not(:last-child) { border-right: 1px solid var(--border-soft); }
+        .meter-bar { width: 12px; height: 3px; border-radius: 9999px; background-color: var(--border); }
+        .meter-bar.active-fg { background-color: var(--fg); }
+        .meter-bar.active-warn { background-color: var(--warn); }
+        .meter-bar.active-accent { background-color: var(--accent); }
+        
+        /* Chain */
+        .timeline { position: relative; display: flex; flex-direction: column; gap: 24px; padding: 24px 32px 32px 32px; }
+        .timeline::before { content: ''; position: absolute; top: 24px; bottom: 24px; left: 43px; width: 2px; background-color: var(--border); z-index: 0; }
+        .node-row { display: flex; gap: 24px; position: relative; z-index: 1; }
+        .node-visual { width: 24px; display: flex; justify-content: center; margin-top: 16px; }
+        .node-dot { width: 16px; height: 16px; border-radius: 9999px; background-color: var(--bg); border: 2px solid var(--muted); display: flex; align-items: center; justify-content: center; }
+        .node-dot.completed { border-color: var(--success); background-color: var(--success); color: var(--bg); }
+        .node-dot.self-signed { border-color: var(--warn); border-width: 4px; }
+        .node-dot.formal-signed { border-color: var(--accent); border-width: 4px; }
+        .node-dot svg { width: 10px; height: 10px; }
+        
+        .node-content { flex: 1; background-color: var(--bg); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
+        .node-content.compact { flex-direction: row; align-items: center; padding: 0; border: 1px solid var(--border-soft); }
+        
+        /* Node Specific Styles */
+        .node-content.self-signed { border-left: 4px solid var(--warn); }
+        .node-content.formal-signed { border-left: 4px solid var(--accent); }
+        
+        .inner-row { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border-soft); gap: 16px; }
+        .inner-row:last-child { border-bottom: none; }
+        
+        .audit-trail-micro { background-color: var(--surface); padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 16px; align-items: center; font-size: 12px; color: var(--muted); }
+        .audit-trail-micro .item { display: flex; align-items: center; gap: 8px; }
+        
+        /* Anchor Grid */
+        .anchor-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 24px; align-items: center; }
+        
+        /* 3-Column Info Layout */
+        .info-3-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; padding: 16px 24px; }
+        .info-col { display: flex; flex-direction: column; gap: 8px; }
+        .info-col:not(:first-child) { border-left: 1px solid var(--border-soft); padding-left: 24px; }
+        
+        /* Details & Table */
+        details > summary { list-style: none; cursor: pointer; color: var(--accent); font-size: 14px; font-weight: 500; }
+        details > summary::-webkit-details-marker { display: none; }
+        details > summary:hover { text-decoration: underline; }
+        
+        .data-table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--bg); }
+        .data-table th { text-align: left; padding: 12px 16px; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--border); }
+        .data-table td { padding: 12px 16px; border-bottom: 1px solid var(--border-soft); color: var(--fg); vertical-align: middle; }
+        
+        /* Empty State Layout */
+        .empty-state-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; padding: 48px; align-items: flex-start; }
+        .ghost-preview { background-color: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 24px; }
+        .ghost-chain { display: flex; flex-direction: column; gap: 16px; position: relative; padding-left: 12px; }
+        .ghost-chain::before { content: ''; position: absolute; top: 12px; bottom: 12px; left: 15px; width: 1px; background-color: var(--border); }
+        .ghost-node { display: flex; align-items: center; gap: 16px; position: relative; z-index: 1; color: var(--muted); }
+        .ghost-dot { width: 8px; height: 8px; border-radius: 9999px; border: 1px solid var(--muted); background-color: var(--surface); }
+    </style>
+<script src="https://cdn.tailwindcss.com"></script></head>
+<body>
+
+    <!-- ==================== SCREEN A ==================== -->
+    <div class="app-container">
+        <div class="screen-label">畫面 A｜有資料狀態</div>
+        
+        <div class="panel flex-col mb-48">
+            <!-- Header -->
+            <div class="border-b bg-bg px-24 py-16 flex items-center justify-between">
+                <div class="flex items-center gap-16">
+                    <span class="text-16 fw-bold">資料同步引擎</span>
+                    <div class="flex items-center gap-4 text-muted text-14">
+                        <svg viewBox="0 0 16 16"><path d="M11.75 2.25a1.75 1.75 0 01-1.036 3.078l-2.034 2.226a1.75 1.75 0 01-1.43.596H6v1.1a1.75 1.75 0 11-1.5 0v-2.5A1.75 1.75 0 116 5.5v2.222h1.25a.25.25 0 00.204-.085l2.034-2.226A1.75 1.75 0 1111.75 2.25z"/></svg>
+                        <span>main</span>
+                    </div>
+                    <div class="font-mono text-12 text-muted">~/Developer/data-sync-engine</div>
+                    <div class="badge badge-solid-muted">草稿</div>
+                    <div class="badge badge-success">鏈完整</div>
+                    <div class="badge">2 個待辦</div>
+                </div>
+                <div class="flex items-center gap-16">
+                    <span class="text-14 fw-500 text-muted">章節 2 / 3 節</span>
+                    <span class="font-mono text-12 text-muted">最後更新 2026-09-02 14:07</span>
+                </div>
+            </div>
+
+            <!-- Route Indicator (Read-only) -->
+            <div class="border-b-soft bg-bg">
+                <div class="flex justify-between items-end px-24 pt-16 pb-8">
+                    <span class="text-14 fw-bold">治理路線</span>
+                    <span class="text-12 text-muted">唯讀 · 反映目前設定</span>
+                </div>
+                <div class="flex">
+                    <div class="route-segment flex-col gap-4 border-b-2-transparent">
+                        <div class="flex items-center gap-8">
+                            <span class="text-16 fw-400 text-muted">新產品／新專案</span>
+                            <div class="flex gap-4">
+                                <div class="meter-bar active-fg"></div><div class="meter-bar active-fg"></div><div class="meter-bar active-fg"></div><div class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <span class="text-12 text-muted">15 節 · 正式多方簽核</span>
+                    </div>
+                    <div class="route-segment flex-col gap-4 border-b-2-transparent">
+                        <div class="flex items-center gap-8">
+                            <span class="text-16 fw-400 text-muted nowrap">功能建構／迭代優化</span>
+                            <div class="flex gap-4">
+                                <div class="meter-bar active-fg"></div><div class="meter-bar active-fg"></div><div class="meter-bar"></div><div class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <span class="text-12 text-muted">8 節 · 正式多方簽核</span>
+                    </div>
+                    <div class="route-segment flex-col gap-4 border-b-2-warn">
+                        <div class="flex items-center gap-8">
+                            <span class="text-16 fw-600 text-warn">試作／探索</span>
+                            <div class="flex gap-4">
+                                <div class="meter-bar active-warn"></div><div class="meter-bar"></div><div class="meter-bar"></div><div class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <span class="text-12 text-warn fw-500">3 節 · 一鍵自簽</span>
+                    </div>
+                    <div class="route-segment flex-col gap-4 border-b-2-transparent opacity-60">
+                        <div class="flex items-center gap-8">
+                            <span class="text-16 fw-400 text-muted">Debug／維運</span>
+                            <div class="flex gap-4">
+                                <div class="meter-bar"></div><div class="meter-bar"></div><div class="meter-bar"></div><div class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <span class="text-12 text-muted">不寫 PRD · 走 OpenSpec</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chain -->
+            <div class="timeline">
+                
+                <!-- Plan Node -->
+                <div class="node-row">
+                    <div class="node-visual"><div class="node-dot completed"><svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg></div></div>
+                    <div class="node-content">
+                        <div class="inner-row">
+                            <div class="flex items-center gap-12 w-200 nowrap">
+                                <span class="text-16 fw-bold">計畫</span>
+                                <span class="text-12 text-success fw-500">已核准</span>
+                            </div>
+                            <div class="flex-1 flex gap-24 text-14">
+                                <div><span class="text-muted">計畫檔案：</span><span class="text-accent font-mono">plans/2026-08-28-資料同步批次驗證計畫.md</span></div>
+                                <div><span class="text-muted">審閱者：</span>林思翰</div>
+                            </div>
+                            <div class="font-mono text-12 text-muted">2026-08-28 10:14:22</div>
+                        </div>
+                        <div class="audit-trail-micro">
+                            <div class="item"><span class="font-mono">2026-08-28 09:55:11</span> 建立計畫 <span class="text-fg">鄭雅筑</span></div>
+                            <div class="item" style="color:var(--border-soft)">|</div>
+                            <div class="item"><span class="font-mono">2026-08-28 10:14:22</span> 檢核計畫 <span class="text-fg">林思翰</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Anchor Node -->
+                <div class="node-row">
+                    <div class="node-visual"><div class="node-dot completed"><svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg></div></div>
+                    <div class="node-content">
+                        <div class="inner-row items-start">
+                            <div class="flex items-center gap-12 w-200 nowrap mt-4">
+                                <span class="text-16 fw-bold">錨點</span>
+                                <span class="text-12 text-success fw-500">已建立</span>
+                            </div>
+                            <div class="flex-1 flex-col gap-8 text-14 mt-4">
+                                <div class="anchor-grid">
+                                    <span class="text-accent font-mono text-12">anc:t=3f9a2c14</span>
+                                    <span class="text-muted font-mono text-12 truncate">src/ingest/validator.ts:12-28</span>
+                                    <span class="text-accent font-mono text-12">anc:t=b71e05da</span>
+                                    <span class="text-muted font-mono text-12 truncate">src/sync/engine.ts:45-67</span>
+                                    <span class="text-accent font-mono text-12">anc:t=c208df6b</span>
+                                    <span class="text-muted font-mono text-12 truncate">src/sync/report.ts:88-94</span>
+                                </div>
+                            </div>
+                            <div class="font-mono text-12 text-muted mt-4">2026-08-28 10:17:09</div>
+                        </div>
+                        <div class="audit-trail-micro">
+                            <div class="item"><span class="font-mono">2026-08-28 10:15:02</span> 標記錨點 <span class="text-fg">鄭雅筑</span></div>
+                            <div class="item" style="color:var(--border-soft)">|</div>
+                            <div class="item"><span class="font-mono">2026-08-28 10:16:20</span> 完成錨點建立 <span class="text-fg">鄭雅筑</span></div>
+                            <div class="item" style="color:var(--border-soft)">|</div>
+                            <div class="item"><span class="font-mono">2026-08-28 10:17:09</span> 寫入 anchors.jsonl <span class="text-fg">系統</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Commit Node -->
+                <div class="node-row">
+                    <div class="node-visual"><div class="node-dot completed"><svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg></div></div>
+                    <div class="node-content">
+                        <div class="inner-row items-start">
+                            <div class="flex items-center gap-12 w-200 nowrap mt-4">
+                                <span class="text-16 fw-bold">Commit</span>
+                                <span class="text-12 text-success fw-500">已提交</span>
+                            </div>
+                            <div class="flex-1 flex-col gap-4 text-14 mt-4">
+                                <div class="flex gap-16 items-center">
+                                    <span class="font-mono text-12 text-accent">4e1c9ab</span>
+                                    <span class="flex-1 truncate">feat(sync): 批次驗證器與錯誤彙整機制</span>
+                                    <span class="text-muted w-200">鄭雅筑</span>
+                                    <span class="font-mono text-12 text-muted">2026-08-28 11:02:31</span>
+                                </div>
+                                <div class="flex gap-16 items-center">
+                                    <span class="font-mono text-12 text-accent">1b7d2ef</span>
+                                    <span class="flex-1 truncate">test(sync): 新增批次驗證整合測試案例</span>
+                                    <span class="text-muted w-200">黃柏諺</span>
+                                    <span class="font-mono text-12 text-muted">2026-08-28 11:28:54</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="audit-trail-micro">
+                            <div class="item"><span class="font-mono">2026-08-28 11:02:31</span> 建立 commit <span class="text-fg">鄭雅筑</span></div>
+                            <div class="item" style="color:var(--border-soft)">|</div>
+                            <div class="item"><span class="font-mono">2026-08-28 11:29:02</span> 更新 refs/chain.log <span class="text-fg">系統</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sign-off Node (Self-signed) -->
+                <div class="node-row">
+                    <div class="node-visual"><div class="node-dot self-signed"></div></div>
+                    <div class="flex-col w-full">
+                        <div class="node-content self-signed">
+                            <div class="p-24 pb-16 flex justify-between items-start">
+                                <div class="flex-col gap-8">
+                                    <div class="flex items-center gap-12 nowrap">
+                                        <span class="text-28 fw-bold text-warn">Sign-off</span>
+                                    </div>
+                                    <div class="text-14 fw-500 text-warn">作者自己核准自己 · 未經第三方</div>
+                                </div>
+                                <div class="font-mono text-12 text-muted mt-8">2026-09-02 14:07:33</div>
+                            </div>
+
+                            <!-- 3 Columns -->
+                            <div class="info-3-col border-t-soft text-14">
+                                <div class="info-col">
+                                    <span class="text-muted fw-bold">本次自簽的規格修訂</span>
+                                    <span class="text-accent font-mono text-12">specs/2026-08-28-sync-batch.md</span>
+                                    <span>變更重點：批次驗證失敗改為彙整回報</span>
+                                </div>
+                                <div class="info-col">
+                                    <span class="text-muted fw-bold">風險說明</span>
+                                    <div class="flex items-center gap-8"><span class="badge badge-warn">中</span><span>欄位改名可能影響外部監控指標</span></div>
+                                    <span class="text-12 text-muted">建議：確認監控看板欄位映射</span>
+                                </div>
+                                <div class="info-col">
+                                    <span class="text-muted fw-bold">影響範圍</span>
+                                    <span class="font-mono text-12">src/sync/engine.ts</span>
+                                    <span class="font-mono text-12">監控看板欄位映射</span>
+                                </div>
+                            </div>
+
+                            <!-- Author Role Row -->
+                            <div class="px-24 pb-16 flex items-center gap-12 text-14">
+                                <div style="width:32px; height:32px; border-radius:9999px; background:var(--surface); display:flex; align-items:center; justify-content:center;">
+                                    <svg viewBox="0 0 16 16" style="width:16px; height:16px; color:var(--muted);"><path d="M8 8a3 3 0 100-6 3 3 0 000 6zm-5 6s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H3z"/></svg>
+                                </div>
+                                <span class="fw-bold">鄭雅筑</span>
+                                <span class="badge">提交者</span>
+                                <span class="badge badge-warn">核准者</span>
+                            </div>
+
+                            <!-- Emphasis Bar -->
+                            <div class="bg-warn-10 border-l-3-warn px-16 py-12 text-14 fw-600 text-warn flex items-center">
+                                自簽不推進專案狀態 · 下游兩站仍未達成
+                            </div>
+
+                            <div class="px-24 py-16 flex justify-between items-center bg-bg border-t">
+                                <div class="text-12 text-muted font-mono">
+                                    2026-09-02 13:56:10 提交待核准項目 鄭雅筑 | 2026-09-02 14:07:33 自簽核准 鄭雅筑
+                                </div>
+                                <div class="flex gap-12 items-center">
+                                    <button class="btn btn-secondary text-14">檢視完整 diff</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Node 5 -->
+                <div class="node-row mt-16">
+                    <div class="node-visual"><div class="node-dot"><svg viewBox="0 0 16 16"></svg></div></div>
+                    <div class="node-content compact">
+                        <div class="inner-row w-full opacity-60">
+                            <div class="flex items-center gap-12 w-200 nowrap">
+                                <span class="text-16 fw-bold text-muted">規格修訂</span>
+                                <span class="text-12 text-muted">(未達成)</span>
+                            </div>
+                            <div class="text-14 text-muted flex-1">需先完成 Sign-off</div>
+                            <div class="font-mono text-12 text-muted">---</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Node 6 -->
+                <div class="node-row">
+                    <div class="node-visual"><div class="node-dot"><svg viewBox="0 0 16 16"></svg></div></div>
+                    <div class="node-content compact">
+                        <div class="inner-row w-full opacity-60">
+                            <div class="flex items-center gap-12 w-200 nowrap">
+                                <span class="text-16 fw-bold text-muted">Release</span>
+                                <span class="text-12 text-muted">(未達成)</span>
+                            </div>
+                            <div class="text-14 text-muted flex-1">需先完成規格修訂</div>
+                            <div class="font-mono text-12 text-muted">---</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr class="screen-divider">
+
+    <!-- ==================== SCREEN C ==================== -->
+    <div class="app-container">
+        <div class="flex items-end gap-16 mb-8">
+            <div class="screen-label m-0">畫面 C｜有資料狀態（正式簽核）</div>
+            <div class="text-12 text-muted pb-4">緊接畫面 A，同一條治理鏈的正式多方簽核版本</div>
+        </div>
+        
+        <div class="panel flex-col mb-48">
+            <!-- Header -->
+            <div class="border-b bg-bg px-24 py-16 flex items-center justify-between">
+                <div class="flex items-center gap-16">
+                    <span class="text-16 fw-bold">行動支付對帳中心</span>
+                    <div class="flex items-center gap-4 text-muted text-14">
+                        <svg viewBox="0 0 16 16"><path d="M11.75 2.25a1.75 1.75 0 01-1.036 3.078l-2.034 2.226a1.75 1.75 0 01-1.43.596H6v1.1a1.75 1.75 0 11-1.5 0v-2.5A1.75 1.75 0 116 5.5v2.222h1.25a.25.25 0 00.204-.085l2.034-2.226A1.75 1.75 0 1111.75 2.25z"/></svg>
+                        <span>main</span>
+                    </div>
+                    <div class="font-mono text-12 text-muted">~/Developer/pay-recon</div>
+                    <div class="badge badge-solid-accent">審閱中</div>
+                    <div class="badge badge-success">鏈完整</div>
+                    <div class="badge">3 個待辦</div>
+                </div>
+                <div class="flex items-center gap-16">
+                    <span class="text-14 fw-500 text-muted">章節 12 / 15 節</span>
+                    <span class="font-mono text-12 text-muted">最後更新 2026-09-01 18:42</span>
+                </div>
+            </div>
+
+            <!-- Route Indicator (Read-only) -->
+            <div class="border-b-soft bg-bg">
+                <div class="flex justify-between items-end px-24 pt-16 pb-8">
+                    <span class="text-14 fw-bold">治理路線</span>
+                    <span class="text-12 text-muted">唯讀 · 反映目前設定</span>
+                </div>
+                <div class="flex">
+                    <div class="route-segment flex-col gap-4 border-b-2-accent">
+                        <div class="flex items-center gap-8">
+                            <span class="text-16 fw-600 text-accent">新產品／新專案</span>
+                            <div class="flex gap-4">
+                                <div class="meter-bar active-accent"></div><div class="meter-bar active-accent"></div><div class="meter-bar active-accent"></div><div class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <span class="text-12 text-accent fw-500">15 節 · 正式多方簽核</span>
+                    </div>
+                    <div class="route-segment flex-col gap-4 border-b-2-transparent">
+                        <div class="flex items-center gap-8">
+                            <span class="text-16 fw-400 text-muted nowrap">功能建構／迭代優化</span>
+                            <div class="flex gap-4">
+                                <div class="meter-bar active-fg"></div><div class="meter-bar active-fg"></div><div class="meter-bar"></div><div class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <span class="text-12 text-muted">8 節 · 正式多方簽核</span>
+                    </div>
+                    <div class="route-segment flex-col gap-4 border-b-2-transparent">
+                        <div class="flex items-center gap-8">
+                            <span class="text-16 fw-400 text-muted">試作／探索</span>
+                            <div class="flex gap-4">
+                                <div class="meter-bar active-fg"></div><div class="meter-bar"></div><div class="meter-bar"></div><div class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <span class="text-12 text-muted">3 節 · 一鍵自簽</span>
+                    </div>
+                    <div class="route-segment flex-col gap-4 border-b-2-transparent opacity-60">
+                        <div class="flex items-center gap-8">
+                            <span class="text-16 fw-400 text-muted">Debug／維運</span>
+                            <div class="flex gap-4">
+                                <div class="meter-bar"></div><div class="meter-bar"></div><div class="meter-bar"></div><div class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <span class="text-12 text-muted">不寫 PRD · 走 OpenSpec</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chain -->
+            <div class="timeline">
+                
+                <!-- Plan Node -->
+                <div class="node-row">
+                    <div class="node-visual"><div class="node-dot completed"><svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg></div></div>
+                    <div class="node-content">
+                        <div class="inner-row">
+                            <div class="flex items-center gap-12 w-200 nowrap">
+                                <span class="text-16 fw-bold">計畫</span>
+                                <span class="text-12 text-success fw-500">已核准</span>
+                            </div>
+                            <div class="flex-1 flex gap-24 text-14">
+                                <div><span class="text-muted">計畫檔案：</span><span class="text-accent font-mono">plans/2026-08-30-對帳批次重算計畫.md</span></div>
+                                <div><span class="text-muted">審閱者：</span>周敏珊</div>
+                            </div>
+                            <div class="font-mono text-12 text-muted">2026-08-30 09:42:15</div>
+                        </div>
+                        <div class="audit-trail-micro">
+                            <div class="item"><span class="font-mono">2026-08-30 08:30:11</span> 建立計畫 <span class="text-fg">鄭雅筑</span></div>
+                            <div class="item" style="color:var(--border-soft)">|</div>
+                            <div class="item"><span class="font-mono">2026-08-30 09:42:15</span> 檢核計畫 <span class="text-fg">周敏珊</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Anchor Node -->
+                <div class="node-row">
+                    <div class="node-visual"><div class="node-dot completed"><svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg></div></div>
+                    <div class="node-content">
+                        <div class="inner-row items-start">
+                            <div class="flex items-center gap-12 w-200 nowrap mt-4">
+                                <span class="text-16 fw-bold">錨點</span>
+                                <span class="text-12 text-success fw-500">已建立</span>
+                            </div>
+                            <div class="flex-1 flex-col gap-8 text-14 mt-4">
+                                <div class="anchor-grid">
+                                    <span class="text-accent font-mono text-12">anc:t=9d41ba07</span>
+                                    <span class="text-muted font-mono text-12 truncate">src/recon/batch.ts:33-51</span>
+                                    <span class="text-accent font-mono text-12">anc:t=5ea7c3b2</span>
+                                    <span class="text-muted font-mono text-12 truncate">src/recon/ledger.ts:120-148</span>
+                                </div>
+                            </div>
+                            <div class="font-mono text-12 text-muted mt-4">2026-08-30 14:15:22</div>
+                        </div>
+                        <div class="audit-trail-micro">
+                            <div class="item"><span class="font-mono">2026-08-30 14:10:05</span> 標記錨點 <span class="text-fg">鄭雅筑</span></div>
+                            <div class="item" style="color:var(--border-soft)">|</div>
+                            <div class="item"><span class="font-mono">2026-08-30 14:15:22</span> 寫入 anchors.jsonl <span class="text-fg">系統</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Commit Node -->
+                <div class="node-row">
+                    <div class="node-visual"><div class="node-dot completed"><svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"/></svg></div></div>
+                    <div class="node-content">
+                        <div class="inner-row items-start">
+                            <div class="flex items-center gap-12 w-200 nowrap mt-4">
+                                <span class="text-16 fw-bold">Commit</span>
+                                <span class="text-12 text-success fw-500">已提交</span>
+                            </div>
+                            <div class="flex-1 flex-col gap-4 text-14 mt-4">
+                                <div class="flex gap-16 items-center">
+                                    <span class="font-mono text-12 text-accent">7c3e5f1</span>
+                                    <span class="flex-1 truncate">feat(recon): 對帳批次重算與差異彙整</span>
+                                    <span class="text-muted w-200">鄭雅筑</span>
+                                    <span class="font-mono text-12 text-muted">2026-08-30 16:45:10</span>
+                                </div>
+                                <div class="flex gap-16 items-center">
+                                    <span class="font-mono text-12 text-accent">a90d84c</span>
+                                    <span class="flex-1 truncate">test(recon): 補上跨日切帳邊界案例</span>
+                                    <span class="text-muted w-200">黃柏諺</span>
+                                    <span class="font-mono text-12 text-muted">2026-08-30 17:10:33</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="audit-trail-micro">
+                            <div class="item"><span class="font-mono">2026-08-30 16:45:10</span> 建立 commit <span class="text-fg">鄭雅筑</span></div>
+                            <div class="item" style="color:var(--border-soft)">|</div>
+                            <div class="item"><span class="font-mono">2026-08-30 17:12:05</span> 更新 refs/chain.log <span class="text-fg">系統</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sign-off Node (Formal) -->
+                <div class="node-row">
+                    <div class="node-visual"><div class="node-dot formal-signed"></div></div>
+                    <div class="flex-col w-full">
+                        <div class="node-content formal-signed bg-accent-5">
+                            <div class="p-24 pb-16 flex justify-between items-start">
+                                <div class="flex-col gap-8">
+                                    <div class="flex items-center gap-12 nowrap">
+                                        <span class="text-28 fw-bold text-accent">Sign-off</span>
+                                        <div class="badge badge-solid-accent">正式多方簽核</div>
+                                    </div>
+                                    <div class="text-14 fw-500 text-accent">提交者與核准者分離 · 四關逐關簽核 · 全數通過才推進</div>
+                                </div>
+                                <div class="font-mono text-12 text-muted mt-8">2026-09-01 16:20:41</div>
+                            </div>
+
+                            <!-- 3 Columns -->
+                            <div class="info-3-col border-t-soft text-14">
+                                <div class="info-col">
+                                    <span class="text-muted fw-bold">本次送審的規格修訂</span>
+                                    <span class="text-accent font-mono text-12">specs/2026-08-30-recon-batch.md</span>
+                                    <span>變更重點：跨日切帳邊界改採帳務日對齊</span>
+                                </div>
+                                <div class="info-col">
+                                    <span class="text-muted fw-bold">風險說明</span>
+                                    <div class="flex items-center gap-8"><span class="badge badge-danger">高</span><span>重算期間對帳報表可能出現暫時性差異</span></div>
+                                    <span class="text-12 text-muted">建議：先在測試環境跑完整月批次</span>
+                                </div>
+                                <div class="info-col">
+                                    <span class="text-muted fw-bold">影響範圍</span>
+                                    <span class="font-mono text-12">src/recon/batch.ts</span>
+                                    <span class="font-mono text-12">src/recon/ledger.ts</span>
+                                    <span class="font-mono text-12">月結對帳報表</span>
+                                </div>
+                            </div>
+
+                            <!-- Approval Table -->
+                            <div class="px-24 py-16 border-t-soft bg-bg">
+                                <div class="text-14 fw-600 mb-12">四關已完成 1 關 · 第 3 關被順序閘門擋住</div>
+                                <table class="data-table border-1 radius-6">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 25%;">順序 / 關卡</th>
+                                            <th style="width: 20%;">狀態</th>
+                                            <th style="width: 25%;">指派對象</th>
+                                            <th style="width: 30%;">決定時間</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>1 ｜ 結構完整度</td>
+                                            <td class="text-success fw-500">已核准</td>
+                                            <td>林思翰</td>
+                                            <td class="font-mono text-12">2026-09-01 16:20:41</td>
+                                        </tr>
+                                        <tr>
+                                            <td>2 ｜ 風險與相依</td>
+                                            <td class="text-accent fw-500">審閱中</td>
+                                            <td>周敏珊</td>
+                                            <td class="font-mono text-12 text-muted">—</td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="flex-col gap-4">
+                                                    <span>3 ｜ 技術可行性</span>
+                                                    <div class="flex items-center gap-4 text-12 text-muted mt-4">
+                                                        <svg viewBox="0 0 16 16"><path d="M4 6V4.5a4 4 0 118 0V6h.5a2 2 0 012 2v5a2 2 0 01-2 2h-9a2 2 0 01-2-2V8a2 2 0 012-2H4zm2 0h4V4.5a2 2 0 10-4 0V6z"/></svg>
+                                                        <span>順序閘門：需「風險與相依」先通過</span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="text-muted fw-500">等待前一關</td>
+                                            <td>黃柏諺</td>
+                                            <td class="font-mono text-12 text-muted">—</td>
+                                        </tr>
+                                        <tr>
+                                            <td>4 ｜ 我核准</td>
+                                            <td class="text-muted fw-500">未開始</td>
+                                            <td>陳冠廷</td>
+                                            <td class="font-mono text-12 text-muted">—</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- SoD (Segregation of Duties) -->
+                            <div class="px-24 py-16 flex items-center justify-between border-t-soft text-14 bg-bg">
+                                <div class="flex items-center gap-12">
+                                    <div style="width:32px; height:32px; border-radius:9999px; background:var(--surface); display:flex; align-items:center; justify-content:center;">
+                                        <svg viewBox="0 0 16 16" style="width:16px; height:16px; color:var(--muted);"><path d="M8 8a3 3 0 100-6 3 3 0 000 6zm-5 6s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H3z"/></svg>
+                                    </div>
+                                    <div class="flex-col gap-4">
+                                        <span class="fw-bold">鄭雅筑</span>
+                                        <span class="badge w-48 justify-center">提交者</span>
+                                    </div>
+                                </div>
+                                <div class="text-12 text-muted px-24">提交者不得核准自己的送審</div>
+                                <div class="flex items-center gap-12">
+                                    <div class="flex-col gap-4 items-end">
+                                        <span class="fw-bold">林思翰 · 周敏珊 · 黃柏諺 · 陳冠廷</span>
+                                        <span class="badge badge-accent">4 位核准者</span>
+                                    </div>
+                                    <div style="width:32px; height:32px; border-radius:9999px; background:var(--accent-20); display:flex; align-items:center; justify-content:center;">
+                                        <svg viewBox="0 0 16 16" style="width:16px; height:16px; color:var(--accent);"><path d="M8 8a3 3 0 100-6 3 3 0 000 6zm-5 6s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H3z"/></svg>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Footer Actions -->
+                            <div class="px-24 py-16 flex justify-between items-center bg-bg border-t">
+                                <div class="text-12 text-muted font-mono">
+                                    2026-08-30 17:22:04 送出審閱 鄭雅筑 | 2026-09-01 16:20:41 核准「結構完整度」林思翰
+                                </div>
+                                <div class="flex gap-12 items-center">
+                                    <button class="btn btn-secondary text-14">檢視完整 diff</button>
+                                    <button class="btn btn-primary text-14">前往簽核頁</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Node 5 -->
+                <div class="node-row mt-16">
+                    <div class="node-visual"><div class="node-dot"><svg viewBox="0 0 16 16"></svg></div></div>
+                    <div class="node-content compact">
+                        <div class="inner-row w-full opacity-60">
+                            <div class="flex items-center gap-12 w-200 nowrap">
+                                <span class="text-16 fw-bold text-muted">規格修訂</span>
+                                <span class="text-12 text-muted">(未達成)</span>
+                            </div>
+                            <div class="text-14 text-muted flex-1">需先完成 Sign-off</div>
+                            <div class="font-mono text-12 text-muted">---</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Node 6 -->
+                <div class="node-row">
+                    <div class="node-visual"><div class="node-dot"><svg viewBox="0 0 16 16"></svg></div></div>
+                    <div class="node-content compact">
+                        <div class="inner-row w-full opacity-60">
+                            <div class="flex items-center gap-12 w-200 nowrap">
+                                <span class="text-16 fw-bold text-muted">Release</span>
+                                <span class="text-12 text-muted">(未達成)</span>
+                            </div>
+                            <div class="text-14 text-muted flex-1">需先完成規格修訂</div>
+                            <div class="font-mono text-12 text-muted">---</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <hr class="screen-divider">
+
+    <!-- ==================== SCREEN B ==================== -->
+    <div class="app-container">
+        <div class="screen-label">畫面 B｜空狀態（整頁模式）</div>
+
+        <div class="panel flex-col mb-48">
+            <div class="border-b bg-bg px-24 py-16 flex items-center justify-between">
+                <div class="flex items-center gap-16">
+                    <span class="text-16 fw-bold text-muted">資料同步引擎</span>
+                    <span class="badge">試作／探索</span>
+                    <div class="badge badge-solid-muted">未綁定</div>
+                    <div class="text-14 text-muted">未選擇資料夾</div>
+                </div>
+                <div class="font-mono text-12 text-muted">---</div>
+            </div>
+
+            <div class="empty-state-layout">
+                <!-- Left Column -->
+                <div class="flex-col gap-24 h-full pt-12">
+                    <h1 class="text-28 fw-bold m-0">這個專案還沒有綁定磁碟資料夾</h1>
+                    <div class="flex-col gap-8">
+                        <h2 class="text-16 fw-bold m-0">為什麼綁定很重要</h2>
+                        <p class="text-14 text-muted m-0">Anchorline 的治理鏈與稽核追蹤，都是寫在你電腦的檔案上。</p>
+                    </div>
+                    <div class="flex items-center gap-16">
+                        <button class="btn btn-primary p-16 text-16">選擇資料夾...</button>
+                        <a href="#" class="link text-14">檔案用途說明</a>
+                    </div>
+                    
+                    <div class="border-t-soft pt-24 mt-24">
+                        <details>
+                            <summary>會建立哪些檔案 ›</summary>
+                            <table class="data-table border-1 radius-6 mt-16 text-12">
+                                <thead><tr><th style="width: 50%;">路徑</th><th style="width: 50%;">用途</th></tr></thead>
+                                <tbody>
+                                    <tr><td class="font-mono">.anchorline/anchors.jsonl</td><td class="text-muted">錨點紀錄</td></tr>
+                                    <tr><td class="font-mono">.anchorline/signoff/</td><td class="text-muted">簽核證據</td></tr>
+                                    <tr><td class="font-mono">.anchorline/specs/</td><td class="text-muted">規格修訂</td></tr>
+                                </tbody>
+                            </table>
+                        </details>
+                        <p class="text-12 text-muted mt-12 m-0">可隨時更換資料夾</p>
+                    </div>
+                </div>
+
+                <!-- Right Column (Ghost Preview) -->
+                <div class="ghost-preview">
+                    <h3 class="text-16 fw-bold m-0">綁定後你會拿到什麼</h3>
+                    <div class="ghost-chain text-14 mt-8">
+                        <div class="ghost-node"><div class="ghost-dot"></div><div class="flex-1 flex justify-between"><span class="flex gap-12"><span class="font-mono text-12">1</span> 計畫 <span class="text-12">(未建立)</span></span></div><span class="font-mono text-12">---</span></div>
+                        <div class="ghost-node"><div class="ghost-dot"></div><div class="flex-1 flex justify-between"><span class="flex gap-12"><span class="font-mono text-12">2</span> 錨點 <span class="text-12">(未建立)</span></span></div><span class="font-mono text-12">---</span></div>
+                        <div class="ghost-node"><div class="ghost-dot"></div><div class="flex-1 flex justify-between"><span class="flex gap-12"><span class="font-mono text-12">3</span> Commit <span class="text-12">(未建立)</span></span></div><span class="font-mono text-12">---</span></div>
+                        <div class="ghost-node"><div class="ghost-dot"></div><div class="flex-1 flex justify-between"><span class="flex gap-12"><span class="font-mono text-12">4</span> Sign-off <span class="text-12">(未建立)</span></span></div><span class="font-mono text-12">---</span></div>
+                        <div class="ghost-node"><div class="ghost-dot"></div><div class="flex-1 flex justify-between"><span class="flex gap-12"><span class="font-mono text-12">5</span> 規格修訂 <span class="text-12">(未建立)</span></span></div><span class="font-mono text-12">---</span></div>
+                        <div class="ghost-node"><div class="ghost-dot"></div><div class="flex-1 flex justify-between"><span class="flex gap-12"><span class="font-mono text-12">6</span> Release <span class="text-12">(未建立)</span></span></div><span class="font-mono text-12">---</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

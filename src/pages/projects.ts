@@ -35,6 +35,7 @@ import {
 import { parsePlanMeta, planProgressPct, type PlanMeta } from "../lib/plan-parser";
 import { askForProjectFolder } from "../lib/project-folder";
 import { canDelete, canEditContent, canExport } from "../lib/permissions";
+import { PRD_ROUTES, routeById, routeScaleLabel, type ProjectRoute } from "../lib/prd-triage";
 import { bindRailProjects, renderRailProjects } from "../lib/rail-projects";
 import { initTheme } from "../lib/theme";
 import {
@@ -748,6 +749,8 @@ if (!requireAuth()) {
       ["做什麼", what || "（跳過了 — 進編輯台再補）"],
       ["給誰", val("wiz-who") || "（跳過了 — 進編輯台再補）"],
       ["為何現在", val("wiz-why") || "（跳過了 — 進編輯台再補）"],
+      // 第 0 章的判定跟著走到確認頁。不顯示的話，那一關等於問完就丟。
+      ...(triageNote ? ([["路線", triageNote]] as [string, string][]) : []),
     ];
     dl.innerHTML = rows
       .map(
@@ -902,9 +905,74 @@ if (!requireAuth()) {
     saveDraft();
   });
 
-  document.getElementById("btn-new")?.addEventListener("click", () => openWizard(false));
-  document.getElementById("btn-beginner")?.addEventListener("click", () => openWizard(true));
-  document.getElementById("btn-beginner-cta")?.addEventListener("click", () => openWizard(true));
+  /* ─── 範本第 0 章：這次要寫哪一種 ─── */
+
+  /**
+   * 選到的路線會**寫進 `Project.route`**，不只是確認頁上的一行字。
+   *
+   * 2026-09-01 之前這裡只留了 `triageNote`，理由是「Lite/Full 不是可切換的
+   * 模式，存一個沒人讀的欄位不划算」。那個前提已經不成立：`sectionsForProject`
+   * 現在照 route 濾章節，Lite 真的只看得到八節。沒存的話三張卡就回到
+   * 純心理暗示 —— 選了 Lite 照樣拿到十五節。
+   *
+   * 跳過路線（`triage-skip`）留 `null`，落到 `Project.route` 是 undefined，
+   * 也就是 Full。那是對的：沒表態的人要看得到全部，不是被默默降級。
+   */
+  let triageNote = "";
+  let pickedRoute: ProjectRoute | null = null;
+
+  function openTriage(asBeginner: boolean) {
+    beginnerPath = asBeginner;
+    const host = document.getElementById("route-grid");
+    if (host) {
+      host.innerHTML = PRD_ROUTES.map(
+        (r) => `<button type="button" class="route-card is-${escapeHtml(r.id)}" role="listitem" data-route="${escapeHtml(r.id)}">
+          <span class="route-name">${escapeHtml(r.name)}</span>
+          <span class="route-scale">${escapeHtml(routeScaleLabel(r))}</span>
+          <span class="route-desc">${escapeHtml(r.desc)}</span>
+          <span class="route-cases-head">適用情境</span>
+          <ul class="route-cases">${r.cases.map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul>
+          <span class="route-timing">時機：${escapeHtml(r.timing)}</span>
+          <span class="route-go">${r.id === "openspec" ? "去 OpenSpec →" : "選這個 →"}</span>
+        </button>`,
+      ).join("");
+      for (const el of host.querySelectorAll<HTMLButtonElement>("[data-route]")) {
+        el.addEventListener("click", () => pickRoute(el.dataset.route!));
+      }
+    }
+    openModal("modal-triage");
+  }
+
+  /**
+   * Debug／維運那條**不進精靈**，直接跳 OpenSpec。
+   *
+   * 讓它照樣開一份 PRD 再叫使用者自己別填，等於這張卡什麼都沒做。
+   */
+  function pickRoute(id: string) {
+    const route = routeById(id);
+    if (!route) return;
+    closeModal("modal-triage");
+    if (route.id === "openspec") {
+      location.href = "openspec.html";
+      return;
+    }
+    triageNote = `${route.name} — ${routeScaleLabel(route)}`;
+    // openspec 已在上面 return，這裡只剩存得進專案的三條
+    pickedRoute = route.id === "lite" || route.id === "vibe" ? route.id : "full";
+    openWizard(beginnerPath);
+  }
+
+  document.getElementById("triage-close")?.addEventListener("click", () => closeModal("modal-triage"));
+  document.getElementById("triage-skip")?.addEventListener("click", () => {
+    triageNote = "";
+    pickedRoute = null;
+    closeModal("modal-triage");
+    openWizard(beginnerPath);
+  });
+
+  document.getElementById("btn-new")?.addEventListener("click", () => openTriage(false));
+  document.getElementById("btn-beginner")?.addEventListener("click", () => openTriage(true));
+  document.getElementById("btn-beginner-cta")?.addEventListener("click", () => openTriage(true));
   document.getElementById("modal-close")?.addEventListener("click", () => closeModal("modal"));
   document.getElementById("modal-cancel")?.addEventListener("click", () => closeModal("modal"));
   document.getElementById("wizard-prev")?.addEventListener("click", () => {
@@ -937,7 +1005,10 @@ if (!requireAuth()) {
       title,
       customName: undefined,
       status: "draft",
-      pct: 18,
+      // 佔位，不是進度。真值由 `store.addProject()` 依章節內容推導
+      // （`prd-progress.ts`）—— 寫死 18 的舊值永遠低於 L4 的 25% 門檻，
+      // 於是手動新建的草稿寫得再完整，流程條的 L4 也不會亮。
+      pct: 0,
       owner: user.name,
       ownerId: user.id,
       authorId: user.id,
@@ -947,6 +1018,9 @@ if (!requireAuth()) {
       lastFileAt: new Date().toISOString(),
       tag: tpl.includes("資安") ? "security" : tpl.includes("成長") ? "growth" : "product",
       isSample: false,
+      // 跳過路線就不設欄位 —— undefined 是 Full，不是「未知」。
+      // full 也不落欄位（同 setProjectRoute：預設值寫進去只是讓資料看起來像被改過）
+      ...(pickedRoute && pickedRoute !== "full" ? { route: pickedRoute } : {}),
       domain:
         (document.getElementById("new-domain") as HTMLSelectElement | null)?.value || DEFAULT_DOMAIN,
     };
@@ -1001,10 +1075,10 @@ if (!requireAuth()) {
   // 初始化步驟列（關閉時也有正確 DOM）
   renderWizardChrome();
 
-  // 側欄「＋」直接開新建精靈（非新手路徑）
+  // 側欄「＋」先過第 0 章判定，再進精靈（非新手路徑）
   if (new URLSearchParams(location.search).get("new") === "1") {
     window.setTimeout(() => {
-      if (canEditContent(store.get().currentUser)) openWizard(false);
+      if (canEditContent(store.get().currentUser)) openTriage(false);
     }, 120);
   }
 

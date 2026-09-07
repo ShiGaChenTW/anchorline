@@ -628,7 +628,7 @@ describe("loadUatScan（共用掃描快取）", () => {
   test("非桌面版：兩個視圖都回空，truncated 是 false", async () => {
     invalidateUatScan();
     const scan = await loadUatScan(["/w/alpha/plans"]);
-    expect(scan).toEqual({ pending: [], fixes: [], truncated: false });
+    expect(scan).toEqual({ pending: [], fixes: [], truncated: false, planStepDirs: [] });
   });
 
   test("同一組目錄 → 同一個 Promise（並發的五個呼叫端只會有一次請求）", () => {

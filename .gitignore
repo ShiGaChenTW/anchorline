@@ -23,3 +23,7 @@ vendor/markamd/src-tauri/target/
 # 而它只是拿來對照的參考資料，不是本專案的程式碼。
 fokr_source/
 .claude/worktrees/
+
+# graphify 產出的知識圖（9.4MB，可重新產生）
+graphify-out/
+.commandcode/

@@ -1,0 +1,19 @@
+{
+  "repoRoot": "/Users/scottchen/Documents/20_Projects/Project_Anchorline",
+  "cwd": "/Users/scottchen/Documents/20_Projects/Project_Anchorline/.aidesigner/redesign-2026-09-03",
+  "stack": {
+    "frameworks": [],
+    "componentLibraries": [],
+    "styling": [],
+    "componentDirectories": [],
+    "packageFiles": [
+      "package.json"
+    ]
+  },
+  "routes": [],
+  "tokens": {
+    "sources": [],
+    "tokens": []
+  },
+  "summary": "Repo root: /Users/scottchen/Documents/20_Projects/Project_Anchorline\nWorking directory: /Users/scottchen/Documents/20_Projects/Project_Anchorline/.aidesigner/redesign-2026-09-03\nFrameworks: none detected\nStyling: none detected\nComponent libraries: none detected\nRoute roots: none detected\nRoute candidates: none detected\nComponent directories: none detected\nToken sources: none detected\nVisible design language hints: no strong hints detected"
+}

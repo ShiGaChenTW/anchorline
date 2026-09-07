@@ -1,0 +1,1921 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI-Native SDLC 六階段拆解</title>
+<meta name="description" content="Anthropic《The AI-Native SDLC Playbook》完整繁中詳解，附六階段迴圈架構圖、採用順序依賴圖、變更生命週期流程圖，以及 Anchorline 改版對照。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@700;900&family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+/* ── 色票：冷調紙面 + 靛藍結構線 + 語意三色（琥珀=人為閘門、苔綠=證據、鏽紅=瓶頸/風險） ── */
+:root{
+  --paper:#EDEFEA; --surface:#F8F9F6; --sunk:#E3E7DF;
+  --ink:#171B1A; --muted:#5E6A66; --faint:#8B948F;
+  --line:#C8CFC6; --hair:#D8DED4;
+  --indigo:#2B3F8F; --indigo-soft:#E1E5F4;
+  --amber:#A0700C; --amber-soft:#F3E9D2;
+  --moss:#3B6A4C; --moss-soft:#DEE9DF;
+  --rust:#8E3B2C; --rust-soft:#F2DFDA;
+  --shadow:0 1px 2px rgba(23,27,26,.06);
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#111514; --surface:#191E1C; --sunk:#0C100F;
+    --ink:#E7EBE6; --muted:#98A29C; --faint:#727C77;
+    --line:#2F3733; --hair:#242B27;
+    --indigo:#93A7EE; --indigo-soft:#1E2540;
+    --amber:#DBA645; --amber-soft:#33291344;
+    --moss:#7DB694; --moss-soft:#16261B;
+    --rust:#E28870; --rust-soft:#2C1713;
+    --shadow:0 1px 2px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#111514; --surface:#191E1C; --sunk:#0C100F;
+  --ink:#E7EBE6; --muted:#98A29C; --faint:#727C77;
+  --line:#2F3733; --hair:#242B27;
+  --indigo:#93A7EE; --indigo-soft:#1E2540;
+  --amber:#DBA645; --amber-soft:#33291344;
+  --moss:#7DB694; --moss-soft:#16261B;
+  --rust:#E28870; --rust-soft:#2C1713;
+  --shadow:0 1px 2px rgba(0,0,0,.4);
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Hiragino Sans TC",system-ui,sans-serif;
+  font-size:16px; line-height:1.85; letter-spacing:.01em;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:"Chivo","Noto Sans TC","PingFang TC",system-ui,sans-serif;line-height:1.3;text-wrap:balance;margin:0}
+code,pre,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+a{color:var(--indigo);text-underline-offset:3px;text-decoration-thickness:1px}
+:focus-visible{outline:2px solid var(--indigo);outline-offset:3px;border-radius:2px}
+
+/* ── 骨架 ── */
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+.col{max-width:74ch}
+main{display:block}
+
+/* 頂部索引軌 */
+.railbar{
+  position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--paper) 88%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);
+}
+.railbar__in{display:flex;align-items:center;gap:18px;height:52px;overflow-x:auto;scrollbar-width:none}
+.railbar__in::-webkit-scrollbar{display:none}
+.railbar b{font-family:"Chivo",sans-serif;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+.railbar a{
+  font-size:13px;color:var(--muted);text-decoration:none;white-space:nowrap;
+  padding:4px 0;border-bottom:2px solid transparent
+}
+.railbar a:hover{color:var(--ink);border-bottom-color:var(--indigo)}
+.railbar a .n{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);margin-inline-end:5px}
+
+/* ── Hero ── */
+.hero{padding:64px 0 40px;border-bottom:1px solid var(--line)}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--indigo);margin-bottom:18px
+}
+.hero h1{font-size:clamp(34px,5.4vw,60px);font-weight:900;letter-spacing:-.015em}
+.hero .dek{font-size:clamp(17px,2vw,20px);color:var(--muted);margin-top:18px;max-width:60ch;line-height:1.7}
+.meta{display:flex;flex-wrap:wrap;gap:0;margin-top:34px;border-top:1px solid var(--hair)}
+.meta div{padding:12px 22px 12px 0;margin-inline-end:22px;border-inline-end:1px solid var(--hair)}
+.meta div:last-child{border:0}
+.meta dt{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.meta dd{margin:2px 0 0;font-size:14px}
+
+/* ── 章節 ── */
+section{padding:56px 0;border-bottom:1px solid var(--line)}
+.sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px}
+.sec-num{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--indigo);letter-spacing:.1em}
+h2{font-size:clamp(24px,3.2vw,34px);font-weight:900;letter-spacing:-.01em}
+h3{font-size:20px;font-weight:700;margin-top:36px}
+h4{font-size:15px;font-weight:700;margin-top:24px;color:var(--ink)}
+p{margin:14px 0}
+.lede{font-size:17.5px;color:var(--muted);max-width:66ch;margin-top:14px}
+ul,ol{padding-inline-start:1.25em;margin:14px 0}
+li{margin:7px 0}
+li::marker{color:var(--faint)}
+
+/* 引言塊 */
+blockquote{
+  margin:26px 0;padding:18px 24px;border-inline-start:3px solid var(--indigo);
+  background:var(--surface);font-size:17px;line-height:1.7
+}
+blockquote p{margin:0}
+blockquote cite{display:block;margin-top:10px;font-size:13px;color:var(--faint);font-style:normal}
+
+/* ── 圖版（schematic plate） ── */
+.plate{margin:34px 0;border:1px solid var(--line);background:var(--surface)}
+.plate__bar{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:10px 16px;border-bottom:1px solid var(--hair);background:var(--sunk)
+}
+.plate__id{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--indigo)}
+.plate__title{font-size:13.5px;font-weight:700}
+.plate__body{padding:22px 20px;overflow-x:auto}
+.plate__note{padding:12px 20px;border-top:1px dashed var(--hair);font-size:13px;color:var(--muted)}
+.plate svg{display:block;max-width:100%;height:auto}
+
+/* 控制列 */
+.ctrls{display:flex;flex-wrap:wrap;gap:8px}
+.btn{
+  font:inherit;font-size:12.5px;padding:5px 13px;border:1px solid var(--line);
+  background:var(--surface);color:var(--muted);cursor:pointer;border-radius:2px;
+  transition:.16s
+}
+.btn:hover{color:var(--ink);border-color:var(--indigo)}
+.btn[aria-pressed="true"],.btn.on{background:var(--indigo);border-color:var(--indigo);color:var(--surface)}
+:root[data-theme="dark"] .btn[aria-pressed="true"],
+:root[data-theme="dark"] .btn.on{color:#0F1312}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn[aria-pressed="true"],
+:root:not([data-theme="light"]) .btn.on{color:#0F1312}}
+
+/* ── 圖01：瓶頸長條 ── */
+.bneck{display:grid;gap:22px;min-width:520px}
+.bneck__row{display:grid;grid-template-columns:104px 1fr;gap:14px;align-items:center}
+.bneck__lbl{font-size:13px;font-weight:700;text-align:end;line-height:1.4}
+.bneck__lbl small{display:block;font-weight:400;color:var(--faint);font-size:11px}
+.bneck__bar{display:flex;height:44px;border:1px solid var(--line);background:var(--sunk)}
+.bneck__seg{
+  flex-grow:1;flex-basis:0;min-width:0;display:flex;align-items:center;justify-content:center;
+  border-inline-end:1px solid var(--paper);transition:flex-grow .6s cubic-bezier(.4,0,.2,1);
+  font-size:11px;font-weight:700;overflow:hidden;white-space:nowrap
+}
+.bneck__seg:last-child{border:0}
+.bneck__seg span{opacity:.9;padding:0 4px}
+.seg-build{background:var(--indigo-soft);color:var(--indigo)}
+.seg-human{background:var(--rust-soft);color:var(--rust)}
+.bneck__scale{display:flex;justify-content:space-between;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--faint);margin-top:6px}
+.bneck__key{display:flex;gap:20px;margin-top:18px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+.bneck__key i{display:inline-block;width:11px;height:11px;margin-inline-end:6px;vertical-align:-1px}
+
+/* ── 表格 ── */
+.tbl-scroll{overflow-x:auto;margin:26px 0;border:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:14px;background:var(--surface);min-width:640px}
+th,td{padding:12px 14px;text-align:start;vertical-align:top;border-bottom:1px solid var(--hair)}
+thead th{
+  background:var(--sunk);font-family:"IBM Plex Mono",monospace;font-size:11px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;
+  position:sticky;top:0
+}
+tbody tr:last-child td{border-bottom:0}
+td.trad{color:var(--muted)}
+td.native{border-inline-start:2px solid var(--indigo)}
+.num{font-variant-numeric:tabular-nums}
+
+/* ── Play 卡 ── */
+.play{border:1px solid var(--line);background:var(--surface);margin:16px 0;box-shadow:var(--shadow)}
+.play>summary{
+  list-style:none;cursor:pointer;padding:16px 18px;display:grid;
+  grid-template-columns:auto 1fr auto;gap:14px;align-items:baseline
+}
+.play>summary::-webkit-details-marker{display:none}
+.play>summary:hover{background:var(--sunk)}
+.play__id{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--indigo);letter-spacing:.06em}
+.play__name{font-size:17px;font-weight:700;font-family:"Chivo","Noto Sans TC",sans-serif}
+.play__name small{display:block;font-weight:400;font-size:13px;color:var(--muted);margin-top:3px;font-family:"Noto Sans TC",sans-serif;line-height:1.6}
+.play__chev{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--faint)}
+.play[open] .play__chev{color:var(--indigo)}
+.play__body{padding:4px 18px 24px;border-top:1px dashed var(--hair)}
+.play__body>*:first-child{margin-top:18px}
+
+/* 傳統 vs AI-native 對照 */
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--hair);margin:18px 0}
+.vs>div{padding:14px 16px;font-size:14px;line-height:1.7}
+.vs>div:first-child{background:var(--sunk);color:var(--muted);border-inline-end:1px solid var(--hair)}
+.vs h5{margin:0 0 8px;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+.vs>div:first-child h5{color:var(--rust)}
+.vs>div:last-child h5{color:var(--indigo)}
+@media(max-width:640px){.vs{grid-template-columns:1fr}.vs>div:first-child{border-inline-end:0;border-bottom:1px solid var(--hair)}}
+
+/* 前置/基礎建設 */
+.pre{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0;border:1px solid var(--hair);margin:18px 0}
+.pre>div{padding:13px 16px;border-inline-end:1px solid var(--hair)}
+.pre>div:last-child{border-inline-end:0}
+.pre dt{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:5px}
+.pre dd{margin:0;font-size:13.5px;line-height:1.65}
+
+/* 治理 / 量測 小塊 */
+.gov{border-inline-start:3px solid var(--amber);background:var(--amber-soft);padding:14px 18px;margin:20px 0;font-size:14px}
+.gov h5{margin:0 0 6px;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+.mez{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--hair);margin:20px 0}
+.mez>div{padding:13px 16px;font-size:13.5px;line-height:1.65}
+.mez>div:first-child{border-inline-end:1px solid var(--hair)}
+.mez h5{margin:0 0 6px;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--moss)}
+@media(max-width:640px){.mez{grid-template-columns:1fr}.mez>div:first-child{border-inline-end:0;border-bottom:1px solid var(--hair)}}
+
+/* 程式碼 */
+.code{position:relative;margin:20px 0;border:1px solid var(--line);background:var(--sunk)}
+.code__bar{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;border-bottom:1px solid var(--hair)}
+.code__name{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted)}
+.code pre{margin:0;padding:14px 16px;overflow-x:auto;font-size:12.5px;line-height:1.7;color:var(--ink)}
+.copy{font:inherit;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  background:none;border:1px solid var(--line);color:var(--faint);padding:2px 8px;cursor:pointer;border-radius:2px}
+.copy:hover{color:var(--indigo);border-color:var(--indigo)}
+
+/* 側欄 aside */
+aside.side{border:1px dashed var(--line);background:var(--surface);padding:20px 22px;margin:30px 0}
+aside.side h4{margin-top:0;color:var(--indigo);font-size:16px}
+
+/* 標籤 */
+.tag{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.08em;
+  padding:2px 8px;border:1px solid currentColor;border-radius:2px;vertical-align:1px}
+.t-have{color:var(--moss)} .t-part{color:var(--amber)} .t-gap{color:var(--rust)}
+</style>
+</head>
+<body>
+
+<nav class="railbar" aria-label="章節索引">
+  <div class="wrap railbar__in">
+    <b>AI-Native SDLC</b>
+    <a href="#why"><span class="n">00</span>命題</a>
+    <a href="#loop"><span class="n">01</span>迴圈</a>
+    <a href="#s1"><span class="n">1</span>Plan</a>
+    <a href="#s2"><span class="n">2</span>Design</a>
+    <a href="#s3"><span class="n">3</span>Build</a>
+    <a href="#s4"><span class="n">4</span>Test</a>
+    <a href="#s5"><span class="n">5</span>Deploy</a>
+    <a href="#s6"><span class="n">6</span>Maintain</a>
+    <a href="#dag"><span class="n">02</span>採用順序</a>
+    <a href="#flow"><span class="n">03</span>流程</a>
+    <a href="#metrics"><span class="n">04</span>量測</a>
+    <a href="#anchorline"><span class="n">05</span>Anchorline</a>
+    <a href="#adopt"><span class="n">06</span>導入</a>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <div class="col">
+    <div class="eyebrow">導讀 · Anthropic Applied AI · 2026-08-21</div>
+    <h1>AI-Native SDLC<br>六階段拆解</h1>
+    <p class="dek">程式碼已經不是瓶頸了。當 agent 幾小時就寫完一版，塞車的地方會往兩側移動——移到計畫、審查與部署這些「還在用人的速度跑」的關卡。這份導讀把原文的 <b>15 個 play</b> 逐條拆開，並對照到 Anchorline 現有的治理鏈。</p>
+  </div>
+  <dl class="meta">
+    <div><dt>原文</dt><dd><a href="https://claude.com/blog/the-ai-native-sdlc-playbook">The AI-Native SDLC playbook</a></dd></div>
+    <div><dt>作者</dt><dd>Louis Claxton</dd></div>
+    <div><dt>結構</dt><dd class="num">6 階段 · 15 plays · 11 份範本</dd></div>
+    <div><dt>用途</dt><dd>學習教材 ＋ Anchorline 改版參考</dd></div>
+  </dl>
+</header>
+
+<main class="wrap">
+
+<!-- ═══════════ 00 命題 ═══════════ -->
+<section id="why">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">00</span><h2>程式碼不再是瓶頸</h2></div>
+    <p class="lede">傳統 SDLC 是為了「寫程式最貴、最慢」的年代設計的。PRD、估點儀式、產品安全審查，全都是為了在那段可能長達數月的開發期之前先把方向對齊。當開發期塌縮成幾小時，這套控制就對不上現實了。</p>
+
+    <p>原文開宗明義：組織已經在用 AI 以一年前無法想像的速度產出程式碼，但<strong>圍繞著程式碼的流程沒有跟著變</strong>。同一批核准關卡、審查、交接與政策還在，於是 agentic coding 帶來的產能被卡在原地。</p>
+
+    <p>當開發階段跑得比傳統 SDLC 允許的還快，會有三件事同時成立：</p>
+    <ol>
+      <li><strong>瓶頸移到開發階段的左右兩側。</strong>主要是計畫、審查／測試、部署——這些階段仍然以人的速度在跑。</li>
+      <li><strong>控制手段開始對不上現實，變得不可行。</strong>逐行手動審查在「程式是人寫的」時代說得通；一旦 agent 寫掉大部分 diff，它就跟不上了。</li>
+      <li><strong>治理成本上升。</strong>因為例外案件仍然要走每週或每月才開一次的會議與委員會。</li>
+    </ol>
+
+    <blockquote>
+      <p>安全團隊的編制是照人的產出量抓的。當 agent 把程式碼產出乘上好幾倍，結果只有兩種：審查佇列愈積愈長，或程式碼在審查不足的狀態下上線。受監理的組織兩種都不能接受——所以它的安全與政策檢查必須跟上 agent 的速度。</p>
+      <cite>原文以「安全瓶頸」為例</cite>
+    </blockquote>
+  </div>
+
+  <!-- 圖 01 -->
+  <div class="plate">
+    <div class="plate__bar">
+      <div><span class="plate__id">圖 01</span> <span class="plate__title">瓶頸移位：開發塌縮，人速階段不動</span></div>
+      <div class="ctrls" role="group" aria-label="切換模式">
+        <button class="btn" id="b-trad" aria-pressed="true">傳統 SDLC</button>
+        <button class="btn" id="b-ai" aria-pressed="false">AI-Native</button>
+      </div>
+    </div>
+    <div class="plate__body">
+      <div class="bneck" id="bneck">
+        <div class="bneck__row">
+          <div class="bneck__lbl">交付週期<small>相對時間佔比</small></div>
+          <div>
+            <div class="bneck__bar">
+              <div class="bneck__seg seg-human" data-t="22" data-a="22"><span>Plan</span></div>
+              <div class="bneck__seg seg-human" data-t="14" data-a="14"><span>Design</span></div>
+              <div class="bneck__seg seg-build" data-t="34" data-a="4"><span>Build</span></div>
+              <div class="bneck__seg seg-human" data-t="12" data-a="12"><span>Test</span></div>
+              <div class="bneck__seg seg-human" data-t="11" data-a="11"><span>Deploy</span></div>
+              <div class="bneck__seg seg-human" data-t="7" data-a="7"><span>Maintain</span></div>
+            </div>
+            <div class="bneck__scale"><span>開始</span><span id="bneck-tot">總長 100</span><span>上線</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="bneck__key">
+        <span><i style="background:var(--indigo-soft);border:1px solid var(--indigo)"></i>Build：agent 接手後塌縮</span>
+        <span><i style="background:var(--rust-soft);border:1px solid var(--rust)"></i>人速階段：長度不變，佔比暴增</span>
+      </div>
+    </div>
+    <div class="plate__note">切到 AI-Native 後，Build 從 34 掉到 4，但其他五段一格都沒動——這就是原文說的「瓶頸移到 build 的左右兩側」。要拿到產能，必須改的是那五段，不是再讓 agent 寫得更快。</div>
+  </div>
+</section>
+
+<!-- ═══════════ 01 迴圈 ═══════════ -->
+<section id="loop">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">01</span><h2>什麼是 AI-native SDLC</h2></div>
+    <p class="lede">它不是把 AI 塞進既有流程，而是<strong>把控制目標保留、把執行方式換掉</strong>：線性流程變成迴圈，AI 嵌在每一個點上，而階段之間的交接由「提交一份可被讀取的產物」自動觸發下一段。</p>
+    <p>原文提醒：這個轉變也被叫做 agentic SDLC、AI SDLC 或 agentic software development——名字不同，講的是同一件事。</p>
+    <p>貫穿整條右欄的那條線是<strong>被提交的產物（committed artifact）</strong>。每個階段以「寫一份東西進版本控制」作結，下一個階段以「讀它」開始。前段用 <code>.md</code>，因為產品負責人與 agent 可以讀同一份檔案；從 Build 開始，產物變成程式碼與它的紀錄。<strong>而這串 commit 本身就是稽核軌跡</strong>：誰要求了什麼、agent 產出了什麼、誰核准了。</p>
+  </div>
+
+  <!-- 圖 02 -->
+  <div class="plate">
+    <div class="plate__bar">
+      <div><span class="plate__id">圖 02</span> <span class="plate__title">六階段迴圈與邊上的交付物（點任一階段可跳至該段）</span></div>
+    </div>
+    <div class="plate__body">
+      <svg viewBox="0 0 1060 268" role="img" aria-label="六階段迴圈架構圖：Plan 產出 intent.md 交給 Design，Design 產出 spec.md 交給 Build，Build 產出 plan.md 與 diff 交給 Test，Test 交給 Deploy 的 PR 與審查發現，Deploy 交給 Maintain，Maintain 在控制帶破線時寫出新的 intent.md 回到 Plan。" style="min-width:1000px">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g font-family="'Noto Sans TC',sans-serif" color="var(--indigo)">
+          <!-- 節點 -->
+          <a href="#s1"><g class="lp" data-s="1">
+            <rect x="10" y="58" width="140" height="76" fill="var(--surface)" stroke="var(--indigo)" stroke-width="1.5"/>
+            <text x="80" y="88" text-anchor="middle" font-size="20" font-weight="700" fill="var(--indigo)" font-family="'Chivo',sans-serif">01</text>
+            <text x="80" y="112" text-anchor="middle" font-size="15" font-weight="700" fill="var(--ink)">計畫 Plan</text>
+          </g></a>
+          <a href="#s2"><g class="lp" data-s="2">
+            <rect x="180" y="58" width="140" height="76" fill="var(--surface)" stroke="var(--indigo)" stroke-width="1.5"/>
+            <text x="250" y="88" text-anchor="middle" font-size="20" font-weight="700" fill="var(--indigo)" font-family="'Chivo',sans-serif">02</text>
+            <text x="250" y="112" text-anchor="middle" font-size="15" font-weight="700" fill="var(--ink)">設計 Design</text>
+          </g></a>
+          <a href="#s3"><g class="lp" data-s="3">
+            <rect x="350" y="58" width="140" height="76" fill="var(--surface)" stroke="var(--indigo)" stroke-width="1.5"/>
+            <text x="420" y="88" text-anchor="middle" font-size="20" font-weight="700" fill="var(--indigo)" font-family="'Chivo',sans-serif">03</text>
+            <text x="420" y="112" text-anchor="middle" font-size="15" font-weight="700" fill="var(--ink)">開發 Build</text>
+          </g></a>
+          <a href="#s4"><g class="lp" data-s="4">
+            <rect x="520" y="58" width="140" height="76" fill="var(--surface)" stroke="var(--indigo)" stroke-width="1.5"/>
+            <text x="590" y="88" text-anchor="middle" font-size="20" font-weight="700" fill="var(--indigo)" font-family="'Chivo',sans-serif">04</text>
+            <text x="590" y="112" text-anchor="middle" font-size="15" font-weight="700" fill="var(--ink)">測試 Test</text>
+          </g></a>
+          <a href="#s5"><g class="lp" data-s="5">
+            <rect x="690" y="58" width="140" height="76" fill="var(--surface)" stroke="var(--indigo)" stroke-width="1.5"/>
+            <text x="760" y="88" text-anchor="middle" font-size="20" font-weight="700" fill="var(--indigo)" font-family="'Chivo',sans-serif">05</text>
+            <text x="760" y="112" text-anchor="middle" font-size="15" font-weight="700" fill="var(--ink)">部署 Deploy</text>
+          </g></a>
+          <a href="#s6"><g class="lp" data-s="6">
+            <rect x="860" y="58" width="140" height="76" fill="var(--surface)" stroke="var(--indigo)" stroke-width="1.5"/>
+            <text x="930" y="88" text-anchor="middle" font-size="20" font-weight="700" fill="var(--indigo)" font-family="'Chivo',sans-serif">06</text>
+            <text x="930" y="112" text-anchor="middle" font-size="15" font-weight="700" fill="var(--ink)">維運 Maintain</text>
+          </g></a>
+
+          <!-- 箭頭 -->
+          <g stroke="var(--muted)" stroke-width="1.4" marker-end="url(#ah)" color="var(--muted)">
+            <line x1="154" y1="96" x2="174" y2="96"/>
+            <line x1="324" y1="96" x2="344" y2="96"/>
+            <line x1="494" y1="96" x2="514" y2="96"/>
+            <line x1="664" y1="96" x2="684" y2="96"/>
+            <line x1="834" y1="96" x2="854" y2="96"/>
+          </g>
+          <!-- 交付物標籤 -->
+          <g font-family="'IBM Plex Mono',monospace" font-size="11.5" text-anchor="middle" fill="var(--moss)">
+            <text x="164" y="44">intent.md</text>
+            <text x="334" y="44">spec.md</text>
+            <text x="504" y="44">plan.md</text>
+            <text x="674" y="44">diff + tests</text>
+            <text x="844" y="44">PR + findings</text>
+          </g>
+          <g font-family="'IBM Plex Mono',monospace" font-size="9.5" text-anchor="middle" fill="var(--faint)" letter-spacing="1">
+            <text x="164" y="30">產物</text><text x="334" y="30">產物</text><text x="504" y="30">產物</text>
+            <text x="674" y="30">產物</text><text x="844" y="30">產物</text>
+          </g>
+
+          <!-- 回流 -->
+          <path d="M 930 138 L 930 196 L 80 196 L 80 140" fill="none" stroke="var(--rust)" stroke-width="1.6"
+                stroke-dasharray="6 4" marker-end="url(#ah)" color="var(--rust)"/>
+          <rect x="360" y="182" width="290" height="28" fill="var(--paper)"/>
+          <text x="505" y="201" text-anchor="middle" font-size="12.5" fill="var(--rust)" font-weight="700">控制帶破線 → 寫出新的 intent.md</text>
+
+          <text x="505" y="240" text-anchor="middle" font-size="12" fill="var(--faint)">人的注意力集中在閘門上：審查 agent 標記出來的東西，而不是從零開始每一段</text>
+        </g>
+      </svg>
+    </div>
+    <div class="plate__note">虛線那一段是全篇的關鍵：只有它接上，SDLC 才真的是迴圈而不是六段直線。原文的 Stage 6 就在做這件事——偵測是純確定性腳本，模型只在破線後才被叫進來。</div>
+  </div>
+
+  <div class="col">
+    <h3>六階段的兩端光譜</h3>
+    <p>下表是原文給的兩端。<strong>多數組織落在中間某處</strong>，這張表不是評分卡，是方向感。</p>
+  </div>
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th style="width:92px">階段</th><th style="width:40%">傳統 SDLC</th><th>AI-native SDLC</th></tr></thead>
+      <tbody>
+        <tr><td><b>Plan</b></td><td class="trad">需求由委員會蒐集，經工作坊與簽核蒸餾，再由人手寫成文件</td><td class="native">Claude 直接從源頭綜整痛點，寫成 <code>intent.md</code>——人讀得懂、機器可執行</td></tr>
+        <tr><td><b>Design</b></td><td class="trad">分析師寫規格，設計師再把規格解讀一次</td><td class="native">需求與設計壓縮成一次工作 session，由編成 skills 的標準約束，版本化在 git 裡</td></tr>
+        <tr><td><b>Build</b></td><td class="trad">測試與程式碼都手寫，文件在主要開發完成後才補</td><td class="native">測試與程式碼由 AI 產生，機構知識以版本化、機器可讀的 <code>CLAUDE.md</code> 與 skills 維護</td></tr>
+        <tr><td><b>Test</b></td><td class="trad">QA 在階段交界處設閘</td><td class="native">持續 evals 織進實作過程</td></tr>
+        <tr><td><b>Deploy</b></td><td class="trad">人審查每一行，治理發生在審查週期裡、而且經常不一致</td><td class="native">多層 agentic 審查，人審保留給受監理與關鍵程式碼；治理在 AI 動作的當下就被強制執行，hooks 即核准閘</td></tr>
+        <tr><td><b>Maintain</b></td><td class="trad">人盯著生產環境找 bug</td><td class="native">agent 監看線上部署，任何被突破的控制帶都會被診斷並寫回迴圈，成為新的 <code>intent.md</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <aside class="side">
+      <h4>一句話記住整篇</h4>
+      <p style="margin-bottom:0">每個階段都提交一份下個階段讀得懂的產物。intent、spec、plan、diff 與審查發現串起來，<strong>就是稽核軌跡本身</strong>——不需要另外做一套稽核系統。人依然為每一個需要判斷的決定負責，只是注意力隨著產物一起往上移。</p>
+    </aside>
+  </div>
+</section>
+
+<!-- ═══════════ Stage 1 ═══════════ -->
+<section id="s1">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">階段 01</span><h2>Plan — 計畫</h2></div>
+    <p class="lede">想法不再排隊等人幫它寫成文件。意圖只被捕捉一次，用提出者自己的話，寫成下一階段就能直接動作的版本控制產物。</p>
+  </div>
+
+  <details class="play" id="p-intent">
+    <summary>
+      <span class="play__id">P1</span>
+      <span class="play__name">捕捉為 intent.md<small>想法、工單、告警三種入口，同一份格式</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p><code>intent.md</code> 是整個開發流程的起點，它可以從三個路徑進來：<strong>有人有了想法</strong>、<strong>工單被開出來</strong>、或<strong>事故經由告警浮現</strong>（見階段 6）。</p>
+      <p>當一個人有想法時，他跟 Claude 腦力激盪，產出一份 markdown 的 proto-spec。在傳統 SDLC 裡，這個人接下來必須說服產品團隊的某人陪他寫、或替他寫。而這份 proto-spec 人讀得懂、被版本控制、下一階段可以直接消費——存成 <code>intent.md</code> 就結束了。</p>
+      <p><strong>不論意圖來自事件觸發還是 agent，步驟都一樣：產品負責人在提交前審閱並修正 agent 寫的 intent.md。</strong></p>
+
+      <div class="vs">
+        <div><h5>傳統</h5>一個想法要先穿過待辦項目、user story、故事點與 refinement 會議，才有人能動作。每一次交接所有權都轉移一次，所以真正到工程手上的東西，跟提出者原本的意思已經隔了好幾層。</div>
+        <div><h5>AI-native</h5>提出者跟 Claude 腦力激盪，把結果寫成 <code>intent.md</code>——一份用他自己語彙寫的 proto-spec。這份產物包含：要什麼、為什麼、在哪些限制下。重複性的流程用 skills 編碼起來。</div>
+      </div>
+
+      <div class="pre">
+        <div><dt>前置</dt><dd>無。</dd></div>
+        <div><dt>基礎建設</dt><dd>讓非工程師也能用 Claude（claude.ai 或 Cowork）；一份講好的 <code>intent.md</code> 範本；一個產品負責人會盯的共享版控家。單一產品最簡單的家就是產品 repo 裡的 <code>intent/</code> 資料夾。</dd></div>
+        <div><dt>誰來架</dt><dd>平台或工程團隊的一次性工作。需要一位技術成員把 intent 的家立起來、決定誰能寫入——因為貢獻者會來自整個組織。</dd></div>
+      </div>
+      <p>把產物鏈放在它衍生出來的程式碼旁邊，是這個配置的重點。<strong>只有當意圖橫跨多個 repository 時，獨立的 intent repo 才值得那個額外成本</strong>；在 monorepo 裡它就是一個目錄。repo 建好之後，沒有 git 經驗的貢獻者不需要直接碰 git——一個到版本控制系統（例如 GitHub）的 connector，就能讓 Claude 從 claude.ai 或 Cowork 代為提交 markdown。</p>
+
+      <h4>怎麼執行</h4>
+      <ol>
+        <li>提出者用自己的話跟 Claude 描述問題：今天做不到什麼、誰受影響、更好長什麼樣、什麼不在範圍內。<strong>不需要任何正式語言。</strong></li>
+        <li>一直激盪到想法夠具體。Claude 會問分析師會問的問題：範圍、使用者、限制、成功的樣子。</li>
+        <li>請 Claude 用組織的範本寫成 <code>intent.md</code>。範本本身可以編成一個 skill，由技術成員建立、由主管簽核，涵蓋問題、預期成果、受影響的使用者與系統、限制、開放問題。</li>
+        <li>提出者修正 Claude 誤解的地方。</li>
+        <li>提交 <code>intent.md</code> 到共享的家。作者與時間戳記加入紀錄，產品負責人從這裡接手。</li>
+      </ol>
+
+      <div class="code">
+        <div class="code__bar"><span class="code__name">intent.md</span><button class="copy">複製</button></div>
+<pre># Intent: claims status self-service
+Author: J. Ortiz (claims operations). Status: draft.
+
+## Problem
+Customers phone the contact center to ask where their claim is.
+Handlers spend roughly a third of call time on status-only queries.
+
+## Proposed outcome
+Customers see claim status, next step and expected date in the portal.
+
+## Affected users and systems
+Claims handlers, portal team, claims-core API.
+
+## Constraints
+No new PII in the portal session. Existing authentication only.
+
+## Open questions
+Do third-party loss adjusters need access too?</pre>
+      </div>
+
+      <div class="gov">
+        <h5>治理</h5>
+        證據就是被提交的 <code>intent.md</code>：作者、時間戳記、完整修訂歷史，全部落在 intent 家的 git 歷史裡。產品負責人核准，而「送進階段 2 或退回」這個決定，被記錄成該筆 merge 或那次結案的 review。
+      </div>
+
+      <div class="mez">
+        <div><h5>領先指標</h5>從第一次對話到 <code>intent.md</code> 被提交的時間，直接讀 intent 家的 git 歷史（含作者與時間戳）。預期是<strong>從數週的訪談與精煉週期，降到數小時</strong>。</div>
+        <div><h5>落後指標</h5>存活率——產品負責人接受進入階段 2 的 intent.md 佔比（相對於被關掉的）。另外還有：同一個變更的第一份 <code>spec.md</code> 提交之後，<code>intent.md</code> 又被改了幾次。</div>
+      </div>
+    </div>
+  </details>
+</section>
+
+<!-- ═══════════ Stage 2 ═══════════ -->
+<section id="s2">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">階段 02</span><h2>Design — 設計</h2></div>
+    <p class="lede">需求與設計塌縮成一次 session。政策在規格被寫下的當下就套用，而不是幾週後在審查裡才被發現。</p>
+  </div>
+
+  <details class="play" id="p-spec">
+    <summary>
+      <span class="play__id">D1</span>
+      <span class="play__name">需求與設計合併<small>產品負責人審規格，但不寫規格</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p>產品負責人核准後，Claude 拿被接受的 <code>intent.md</code> 產出一份需求與設計規格，過程由組織在<strong>品牌、安全、合規、UX</strong> 上的 skills 引導。產品負責人審閱這份規格，但不寫它。目標是產出一份工程團隊可以據以規劃的規格，並且把疑慮之處標記出來。</p>
+      <p>前端工作是最清楚的例子：<code>intent.md</code> 一被接受，產品負責人就在 Claude Design（beta）裡從 intent.md 做出 mock、迭代它，然後匯出到 Claude Code 去建。</p>
+
+      <div class="vs">
+        <div><h5>傳統</h5>需求與設計是兩個由不同團隊跑的階段。分析師把想法形式化成需求，設計師再把需求解讀回設計。這種分離是為了問責而存在的，但它慢，而且有損耗。</div>
+        <div><h5>AI-native</h5>兩個階段在同一次被提示的 session 裡發生。Claude 拿 <code>intent.md</code> 產出需求與設計規格，受組織的 skills 約束，並把疑慮之處標記出來。</div>
+      </div>
+
+      <div class="pre">
+        <div><dt>前置</dt><dd>寫好一份 <code>intent.md</code>，以及把品牌、安全、合規、UX 政策寫成 skills。</dd></div>
+        <div><dt>基礎建設</dt><dd>一位有 Claude 存取權的產品負責人。<strong>不需要任何工程技能。</strong></dd></div>
+      </div>
+
+      <h4>怎麼執行</h4>
+      <ol>
+        <li>產品負責人開一個載入組織 skills 的 session，附上 <code>intent.md</code>。</li>
+        <li>提示詞指向 intent.md、點名限制、並要求標記疑慮。<strong>先手動跑，再把它變成組織層級的 slash command</strong>；之後把「intent.md 在 intent 家被接受」設成觸發條件，用一個在 merge 時觸發的非互動 job 載入 skills 跑這一趟，並以 pull request 提交 <code>spec.md</code>。從那時起產品負責人的第一次涉入就只剩審閱。</li>
+        <li>同一位產品負責人拿規格對照原始想法：規格有沒有解決陳述的問題？intent.md 裡的開放問題被回答了，還是被往下帶了？</li>
+        <li><strong>先處理被標記的疑慮</strong>——那些正是分析師會往上呈報的點。產品負責人在工程看到規格之前，逐一與政策負責人解決。</li>
+        <li>把 <code>spec.md</code> 和 <code>intent.md</code> 一起提交。這一對檔案記錄了「要求了什麼」與「決定了什麼」。</li>
+        <li>產品負責人決定規格與意圖是否進入 build；組織歸類為較高風險的，要諮詢技術主管。<strong>這個決定永遠由人做</strong>，而接受規格就是階段 3 plan mode 的啟動訊號。</li>
+      </ol>
+
+      <div class="code">
+        <div class="code__bar"><span class="code__name">提示詞範本（原文原句）</span><button class="copy">複製</button></div>
+<pre>Read the attached intent.md and produce a requirements and design
+spec for integrating it into our existing codebase. Apply the skills
+available to you so the plan conforms to our brand guidelines,
+security policies and UX standards. Document the spec fully as
+spec.md, ready to hand to the engineering team. Describe clearly any
+areas of concern, especially where you cannot satisfy contradicting
+policies.</pre>
+      </div>
+      <p style="font-size:14px;color:var(--muted)">最後那句是重點：<strong>要求它明講「哪裡有互相矛盾的政策無法同時滿足」</strong>。這是把人的判斷力導向真正需要判斷的地方。</p>
+
+      <div class="gov">
+        <h5>治理</h5>
+        政策不是幾週後在審查裡被發現，而是在規格被寫的當下就被讀取並套用。組織的 skills 作為規格的約束條件。規格本身、產生它的提示詞、以及當時生效的 skill 版本，全部記錄在版本控制裡。產品負責人簽核規格，並把被標記的疑慮路由給指定的政策負責人。
+      </div>
+
+      <div class="mez">
+        <div><h5>領先指標</h5>同一個變更的 <code>intent.md</code> 提交到 <code>spec.md</code> 提交之間的時間（兩個 git 時間戳），與舊的「需求＋設計」週期相比。</div>
+        <div><h5>落後指標</h5>build 開始後的需求返工：數一數同個變更中，日期晚於第一份 <code>plan.md</code> 的 <code>spec.md</code> 提交次數。<code>git log</code> 直接給得出來。</div>
+      </div>
+    </div>
+  </details>
+</section>
+
+<!-- ═══════════ Stage 3 ═══════════ -->
+<section id="s3">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">階段 03</span><h2>Build — 開發</h2></div>
+    <p class="lede">沒有被接受的計畫就不動手。機構知識變成 agent 讀得到的檔案，護欄以程式碼的形式執行，而不是靠習慣。</p>
+    <p style="font-size:14px;color:var(--muted)">這一階段有五個 play，是全篇最厚的一段。</p>
+  </div>
+
+  <details class="play" id="p-planmode">
+    <summary>
+      <span class="play__id">B1</span>
+      <span class="play__name">Plan mode 作為預設起手式<small>Claude 讀 codebase 但不動任何檔案，直到你接受計畫</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p>工程師以 plan mode 起手，把階段 2 核准的 <code>spec.md</code> 交給 Claude，讓它反過來訪談自己，一路迭代計畫到工程師滿意為止。</p>
+
+      <div class="vs">
+        <div><h5>傳統</h5>工程師讀完設計就開始寫。變更要怎麼做、動哪些檔案、寫哪些測試，全留在工程師腦袋裡，最好的情況也只是一則工單留言。沒有別人審得到。審查者看到的第一個東西是完成的 diff——到那時候要返工已經很慢了。</div>
+        <div><h5>AI-native</h5>工作從一份書面計畫開始，由 Claude 在 plan mode 產出——這個模式下它可以讀 codebase 但不改任何東西。工程師在程式碼被寫之前修正計畫，核准版本提交成 <code>plan.md</code>，供後面的階段拿來對照。</div>
+      </div>
+
+      <div class="pre">
+        <div><dt>前置</dt><dd>意圖產物（<code>intent.md</code> 或 <code>spec.md</code>）如果有的話，以及 <code>CLAUDE.md</code>（有幫助但非必要）。</dd></div>
+        <div><dt>基礎建設</dt><dd>有 repository 存取權的 Claude Code。</dd></div>
+      </div>
+
+      <h4>怎麼執行</h4>
+      <ol>
+        <li>工程師以 plan mode 開 session。</li>
+        <li>把 <code>intent.md</code> 與 <code>spec.md</code> 給 Claude，要一份實作計畫，<strong>指名會動到哪些檔案、工作順序、以及證明它成立的測試</strong>。</li>
+        <li>盤問這份計畫：這個變更可能弄壞什麼？哪一步風險最高？你考慮過但沒選的其他做法是什麼？</li>
+        <li>迭代到「一個從沒看過這段對話的工程師，光靠計畫就能實作」為止。</li>
+        <li>把核准的計畫提交成 <code>plan.md</code>。它加入稽核軌跡，階段 5 的 PR 審查會拿最終 diff 來對照它。</li>
+        <li>接受計畫，讓 Claude 實作。<strong>計畫夠紮實的話，實作經常一趟就過。</strong></li>
+        <li>實作偏離計畫時，在同一個 commit 裡更新 <code>plan.md</code>。可以考慮用 hook 強制兩者同步。</li>
+      </ol>
+
+      <div class="code">
+        <div class="code__bar"><span class="code__name">plan.md</span><button class="copy">複製</button></div>
+<pre># Plan: claims status self-service (from intent.md 2026-06-02)
+
+## Files that change
+portal/src/claims/StatusPanel.tsx (new), claims-api/routes/status.py,
+claims-api/tests/test_status.py
+
+## Order of work
+1. Add the status endpoint behind existing auth.
+2. Panel against the endpoint.
+3. Wire into the portal nav.
+
+## Risks
+The claims-core API rate-limits at 50 rps; the panel must cache.
+
+## Proof
+test_status.py covers the four claim states; screenshot matches the
+approved mock.</pre>
+      </div>
+
+      <div class="gov">
+        <h5>治理</h5>
+        設計審查發生在任何程式碼被產生之前——那時候要改方向還只是編輯一份文件的事。<strong>plan mode 自己就強制了這件事，因為在工程師接受計畫之前 Claude 無法編輯檔案。</strong>計畫與其修訂連同「誰接受的」一起被記錄。例行變更由工程師核准，組織歸類為較高風險的送技術主管或架構師。
+      </div>
+
+      <div class="mez">
+        <div><h5>領先指標</h5>第一次實作就 merge 的變更佔比；從計畫核准到 PR merge 的時間（資料在 PR metadata 裡）。</div>
+        <div><h5>落後指標</h5>每個變更的返工次數（同樣讀 PR metadata），以及 merge 的 diff 有多常仍然吻合已提交的 <code>plan.md</code>。</div>
+      </div>
+
+      <h4>延伸：auto mode</h4>
+      <p>Claude Code 也可以跑 auto mode——工程師核准計畫、迭代到滿意之後，Claude 逐項套用變更而不再逐次徵詢。隨著後面幾個 play 的護欄成熟（調校過的 <code>CLAUDE.md</code>、把政策編碼的 skills、擋掉不安全動作的 hooks、Claude 跑得動的測試套件），<strong>auto-accept 會變成例行工作的預設值</strong>：規格緊、爆炸半徑小、程式碼已被測試覆蓋。</p>
+      <p>轉變在於：從「使用者看著 agent 編輯、審查每個動作」，移向「在較長的自主 session 之後審查產物」。auto-accept 搭配 worktrees 進一步讓個人與團隊層級的平行化成為可能，<strong>而且是自主跑完整個 SDLC、閉上迴圈（階段 6）的基礎</strong>。</p>
+    </div>
+  </details>
+
+  <div class="col">
+    <aside class="side">
+      <h4>側欄：既有系統與「真相來源」</h4>
+      <p>適用於這個流程產出的每一份產物。</p>
+      <p>既有 SDLC 流程很可能已經在追蹤這些產物了，只是不是用 markdown：工作項目在 Jira、需求在一個內建法規追溯性的工具裡、設計在 Figma、變更核准在變更委員會。<strong>這些系統很難被取代，因為稽核員與監理機關已經接受它們，而且其他團隊靠它們吃飯</strong>——所以 AI-native SDLC 必須繞著既有的東西長。</p>
+      <p>轉換時，<strong>對每一份產物指定「一個」系統作為真相來源</strong>，其他都只持有副本或連結。三種配置：</p>
+      <ul>
+        <li><strong>repo 是真相來源。</strong>markdown 產物是權威紀錄，既有系統引用 commit 裡的檔案。對工程主導的組織來說這是最乾淨的配置之一——所有紀錄在一個工具裡、一個時間戳權威。</li>
+        <li><strong>既有系統是真相來源。</strong>Jira、ServiceNow 或需求工具持有權威紀錄，markdown 是工作副本。Claude 在 session 開始時讀取紀錄，並在同一個 session 裡透過 MCP connector 把結果寫回去。</li>
+        <li><strong>連結是最低標準。</strong>所有產物註記紀錄 ID，所有既有紀錄含有 markdown 檔的 commit SHA。這是轉換期不錯的起點——代價是承認有兩個真相來源。</li>
+      </ul>
+      <p style="margin-bottom:0">兩套可以並存，<strong>只要兩者之間有連結，或其中一個被宣告為真相來源。</strong></p>
+    </aside>
+  </div>
+
+  <details class="play" id="p-claudemd">
+    <summary>
+      <span class="play__id">B2</span>
+      <span class="play__name">CLAUDE.md<small>把「新人第一天需要知道的」變成 agent 每次開場都會讀的檔案</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p><code>CLAUDE.md</code> 給 Claude 的是一個新加入者需要的脈絡：慣例、指令、架構，以及團隊最常看到的錯誤。<strong>原本存在人腦袋裡和 wiki 上的知識，變成 agent 在每次 session 開始時讀的檔案</strong>，由整個團隊維護，每次犯錯就迭代一次。</p>
+
+      <div class="pre">
+        <div><dt>前置</dt><dd>無。</dd></div>
+        <div><dt>基礎建設</dt><dd>一個 repo、裝好的 Claude Code、以及一位很熟這個 codebase 的工程師。</dd></div>
+      </div>
+
+      <h4>怎麼執行</h4>
+      <ol>
+        <li>在 repo 裡跑 <code>/init</code>。Claude 會從它找到的東西產生一份起手的 CLAUDE.md。</li>
+        <li><strong>把產生的檔案砍到只剩「新人第一天需要的」</strong>：build／test／lint 指令、真正重要的慣例、以及 Claude 一直搞錯的東西。</li>
+        <li>把 CLAUDE.md 放在 repo 根目錄並納入 git，讓全隊共用一個版本、變更像程式碼一樣被審查。</li>
+        <li>一條實用的工作規則：<strong>當 Claude 犯同一個錯第二次，修正就寫進 CLAUDE.md。</strong></li>
+        <li>控制在一頁以內。Claude 在 session 開始時整份讀完，任何過時的內容都在白白吃掉 context。</li>
+      </ol>
+
+      <div class="code">
+        <div class="code__bar"><span class="code__name">CLAUDE.md</span><button class="copy">複製</button></div>
+<pre># Payments service
+
+## Commands
+- Build: make build
+- Test: make test (unit), make itest (integration, needs docker)
+- Lint: make lint (runs in CI; fix before pushing)
+
+## Conventions
+- Java 21, Spring Boot 3. No new Lombok.
+- Money is always BigDecimal, never double.
+- Every endpoint needs an integration test in src/itest.
+
+## Architecture
+- api/ holds REST controllers, core/ holds domain logic,
+  adapters/ talks to external systems.
+- Kafka events are defined in schemas/; never edit generated classes.
+
+## Things Claude gets wrong
+- Do not bump dependency versions; the platform team owns them.
+- The legacy v1/ package is frozen; changes go in v2/.</pre>
+      </div>
+
+      <div class="gov">
+        <h5>治理</h5>
+        CLAUDE.md 受版本控制，所以 agent 依循的指令是可審閱、可稽核的。團隊慣例透過這份檔案被套用，它的變更記在 git 歷史裡，並由 code owners 在 PR 審查中核准。
+      </div>
+
+      <div class="mez">
+        <div><h5>領先指標</h5>Claude 重複犯「CLAUDE.md 本該擋下」的錯誤的頻率。對 CLAUDE.md 的修正應該被追蹤在 git 歷史裡。</div>
+        <div><h5>落後指標</h5>新成員從加入到第一個 PR merge 的時間（讀 PR 歷史）。</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="play" id="p-skills">
+    <summary>
+      <span class="play__id">B3</span>
+      <span class="play__name">Skills 作為機構知識<small>要一致套用的政策寫成 skill；屬於 CLAUDE.md 或提示詞的，不要寫成 skill</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p>Skills 是組織把機構知識<strong>可操作化</strong>的方式：指令明確、受版本控制、廣泛套用、政策改變時集中更新。</p>
+      <blockquote><p>經驗法則：<strong>必須被一致套用的機構知識，寫成 skill；屬於 CLAUDE.md 或屬於一次性提示詞的東西，不要寫成 skill。</strong></p></blockquote>
+
+      <div class="pre">
+        <div><dt>前置</dt><dd>不需要。有 CLAUDE.md 有幫助（它把 agent 的工作知識留在 repo 裡），但 skill 不依賴它。</dd></div>
+        <div><dt>基礎建設</dt><dd>一條有指定負責人、且有書面真相來源的政策。</dd></div>
+      </div>
+
+      <h4>怎麼執行</h4>
+      <ol>
+        <li>挑一個<strong>今天被執行得不一致</strong>的知識點：可能是安全標準、API 設計慣例，或品牌規則。</li>
+        <li>把它寫成 skill——一個含 <code>SKILL.md</code> 的資料夾，frontmatter 說何時觸發，body 說要做什麼。由工程師依政策負責人的真相來源撰寫，可用 Claude 協助。</li>
+        <li>把 skill 放在 repo 的 <code>.claude/skills/&lt;name&gt;/</code> 讓它隨程式碼一起走，或透過 plugin 在整個組織散佈。</li>
+        <li><strong>測試 skill 真的會觸發。</strong>用不同的講法要求 Claude 做相關任務，確認每次都載入。</li>
+        <li>政策變更時改 skill，並讓政策負責人簽核那次變更。</li>
+        <li>工程師會在下一次 session 自動拿到新版本。</li>
+      </ol>
+
+      <div class="code">
+        <div class="code__bar"><span class="code__name">.claude/skills/secure-api-review/SKILL.md</span><button class="copy">複製</button></div>
+<pre>---
+name: secure-api-review
+description: Apply the API security standard. Use whenever creating or
+  modifying an external-facing endpoint, reviewing API code, or
+  generating an OpenAPI spec.
+---
+# Secure API review
+
+When you create or change an API endpoint:
+1. Authentication: every endpoint requires the gateway JWT;
+   no anonymous routes outside /health.
+2. Input validation: validate request bodies against the OpenAPI
+   schema and reject unknown fields.
+3. Audit: every state-changing endpoint emits an audit event with
+   actor, action, entity and timestamp.
+4. Data classification: fields tagged pii in the schema must never
+   appear in logs or error messages.
+
+Run scripts/check-endpoints.sh and include its output in your summary.</pre>
+      </div>
+
+      <div class="gov">
+        <h5>治理 — 這段是全篇最重要的細節之一</h5>
+        <p style="margin-top:0"><strong>skill 是一種控制，但它是「建議性」的。</strong>它讓 Claude 很可能在寫程式的當下套用政策，但沒有任何東西強迫一個 session 遵守它。</p>
+        <p style="margin-bottom:0">一條「必須永遠成立」的政策，需要在 skill 背後放一個確定性的東西——例如一個會擋掉動作的 hook，或一趟在 PR 端重新檢查政策的審查。<strong>skill 讓違規變罕見，hook 讓違規接近不可能。</strong>skill 的調用被記在 session traces 裡，政策負責人像審程式碼一樣審 skill 的變更。</p>
+      </div>
+
+      <div class="mez">
+        <div><h5>領先指標</h5>從政策負責人核准政策變更，到對應 skill merge 的時間（讀 skill 資料夾上的 PR）。</div>
+        <div><h5>落後指標</h5>PR 審查中引用該政策的發現數，應該隨著 skill 在寫程式當下就套用政策而趨近於零。<strong>如果沒有下降，要嘛 skill 沒被觸發，要嘛它的文字已經和官方政策漂移了。</strong></div>
+      </div>
+    </div>
+  </details>
+
+  <details class="play" id="p-hooks-build">
+    <summary>
+      <span class="play__id">B4</span>
+      <span class="play__name">Hooks 作為建置期護欄<small>skill 是建議層，hook 是它背後的確定性層</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p>Claude 大部分的動作是實作期間的檔案編輯與 shell 指令，<strong>所以建置階段是 hooks 觸發最頻繁的地方</strong>。</p>
+      <p>建置期 hooks 可以：</p>
+      <ul>
+        <li>擋掉對受保護路徑的編輯，例如產生出來的類別或一個凍結的套件；</li>
+        <li>在檔案編輯後跑格式化與 lint，讓漂移永遠不會累積；</li>
+        <li>把憑證擋在 diff 之外。</li>
+      </ul>
+      <p>任何「政策必須無例外成立」的 skill，都要用 hook 墊在後面。hook 在每一個符合條件的動作上執行，所以<strong>建置期 hooks 必須快，而且範圍要限縮在被改動的那個檔案</strong>。比較重的檢查（例如完整測試套件）屬於 commit 或 PR 那一層。</p>
+      <blockquote><p>會去問人要核准的 hook，屬於階段 5 的閘門——<strong>因為在建置過程中跳出核准提示，等於把一個人放回所有平行 session 的關鍵路徑上。</strong></p></blockquote>
+    </div>
+  </details>
+
+  <details class="play" id="p-parallel">
+    <summary>
+      <span class="play__id">B5</span>
+      <span class="play__name">平行 session 與 subagent<small>一位工程師同時推進數條工作線，工作變成掌舵與審查</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p><strong>平行 session</strong>是另一個完整的 Claude Code 實例，在自己的 git worktree 裡跑另一個任務。每個獨立 session 彼此一無所知，唯一共享的東西是掌舵的那位工程師。</p>
+      <p><strong>subagent</strong> 跑在單一 session 內部，是一個有自己 context window 與工具限制的受限助手，適合在多個任務中重複出現的工作，例如「驗證 app 是否如預期執行」。</p>
+      <p>平行 session 拉高一位工程師同時在飛的任務數；subagent 讓每個 session 專注在自己的任務上。<strong>工程師的工作是掌舵並審查全部。</strong></p>
+
+      <div class="vs">
+        <div><h5>傳統</h5>一位工程師一次做一個任務，而且一天或一週有相當大比例花在 build、測試和等審查上。等待時切換任務是可能的，但脈絡切換累到很少有人願意這樣做。</div>
+        <div><h5>AI-native</h5>一位工程師同時跑數個 Claude session，各自在自己的 worktree、自己的任務上。重複的工作變成有自己 context 與工具限制的 subagent。工程師的工作轉為編排，最終轉為建造並監看迴圈。</div>
+      </div>
+
+      <div class="pre">
+        <div><dt>前置</dt><dd><code>CLAUDE.md</code>（所有 session 都讀它）。階段 4 的回饋迴圈也有幫助——session 能自己驗證工作時，需要的監督就少。</dd></div>
+        <div><dt>基礎建設</dt><dd>一個 git repository（隔離來自 worktrees），以及調校過的權限設定，讓 session 不會卡在等「組織認為安全的指令」的核准提示。</dd></div>
+      </div>
+
+      <h4>怎麼執行</h4>
+      <ol>
+        <li>工程師把工作拆成<strong>會動到不同檔案</strong>的任務，用 plan mode 的計畫去看哪裡是獨立的。共用檔案的任務放在同一個 session 裡依序做。</li>
+        <li>每個平行任務有自己的 worktree，例如一個終端跑 <code>claude --worktree feature-auth</code>，另一個跑 <code>claude --worktree fix-rate-limit</code>。worktree 是自己分支上的獨立 checkout，可以避免 session 在檔案上互撞。</li>
+        <li><strong>兩到三個 session 是合理的起點。</strong>實務上限是「一個人能好好審查幾條線」，所以只有在審查跟得上時才加 session。</li>
+        <li>把重複的工作變成 subagent，定義在 <code>.claude/agents/</code> 的 markdown 檔裡，各自有名字、何時使用的描述、以及可以碰的工具。例子：主 agent 完成後負責砍掉多餘複雜度的 code simplifier；跑起 app 並檢查行為的 verifier；探索 codebase 並回報、不污染主 context 的 researcher。<strong>定義要進 git，讓全隊共用。</strong></li>
+      </ol>
+
+      <div class="code">
+        <div class="code__bar"><span class="code__name">.claude/agents/verifier.md</span><button class="copy">複製</button></div>
+<pre>---
+name: verifier
+description: Runs the app and checks the change works before the session
+  reports done
+tools: Bash, Read
+---
+Start the app with make run. Exercise the changed behavior and the two
+nearest neighboring flows. Report what you ran, what you saw, and any
+behavior that does not match plan.md. Do not fix anything; report only.</pre>
+      </div>
+
+      <div class="gov">
+        <h5>治理</h5>
+        更多 session 代表更多產出，所以控制必須來自 repo 裡的設定。放在那裡的 hooks 與權限設定會套用到所有 session，而 session 做了什麼會被記錄並歸屬到執行它的那位工程師身上。
+      </div>
+
+      <div class="mez">
+        <div><h5>領先指標</h5>在審查品質維持的前提下，每位工程師的並行 session 數（從 OpenTelemetry 匯出計算），以及一天當中花在掌舵而非等待的比例。</div>
+        <div><h5>落後指標</h5>每位工程師每週 merge 的變更數，<strong>要與返工率一起讀</strong>（返工率由 PR 歷史決定）。</div>
+      </div>
+    </div>
+  </details>
+</section>
+
+<!-- ═══════════ Stage 4 ═══════════ -->
+<section id="s4">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">階段 04</span><h2>Test — 測試</h2></div>
+    <p class="lede">每個 session 在人看到之前先檢查自己的工作；而那份「操縱 agent 的設定」本身，也要像它產出的程式碼一樣被回歸測試。</p>
+  </div>
+
+  <details class="play" id="p-feedback">
+    <summary>
+      <span class="play__id">T1</span>
+      <span class="play__name">給 Claude 一個回饋迴圈<small>測試、build、截圖比對——它自己修完再交出來</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p><strong>永遠給 Claude 一個能驗證自己工作的方法</strong>，不論是測試、build 還是截圖差異。session 在工程師看到之前，先檢查自己的工作、修自己的錯。</p>
+      <blockquote>
+        <p>回饋迴圈不要跟 verifier subagent（階段 3）搞混。<strong>回饋迴圈貫穿整個任務，跑幾次由工作決定；verifier subagent 是把最終檢查打包起來的一種方式</strong>——在 session 認為工作完成後，用一個全新的 context window 跑一次，這樣結論就不會被「產生這段程式碼的那些假設」染色。</p>
+      </blockquote>
+
+      <div class="vs">
+        <div><h5>傳統</h5>「程式碼能動」這個訊號來得很晚。CI 是幾分鐘後，測試人員是幾天後，生產環境是幾週後。當程式碼是 agent 產出的，訊號晚就意味著要有一個人去檢查它的全部輸出——而那個人就變成瓶頸。</div>
+        <div><h5>AI-native</h5>session 被給了一個在人看到之前檢查自己工作的方法。跑測試、跑 build、拍截圖。Claude 一直迭代到檢查通過，所以到工程師手上的東西已經通過了。<strong>設定這個迴圈是跑 session 那位工程師的責任。</strong></div>
+      </div>
+
+      <div class="pre">
+        <div><dt>前置</dt><dd>無。</dd></div>
+        <div><dt>基礎建設</dt><dd>一套測試與一個 build，各自能用<strong>一行指令</strong>在本機跑起來。UI 工作則必須讓 Claude 看得到結果——瀏覽器工具，或透過 MCP 接上的截圖工具。</dd></div>
+      </div>
+
+      <h4>怎麼執行</h4>
+      <ol>
+        <li>如果今天檢查工作要跑一串指令＋一些環境知識，<strong>把它包成單一目標</strong>，例如 <code>make test</code> 或 <code>npm test</code>，失敗時回傳非零。</li>
+        <li>在 CLAUDE.md 的 Commands 區塊，列出每個指令<strong>並附一個健康輸出的範例</strong>。</li>
+        <li>陳述一個目標並且讓它可量化，這樣 Claude 不用問你就能自我檢查。例如：「test_status.py 的所有測試通過」、「截圖吻合附上的 mock」、「端點回傳 200 且含新欄位」。</li>
+        <li><strong>修 bug 時先寫失敗的測試。</strong>請 Claude 把 bug 重現成一個測試、跑它、確認它以你預期的理由失敗。提交那個測試。然後才請 Claude 讓它通過、且不得編輯測試——用最後一步的 test-file hook 強制這個限制。<strong>一個在修復之前就存在、而且 agent 改不動的測試，就是 bug 已消失的證明。</strong></li>
+        <li>UI 工作用視覺檢查閉環：給 Claude 瀏覽器或截圖工具、給它 mock，讓它迭代。實作、截圖、比對、調整。<strong>兩到三輪是正常的</strong>，而且每一輪結果應該更好。</li>
+        <li>把驗證變成「完成」的一部分。指令寫在 CLAUDE.md 裡：回報任務完成前先跑測試，並附上輸出。</li>
+        <li>最後，<strong>迴圈本身需要被保護</strong>——因為一個在修程式碼的 agent，絕不能有能力削弱針對那段程式碼的檢查。一個在修復任務期間擋掉測試檔編輯的 hook 就做這件事。替代方案是在審查時檢查 diff，並拒絕任何動到測試的變更。</li>
+      </ol>
+
+      <div class="code">
+        <div class="code__bar"><span class="code__name">CLAUDE.md — 驗證區塊</span><button class="copy">複製</button></div>
+<pre>## Verifying your work
+
+- Build: make build (must finish with "Build succeeded")
+- Test: make test (all green; never skip or delete a failing test)
+- Lint: make lint (zero warnings)
+
+Run all three before reporting any task complete, and paste the output.
+If a test fails, fix the code, not the test.</pre>
+      </div>
+
+      <div class="gov">
+        <h5>治理（原文在這裡拆成四問，值得照抄）</h5>
+        <ul style="margin-bottom:0">
+          <li><strong>強制了什麼</strong>：回報完成之前必須驗證；修復任務期間禁止 agent 編輯測試檔。組織要保證時，兩者都實作成 hooks。</li>
+          <li><strong>證據是什麼</strong>：<code>make test</code> 的實際輸出、build log，或 Claude 跑過並貼上的截圖差異——<strong>證據來自工具鏈，不是來自宣稱</strong>。</li>
+          <li><strong>記在哪裡</strong>：session transcript（由 OpenTelemetry 匯出轉發到組織的可觀測性堆疊），以及 PR 的 check run，審查者與日後的稽核員都看得到。</li>
+          <li><strong>誰核准</strong>：審 PR 的 code owner——他可以專注在意圖與風險上，因為機械性的證據已經附上了。</li>
+        </ul>
+      </div>
+
+      <div class="mez">
+        <div><h5>領先指標</h5>agent 撰寫的變更的<strong>首次 CI 成功率</strong>（CI 系統本來就支援）。</div>
+        <div><h5>落後指標</h5>每個 PR 的審查時間（讀 PR metadata），應隨著測試接手了審查者原本抓的東西而下降；以及事故追蹤系統裡的變更失敗率。</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="play" id="p-evals">
+    <summary>
+      <span class="play__id">T2</span>
+      <span class="play__name">CI 裡的持續 evals<small>agent 的設定變了，就要回歸測試——它是 AI-native 版的階段閘 QA</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p>Evals 是階段閘 QA 的 AI-native 對應物。實務上是一套<strong>只要 agent 的設定改變就會跑的測試</strong>：換了新模型、改寫了提示詞，eval 套件會告訴你 agent 是否還維持同樣水準。</p>
+      <p>evals 應該被視為<strong>活的套件</strong>。隨著模型變強，曾經有鑑別力的案例會失去鑑別力，必須從持續監控中補進新案例。</p>
+      <p style="color:var(--muted);font-size:14px">依使用情境不同，有些團隊會偏好用固定節奏離線跑，而不是每次變更都跑。下面的步驟寫的是「持續」版本。</p>
+
+      <div class="pre">
+        <div><dt>前置</dt><dd><code>CLAUDE.md</code> 與回饋迴圈（T1）。</dd></div>
+        <div><dt>基礎建設</dt><dd>能非互動執行 Claude Code 的 CI，以及一把有 eval 執行預算的 API key。</dd></div>
+      </div>
+
+      <h4>怎麼執行</h4>
+      <ol>
+        <li>平台工程師從近期工作中蒐集 <strong>20 到 50 個真實任務</strong>，連同它們的預期／可接受結果。</li>
+        <li>把每個任務寫成一個 eval：提示詞 ＋ 定義「可接受」的檢查（測試通過、lint 乾淨、行為不變、政策被遵守）。</li>
+        <li>套件在 CI 中非互動執行，<strong>按排程跑，並在 CLAUDE.md、skills 或 hooks 有任何變更時跑</strong>——因為那些設定操縱著 agent，理當享有程式碼等級的回歸測試。</li>
+        <li><strong>把設定變更 gate 在結果上。</strong>一個讓通過率下降的 skill 變更，要先被審查才能 merge。</li>
+        <li>每一次生產事故都變成一個 eval，由擁有該事故的團隊撰寫，並永久留在套件裡作為回歸測試。</li>
+      </ol>
+
+      <div class="code">
+        <div class="code__bar"><span class="code__name">.github/workflows/agent-evals.yml</span><button class="copy">複製</button></div>
+<pre>name: Agent evals
+on:
+  pull_request:
+    paths: ['CLAUDE.md', '.claude/**']
+  schedule:
+    - cron: '0 2 * * *'
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install -g @anthropic-ai/claude-code
+      - name: Run eval suite
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          for eval in evals/*.json; do
+            claude -p "$(jq -r '.prompt' $eval)" \
+              --allowedTools "Read,Edit,Bash(make test)" \
+              --output-format json &gt; result.json
+            ./evals/check.sh "$eval" result.json
+          done</pre>
+      </div>
+      <p style="font-size:14px;color:var(--muted)">注意 <code>paths</code> 那兩行：<strong>觸發條件是 <code>CLAUDE.md</code> 與 <code>.claude/**</code></strong>——這正是「把 agent 設定當程式碼對待」的具體落點。</p>
+
+      <div class="gov">
+        <h5>治理</h5>
+        Evals 給了 QA 一個跟得上 agent 產出速度的閘門。通過率門檻以 merge check 的形式強制執行，每次執行都被記錄以便跨時間比較，而擁有該設定變更的團隊負責核准它。
+      </div>
+
+      <div class="mez">
+        <div><h5>領先指標</h5>eval 通過率隨時間的變化（套件每次執行都回報），以及一次生產事故要多久才變成一個常駐 eval。</div>
+        <div><h5>落後指標</h5>在 CI 抓到的回歸數，對比在生產環境發現的回歸數（來自事故追蹤系統）。</div>
+      </div>
+    </div>
+  </details>
+</section>
+
+<!-- ═══════════ Stage 5 ═══════════ -->
+<section id="s5">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">階段 05</span><h2>Deploy — 部署</h2></div>
+    <p class="lede">審查雙向進行，治理在 agent 動作的當下被強制。<strong>agent 做完通往生產閘門之前的所有事，然後一步都不越過那道閘門。</strong></p>
+  </div>
+
+  <details class="play" id="p-review">
+    <summary>
+      <span class="play__id">R1</span>
+      <span class="play__name">PR 審查迴圈裡的 AI<small>Claude 既給審查也收審查；人的注意力往上移一層</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p>Claude 既給審查也收審查。它依組織政策審查進來的 PR，也處理自己 PR 上收到的審查意見。<strong>這讓工程師在 PR 審查時專注於行為——歸結起來就是判斷意圖與風險。</strong></p>
+
+      <div class="vs">
+        <div><h5>傳統</h5>審查產能是照人的產出量規劃的。一個 PR 等著審查者把它整份讀完，審查品質隨審查者當下的負載浮動，作者一邊追人一邊看著待審佇列變長。</div>
+        <div><h5>AI-native</h5>所有 PR 都得到一組完全相同的審查趟數，發現依嚴重度排序。人的注意力上移一層：這個變更做的是不是計畫想做的事？風險可不可以接受？</div>
+      </div>
+
+      <div class="pre">
+        <div><dt>前置</dt><dd>階段 3 更新過的 <code>CLAUDE.md</code>；若審查趟數要強制書面政策則需要 skills；已定義的 subagents。</dd></div>
+        <div><dt>基礎建設</dt><dd>裝好 Claude 整合的 repo：由 admin 啟用的託管版 Code Review（research preview），或在自家 CI 跑的 <code>claude-code-action</code>；必要時模型呼叫走 AWS Bedrock、Google Vertex 或 Microsoft Foundry。另外，<strong>要求 code owner 核准的分支保護政策也很值得設</strong>。</dd></div>
+      </div>
+
+      <h4>怎麼執行</h4>
+      <ol>
+        <li>託管版 Code Review 服務是最快的起點。需要掌控 pipeline、或想讓 API 呼叫走自家雲端合約時，才用 <code>claude-code-action</code> 在自家 CI 跑。</li>
+        <li>技術主管把審查政策寫成 repo 根目錄的 <code>REVIEW.md</code>，切成組織在意的幾趟：<strong>bug 與邏輯錯誤；安全與漏洞；對照 spec.md、plan.md 與設計原則的合規性</strong>。REVIEW.md 同時定義什麼算 Important、什麼只是 Nit，以及什麼要跳過。</li>
+        <li>技術主管設定人為門檻。<strong>審查發現本身不會核准或封鎖 PR</strong>，分支保護仍然要求 code owner 核准。想以發現數 gate merge 的平台工程師，可以讀 check run 發布的機器可讀嚴重度統計。</li>
+        <li>當審查者或作者在審查留言裡 tag <code>@claude</code>，Claude 處理該留言並推送修正，PR 討論串同時記下請求與變更。<strong>對 Claude 自己開的 PR，可以更進一步讓 Claude 一路顧到 merge</strong>：團隊把這個迴圈包成自訂 slash command，掃過 PR 上未解決的審查留言與失敗的檢查、處理它們、推送修正，直到 PR 全綠、只剩 code owner 核准。</li>
+        <li><strong>審查發現要回流到 CLAUDE.md。</strong>當審查第二次標出同一個錯誤，修正就在那次審查中寫進 CLAUDE.md；因為審查會讀 CLAUDE.md，這個錯誤從下一個 PR 起就會被抓到。審查也會標出「這個變更讓 CLAUDE.md 過時了」。</li>
+        <li>每月一次，技術主管調校設定：<strong>替發現打分讓審查者變強</strong>，並在 REVIEW.md 裡限制 Nit 的數量。產生出來的路徑、以及 CI 已經強制的東西，都排除掉。</li>
+      </ol>
+
+      <div class="code">
+        <div class="code__bar"><span class="code__name">REVIEW.md</span><button class="copy">複製</button></div>
+<pre># Review instructions
+
+## Passes
+Run three passes and tag each finding with its pass:
+- Bugs: logic errors, broken edge cases, subtle regressions
+- Security: injection risks, authentication gaps, PII in logs
+- Compliance: the change matches spec.md, plan.md and our design principles
+
+## What Important means here
+Reserve Important for findings that would break behavior, leak data
+or breach a policy. Style and naming are nits.
+
+## Cap the nits
+Report at most five nits per review; summarize the rest as a count.
+
+## Do not report
+Generated files under src/gen/ and anything CI already enforces.</pre>
+      </div>
+
+      <div class="gov">
+        <h5>治理</h5>
+        <strong>職責分離被保住了，因為寫程式的那個 agent 沒有任何途徑核准它。</strong>REVIEW.md 裡的審查政策套用到所有 PR，而發現、修正、評分與核准全部記錄在 PR 歷史裡——所以 PR 本身就是稽核紀錄。核准來自人，透過分支保護，並由審查發現提供資訊。
+      </div>
+
+      <div class="mez">
+        <div><h5>領先指標</h5>到首次審查的時間（應降到分鐘級），以及「沒有人碰分支就被解決」的審查留言佔比，資料直接存在 git 上。</div>
+        <div><h5>落後指標</h5>merge 前抓到的缺陷與漏洞數，對比逃到生產環境的數量（來自 PR 歷史與事故追蹤系統）。</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="play" id="p-gates">
+    <summary>
+      <span class="play__id">R2</span>
+      <span class="play__name">Hooks 作為核准閘<small>hook 除了 allow／block，還可以「ask」——暫停動作直到指定的人核准</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p>建置階段把 hooks 當成護欄，在沒有人涉入的情況下允許或封鎖動作（階段 3）。<strong>hook 也可以「問」</strong>——暫停動作直到某位特定的人核准，這正是發布 gating 需要的東西。</p>
+      <p>這個 play 放在階段 5 是因為發布閘是最清楚的案例，但 <strong>hooks 並非部署專屬：它們在 Claude 動作的任何地方執行</strong>。例如在階段 3 擋掉「沒有變更工單就編輯 migration 與基礎設施」，或在階段 4 阻止 agent 在修復任務中編輯測試檔。</p>
+
+      <div class="pre">
+        <div><dt>前置</dt><dd>無。</dd></div>
+        <div><dt>基礎建設</dt><dd>一份書面清單，列出變更流程要求的所有核准。</dd></div>
+      </div>
+
+      <h4>怎麼執行</h4>
+      <ol>
+        <li>工程領導層會同變更管理與合規，<strong>列出哪些人為核准閘必須存活</strong>：變更管理簽核、發布授權、受保護路徑的編輯等。</li>
+        <li>平台工程師把每個閘門表達成一個 hook——一個在 Claude 動作前執行、可以 allow／ask／block 的腳本。</li>
+        <li>團隊 hooks 放在 git 裡的 <code>.claude/settings.json</code>；<strong>不可協商的 hooks 放在由平台或 IT 管理員擁有的 managed settings 裡，個別工程師關不掉。</strong></li>
+        <li><strong>封鎖必須自己解釋自己</strong>：當 hook 擋下一個動作，理由與取得核准的途徑要出現在 Claude 的輸出裡。</li>
+      </ol>
+
+      <div class="code">
+        <div class="code__bar"><span class="code__name">.claude/settings.json</span><button class="copy">複製</button></div>
+<pre>{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/production-gate.sh" }
+        ]
+      }
+    ]
+  }
+}</pre>
+      </div>
+      <div class="code">
+        <div class="code__bar"><span class="code__name">.claude/hooks/production-gate.sh</span><button class="copy">複製</button></div>
+<pre>#!/bin/bash
+# Production deploys require a named release authorization
+cmd=$(jq -r '.tool_input.command' &lt; /dev/stdin)
+if [[ "$cmd" == *"deploy"* &amp;&amp; "$cmd" == *"production"* ]]; then
+  if [ -z "$RELEASE_APPROVAL" ]; then
+    echo "Production deploys need a release authorization." &gt;&amp;2
+    exit 2   # exit 2 blocks the action; the message goes to Claude
+  fi
+fi
+exit 0</pre>
+      </div>
+
+      <h4>實作範例：受監理企業的 managed settings</h4>
+      <p style="font-size:14px;color:var(--muted)">由平台團隊透過 MDM 或管理主控台部署，工程師無法編輯或覆寫其中任何一項。</p>
+      <div class="code">
+        <div class="code__bar"><span class="code__name">managed settings（企業版）</span><button class="copy">複製</button></div>
+<pre>{
+  "permissions": {
+    "deny": [
+      "Read(.env*)", "Read(./secrets/**)",
+      "WebFetch", "Bash(curl *)", "Bash(wget *)"
+    ],
+    "allow": [
+      "Bash(git *)", "Bash(make build)",
+      "Bash(make test)", "Bash(make lint)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  },
+  "allowManagedPermissionRulesOnly": true,
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "network": { "allowedDomains": ["git.internal.example.com",
+                                    "registry.npmjs.org"] },
+    "credentials": {
+      "files": [
+        { "path": "~/.ssh", "mode": "deny" },
+        { "path": "~/.aws/credentials", "mode": "deny" }
+      ],
+      "envVars": [ { "name": "GITHUB_TOKEN", "mode": "deny" } ]
+    }
+  },
+  "allowManagedHooksOnly": true,
+  "disableSideloadFlags": true,
+  "allowManagedMcpServersOnly": true,
+  "strictKnownMarketplaces": [
+    { "source": "github", "repo": "example-corp/approved-plugins" }
+  ],
+  "requiredMinimumVersion": "2.1.193"
+}</pre>
+      </div>
+
+      <h5 style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:22px 0 0">每一行用控制的語言講買到了什麼</h5>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th style="width:34%">設定</th><th>它擋住的是什麼</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">permissions.deny</td><td>把祕密擋在 agent 的 context 之外，並封鎖經由工具的任意網路外連。</td></tr>
+            <tr><td class="mono">permissions.allow</td><td>預先核准安全的內圈迴圈，免得 deny 清單變成提示疲勞。</td></tr>
+            <tr><td class="mono">disableBypassPermissionsMode<br>+ allowManagedPermissionRulesOnly</td><td>沒有任何工程師、專案檔或命令列旗標能把規則放寬。</td></tr>
+            <tr><td class="mono">sandbox</td><td>補上權限補不到的洞。<strong>對 WebFetch 的工具層 deny，擋不住一個 shell 指令連上網路</strong>；OS 層的網域白名單直接封鎖外連。</td></tr>
+            <tr><td class="mono">failIfUnavailable<br>+ allowUnsandboxedCommands</td><td>讓 sandbox 成為閘門：sandbox 起不來時 Claude Code 拒絕啟動，而在 sandbox 內失敗的指令不能拿到外面重試。</td></tr>
+            <tr><td class="mono">credentials</td><td>補上 deny 規則留下的洞。<code>permissions.deny</code> 管的是 Claude 的檔案工具，但一個沙箱化的 shell 指令預設仍讀得到 <code>~/.ssh</code> 或 <code>~/.aws/credentials</code>；這個區塊拒絕那些讀取，並把指名的祕密從每個沙箱指令的環境變數裡剝掉。</td></tr>
+            <tr><td class="mono">allowManagedHooksOnly</td><td>本 play 的核准閘是唯一會執行的 hooks，本機沒有任何東西能增補或取代它們。</td></tr>
+            <tr><td class="mono">disableSideloadFlags<br>+ strictKnownMarketplaces</td><td>工程師機器上的每個 skill、agent、hook 與 MCP server，都是經由組織核可的 plugin marketplace 進來的，絕不會來自家目錄。</td></tr>
+            <tr><td class="mono">allowManagedMcpServersOnly</td><td>agent 的工具面變成一份由平台團隊擁有的白名單。</td></tr>
+            <tr><td class="mono">requiredMinimumVersion</td><td>低於核可下限的版本直接拒絕啟動，所以控制是由「組織真的評估過的建置」在執行。</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="font-size:14px;color:var(--muted)">原文特別聲明：<strong>把上面當成一個要裁剪的起點，而不是照抄的建議</strong>。每一條 deny 都在跟能力做交換，正確的平衡取決於該 repo 的資料分級。</p>
+
+      <div class="gov">
+        <h5>治理</h5>
+        Hooks 就是核准閘。閘門條件每一次、對每一個人都被執行。allow 與 block 的決定連同時間戳被記錄。閘門同時定義「什麼算核准」——是一張核准過的變更工單，還是發布經理的簽核。
+      </div>
+
+      <div class="mez">
+        <div><h5>領先指標</h5>每一道核准閘上的等待時間。每個 hook 決定都會帶時間戳與 allow／block 判定寫進 OpenTelemetry 匯出，所以等待是逐閘可見的。</div>
+        <div><h5>落後指標</h5>導入 hooks 前後，抵達生產環境的閘門違規數（來自事故追蹤系統）。</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="play" id="p-cicd">
+    <summary>
+      <span class="play__id">R3</span>
+      <span class="play__name">CI/CD 整合與部署<small>agent 可以做到生產閘門為止，而且不能越過它</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p>在 CI/CD pipeline 內部非互動執行 Claude Code，把執行沙箱化讓長時間執行的 agent 安全運作，透過 MCP 整合暴露部署能力，<strong>並且在 agent 真的需要之前就先演練好 rollback 路徑</strong>。</p>
+
+      <div class="vs">
+        <div><h5>傳統</h5>Pipeline 跑確定性腳本，任何需要判斷的事就等人。例如分流一個 flaky test、寫 changelog、搞清楚 build 為什麼掛了。部署與 rollback 是人在壓力下照著跑的 runbook。</div>
+        <div><h5>AI-native</h5>Claude 在 pipeline 內非互動執行那些需要判斷的步驟，跑在沙箱裡、帶著範圍受限的憑證。部署工具透過 MCP 暴露給 agent，<strong>所以寫了並測了這個變更的同一條工作流，也可以把它送上線、也可以把它退回來</strong>，全部在組織依環境定義的閘門之內。</div>
+      </div>
+
+      <div class="pre">
+        <div><dt>前置</dt><dd>PR 審查迴圈（R1）與 hooks 核准閘（R2）——<strong>閘門必須先存在，自動化才不會只是把東西加速衝過去。</strong></dd></div>
+        <div><dt>基礎建設</dt><dd>裝有 <code>claude-code-action</code> 的 CI 平台，或任何能呼叫 <code>claude -p</code> 的 runner；模型存取走 API，或在流量必須留在自家雲端合約時走 Bedrock／Foundry／Vertex；部署目標的 MCP servers；一個給 agent job 用、預設不持有生產憑證的沙箱設定檔。</dd></div>
+      </div>
+
+      <h4>怎麼執行</h4>
+      <ol>
+        <li>平台工程師<strong>從唯讀的判斷步驟開始</strong>。在 pipeline job 裡用 <code>claude -p</code> 分流失敗的 build、摘要 flaky test，或起草 changelog。</li>
+        <li>把寫入步驟加在既有閘門之後：修 lint、更新產生的文件、透過 <code>@claude</code> 提及處理審查留言。<strong>agent 寫的任何東西都以 PR 的形式經過分支保護，agent 沒有推上 main 的途徑。</strong></li>
+        <li>執行要沙箱化。agent job 跑在網路政策下的容器裡，持有短期、範圍受限的 token，<strong>預設不持有任何生產憑證</strong>。</li>
+        <li>透過 MCP 暴露部署。deploy、status、rollback 變成工具，依環境限定範圍——<strong>於是 agent 的部署權力是一份白名單，而不是一個帶著憑證的 shell script。</strong></li>
+        <li><strong>依環境分層自主權。</strong>開發環境 agent 自由部署；生產環境 agent 準備發布、由發布經理授權，並由 hook 強制生產閘門；staging 落在中間。</li>
+        <li><strong>Rollback 應該是整條 pipeline 中被演練得最熟的路徑</strong>：一個 agent 跑得動的單一指令，而且定期在 staging 演練。階段 6 的閉環 play 會在控制帶被突破時呼叫這個 rollback，所以它必須事先被證明過。</li>
+      </ol>
+
+      <div class="code">
+        <div class="code__bar"><span class="code__name">pipeline step</span><button class="copy">複製</button></div>
+<pre>- name: Triage failed build
+  if: failure()
+  run: &gt;
+    claude -p "Read the build log at out/build.log. Identify the most
+    likely cause, say whether the failure looks flaky or real, and write a
+    three-line summary for the PR thread." &gt;&gt; triage.md</pre>
+      </div>
+
+      <div class="gov">
+        <h5>治理</h5>
+        <p style="margin-top:0"><strong>治理原則就是一句話：agent 可以動作到生產閘門為止，而且不能越過它。</strong></p>
+        <ul style="margin-bottom:0">
+          <li>分支保護把 agent 寫的任何東西都變成 PR，沒有直達 main 的路。</li>
+          <li>生產部署 hook 封鎖發布，直到一位指名的發布經理授權。<strong>每一次非互動執行都以 agent 自己的身分行動</strong>，所以 pipeline log 分得清「agent 做了什麼」與「觸發它的工程師做了什麼」。</li>
+          <li>依環境的權限分層，設定 agent 在抵達閘門之前能做到什麼程度。</li>
+        </ul>
+      </div>
+
+      <div class="mez">
+        <div><h5>領先指標</h5>不需要 call 人就完成分流的 pipeline 失敗佔比（來自 CI/CD pipeline logs）。</div>
+        <div><h5>落後指標</h5>DORA 指標——CI 系統與部署工具本來就會發出這些數據。</div>
+      </div>
+    </div>
+  </details>
+</section>
+
+<!-- ═══════════ Stage 6 ═══════════ -->
+<section id="s6">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">階段 06</span><h2>Maintain — 維運</h2></div>
+    <p class="lede">迴圈在這裡閉合。一個觸發器在<strong>沒有任何人在呼叫路徑上</strong>的情況下叫起 Claude，而它發現的東西以 <code>intent.md</code> 的形式重新進入流程。</p>
+    <p>前面五個階段都還需要人去啟動第一步。階段 6 把焦點轉到<strong>自主執行</strong>：一個持續執行的監控 agent，可以在一張 bug 工單被開出來時建立 intent.md，然後一路流過需求、計畫、開發、測試與審查。它跑在 headless，階段與階段之間有一道<strong>獨立的信心閘</strong>——一個確定性檢查或一個對抗性的審查 agent——決定前一階段的產出是繼續往下，還是升級給人。</p>
+
+    <div class="vs">
+      <div><h5>傳統</h5>維運是被動階段。所有工單或事故都在等一個人去動作、去重啟流程。凌晨三點的告警可能被漏掉，一張工單可能躺在待辦裡直到有人撿起來，而事後檢討的行動項目在下一場火燒起來時，可能根本沒進到 codebase。</div>
+      <div><h5>AI-native</h5>一個觸發器（控制帶被突破、一張工單、一則頻道訊息或一個排程）在沒有人在路徑上的情況下叫起 Claude。Claude 診斷、只透過受閘門管制的途徑動作，並把發現寫成 <code>intent.md</code>，接著走完前述所有階段。<strong>人負責分流與審查那份工作，不再需要啟動它。</strong></div>
+    </div>
+  </div>
+
+  <details class="play" id="p-loop">
+    <summary>
+      <span class="play__id">M1</span>
+      <span class="play__name">閉環：控制帶與 bands.yaml<small>偵測完全確定性，模型只在破線後才被叫進來</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p>一個確定性腳本盯著生產環境，在控制帶被突破時叫起 Claude。<strong>監控突破是「迴圈自主執行」這個模式最好懂的例子</strong>；本階段最後的 Claude Tag 一節則涵蓋工作經由其他管道抵達的情形。</p>
+
+      <div class="pre">
+        <div><dt>前置</dt><dd><code>intent.md</code>（給迴圈一個結構化的輸出去重啟流程）、Claude 加速的 PR 審查、hooks 作為動作邊界，以及 CI/CD 的 rollback 路徑（最高自主層級會呼叫它）。</dd></div>
+        <div><dt>基礎建設</dt><dd>偵測腳本查得動的指標儲存（Prometheus、CI 系統的 API 或同類），repo 的讀取權限，以及在 CI 中非互動執行 Claude Code 的方式，或用 Agent SDK 做一個接收 webhook 的服務。</dd></div>
+      </div>
+
+      <h4>怎麼執行</h4>
+      <ol>
+        <li>服務負責人或平台工程師挑<strong>一個</strong>有穩定滾動基線的指標：CI 測試失敗率、部署後的 5xx 率，或 PR 週期時間。</li>
+        <li>寫偵測腳本，通常是滾動視窗上的平均值與標準差，加上規則（Western Electric 或類似），<strong>讓控制帶既抓得到尖峰也抓得到緩慢漂移</strong>。腳本受版本控制、有單元測試，而且<strong>偵測完全保持確定性，沒有任何模型涉入</strong>。</li>
+        <li>回應層級定義在受版本控制的設定裡（下面的 <code>bands.yaml</code>）。1σ 只記錄；2σ 以唯讀方式叫起 Claude 診斷；3σ Claude 可以動作，但<strong>只能透過開 PR 進入審查閘，或觸發預先核准的 runbook</strong>。</li>
+        <li>觸發層可以是 GitHub／GitLab 的排程 workflow、既有監控堆疊發出的 webhook，或網路內的 Cron Job。Claude 無狀態執行——CI runner 上的非互動步驟，或沙箱容器裡的 Agent SDK 服務。<strong>因為執行是無狀態且非互動的，一個迴圈可以在沒有任何人啟動的情況下開始與結束。</strong></li>
+        <li>agent 把診斷寫成階段 1 格式的 <code>intent.md</code>，涵蓋異常與其證據、提議的成果、受影響的系統，以及任何開放問題。從那裡開始，這個發現就跟其他任何東西一樣走完整條流程。</li>
+        <li>服務負責人或 on-call 工程師分流佇列，把面向產品的發現路由給產品負責人。<strong>現在修、排程、或駁回。而駁回會回頭調校控制帶、降低噪音。</strong></li>
+        <li>修復上線時，替這次事故加一個 eval（見 T2），確保這類問題日後有防護。</li>
+      </ol>
+
+      <div class="code">
+        <div class="code__bar"><span class="code__name">bands.yaml — 監控 CI 測試失敗率</span><button class="copy">複製</button></div>
+<pre>metric: ci_test_failure_rate
+baseline: rolling_30d
+rules: western_electric
+tiers:
+  1sigma: { action: log }
+  2sigma: { action: diagnose,
+            tools: "Read,Grep,Bash(gh run view *)" }
+  3sigma: { action: propose,
+            routes: [pull_request, runbook:rollback-deploy] }</pre>
+      </div>
+
+      <!-- 圖 05：σ 控制帶 -->
+      <div class="plate" style="margin-top:26px">
+        <div class="plate__bar"><div><span class="plate__id">圖 05</span> <span class="plate__title">三層自主權：偵測是確定性的，權限隨嚴重度放大</span></div></div>
+        <div class="plate__body">
+          <div style="display:grid;gap:10px;min-width:460px">
+            <div style="display:grid;grid-template-columns:80px 1fr;gap:14px;align-items:stretch">
+              <div class="mono" style="display:flex;align-items:center;justify-content:end;font-size:15px;font-weight:600;color:var(--moss)">1σ</div>
+              <div style="border:1px solid var(--line);border-inline-start:4px solid var(--moss);background:var(--moss-soft);padding:11px 15px;font-size:14px">
+                <b>log</b> — 只記錄。模型完全沒被叫起來。
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:80px 1fr;gap:14px;align-items:stretch">
+              <div class="mono" style="display:flex;align-items:center;justify-content:end;font-size:15px;font-weight:600;color:var(--amber)">2σ</div>
+              <div style="border:1px solid var(--line);border-inline-start:4px solid var(--amber);background:var(--amber-soft);padding:11px 15px;font-size:14px">
+                <b>diagnose</b> — 叫起 Claude，<b>唯讀</b>。工具限定 <code class="mono">Read, Grep, Bash(gh run view *)</code>。
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:80px 1fr;gap:14px;align-items:stretch">
+              <div class="mono" style="display:flex;align-items:center;justify-content:end;font-size:15px;font-weight:600;color:var(--rust)">3σ</div>
+              <div style="border:1px solid var(--line);border-inline-start:4px solid var(--rust);background:var(--rust-soft);padding:11px 15px;font-size:14px">
+                <b>propose</b> — 可以動作，但只經由兩條受閘門的路徑：<b>開 PR</b>，或<b>觸發預先核准的 runbook</b>（例如 rollback-deploy）。
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="plate__note">注意這三層都沒有「直接改生產環境」。層級提高放大的是<strong>提案的權力</strong>，不是繞過閘門的權力。</div>
+      </div>
+
+      <div class="gov">
+        <h5>治理</h5>
+        層級邊界由受版本控制的設定強制，權限與 managed settings 拒絕生產環境存取。叫起、發現與分流決定都帶時間戳被記錄。服務負責人分流並核准發現，產生的變更走一般 PR 審查閘，<strong>而 agent 能觸發的 runbook 都是事先核准過的。</strong>
+      </div>
+
+      <div class="mez">
+        <div><h5>領先指標</h5>從控制帶突破到分流佇列裡出現一份 <code>intent.md</code> 的時間，對比舊的「事故到事後檢討行動」時間。偵測腳本的 log 有突破時間戳與層級。</div>
+        <div><h5>落後指標</h5>發現最終變成 merged 修復的比例（分流佇列對 PR 歷史），以及同類事故的重複次數——它應該隨著修復把案例加進 eval 套件而下降。</div>
+      </div>
+
+      <h4>三個具體例子</h4>
+      <ul>
+        <li>CI 測試失敗率突破 3σ 時，agent 隔離該 flaky test 或開一個 revert PR，由審查閘決定。</li>
+        <li>部署後 5xx 率突破 3σ 且該時間窗內有一次部署時，agent 觸發既有的 rollback pipeline。</li>
+        <li>PR 週期時間觸發漂移規則時，agent 寫一份報告給工程領導層——<strong>這顯示這套裝置對流程指標跟對生產指標一樣管用。</strong></li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="play" id="p-scan">
+    <summary>
+      <span class="play__id">M2</span>
+      <span class="play__name">週期性程式碼庫掃描<small>掃描結果會過期兩次：程式碼會變，模型也會變</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <blockquote><p>一次安全掃描，是「在某個特定模型之下、對某個 codebase 的一個時間點陳述」。<strong>而這兩半都會過期</strong>：程式碼每週都在變，而每一代模型都會找到上一代漏掉的漏洞。</p></blockquote>
+      <p>AI-native 的答案是：<strong>按排程執行掃描，呼叫路徑上沒有人，並把它找到的東西送進跟其他任何程式碼變更相同的閘門。</strong></p>
+      <p>Claude Security 是這種排程掃描的託管形式。連上 GitHub repository，掃描在 Anthropic 的基礎設施上以 Claude Mythos 5 執行，<strong>每個發現在被回報之前都經過驗證</strong>，並附上信心評分。建議的修補在 Claude Code on the web 中審閱與套用。組織拿得到發現，而不需要自己取得模型的存取權。</p>
+
+      <div class="vs">
+        <div><h5>傳統</h5>安全掃描是一個事件：在發布或稽核前啟動一次掃描。報告進到追蹤系統，待辦被人工消化到下一次事件為止。中間寫的程式碼，就靠 PR 審查抓到什麼算什麼。</div>
+        <div><h5>AI-native</h5>掃描按排程對每個連上的 repository 執行，用當前最強的模型，發現在任何人讀到之前先被驗證。每個發現的處理方式跟控制帶突破一樣：<strong>塞得進一個 PR 的修復走審查閘，更大的就變成 intent.md</strong>。覆蓋率的日期從最後一次執行算起，不是從第一次。</div>
+      </div>
+
+      <div class="pre">
+        <div><dt>前置</dt><dd>PR 審查閘與 hooks 核准閘（階段 5），讓發現像其他變更一樣走審查；以及階段 1 的 <code>intent.md</code> 格式，給塞不進單一 PR 的發現用。</dd></div>
+        <div><dt>基礎建設</dt><dd>Claude Security 對 Claude Enterprise 組織開放公開 beta。需要在目標 repository 上安裝 Anthropic GitHub App（雲端託管的 github.com）、啟用 Claude Code on the Web、開啟 Extra Usage 並設定支出上限、給執行掃描的人 premium 席位，並由管理員在 <code>claude.ai/admin-settings/claude-code</code> 打開該功能。<strong>掃描以 Mythos 5 費率按用量計費，所以支出上限要與 repository 的規模與數量相稱。</strong></dd></div>
+      </div>
+
+      <h4>怎麼執行</h4>
+      <ol>
+        <li>安全負責人連上 repositories，並依 repo、服務或團隊把它們組織成 projects，<strong>讓發現的歸屬從一開始就清楚</strong>。</li>
+        <li>對最關鍵的 repositories 跑第一次完整掃描，<strong>包含那些已經被其他工具或更早的模型掃過的</strong>。把第一次掃描當作基線——它很可能會在被視為乾淨的程式碼裡挖出東西。</li>
+        <li>逐 project 設排程。積極開發中的服務，<strong>每週是合理的預設值</strong>；repository 很大或很混雜時，把掃描範圍縮到某個目錄或分支。</li>
+        <li>拿著信心評分分流發現。<strong>駁回時要填理由</strong>，讓駁回被記錄下來，同一個發現才不會在下次執行時又變成新的。</li>
+        <li>對於有邊界的發現，在 Claude Code on the Web 開啟建議的修補、審閱它，然後像其他任何變更一樣送進 PR 審查閘。<strong>提出修復的那個 agent 沒有任何途徑核准它。</strong></li>
+        <li>對於比一個修補更寬的東西——架構弱點，或跨服務重複出現的模式——用階段 1 的格式寫成 <code>intent.md</code>，從 Plan 開始跑。</li>
+        <li>修復發布到生產環境後，替該漏洞類別在 eval 套件（T2）加一個 eval，讓操縱 agent 的設定從此對這個類別受測。</li>
+        <li>用 CSV 或 Markdown 匯出發現，或用 webhooks，<strong>讓組織既有的追蹤與稽核系統繼續當紀錄系統</strong>——稽核員本來就在那裡找它們。</li>
+      </ol>
+
+      <div class="gov">
+        <h5>治理</h5>
+        掃描在組織的管理控制之下執行：連上哪些 repository、誰持有掃描席位、支出上限，都是集中設定的。<strong>每個發現都有驗證結果與信心評分，每次駁回都有理由，所以掃描歷史本身就是一份稽核紀錄</strong>——記錄了什麼被找到、被修好、以及被有意識地接受了。修復經由 PR 審查閘與分支保護抵達生產環境，而不是從掃描本身。Claude Security 是既有靜態分析與相依套件掃描的<strong>補強</strong>：確定性檢查留在 CI，模型驅動的掃描負責那些檢查抓不到的、依賴脈絡的漏洞。
+      </div>
+
+      <div class="mez">
+        <div><h5>領先指標</h5>已排程的 repositories 佔比，以及從發現被回報到其修補進入 PR 審查閘的時間（讀掃描歷史與 PR metadata）。</div>
+        <div><h5>落後指標</h5>排程掃描找到的漏洞數，對比在生產環境或由外部回報發現的（來自事故追蹤系統）；以及已跑過數輪的 repository 上「每次掃描的發現數」趨勢——它應該隨著修復與 evals 累積而下降。</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="play" id="p-tag">
+    <summary>
+      <span class="play__id">M3</span>
+      <span class="play__name">Claude Tag：讓 Claude 站上 on-call<small>頻道就是稽核軌跡</small></span>
+      <span class="play__chev">展開</span>
+    </summary>
+    <div class="play__body">
+      <p>事故也會經由其他管道抵達，例如 Slack 或 Teams 這類工作通訊軟體。事故可能長得像「晚上十點在事故頻道裡一則要求緊急修復的訊息」——現在它可以被立刻動作。</p>
+      <p><strong>Claude Tag（目前在 Slack 上公開 beta）讓 Claude 以自己的身分成為那些頻道的成員</strong>，於是每一起新事故都有一個第一線回應者，而回應本身成為迴圈與未來事故的記憶。</p>
+      <p>對話與機構知識留在頻道裡，頻道裡的任何人都能引導與執行回應。任何團隊成員都可以即時測試假設、探索新選項、進行調查，<strong>而頻道歷史為可稽核性再加一層</strong>。透過 MCP 存取，Claude 驗證指標已回到基線並在討論串中確認，然後把事後檢討寫進一份受版本控制的 lessons 檔案，供未來的調查讀取。</p>
+      <p>事故不是 Claude Tag 唯一撿起來的工作。經由 MCP 在一張工單上被 tag、或在頻道裡被詢問時，Claude 以同樣方式分流工作：<strong>小而邊界清楚的修復，以 PR 的形式經過審查閘抵達；更大的則寫成 intent.md 進入階段 1——迴圈從這一刻開始自己餵自己。</strong></p>
+      <blockquote><p>頻道就是稽核軌跡：請求、診斷、人的授權與修復，全都留在事故被處理的那個地方。</p></blockquote>
+    </div>
+  </details>
+</section>
+
+<!-- ═══════════ 02 採用順序 DAG ═══════════ -->
+<section id="dag">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">02</span><h2>採用順序，不是階段順序</h2></div>
+    <p class="lede">原文特別強調這件事，而且很容易被誤讀：<strong>play 是用「階段」列出來的，但箭頭給的是採用順序——兩者不是同一回事。</strong></p>
+    <p>從任何一個<strong>沒有箭頭指進去</strong>的 play 開始，因為它什麼都不需要。對其他任何 play 來說，<strong>指進它的箭頭就是要先採用的那些 play</strong>。點下面任一節點，會把它的完整前置鏈標出來。</p>
+  </div>
+
+  <div class="plate">
+    <div class="plate__bar">
+      <div><span class="plate__id">圖 03</span> <span class="plate__title">15 個 play 的前置依賴圖（點節點追蹤前置鏈）</span></div>
+      <div class="ctrls"><button class="btn" id="dag-reset">清除選取</button></div>
+    </div>
+    <div class="plate__body">
+      <svg id="dagsvg" viewBox="0 0 960 400" role="img" aria-label="採用順序依賴圖：無前置的起點為捕捉 intent.md、CLAUDE.md、Skills、回饋迴圈、Hooks 核准閘；其餘 play 依箭頭指向的前置關係展開。" style="min-width:900px">
+        <defs>
+          <marker id="dah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g id="dagEdges" fill="none" stroke-width="1.3"></g>
+        <g id="dagNodes" font-family="'Noto Sans TC',sans-serif"></g>
+        <g font-family="'IBM Plex Mono',monospace" font-size="10" fill="var(--faint)" letter-spacing="1.2" text-anchor="middle">
+          <text x="95" y="392">起點 · 無前置</text>
+          <text x="285" y="392">第二波</text>
+          <text x="475" y="392">第三波</text>
+          <text x="665" y="392">第四波</text>
+          <text x="855" y="392">自主層</text>
+        </g>
+      </svg>
+    </div>
+    <div class="plate__note" id="dag-note">最左欄那五個 play 什麼都不需要，可以今天就開始。<strong>閉環（M1）需要幾乎全部東西先就位</strong>——這是為什麼它排在階段 6，而不是因為維運比較不重要。</div>
+  </div>
+</section>
+
+<!-- ═══════════ 03 流程圖 ═══════════ -->
+<section id="flow">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">03</span><h2>一次變更的完整生命週期</h2></div>
+    <p class="lede">把 15 個 play 串起來，一個想法從提出到上線、再回到起點會經過什麼。<strong>五道閘門全都由人或確定性規則把守；agent 在閘門之間全速跑。</strong></p>
+  </div>
+
+  <div class="plate">
+    <div class="plate__bar"><div><span class="plate__id">圖 04</span> <span class="plate__title">從想法到生產，五道閘門與兩條回流</span></div></div>
+    <div class="plate__body">
+      <svg viewBox="0 0 700 1040" role="img" aria-label="變更生命週期流程圖：腦力激盪產出 intent.md，經產品負責人接受閘門，產出 spec.md，經規格閘門，工程師以 plan mode 產出 plan.md，經計畫接受閘門，agent 實作並自我驗證，開 PR 進行三趟審查，經 code owner 核准閘門，合併進入 CI/CD，經發布授權閘門後上線，生產監控在控制帶破線時寫出新的 intent.md 回到起點；另有一條從審查閘門回到實作的修正迴圈。" style="min-width:640px">
+        <defs>
+          <marker id="fah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g font-family="'Noto Sans TC',sans-serif" text-anchor="middle">
+
+          <!-- 連接線 -->
+          <g stroke="var(--muted)" stroke-width="1.4" marker-end="url(#fah)" color="var(--muted)">
+            <line x1="350" y1="78"  x2="350" y2="94"/>
+            <line x1="350" y1="168" x2="350" y2="184"/>
+            <line x1="350" y1="246" x2="350" y2="262"/>
+            <line x1="350" y1="336" x2="350" y2="352"/>
+            <line x1="350" y1="414" x2="350" y2="430"/>
+            <line x1="350" y1="504" x2="350" y2="520"/>
+            <line x1="350" y1="582" x2="350" y2="598"/>
+            <line x1="350" y1="660" x2="350" y2="676"/>
+            <line x1="350" y1="750" x2="350" y2="766"/>
+            <line x1="350" y1="828" x2="350" y2="844"/>
+            <line x1="350" y1="918" x2="350" y2="934"/>
+          </g>
+
+          <!-- 1 -->
+          <rect x="200" y="20" width="300" height="58" fill="var(--surface)" stroke="var(--amber)" stroke-width="1.6"/>
+          <text x="350" y="42" font-size="10.5" font-family="'IBM Plex Mono',monospace" fill="var(--amber)" letter-spacing="1">提出者</text>
+          <text x="350" y="63" font-size="14" font-weight="700" fill="var(--ink)">與 Claude 腦力激盪 → intent.md</text>
+          <!-- G1 -->
+          <path d="M350,98 L500,133 L350,168 L200,133 Z" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.6"/>
+          <text x="350" y="130" font-size="13" font-weight="700" fill="var(--ink)">閘門 1 · 產品負責人</text>
+          <text x="350" y="147" font-size="12" fill="var(--muted)">接受這個意圖嗎？</text>
+          <!-- 2 -->
+          <rect x="200" y="188" width="300" height="58" fill="var(--surface)" stroke="var(--indigo)" stroke-width="1.6"/>
+          <text x="350" y="210" font-size="10.5" font-family="'IBM Plex Mono',monospace" fill="var(--indigo)" letter-spacing="1">Claude ＋ skills</text>
+          <text x="350" y="231" font-size="14" font-weight="700" fill="var(--ink)">需求與設計一次做完 → spec.md</text>
+          <!-- G2 -->
+          <path d="M350,266 L500,301 L350,336 L200,301 Z" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.6"/>
+          <text x="350" y="298" font-size="13" font-weight="700" fill="var(--ink)">閘門 2 · 產品負責人</text>
+          <text x="350" y="315" font-size="12" fill="var(--muted)">被標記的疑慮解決了嗎？</text>
+          <!-- 3 -->
+          <rect x="200" y="356" width="300" height="58" fill="var(--surface)" stroke="var(--amber)" stroke-width="1.6"/>
+          <text x="350" y="378" font-size="10.5" font-family="'IBM Plex Mono',monospace" fill="var(--amber)" letter-spacing="1">工程師 ＋ plan mode</text>
+          <text x="350" y="399" font-size="14" font-weight="700" fill="var(--ink)">盤問並修正計畫 → plan.md</text>
+          <!-- G3 -->
+          <path d="M350,434 L500,469 L350,504 L200,469 Z" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.6"/>
+          <text x="350" y="466" font-size="13" font-weight="700" fill="var(--ink)">閘門 3 · 計畫被接受？</text>
+          <text x="350" y="483" font-size="12" fill="var(--muted)">未接受前 Claude 改不了檔案</text>
+          <!-- 4 -->
+          <rect x="200" y="524" width="300" height="58" fill="var(--surface)" stroke="var(--indigo)" stroke-width="1.6"/>
+          <text x="350" y="546" font-size="10.5" font-family="'IBM Plex Mono',monospace" fill="var(--indigo)" letter-spacing="1">Agent ＋ hooks ＋ 回饋迴圈</text>
+          <text x="350" y="567" font-size="14" font-weight="700" fill="var(--ink)">實作、自己跑測試、自己修</text>
+          <!-- 5 -->
+          <rect x="200" y="602" width="300" height="58" fill="var(--surface)" stroke="var(--indigo)" stroke-width="1.6"/>
+          <text x="350" y="624" font-size="10.5" font-family="'IBM Plex Mono',monospace" fill="var(--indigo)" letter-spacing="1">Agent ＋ REVIEW.md</text>
+          <text x="350" y="645" font-size="14" font-weight="700" fill="var(--ink)">開 PR → bug／安全／合規三趟</text>
+          <!-- G4 -->
+          <path d="M350,680 L500,715 L350,750 L200,715 Z" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.6"/>
+          <text x="350" y="712" font-size="13" font-weight="700" fill="var(--ink)">閘門 4 · Code owner</text>
+          <text x="350" y="729" font-size="12" fill="var(--muted)">分支保護，人核准</text>
+          <!-- 6 -->
+          <rect x="200" y="770" width="300" height="58" fill="var(--surface)" stroke="var(--indigo)" stroke-width="1.6"/>
+          <text x="350" y="792" font-size="10.5" font-family="'IBM Plex Mono',monospace" fill="var(--indigo)" letter-spacing="1">CI/CD ＋ MCP 部署工具</text>
+          <text x="350" y="813" font-size="14" font-weight="700" fill="var(--ink)">合併，agent 做到閘門為止</text>
+          <!-- G5 -->
+          <path d="M350,848 L500,883 L350,918 L200,883 Z" fill="var(--amber-soft)" stroke="var(--amber)" stroke-width="1.6"/>
+          <text x="350" y="880" font-size="13" font-weight="700" fill="var(--ink)">閘門 5 · 發布授權</text>
+          <text x="350" y="897" font-size="12" fill="var(--muted)">production-gate.sh 強制</text>
+          <!-- 7 -->
+          <rect x="200" y="938" width="300" height="58" fill="var(--surface)" stroke="var(--rust)" stroke-width="1.6"/>
+          <text x="350" y="960" font-size="10.5" font-family="'IBM Plex Mono',monospace" fill="var(--rust)" letter-spacing="1">生產環境 ＋ bands.yaml</text>
+          <text x="350" y="981" font-size="14" font-weight="700" fill="var(--ink)">控制帶監控（偵測是確定性的）</text>
+
+          <!-- 修正迴圈：閘門4 → 實作 -->
+          <path d="M 200 715 L 120 715 L 120 553 L 194 553" fill="none" stroke="var(--indigo)" stroke-width="1.4"
+                stroke-dasharray="5 4" marker-end="url(#fah)" color="var(--indigo)"/>
+          <text x="122" y="638" font-size="11.5" fill="var(--indigo)" text-anchor="middle" transform="rotate(-90 122 638)">審查發現 → @claude 修正後再推</text>
+
+          <!-- 大迴圈：生產 → 起點 -->
+          <path d="M 500 967 L 620 967 L 620 49 L 506 49" fill="none" stroke="var(--rust)" stroke-width="1.6"
+                stroke-dasharray="6 4" marker-end="url(#fah)" color="var(--rust)"/>
+          <text x="622" y="508" font-size="12" fill="var(--rust)" font-weight="700" text-anchor="middle" transform="rotate(-90 622 508)">控制帶破線 → 新的 intent.md</text>
+        </g>
+      </svg>
+    </div>
+    <div class="plate__note">
+      <span style="display:inline-block;width:11px;height:11px;border:2px solid var(--amber);vertical-align:-1px;margin-inline-end:6px"></span>人負責的步驟與閘門　
+      <span style="display:inline-block;width:11px;height:11px;border:2px solid var(--indigo);vertical-align:-1px;margin:0 6px 0 16px"></span>agent 負責　
+      <span style="display:inline-block;width:11px;height:11px;border:2px solid var(--rust);vertical-align:-1px;margin:0 6px 0 16px"></span>生產與回流
+      <br><br>五道閘門有一個共通性質：<strong>寫東西的那一方都沒有辦法核准自己寫的東西。</strong>這是整套設計裡唯一不能省的結構。
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 04 量測索引 ═══════════ -->
+<section id="metrics">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">04</span><h2>量測索引</h2></div>
+    <p class="lede">原文每個 play 都給了領先與落後指標，而且刻意<strong>只用既有系統已經在發出的資料</strong>——git 歷史、PR metadata、CI、事故追蹤、OpenTelemetry。不需要新的度量平台。</p>
+  </div>
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th style="width:56px">Play</th><th style="width:23%">領先指標（先動）</th><th style="width:23%">落後指標（真的改善了嗎）</th><th>資料在哪</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">P1</td><td>對話到 intent.md 提交的時間</td><td>intent 存活率；spec 之後又改 intent 的次數</td><td class="trad">intent 家的 git 歷史</td></tr>
+        <tr><td class="mono">D1</td><td>intent.md → spec.md 的時間差</td><td>build 開始後的需求返工</td><td class="trad">git log 兩個時間戳</td></tr>
+        <tr><td class="mono">B1</td><td>一次實作就 merge 的比例；計畫核准到 merge 的時間</td><td>每個變更的返工次數；diff 與 plan.md 的吻合度</td><td class="trad">PR metadata</td></tr>
+        <tr><td class="mono">B2</td><td>Claude 重犯「CLAUDE.md 該擋下」的錯的頻率</td><td>新成員到第一個 merged PR 的時間</td><td class="trad">git 歷史、PR 歷史</td></tr>
+        <tr><td class="mono">B3</td><td>政策核准到 skill merge 的時間</td><td>引用該政策的審查發現數（應趨近零）</td><td class="trad">skill 資料夾的 PR</td></tr>
+        <tr><td class="mono">B5</td><td>審查品質維持下的並行 session 數；掌舵時間佔比</td><td>每人每週 merge 數，<b>要與返工率一起讀</b></td><td class="trad">OpenTelemetry 匯出、PR 歷史</td></tr>
+        <tr><td class="mono">T1</td><td>agent 變更的首次 CI 成功率</td><td>每 PR 審查時間；變更失敗率</td><td class="trad">CI、PR metadata、事故追蹤</td></tr>
+        <tr><td class="mono">T2</td><td>eval 通過率趨勢；事故變成常駐 eval 的時間</td><td>CI 攔到的回歸 vs 生產發現的回歸</td><td class="trad">eval 套件、事故追蹤</td></tr>
+        <tr><td class="mono">R1</td><td>到首次審查的時間；無人碰分支就解決的留言佔比</td><td>merge 前抓到 vs 逃到生產的缺陷與漏洞</td><td class="trad">PR 歷史、事故追蹤</td></tr>
+        <tr><td class="mono">R2</td><td>每道核准閘的等待時間</td><td>導入前後抵達生產的閘門違規數</td><td class="trad">OpenTelemetry（每個 hook 決定都有時間戳）</td></tr>
+        <tr><td class="mono">R3</td><td>不需 call 人就完成分流的 pipeline 失敗佔比</td><td>DORA 指標</td><td class="trad">CI/CD logs、部署工具</td></tr>
+        <tr><td class="mono">M1</td><td>破線到 intent.md 進分流佇列的時間</td><td>發現變成 merged 修復的比例；同類事故重複次數</td><td class="trad">偵測腳本 log、PR 歷史</td></tr>
+        <tr><td class="mono">M2</td><td>已排程 repo 佔比；發現到修補進審查閘的時間</td><td>掃描 vs 生產／外部回報的漏洞；每次掃描發現數趨勢</td><td class="trad">掃描歷史、PR metadata</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="col">
+    <p style="font-size:14px;color:var(--muted)">留意 <strong>B5 那條刻意的但書</strong>：「每人每週 merge 數」單獨看是個會誘發壞行為的指標，原文明確要求它必須和返工率一起讀。這種成對設計在整份 playbook 裡反覆出現，值得學起來。</p>
+  </div>
+</section>
+
+<!-- ═══════════ 05 Anchorline ═══════════ -->
+<section id="anchorline">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">05</span><h2>對照 Anchorline</h2></div>
+    <p class="lede">Anchorline 已經在做的事，跟這份 playbook 講的是同一件事的<strong>不同一半</strong>：playbook 講「怎麼讓 agent 跑完整條 SDLC」，Anchorline 講「怎麼證明這些 agent 做過的事被治理過」。把兩邊疊起來，缺口會很清楚。</p>
+    <blockquote>
+      <p>現況欄位依 <code>README.md</code> 與 <code>docs/PRD.md</code> 判讀，<strong>未逐一核對原始碼</strong>；建議欄是我的判斷，不是原文的主張。真的要動工前，每一列都該回去驗一次。</p>
+    </blockquote>
+
+    <p style="margin-top:26px;padding:14px 18px;border:1px solid var(--line);background:var(--surface);font-size:14.5px">
+      📐 這一節另外拉出一張獨立的治理鏈流程圖（含情境使用說明、可切換的三個導覽視角）：
+      <a href="anchorline-governance-chain.html"><b>Anchorline 治理鏈：現況、缺口與回流</b></a>
+    </p>
+
+    <h3>Anchorline 已經比 playbook 更嚴的一處</h3>
+    <p>原文在 R1 的治理段寫的是「<strong>寫程式的那個 agent 沒有任何途徑核准它</strong>」——這是人／agent 粒度的職責分離。Anchorline 的 <code>authorAgentFamily</code> 把粒度再降一層：<strong>同一個 agent 族系撰寫的文件，不能由同族系核准</strong>。GitHub 的 CODEOWNERS 與分支保護只認人不認族系，抓不到這一類。這是 Anchorline 目前對外最有辨識度的機制，也剛好是這份 playbook 沒有寫進去的東西。</p>
+  </div>
+
+  <div class="ctrls" style="margin:26px 0 0" role="group" aria-label="篩選判定">
+    <button class="btn on" data-f="all">全部</button>
+    <button class="btn" data-f="have">已具備</button>
+    <button class="btn" data-f="part">部分</button>
+    <button class="btn" data-f="gap">缺口</button>
+  </div>
+
+  <div class="tbl-scroll">
+    <table id="anctbl">
+      <thead><tr><th style="width:130px">Play</th><th style="width:30%">Anchorline 現況</th><th style="width:66px">判定</th><th>改版建議</th></tr></thead>
+      <tbody>
+        <tr data-v="gap"><td><b>P1</b> 捕捉 intent.md</td><td class="trad">治理鏈從 <b>PRD 撰寫</b>起手（編輯台）。沒有更早、更粗、非工程師可寫的入口。</td><td><span class="tag t-gap">缺口</span></td><td>在編輯台前面加一層 <code>intent/</code>：一個欄位極少的 proto-spec（問題／預期成果／受影響系統／限制／開放問題），<b>一建立就配錨點</b>。PRD 變成 intent 的下游而不是起點——這樣「想法」也進得了稽核軌跡。</td></tr>
+        <tr data-v="part"><td><b>D1</b> 需求與設計合併</td><td class="trad">編輯台已有 PRD 引導撰寫 ＋ <b>結構 gate</b> ＋ Markdown 即時預覽。</td><td><span class="tag t-part">部分</span></td><td>結構 gate 檢查的是「章節齊不齊」，playbook 要的是<b>政策約束</b>。把品牌／安全／合規／UX 政策做成可掛載的 skill 清單，並在 PRD 上記錄「當時生效的 skill 版本」——這一欄現在沒有，補了它，spec 的可稽核性才完整。</td></tr>
+        <tr data-v="part"><td><b>B1</b> Plan mode / plan.md</td><td class="trad">Task Tracking 直接讀 <code>plans/*.md</code>，checkbox 可勾、右欄三層稽核軌跡。<code>plans/</code> 本來就是 plan.md 的家。</td><td><span class="tag t-part">部分</span></td><td>缺的是<b>對照</b>：merge 的 diff 有沒有還吻合 plan？把「plan.md 未同步」做成治理鏈上的一種違規標記，和 <code>authorAgentFamily</code> 用同一套 replay 機制報出來。</td></tr>
+        <tr data-v="gap"><td><b>B2</b> CLAUDE.md</td><td class="trad">repo 有 <code>CLAUDE.md</code>，但它不是 Anchorline 的治理對象——App 不知道它存在。</td><td><span class="tag t-gap">缺口</span></td><td>把 <code>CLAUDE.md</code>、<code>.claude/skills/</code>、<code>.claude/settings.json</code> 納入監看清單，變更時在稽核軌跡留一筆。<b>操縱 agent 的設定，本身就該是被治理的產物</b>——這是 playbook 的 T2 論點，Anchorline 目前完全沒接。</td></tr>
+        <tr data-v="part"><td><b>B3</b> Skills 作為機構知識</td><td class="trad">Agents 頁已有 agent 角色、prompt、進場作業。</td><td><span class="tag t-part">部分</span></td><td>從「agent 名冊」擴成「<b>policy → skill → 負責人</b>」的登錄表：每條政策一位指定負責人、一份真相來源、一個 skill 版本。這樣才答得出「這份 PRD 是在哪一版政策下寫的」。</td></tr>
+        <tr data-v="gap"><td><b>B4</b> Hooks 建置護欄</td><td class="trad">無。Anchorline 不介入 agent 的執行期。</td><td><span class="tag t-gap">缺口</span></td><td>不建議自己做 hook runtime（那是 Claude Code 的事）。但可以<b>把 hook 決定收進稽核軌跡</b>：讀 OpenTelemetry 或 hook log，把 allow／block／ask 三種判定畫在治理鏈上。Anchorline 的定位是紀錄，不是執行。</td></tr>
+        <tr data-v="part"><td><b>B5</b> 平行 session 與 subagent</td><td class="trad">Agents 頁 ＋ 跨 repo PR 雷達已經接近「多線在飛」的視圖。</td><td><span class="tag t-part">部分</span></td><td>PR 雷達再往前一步：顯示<b>還沒變成 PR 的在途 worktree／session</b>。原文的實務上限是「一個人審查得過來幾條線」，這個數字現在沒有任何畫面在回答。</td></tr>
+        <tr data-v="part"><td><b>T1</b> 回饋迴圈</td><td class="trad">UAT 使用者測試是<b>人眼</b>迴圈：逐題勾選，失敗與不測必填說明，結果寫回同一份 markdown。</td><td><span class="tag t-part">部分</span></td><td>UAT 對應的是原文的「視覺檢查」那一段，做得比原文細。缺的是<b>機器迴圈的證據</b>：<code>make test</code> 輸出、build log、截圖差異，目前不進治理鏈。把它們當成一種軌跡事件收進來，「證據來自工具鏈」這句話才成立。</td></tr>
+        <tr data-v="gap"><td><b>T2</b> 持續 evals</td><td class="trad">無。</td><td><span class="tag t-gap">缺口</span></td><td>對單人＋多 agent 的使用情境，全套 eval 太重。<b>最小可行版</b>：把 UAT 失敗題與事故各留一則案例，在 <code>CLAUDE.md</code> 或 skills 變更時提醒重跑。價值在「設定變更要回歸」這個習慣，不在套件規模。</td></tr>
+        <tr data-v="part"><td><b>R1</b> PR 審查迴圈</td><td class="trad">跨 repo PR 雷達已有；<code>authorAgentFamily</code> 的職責分離比原文更嚴。</td><td><span class="tag t-part">部分</span></td><td>缺 <code>REVIEW.md</code> 這一層：審查政策、Important／Nit 的界線、要跳過什麼。以及<b>審查發現本身</b>目前沒進軌跡——它是 playbook 明列的六份產物之一。</td></tr>
+        <tr data-v="have"><td><b>R2</b> Hooks 核准閘</td><td class="trad">審閱／簽核畫面：<b>gate 未過擋核准</b>；治理鏈 replay 會標出違規。</td><td><span class="tag t-have">已具備</span></td><td>這是 Anchorline 最強的一段，概念上就是 playbook 的 ask-hook。可補的是「<b>封鎖必須自己解釋自己</b>」：擋下時同時顯示理由與取得核准的途徑，而不只是把按鈕變灰。</td></tr>
+        <tr data-v="part"><td><b>R3</b> CI/CD 與部署</td><td class="trad">發布頁追蹤 release；鏈的末端是 <code>commits → PR → release</code>。</td><td><span class="tag t-part">部分</span></td><td>缺 <b>rollback</b>。原文說 rollback 應該是整條 pipeline 中被演練得最熟的路徑，因為 M1 的 3σ 會呼叫它。Anchorline 的鏈目前只有單向；補一個 rollback 事件型別，鏈才走得回來。</td></tr>
+        <tr data-v="gap"><td><b>M1</b> 閉環</td><td class="trad">無。UAT 失敗、gate 未過、PR 失敗，目前都停在畫面上等人看。</td><td><span class="tag t-gap">缺口</span></td><td><b>這是最大的一塊，也是最像 Anchorline 該做的事。</b>它已經握有全部四種訊號的錨點，只差最後一步：讓「UAT 某題失敗」或「治理鏈出現違規」自動生成一份帶錨點的 <code>intent.md</code> 草稿，丟回 P1。做到這裡，Anchorline 才從「看板」變成「迴圈」。</td></tr>
+        <tr data-v="gap"><td><b>M2/M3</b> 掃描與 on-call</td><td class="trad">無。</td><td><span class="tag t-gap">缺口</span></td><td>對單人使用情境優先度最低，且高度依賴 Claude Enterprise。<b>先不做</b>，但把「發現 → intent.md」的入口先留好——那個入口跟 M1 是同一個。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <h3>三個結構性判斷</h3>
+    <ol>
+      <li><strong>Anchorline 的鏈少了最前面一段。</strong>playbook 的鏈是 intent → spec → plan → diff → PR → incident；Anchorline 的鏈是 PRD → gate → 簽核 → openspec → commits → PR → release。<strong>從 PRD 起手，等於默認「已經有人把想法寫成規格了」</strong>——而那正是傳統 SDLC 最慢的一段。補上 intent 層，是投報率最高的一步，也最便宜。</li>
+      <li><strong>迴圈沒有閉合，所以它現在是一條線。</strong>圖 02 的虛線在 Anchorline 上是斷的。四種訊號（UAT 失敗、gate 違規、PR 失敗、release 異常）都已經有錨點，缺的只是「自動寫回一份意圖」。<strong>這一步做完，README 上那句「一條治理鏈」才會真的變成迴圈。</strong></li>
+      <li><strong>操縱 agent 的設定，本身沒有被治理。</strong><code>CLAUDE.md</code>、skills、hooks 決定了 agent 的行為，但它們的變更不在稽核軌跡上。對一個主打「證明 agent 做的事被治理過」的產品來說，<strong>這是定位上的漏洞而不只是功能缺口</strong>：治理了產出，沒治理產出者的設定。</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ═══════════ 06 導入 ═══════════ -->
+<section id="adopt">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">06</span><h2>導入順序與自我檢核</h2></div>
+    <p class="lede">依圖 03 的依賴關係，加上「哪些今天就能做」的判斷。勾選會存在這台瀏覽器裡。</p>
+  </div>
+
+  <div class="col">
+    <h4>第一波 — 零前置，今天就能開始</h4>
+    <ul class="ck" data-w="1">
+      <li><label><input type="checkbox" data-k="c1"> 跑 <code>/init</code>，把 <code>CLAUDE.md</code> 砍到一頁以內，進 git（B2）</label></li>
+      <li><label><input type="checkbox" data-k="c2"> 把 build／test／lint 各包成一行指令，寫進 CLAUDE.md 並附健康輸出範例（T1）</label></li>
+      <li><label><input type="checkbox" data-k="c3"> 挑<b>一條</b>今天被執行得不一致的政策，寫成 skill 並測試它真的觸發（B3）</label></li>
+      <li><label><input type="checkbox" data-k="c4"> 列出「必須存活的人為核准閘」清單，先寫在紙上（R2 的前置動作）</label></li>
+      <li><label><input type="checkbox" data-k="c5"> 建 intent 的家：產品 repo 裡一個 <code>intent/</code> 目錄 ＋ 一份範本（P1）</label></li>
+    </ul>
+
+    <h4>第二波 — 有了上面才做得起來</h4>
+    <ul class="ck" data-w="2">
+      <li><label><input type="checkbox" data-k="c6"> plan mode 變成預設起手式，計畫提交成 <code>plan.md</code>（B1）</label></li>
+      <li><label><input type="checkbox" data-k="c7"> 把核准閘寫成 hooks；不可協商的放 managed settings（R2）</label></li>
+      <li><label><input type="checkbox" data-k="c8"> 兩到三個平行 worktree session；重複工作變成 subagent（B5）</label></li>
+      <li><label><input type="checkbox" data-k="c9"> 修 bug 一律先寫失敗的測試，並用 hook 擋掉測試檔編輯（T1 後半）</label></li>
+    </ul>
+
+    <h4>第三波 — 審查與流水線</h4>
+    <ul class="ck" data-w="3">
+      <li><label><input type="checkbox" data-k="c10"> 寫 <code>REVIEW.md</code>，定義三趟審查與 Important／Nit 界線（R1）</label></li>
+      <li><label><input type="checkbox" data-k="c11"> 審查發現回流 CLAUDE.md：同一個錯被標第二次就寫進去（R1）</label></li>
+      <li><label><input type="checkbox" data-k="c12"> pipeline 先加唯讀判斷步驟（分流失敗 build、起草 changelog）（R3）</label></li>
+      <li><label><input type="checkbox" data-k="c13"> 20–50 個真實任務變成 eval 套件，gate 在 <code>.claude/**</code> 的變更上（T2）</label></li>
+      <li><label><input type="checkbox" data-k="c14"> Rollback 變成單一指令，並在 staging 定期演練（R3）</label></li>
+    </ul>
+
+    <h4>第四波 — 閉環</h4>
+    <ul class="ck" data-w="4">
+      <li><label><input type="checkbox" data-k="c15"> 挑一個有穩定基線的指標，寫確定性偵測腳本 ＋ <code>bands.yaml</code>（M1）</label></li>
+      <li><label><input type="checkbox" data-k="c16"> 讓 agent 把診斷寫成 <code>intent.md</code> 進分流佇列（M1）</label></li>
+      <li><label><input type="checkbox" data-k="c17"> 每次事故都加一個 eval，永久留在套件裡（T2 × M1）</label></li>
+    </ul>
+    <p id="ckcount" class="mono" style="font-size:13px;color:var(--muted)"></p>
+  </div>
+
+  <div class="col">
+    <h3>幾個容易讀漏的地方</h3>
+    <ul>
+      <li><strong>skill 是建議，hook 才是強制。</strong>把「一定要成立」的政策只寫成 skill，等於沒有控制。</li>
+      <li><strong>核准提示不要放在建置期。</strong>它會把一個人放回所有平行 session 的關鍵路徑上——這正是你想消滅的瓶頸。</li>
+      <li><strong>偵測必須是確定性的。</strong>模型只在控制帶被突破<b>之後</b>才被叫進來，不參與判斷有沒有破線。</li>
+      <li><strong>修程式碼的 agent 不能改測試。</strong>否則回饋迴圈會自己把自己拆掉。</li>
+      <li><strong>每個產物指定一個真相來源。</strong>repo、既有系統、或至少互相連結——三選一，不要含糊。</li>
+      <li><strong>「每人每週 merge 數」不能單獨看。</strong>原文明確要求它和返工率一起讀。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════ 附錄 ═══════════ -->
+<section id="ref" style="border-bottom:0">
+  <div class="col">
+    <div class="sec-head"><span class="sec-num">附錄</span><h2>名詞與資源</h2></div>
+  </div>
+  <div class="tbl-scroll">
+    <table>
+      <thead><tr><th style="width:170px">名詞</th><th>在這份 playbook 裡的意思</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">intent.md</td><td>提出者用自己語彙寫的 proto-spec。問題、預期成果、受影響的使用者與系統、限制、開放問題。<b>整個迴圈的重啟格式。</b></td></tr>
+        <tr><td class="mono">spec.md</td><td>由 Claude 從 intent.md 產出、受 skills 約束的需求與設計規格，含被標記的疑慮。</td></tr>
+        <tr><td class="mono">plan.md</td><td>plan mode 產出並經工程師核准的實作計畫：動哪些檔案、工作順序、風險、證明方式。</td></tr>
+        <tr><td class="mono">REVIEW.md</td><td>repo 根目錄的審查政策：幾趟審查、什麼算 Important、Nit 上限、什麼不報。</td></tr>
+        <tr><td class="mono">bands.yaml</td><td>控制帶的層級設定：1σ 記錄、2σ 唯讀診斷、3σ 可提案（PR 或預核 runbook）。</td></tr>
+        <tr><td class="mono">skill</td><td>含 <code>SKILL.md</code> 的資料夾。frontmatter 說何時觸發，body 說做什麼。<b>建議性控制。</b></td></tr>
+        <tr><td class="mono">hook</td><td>Claude 動作前執行的腳本，可 allow／ask／block。<b>確定性控制。</b></td></tr>
+        <tr><td class="mono">subagent</td><td>單一 session 內、有自己 context window 與工具限制的受限助手。</td></tr>
+        <tr><td class="mono">worktree</td><td>自己分支上的獨立 checkout，用來讓平行 session 不互撞。</td></tr>
+        <tr><td class="mono">managed settings</td><td>由平台／IT 管理員擁有、工程師無法覆寫的設定層。</td></tr>
+        <tr><td class="mono">控制帶（control band）</td><td>指標在滾動基線上的統計邊界。被突破時觸發自主流程。</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="col">
+    <h4>原文列出的部署文件（依大致的推行順序）</h4>
+    <ul style="font-size:14px">
+      <li>組織的 Claude Code 設定（管理決策地圖，從這裡開始）— <span class="mono">code.claude.com/docs/en/admin-setup</span></li>
+      <li>Settings 參考與優先序，含所有 managed-only 鍵 — <span class="mono">code.claude.com/docs/en/settings</span></li>
+      <li>Server-managed settings — <span class="mono">code.claude.com/docs/en/server-managed-settings</span></li>
+      <li>Permissions — <span class="mono">code.claude.com/docs/en/permissions</span></li>
+      <li>Sandboxing（OS 層檔案系統與網路隔離）— <span class="mono">code.claude.com/docs/en/sandboxing</span></li>
+      <li>Hooks 指南與參考 — <span class="mono">code.claude.com/docs/en/hooks-guide</span> · <span class="mono">/hooks</span></li>
+      <li>Skills — <span class="mono">code.claude.com/docs/en/skills</span></li>
+      <li>Plugins 與私有 marketplace — <span class="mono">code.claude.com/docs/en/plugin-marketplaces</span></li>
+      <li>Managed MCP — <span class="mono">code.claude.com/docs/en/managed-mcp</span></li>
+      <li>企業部署總覽（Bedrock / Vertex / Foundry）— <span class="mono">code.claude.com/docs/en/third-party-integrations</span></li>
+      <li>企業網路設定 — <span class="mono">code.claude.com/docs/en/network-config</span></li>
+      <li>監控（OpenTelemetry）與分析儀表板 — <span class="mono">code.claude.com/docs/en/monitoring-usage</span> · <span class="mono">/analytics</span></li>
+      <li>Compliance API — <span class="mono">platform.claude.com/docs/en/manage-claude/compliance-api</span></li>
+      <li>安全模型 — <span class="mono">code.claude.com/docs/en/security</span></li>
+    </ul>
+    <blockquote style="margin-top:34px">
+      <p>迴圈持續運轉。<strong>人的判斷停留在它之上。</strong></p>
+      <cite>原文結語</cite>
+    </blockquote>
+    <p style="font-size:13px;color:var(--faint);margin-top:34px">
+      本頁為繁中導讀與延伸判斷，非原文翻譯，引用段落已盡量保留原意。原文：
+      <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">The AI-Native SDLC playbook</a>，Louis Claxton，2026-08-21。
+      「對照 Anchorline」一節為本地判斷，依 <code>README.md</code> 與 <code>docs/PRD.md</code> 判讀，未逐一核對原始碼。
+    </p>
+  </div>
+</section>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ── 圖 01：瓶頸切換 ── */
+  var segs = document.querySelectorAll('#bneck .bneck__seg');
+  var bt = document.getElementById('b-trad'), ba = document.getElementById('b-ai');
+  var tot = document.getElementById('bneck-tot');
+  function setMode(ai){
+    var sum = 0;
+    segs.forEach(function(s){
+      var v = +(ai ? s.dataset.a : s.dataset.t);
+      s.style.flexGrow = v; sum += v;
+      s.querySelector('span').style.display = v < 6 ? 'none' : '';
+    });
+    tot.textContent = '總長 ' + sum;
+    bt.setAttribute('aria-pressed', String(!ai));
+    ba.setAttribute('aria-pressed', String(ai));
+  }
+  bt.addEventListener('click', function(){ setMode(false); });
+  ba.addEventListener('click', function(){ setMode(true); });
+  setMode(false);
+
+  /* ── 複製按鈕 ── */
+  document.addEventListener('click', function(e){
+    var b = e.target.closest('.copy');
+    if(!b) return;
+    var pre = b.closest('.code').querySelector('pre');
+    navigator.clipboard.writeText(pre.textContent).then(function(){
+      var o = b.textContent; b.textContent = '已複製';
+      setTimeout(function(){ b.textContent = o; }, 1400);
+    }, function(){ b.textContent = '複製失敗'; });
+  });
+
+  /* ── 圖 03：採用順序 DAG ── */
+  var COLX = [95, 285, 475, 665, 855], W = 85, H = 22;
+  var N = {
+    P1:{c:0,y:26, t:'捕捉 intent.md',   s:'P1', h:'#p-intent'},
+    B2:{c:0,y:96, t:'CLAUDE.md',        s:'B2', h:'#p-claudemd'},
+    B3:{c:0,y:166,t:'Skills',           s:'B3', h:'#p-skills'},
+    T1:{c:0,y:236,t:'回饋迴圈',          s:'T1', h:'#p-feedback'},
+    R2:{c:0,y:306,t:'Hooks 核准閘',      s:'R2', h:'#p-gates'},
+    D1:{c:1,y:40, t:'需求與設計',        s:'D1', h:'#p-spec'},
+    B4:{c:1,y:120,t:'Hooks 建置護欄',    s:'B4', h:'#p-hooks-build'},
+    B5:{c:1,y:200,t:'平行 session',      s:'B5', h:'#p-parallel'},
+    T2:{c:1,y:280,t:'持續 evals',        s:'T2', h:'#p-evals'},
+    B1:{c:2,y:80, t:'Plan mode',        s:'B1', h:'#p-planmode'},
+    R1:{c:2,y:200,t:'PR 審查迴圈',       s:'R1', h:'#p-review'},
+    R3:{c:3,y:200,t:'CI/CD 與部署',      s:'R3', h:'#p-cicd'},
+    M1:{c:4,y:110,t:'閉環（控制帶）',     s:'M1', h:'#p-loop'},
+    M2:{c:4,y:200,t:'週期性掃描',        s:'M2', h:'#p-scan'},
+    M3:{c:4,y:290,t:'Claude Tag',       s:'M3', h:'#p-tag'}
+  };
+  var E = [
+    ['P1','D1'],['B3','D1'],['B3','B4'],['B2','B5'],['T1','B5'],['B2','T2'],['T1','T2'],
+    ['D1','B1'],['B2','B1'],['B2','R1'],['B3','R1'],['B5','R1'],['R1','R3'],['R2','R3'],
+    ['P1','M1'],['R1','M1'],['R2','M1'],['R3','M1'],['P1','M2'],['R1','M2'],['R2','M2'],['R1','M3']
+  ];
+  var gE = document.getElementById('dagEdges'), gN = document.getElementById('dagNodes');
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function cx(k){ return COLX[N[k].c]; }
+  E.forEach(function(e){
+    var a = N[e[0]], b = N[e[1]];
+    var x1 = cx(e[0]) + W, y1 = a.y + H, x2 = cx(e[1]) - W, y2 = b.y + H;
+    var d = (x2 - x1) * 0.45;
+    var p = document.createElementNS(SVGNS,'path');
+    p.setAttribute('d','M'+x1+','+y1+' C'+(x1+d)+','+y1+' '+(x2-d)+','+y2+' '+x2+','+y2);
+    p.setAttribute('stroke','var(--muted)');
+    p.setAttribute('opacity','.26');
+    p.setAttribute('marker-end','url(#dah)');
+    p.setAttribute('color','var(--muted)');
+    p.dataset.from = e[0]; p.dataset.to = e[1];
+    gE.appendChild(p);
+  });
+  Object.keys(N).forEach(function(k){
+    var n = N[k], x = cx(k) - W;
+    var a = document.createElementNS(SVGNS,'a');
+    a.setAttribute('href', n.h);
+    var g = document.createElementNS(SVGNS,'g');
+    g.dataset.k = k; g.style.cursor = 'pointer';
+    var r = document.createElementNS(SVGNS,'rect');
+    r.setAttribute('x',x); r.setAttribute('y',n.y);
+    r.setAttribute('width',W*2); r.setAttribute('height',H*2);
+    r.setAttribute('fill','var(--surface)'); r.setAttribute('stroke','var(--line)'); r.setAttribute('stroke-width','1.4');
+    var t1 = document.createElementNS(SVGNS,'text');
+    t1.setAttribute('x',x+11); t1.setAttribute('y',n.y+27);
+    t1.setAttribute('font-family',"'IBM Plex Mono',monospace"); t1.setAttribute('font-size','11');
+    t1.setAttribute('fill','var(--indigo)'); t1.textContent = n.s;
+    var t2 = document.createElementNS(SVGNS,'text');
+    t2.setAttribute('x',x+42); t2.setAttribute('y',n.y+28);
+    t2.setAttribute('font-size','13.5'); t2.setAttribute('font-weight','700');
+    t2.setAttribute('fill','var(--ink)'); t2.textContent = n.t;
+    g.appendChild(r); g.appendChild(t1); g.appendChild(t2);
+    a.appendChild(g); gN.appendChild(a);
+    g.addEventListener('click', function(ev){ ev.preventDefault(); pick(k); });
+  });
+  var rev = {}; E.forEach(function(e){ (rev[e[1]] = rev[e[1]] || []).push(e[0]); });
+  var note = document.getElementById('dag-note');
+  var noteBase = note.innerHTML;
+  function pick(k){
+    var seen = {}, stack = (rev[k] || []).slice();
+    while(stack.length){ var v = stack.pop(); if(seen[v]) continue; seen[v] = 1; (rev[v] || []).forEach(function(p){ stack.push(p); }); }
+    gN.querySelectorAll('g[data-k]').forEach(function(g){
+      var kk = g.dataset.k, r = g.querySelector('rect');
+      var on = seen[kk], me = kk === k;
+      r.setAttribute('stroke', me ? 'var(--rust)' : on ? 'var(--indigo)' : 'var(--line)');
+      r.setAttribute('stroke-width', me || on ? '2' : '1.4');
+      r.setAttribute('fill', me ? 'var(--rust-soft)' : on ? 'var(--indigo-soft)' : 'var(--surface)');
+      g.setAttribute('opacity', me || on ? '1' : '.4');
+    });
+    gE.querySelectorAll('path').forEach(function(p){
+      var on = (seen[p.dataset.from] || p.dataset.from === k) && (seen[p.dataset.to] || p.dataset.to === k);
+      p.setAttribute('opacity', on ? '.95' : '.08');
+      p.setAttribute('stroke', on ? 'var(--indigo)' : 'var(--muted)');
+      p.setAttribute('color', on ? 'var(--indigo)' : 'var(--muted)');
+      p.setAttribute('stroke-width', on ? '2' : '1.3');
+    });
+    var pre = Object.keys(seen);
+    note.innerHTML = '<b>' + N[k].s + ' ' + N[k].t + '</b>：' + (pre.length
+      ? '採用前要先有 <b>' + pre.map(function(x){ return N[x].s + ' ' + N[x].t; }).join('、') + '</b>（共 ' + pre.length + ' 項）。'
+      : '<b>沒有任何前置</b>——這是一個可以今天就開始的起點。');
+  }
+  document.getElementById('dag-reset').addEventListener('click', function(){
+    gN.querySelectorAll('g[data-k]').forEach(function(g){
+      var r = g.querySelector('rect');
+      r.setAttribute('stroke','var(--line)'); r.setAttribute('stroke-width','1.4');
+      r.setAttribute('fill','var(--surface)'); g.setAttribute('opacity','1');
+    });
+    gE.querySelectorAll('path').forEach(function(p){
+      p.setAttribute('opacity','.26'); p.setAttribute('stroke','var(--muted)');
+      p.setAttribute('color','var(--muted)'); p.setAttribute('stroke-width','1.3');
+    });
+    note.innerHTML = noteBase;
+  });
+
+  /* ── Anchorline 表格篩選 ── */
+  var chips = document.querySelectorAll('[data-f]');
+  chips.forEach(function(c){
+    c.addEventListener('click', function(){
+      chips.forEach(function(x){ x.classList.remove('on'); });
+      c.classList.add('on');
+      var f = c.dataset.f;
+      document.querySelectorAll('#anctbl tbody tr').forEach(function(tr){
+        tr.hidden = !(f === 'all' || tr.dataset.v === f);
+      });
+    });
+  });
+
+  /* ── 自我檢核（存在這台瀏覽器） ── */
+  var KEY = 'ansdlc-checklist';
+  var boxes = document.querySelectorAll('.ck input[type=checkbox]');
+  var cnt = document.getElementById('ckcount');
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch(e) { state = {}; }
+  function tally(){
+    var d = 0; boxes.forEach(function(b){ if(b.checked) d++; });
+    cnt.textContent = '已完成 ' + d + ' / ' + boxes.length + '　（勾選只存在這台瀏覽器）';
+  }
+  boxes.forEach(function(b){
+    b.checked = !!state[b.dataset.k];
+    b.addEventListener('change', function(){
+      state[b.dataset.k] = b.checked;
+      try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e) {}
+      tally();
+    });
+  });
+  tally();
+})();
+</script>
+<style>
+.ck{list-style:none;padding:0;margin:12px 0 26px}
+.ck li{margin:0;border-bottom:1px solid var(--hair)}
+.ck label{display:flex;gap:11px;align-items:flex-start;padding:10px 2px;cursor:pointer;font-size:14.5px;line-height:1.65}
+.ck label:hover{background:var(--surface)}
+.ck input{margin-top:6px;accent-color:var(--indigo);width:15px;height:15px;flex:none}
+.ck input:checked+*,.ck label:has(input:checked){color:var(--muted)}
+</style>
+</body>
+</html>

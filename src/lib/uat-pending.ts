@@ -17,6 +17,7 @@
  * 只有 `loadPendingUats` 碰橋，判定本身是純函式。
  */
 import { canScanPlans, requestTrackingScan, type ScannedPlan } from "./tracking-bridge";
+import { planStepDirsFrom } from "./plan-steps";
 import { isUatText, parseUatReport, uatProgress, type UatVerdict } from "./uat-parser";
 
 export type PendingUat = {
@@ -401,9 +402,18 @@ export type UatScan = {
   fixes: OpenFix[];
   /** Rust 端撞到 300 檔上限。合計是「全部加起來」，被截斷卻不講就是安靜說謊 */
   truncated: boolean;
+  /**
+   * 哪些專案根目錄底下有帶勾選框的計劃檔（dashboard 治理鏈 L3 的資料通道）。
+   *
+   * 共用同一趟 `loadUatScan`：dashboard 那一趟掃的是全部專案的 plans/，順手把
+   * 「誰家有計劃步驟」也算出來，零額外 I/O —— 五個曝光面共用一趟的設計不破壞。
+   * 存的是掃描時算好的 **root 目錄清單**，哪個專案是「目前焦點」由消費者拿
+   * 自己的 root 去比（`plan-steps.hasPlanStepsFor`）。
+   */
+  planStepDirs: string[];
 };
 
-const EMPTY_SCAN: UatScan = { pending: [], fixes: [], truncated: false };
+const EMPTY_SCAN: UatScan = { pending: [], fixes: [], truncated: false, planStepDirs: [] };
 
 /**
  * 共用掃描快取。**key 是排序後的目錄字串**，值是那一次掃描的 Promise。
@@ -443,6 +453,10 @@ export function loadUatScan(plansDirs: string[]): Promise<UatScan> {
       pending: pendingUatsFrom(scan.files),
       fixes: openFixesFrom(scan.files),
       truncated: scan.truncated,
+      // dashboard 治理鏈 L3 的資料通道 —— 跟上面兩個視圖共用同一趟掃描。
+      // 掃描回來的 path 是絕對路徑（Rust 端 `${root}/plans/<檔名>`），把帶
+      // 勾選框的檔算回它的專案根目錄，消費端再拿 active project 的 root 比。
+      planStepDirs: planStepDirsFrom(scan.files),
     }))
     .catch(() => {
       // 失敗不留在快取裡：整個頁面生命週期都吃同一個空答案的話，失效重掃也救不回來。

@@ -89,6 +89,8 @@ pub fn run() {
             commands::list_snapshots,
             commands::write_snapshot,
             commands::write_export,
+            commands::write_prd,
+            commands::list_prd_versions,
             commands::write_wishlist,
             commands::save_wish_image,
             commands::read_wish_image,

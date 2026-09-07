@@ -1,0 +1,5 @@
+{
+  "transport": "mcp",
+  "source": "capture",
+  "remoteRunId": null
+}

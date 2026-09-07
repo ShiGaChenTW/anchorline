@@ -16,7 +16,8 @@ import { inlineDiff } from "../lib/file-history";
 import { evaluatePrdGates, gateSummaryLine } from "../lib/prd-gates";
 import { initTheme } from "../lib/theme";
 import { syncRailContext } from "../lib/rail-projects";
-import { canSignAnyStage } from "../lib/signoff";
+import { canSignAnyStage, caseHasSelfSign } from "../lib/signoff";
+import { approvalStripHtml } from "../lib/approval-strip";
 import {
   expandEnter,
   flashFocus,
@@ -428,30 +429,20 @@ function renderApprovals() {
         })()
       : { ok: false, reason: "找不到專案" };
 
-  const cards = approvals
-    .map((a) => {
-      const cls =
-        a.state === "approved" ? "is-approved" : a.state === "pending" ? "is-pending" : "is-empty";
-      const stateLabel =
-        a.state === "approved" ? "已簽" : a.state === "pending" ? "審閱中" : "待指派";
-      return `<div class="approval-card ${cls}" data-od-id="approval-${a.id}">
-        <span class="st" aria-hidden="true"></span>
-        <span class="role">${escapeHtml(a.role)}</span>
-        <span class="name">${escapeHtml(a.name || stateLabel)}</span>
-      </div>`;
-    })
-    .join("");
-
   const signed = approvals.filter((a) => a.state === "approved").length;
   // 只算這個專案的 —— 留言原本是全域的，別的專案的未解決數會混進來
   const open = comments.filter((c) => c.projectId === activeProjectId && !c.resolved).length;
-  strip.innerHTML =
-    cards +
-    `<div class="approval-meta" data-od-id="approval-meta">
-      <span>${signed} / ${approvals.length} 已簽</span>
-      <span>開放留言 ${open}</span>
-      ${withdrawn ? '<span style="color:var(--danger)">已抽單</span>' : ""}
-    </div>`;
+  // 卡片的 HTML 搬到 `lib/approval-strip.ts`（純函式，測得到）。
+  // 自簽判準要靠 `caseRec.stages` —— `Approval` 是有損鏡像，上面沒有 comment，
+  // 反推一定是猜的。`caseRec` 拿不到（種子資料、或 active 個案不是這個專案）
+  // 時就傳 undefined，那邊會安靜不標。
+  strip.innerHTML = approvalStripHtml({
+    approvals,
+    stages: caseRec?.stages,
+    openComments: open,
+    withdrawn,
+    selfSigned: caseHasSelfSign(caseRec),
+  });
 
   const sum = document.getElementById("approvals-summary");
   if (sum) {

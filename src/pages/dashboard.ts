@@ -10,7 +10,8 @@
  * 不做「十二個小數字磚」——那是把解讀成本丟回給使用者。
  */
 import { store } from "../data/store";
-import { projectDisplayName, type Project } from "../data/types";
+import { CUSTOM_SECTION_ID } from "../data/seed";
+import { projectDisplayName, type AppState, type Project } from "../data/types";
 import { askConfirm } from "../lib/ask";
 import { bindLogout, requireAuth, toRailUser } from "../lib/auth";
 import {
@@ -60,7 +61,19 @@ import { initTheme } from "../lib/theme";
 import { escapeHtml, initMobileNav, toast, updateUserRailFooter } from "../lib/ui";
 import { attachDiffSummary } from "../lib/diff-summary";
 import { coverageLine } from "../lib/governance";
-import { canReadCoverage, requestCoverage, type CoverageResult } from "../lib/governance-bridge";
+import { requestCoverage } from "../lib/governance-bridge";
+import {
+  buildDashboardChainInput,
+  dashboardHeadHtml,
+  measuredLineHtml,
+  type DashboardChainSource,
+} from "../lib/dashboard-chain";
+import { noFolderHtml, noProjectHtml, notDesktopHtml } from "../lib/dashboard-empty";
+import { buildChainStations, chainHealthLine, renderGhostChainHtml, renderGovChainHtml } from "../lib/gov-chain";
+import { deriveFlowLayers } from "../lib/flow-layers";
+import { gateSummaryLine, evaluatePrdGates } from "../lib/prd-gates";
+import { hasPlanStepsFor } from "../lib/plan-steps";
+import { sectionHasSubstance } from "../lib/prd-progress";
 // 靜態 import：這個 module 本來就已經被靜態拉進來（原本的 loadOpenFixes），
 // 再對同一個 module 用動態 import 只是多一段 await，省不到任何東西。
 import {
@@ -87,11 +100,114 @@ if (!requireAuth()) {
   /** 量測結果只留在記憶體：磁碟隨時會變，存起來只會顯示過期數字 */
   const cache = new Map<string, ProjectStats>();
   let busy = false;
+  const CHAIN_HOST_ID = "d-chain-host";
+  let chainSrc: DashboardChainSource | null = null;
 
   function activeProject(): Project | null {
     const st = store.get();
     const visible = st.projects.filter((p) => (st.showSamples ? true : !p.isSample));
     return visible.find((p) => p.id === st.activeProjectId) ?? visible[0] ?? null;
+  }
+
+  function projectStatusText(p: Project | null): string {
+    return p?.status === "approved"
+      ? "已核准"
+      : p?.status === "review"
+        ? "審閱中"
+        : p?.status === "withdrawn"
+          ? "已抽單"
+          : "草稿";
+  }
+
+  function projectStateFor(p: Project): AppState {
+    const st = store.get();
+    return {
+      ...st,
+      sectionValues: st.projectSectionValues?.[p.id] ?? {},
+      sections: store.sectionsFor(p.id),
+      activeProjectId: p.id,
+    } as AppState;
+  }
+
+  function buildChainSource(
+    p: Project,
+    s: ProjectStats | null,
+    opts: {
+      planStepsKnown: boolean;
+      hasPlanSteps: boolean;
+      coverageLine?: string;
+      anchors?: number;
+      ungoverned?: number;
+      openFixes?: number;
+      measuring?: boolean;
+    },
+  ): DashboardChainSource {
+    const st = projectStateFor(p);
+    const spec = store.gateSpecFor(p.id);
+    const docs = st.sectionValues;
+    const sections = st.sections;
+    const report = evaluatePrdGates(st, spec);
+    const counted = sections.filter((section) => section.id !== CUSTOM_SECTION_ID);
+    const done = counted.filter((section) => sectionHasSubstance(docs[section.id])).length;
+    const g = s?.git;
+    const versions = st.prdVersions[p.id] ?? [];
+    const submitted = versions.find((v) => v.kind === "commit");
+    const approved = versions.find((v) => v.kind === "merge");
+    const releases = store.releasesOf();
+    const tags = opts.measuring ? [] : (g?.tags ?? []).slice(0, 2).map((t) => escapeHtml(t.name));
+    const currentVersion = releases[0]?.version || (opts.measuring ? null : g?.tags?.[0]?.name || null);
+    const summary = docs.summary ?? {};
+    const layers = deriveFlowLayers(st, { hasPlanSteps: opts.hasPlanSteps, gateSpec: spec });
+    const chainLayers = opts.measuring
+      ? layers.map((layer) =>
+          layer.id === "l4" || layer.id === "l5" ? { ...layer, done: false } : layer,
+        )
+      : layers;
+
+    return {
+      layers: chainLayers,
+      planStepsKnown: opts.planStepsKnown,
+      hasPlanSteps: opts.hasPlanSteps,
+      summaryFilled: !!(summary.what?.trim() && summary.who?.trim()),
+      summaryFindings: report.findings
+        .filter((finding) => finding.id.includes("summary"))
+        .map((finding) => escapeHtml(finding.label)),
+      gateSummary: escapeHtml(gateSummaryLine(report)),
+      prdPct: { done, total: counted.length },
+      gateFindings: report.findings.map((finding) => ({
+        text: escapeHtml(finding.label),
+        level: finding.level === "block" ? "block" : "warn",
+      })),
+      coverageLine: escapeHtml(opts.coverageLine ?? ""),
+      anchors: opts.anchors ?? 0,
+      ungoverned: opts.ungoverned ?? 0,
+      gitHeadline: opts.measuring ? "量測中…" : escapeHtml(gitHeadline(g).text),
+      recentCommits: opts.measuring
+        ? []
+        : (g?.commits ?? []).slice(0, 2).map((c) => escapeHtml(c.subject || "（無訊息）")),
+      branches: opts.measuring ? 0 : (g?.branches ?? []).length,
+      worktrees: opts.measuring ? 0 : Math.max(0, (g?.worktrees ?? []).length - 1),
+      statusText: opts.measuring ? "量測中…" : projectStatusText(p),
+      openFixes: opts.openFixes ?? 0,
+      submittedAt: submitted ? new Date(submitted.at).toLocaleString("zh-TW") : undefined,
+      approvedAt: approved ? new Date(approved.at).toLocaleString("zh-TW") : undefined,
+      version: currentVersion ? escapeHtml(currentVersion) : null,
+      tags,
+      versionPolicyLine:
+        policyOf(p) === "strict"
+          ? "版號採 vX.YY.ZZ（X 需 PRD 簽核、YY 走過 OpenSpec、ZZ 挑 commit）"
+          : "版號目前不限格式",
+    };
+  }
+
+  function repaintChain() {
+    if (!chainSrc) return;
+    const host = document.getElementById(CHAIN_HOST_ID);
+    if (!host) return;
+    const stations = buildChainStations(buildDashboardChainInput(chainSrc));
+    host.innerHTML = renderGovChainHtml(stations);
+    const health = document.querySelector(".d-head-health");
+    if (health) health.textContent = chainHealthLine(stations);
   }
 
   function syncChrome(p: Project | null) {
@@ -104,7 +220,7 @@ if (!requireAuth()) {
     syncRailContext({
       mode: "專案儀表板",
       projectName: name,
-      statusLabel: p?.status === "approved" ? "已核准" : p?.status === "review" ? "審閱中" : "草稿",
+      statusLabel: projectStatusText(p),
       statusTone: p?.status === "approved" ? "ok" : p?.status === "review" ? "review" : "draft",
       meta: p?.sourceFolder,
     });
@@ -181,11 +297,6 @@ if (!requireAuth()) {
    * 沒有 git 統計的兩條路徑（沒綁資料夾、瀏覽器版）也要留住政策入口 ——
    * 版號政策跟綁不綁資料夾無關，藏起來只會讓人以為功能消失了。
    */
-  function policyCard(p: Project | null): string {
-    if (!p) return "";
-    return `<section class="d-card"><p class="d-eyebrow">版號紀錄</p>${policyHtml(p)}</section>`;
-  }
-
   function policyHtml(p: Project | null): string {
     if (!p) return "";
     if (policyOf(p) === "strict") {
@@ -228,55 +339,6 @@ if (!requireAuth()) {
     if (!host) return;
     host.innerHTML = tagsInnerHtml(activeProject());
     if (focus) (document.getElementById("d-tag-input") as HTMLInputElement | null)?.focus();
-  }
-
-  function heroGit(s: ProjectStats): string {
-    const g = s.git;
-    const head = gitHeadline(g);
-    const facts = g
-      ? [
-          ["分支", g.branch || "—"],
-          ["HEAD", g.head || "—"],
-          ["累計 commit", String(g.commitCount)],
-          [
-            "與 origin",
-            g.ahead < 0 ? "未追蹤遠端" : `領先 ${g.ahead} · 落後 ${g.behind}`,
-          ],
-        ]
-      : [];
-    const p = activeProject();
-
-    // 專案身分與版本控制是**兩件事**：一個是人寫的中繼資料，一個是磁碟量出來的
-    // 狀態。擠在同一張卡裡，中間那條分隔線要做整張卡的分節工作，掃過去只會讀到
-    // 一坨。拆成上下兩張各半高的卡，各自有自己的框。
-    return `<div class="d-top-left">
-      ${identHtml(p)}
-
-      <section class="d-hero tone-${head.tone}">
-      <p class="d-eyebrow">版本控制</p>
-      <div class="d-hero-head">
-        <p class="d-hero-figure">${escapeHtml(head.text)}</p>
-        ${
-          hasActionableIssue(diagnoseGit(g))
-            ? `<button type="button" class="btn btn-sm d-fix-btn" id="btn-git-doctor">版控健檢 <span>${diagnoseGit(g).filter((i) => i.level !== "info").length}</span></button>`
-            : !g
-              ? `<button type="button" class="btn btn-sm btn-primary" id="btn-git-init" title="在這個資料夾執行 git init">git init</button>`
-              : ""
-        }
-      </div>
-      ${
-        g
-          ? `<p class="d-hero-sub">${escapeHtml(g.lastMessage || "（無 commit 訊息）")}</p>
-             <p class="d-hero-meta">${escapeHtml(g.author || "—")} · ${escapeHtml(
-               g.lastAt ? g.lastAt.slice(0, 16).replace("T", " ") : "—",
-             )}${g.remote ? ` · ${escapeHtml(g.remote.replace(/^https:\/\//, ""))}` : " · 未設定 origin"}</p>
-             <dl class="d-facts">${facts
-               .map(([k, v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd></div>`)
-               .join("")}</dl>`
-          : `<p class="d-hero-sub">按「git init」在這個資料夾建立 <code>.git</code>。只做 init，不會 add、不會 commit。</p>`
-      }
-      </section>
-    </div>`;
   }
 
   function cardStack(s: ProjectStats): string {
@@ -333,95 +395,6 @@ if (!requireAuth()) {
     </section>`;
   }
 
-  /**
-   * 版號紀錄 —— 目前版本要一眼認出來。
-   * ADHD：清單裡「我在哪」如果要靠比對雜湊字串才找得到，等於沒標。
-   */
-  function cardTags(s: ProjectStats): string {
-    const g = s.git;
-    if (!g) {
-      return `<section class="d-card">
-        <p class="d-eyebrow">版號紀錄</p>
-        <p class="d-figure">不是 git 專案</p>
-        <p class="d-figure-sub">起了版控之後這裡會列出版號。</p>
-        ${policyHtml(activeProject())}
-      </section>`;
-    }
-    const tags = g.tags ?? [];
-    const current = tags[0];
-
-    // 使用者自己取的版號優先顯示 —— git tag 是「已經標下去的」，
-    // releases 是「決定了但可能還沒標」，後者才是現在在推的那一版。
-    const mine = store.releasesOf();
-    const headline = mine[0]?.version || current?.name || "尚無版號";
-
-    return `<section class="d-card">
-      <div class="d-hero-head">
-        <p class="d-eyebrow">版號紀錄</p>
-        <a class="btn btn-sm d-take-btn" href="releases.html" title="自己決定版號與這一版收哪些功能">版本取號</a>
-      </div>
-      <p class="d-figure">${escapeHtml(headline)}</p>
-      <p class="d-figure-sub">${
-        mine.length
-          ? `你取的版號 ${mine.length} 個　git tag ${tags.length} 個`
-          : current
-            ? `目前版本　共 ${tags.length} 個 tag`
-            : "還沒發過版"
-      }</p>
-      ${
-        tags.length
-          ? `<ul class="d-tags">${tags
-              .map(
-                (t, i) =>
-                  `<li class="${i === 0 ? "is-current" : ""}">
-                     <span class="d-tag-head">
-                       <span class="d-tag-name">${escapeHtml(t.name)}</span>
-                       ${i === 0 ? `<span class="d-tag-badge">目前版本</span>` : ""}
-                       <span class="d-tag-hash mono">${escapeHtml(t.hash)}</span>
-                       <span class="d-tag-at">${escapeHtml(t.at.slice(0, 10))}</span>
-                     </span>
-                     ${
-                       t.subject
-                         ? `<span class="d-tag-note">${escapeHtml(t.subject)}</span>`
-                         : ""
-                     }
-                   </li>`,
-              )
-              .join("")}</ul>`
-          : `<p class="d-note-empty">用 <code>git tag v1.0.0</code> 標一版之後，這裡會列出版號與它的說明。</p>`
-      }
-      ${policyHtml(activeProject())}
-    </section>`;
-  }
-
-  /** commit 紀錄 —— HEAD 那筆要標出來 */
-  function cardCommits(s: ProjectStats): string {
-    const g = s.git;
-    const commits = g?.commits ?? [];
-    const tagByHash = new Map((g?.tags ?? []).map((t) => [t.hash, t.name]));
-
-    return `<section class="d-card d-tall">
-      <p class="d-eyebrow">提交紀錄</p>
-      <p class="d-figure">${g?.commitCount ?? "—"}</p>
-      <p class="d-figure-sub">個 commit　最近 ${commits.length} 筆</p>
-      <ol class="d-commits">${commits
-        .map((c) => {
-          const isHead = /\bHEAD\b/.test(c.refs);
-          const tagOnIt = tagByHash.get(c.hash);
-          return `<li class="${isHead ? "is-head" : ""}">
-            <span class="d-commit-rail" aria-hidden="true"></span>
-            <span class="d-commit-hash mono">${escapeHtml(c.hash)}</span>
-            <span class="d-commit-subject">${escapeHtml(c.subject || "（無訊息）")}</span>
-            ${isHead ? `<span class="d-commit-flag">HEAD</span>` : ""}
-            ${tagOnIt ? `<span class="d-commit-tag">${escapeHtml(tagOnIt)}</span>` : ""}
-            <span class="d-commit-at">${escapeHtml((c.at || "").slice(0, 10))}</span>
-          </li>`;
-        })
-        .join("")}</ol>
-      ${commits.length ? "" : `<p class="d-note-empty">讀不到提交紀錄。</p>`}
-    </section>`;
-  }
-
   /** agent 家族 → 顯示名。authorAgentFamily 是既有欄位。 */
   const AGENT_LABEL: Record<string, string> = {
     claude: "Claude",
@@ -435,68 +408,6 @@ if (!requireAuth()) {
    * 工作區狀態：worktree、branch、專案階段、由誰起的。
    * 這四件事的共同問題是「散在四個地方，沒人一起看」。
    */
-  /** 治理覆蓋率。資料是非同步來的，先出骨架，讀完再換掉這張卡的內容。 */
-  const GOVERNANCE_CARD_ID = "card-governance";
-
-  function governanceInner(r: CoverageResult | null): string {
-    if (!canReadCoverage()) {
-      return `<p class="d-eyebrow">治理覆蓋率</p>
-        <p class="d-figure">—</p>
-        <p class="d-figure-sub">桌面版才讀得到稽核軌跡</p>`;
-    }
-    if (!r) {
-      return `<p class="d-eyebrow">治理覆蓋率</p>
-        <p class="d-figure">讀取中…</p>
-        <p class="d-figure-sub">正在讀 .anchorline/log/</p>`;
-    }
-    const { coverage: c } = r;
-    // 「尚未開始治理」與「零未治理」必須看得出差別 —— 兩者都顯示 0 的話，
-    // 什麼都沒做會看起來像做得很乾淨。
-    const figure = c.startedIso === null ? "尚未開始" : String(c.ungoverned);
-    // 「尚未開始治理」自己不夠用 —— 它沒說下一步是什麼。分成兩種：
-    // plan 還沒鑄錨點（去鑄），或錨點有了但沒有工作掛上去（去按交接）。
-    const notes = [
-      c.startedIso !== null
-        ? `自 ${new Date(c.startedIso).toLocaleDateString("zh-TW")} 起算　已治理 ${c.governed} 件`
-        : r.knownAnchors > 0
-          ? `plans 有 ${r.knownAnchors} 個錨點，但還沒有工作掛上去 —— 用步驟上的「交接」派工就會開始累積`
-          : "plans 裡還沒有任何錨點　勾選或編輯步驟時會自動鑄一個",
-      r.truncated ? "只讀了最近的分片，實際數量可能更多" : "",
-      r.skipped ? `跳過 ${r.skipped} 行讀不懂的資料` : "",
-      // W1-3 改了判準：openspec 步驟從此計入已治理。歷史數字因此往上跳
-      // 一次是預期行為——不講出來，使用者只會以為資料壞了。
-      c.startedIso !== null ? "計分規則 2026-08 起認 openspec 步驟，歷史數字曾因此上調一次" : "",
-    ].filter(Boolean);
-
-    return `<p class="d-eyebrow">治理覆蓋率</p>
-      <p class="d-figure">${escapeHtml(figure)}</p>
-      <p class="d-figure-sub">${escapeHtml(coverageLine(c))}</p>
-      ${notes.map((n) => `<p class="d-note">${escapeHtml(n)}</p>`).join("")}`;
-  }
-
-  function cardGovernance(r: CoverageResult | null): string {
-    return `<section class="d-card" id="${GOVERNANCE_CARD_ID}">${governanceInner(r)}</section>`;
-  }
-
-  /** 讀完就只換這張卡，不重畫整頁 —— 重畫會把使用者的捲動位置扔掉。 */
-  const FIXES_CARD_ID = "d-open-fixes";
-
-  /**
-   * 待修題數（W2-4）——只給一個數字，明細在總覽的「待修」收件匣。
-   * 這一頁講的是「這個專案怎麼樣」，所以只掃當前專案的 plans/。
-   * 零題整卡不渲染，跟總覽同一條「不留空殼」的規矩。
-   */
-  function openFixesInner(n: number): string {
-    if (!n) return "";
-    return `<p class="d-eyebrow">待修</p>
-      <p class="d-figure">${n} 題</p>
-      <p class="d-note" title="以最新一輪報告為準——被重測取代的舊報告不列入">失敗題明細與交辦在「專案總覽」的待修區塊</p>`;
-  }
-
-  function cardOpenFixes(): string {
-    return `<section class="d-card" id="${FIXES_CARD_ID}" hidden></section>`;
-  }
-
   /**
    * 跨專案實測進度 —— **一列，不是一張卡**。
    *
@@ -549,12 +460,6 @@ if (!requireAuth()) {
           { id: p.id, name: projectDisplayName(p), rootPath: folderPath },
         ]).filter((x) => x.projectId === p.id)
       : [];
-    const host = document.getElementById(FIXES_CARD_ID);
-    if (host && mine.length) {
-      host.innerHTML = openFixesInner(mine.length);
-      host.hidden = false;
-    }
-
     // 這一列不過濾專案：它回答的就是「所有專案加起來」。
     const rowHost = document.getElementById(UAT_ROW_ID);
     const roll = rollupPendingUats(scan.pending, { truncated: scan.truncated });
@@ -562,12 +467,36 @@ if (!requireAuth()) {
       rowHost.innerHTML = uatRowInner(roll);
       rowHost.hidden = false;
     }
+
+    if (chainSrc) {
+      const current = activeProject();
+      chainSrc.planStepsKnown = isDesktop() && !!folderPath;
+      chainSrc.hasPlanSteps = hasPlanStepsFor(current?.importSummary?.rootPath, scan.planStepDirs);
+      chainSrc.openFixes = mine.length;
+      if (current) {
+        chainSrc.layers = deriveFlowLayers(projectStateFor(current), {
+          hasPlanSteps: chainSrc.hasPlanSteps,
+          gateSpec: store.gateSpecFor(current.id),
+        });
+      }
+      repaintChain();
+    }
   }
 
   async function loadGovernance(folderPath: string): Promise<void> {
     const r = await requestCoverage(folderPath);
-    const host = document.getElementById(GOVERNANCE_CARD_ID);
-    if (host) host.innerHTML = governanceInner(r);
+    if (chainSrc) {
+      const notes = [
+        r.truncated ? "只讀了最近的分片，實際數量可能更多" : "",
+        r.skipped ? `跳過 ${r.skipped} 行讀不懂的資料` : "",
+      ].filter(Boolean);
+      chainSrc.coverageLine = escapeHtml(
+        notes.length ? `${coverageLine(r.coverage)}（${notes.join("；")}）` : coverageLine(r.coverage),
+      );
+      chainSrc.anchors = r.knownAnchors;
+      chainSrc.ungoverned = r.coverage.ungoverned;
+      repaintChain();
+    }
   }
 
   function cardWorkspace(s: ProjectStats): string {
@@ -577,14 +506,7 @@ if (!requireAuth()) {
     const brs = g?.branches ?? [];
     const extra = Math.max(0, wts.length - 1); // 第一筆是主工作區
 
-    const statusLabel =
-      p?.status === "approved"
-        ? "已核准"
-        : p?.status === "review"
-          ? "審閱中"
-          : p?.status === "withdrawn"
-            ? "已抽單"
-            : "草稿";
+    const statusLabel = projectStatusText(p);
     const fam = p?.authorAgentFamily ?? null;
     const starter = fam ? (AGENT_LABEL[fam] ?? fam) : p?.owner || "—";
     const starterKind = fam ? "agent" : "人員";
@@ -639,12 +561,47 @@ if (!requireAuth()) {
     if (root) root.innerHTML = html;
   }
 
-  function renderStats(s: ProjectStats) {
+  function gitActionsHtml(g: ProjectStats["git"]): string {
+    let gitAction = "";
+    if (hasActionableIssue(diagnoseGit(g))) {
+      gitAction = `<button type="button" class="btn btn-sm d-fix-btn" id="btn-git-doctor">版控健檢 <span>${diagnoseGit(g).filter((i) => i.level !== "info").length}</span></button>`;
+    } else if (!g) {
+      gitAction = `<button type="button" class="btn btn-sm btn-primary" id="btn-git-init" title="在這個資料夾執行 git init">git init</button>`;
+    }
+    return `${gitAction}<a class="btn btn-sm d-take-btn" href="releases.html" title="自己決定版號與這一版收哪些功能">版本取號</a>`;
+  }
+
+  function renderMeasurementState(p: Project, message: string) {
+    chainSrc = buildChainSource(p, null, {
+      planStepsKnown: false,
+      hasPlanSteps: false,
+      measuring: true,
+    });
+    const stations = buildChainStations(buildDashboardChainInput(chainSrc));
     renderState(
-      `<div class="d-top">${heroGit(s)}${cardTags(s)}</div>
+      `${dashboardHeadHtml(escapeHtml(projectDisplayName(p)), chainHealthLine(stations))}
+       ${identHtml(p)}
+       <div id="${CHAIN_HOST_ID}">${renderGovChainHtml(stations)}</div>
+       <div class="dash-empty"><p>${escapeHtml(message)}</p></div>`,
+    );
+    bindIdentEditing();
+  }
+
+  function renderStats(s: ProjectStats) {
+    const p = activeProject();
+    if (!p) return;
+    chainSrc = buildChainSource(p, s, {
+      planStepsKnown: false,
+      hasPlanSteps: false,
+    });
+    const stations = buildChainStations(buildDashboardChainInput(chainSrc));
+    renderState(
+      `${dashboardHeadHtml(escapeHtml(projectDisplayName(p)), chainHealthLine(stations)).replace("</header>", `${gitActionsHtml(s.git)}</header>`)}
+       ${identHtml(p)}
+       <div id="${CHAIN_HOST_ID}">${renderGovChainHtml(stations)}</div>
        ${uatRow()}
-       <div class="d-grid">${cardCommits(s)}${cardGovernance(null)}${cardOpenFixes()}${cardStack(s)}${cardSize(s)}${cardWorkspace(s)}</div>
-       <p class="d-measured">量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")}　<span class="mono">${escapeHtml(s.folderPath)}</span></p>`,
+       <div class="d-grid d-grid--facts">${cardStack(s)}${cardSize(s)}${cardWorkspace(s)}</div>
+       ${measuredLineHtml(`量測於 ${new Date(s.measuredAt ?? Date.now()).toLocaleTimeString("zh-TW")}`, escapeHtml(s.folderPath))}`,
     );
     bindIdentEditing();
     document.getElementById("btn-git-doctor")?.addEventListener("click", () => {
@@ -696,12 +653,10 @@ if (!requireAuth()) {
   async function load(force = false) {
     const p = activeProject();
     syncChrome(p);
+    chainSrc = null;
 
     if (!p) {
-      renderState(
-        `${uatRow()}
-         <div class="dash-empty"><p>還沒有選擇專案。</p><a class="btn btn-primary" href="overview.html">回總覽</a></div>`,
-      );
+      renderState(noProjectHtml({ uatRowHtml: uatRow() }));
       // 沒選專案時這一列**最有用**：它是唯一不需要選專案就能回答的問題。
       void loadUatCards();
       return;
@@ -711,14 +666,14 @@ if (!requireAuth()) {
       // 當場就能解決，不要把人踢去別頁再自己找按鈕 ——
       // 「沒綁資料夾」是這一頁最常見的狀態（多數專案都沒綁）
       renderState(
-        `${identHtml(p)}
-         ${uatRow()}
-         <div class="dash-empty">
-          <p>「${escapeHtml(projectDisplayName(p))}」還沒有對應磁碟上的資料夾，所以量不到 git、技術線與容量。</p>
-          <button type="button" class="btn btn-primary" id="dash-bind">指定專案資料夾</button>
-          <p class="dash-note">綁定只記錄對應關係，不會動到你已經寫好的章節內容。</p>
-        </div>
-        ${policyCard(p)}`,
+        noFolderHtml({
+          projectName: escapeHtml(projectDisplayName(p)),
+          ghostChainHtml: renderGhostChainHtml(),
+          uatRowHtml: uatRow(),
+          identHtml: identHtml(p),
+          policyHtml: policyHtml(p),
+          bindButtonId: "dash-bind",
+        }),
       );
       bindIdentEditing();
       // 本專案沒綁資料夾，但**別的**專案可能有實測在等 —— 這一列問的是全部專案，
@@ -734,12 +689,12 @@ if (!requireAuth()) {
       // 而空經過 rollup 會變成「每題都勾完了」—— 一句假的全清。
       // 同一條規矩寫在 welcome.ts 的 canScanPlans 守門上。
       renderState(
-        `${identHtml(p)}
-         <div class="dash-empty">
-          <p>這一頁需要桌面版 App。瀏覽器看不到磁碟，也跑不了 git。</p>
-          <p class="dash-note mono">${escapeHtml(path)}</p>
-        </div>
-        ${policyCard(p)}`,
+        notDesktopHtml({
+          ghostChainHtml: renderGhostChainHtml(),
+          path: escapeHtml(path),
+          identHtml: identHtml(p),
+          policyHtml: policyHtml(p),
+        }),
       );
       bindIdentEditing();
       return;
@@ -753,16 +708,15 @@ if (!requireAuth()) {
 
     if (busy) return;
     busy = true;
-    renderState(`<div class="dash-empty"><p>正在量測資料夾…</p></div>`);
+    renderMeasurementState(p, "正在量測資料夾…");
     try {
       const s = await requestProjectStats(path);
       cache.set(path, s);
       renderStats(s);
     } catch (e) {
-      renderState(
-        `<div class="dash-empty"><p>${escapeHtml(e instanceof Error ? e.message : "量測失敗")}</p></div>`,
-      );
-      toast(e instanceof Error ? e.message : "量測失敗");
+      const message = e instanceof Error ? e.message : "量測失敗";
+      renderMeasurementState(p, message);
+      toast(message);
     } finally {
       busy = false;
     }

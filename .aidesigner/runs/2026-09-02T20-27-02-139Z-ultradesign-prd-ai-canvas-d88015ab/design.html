@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRD 審閱監控台 — Anchorline（ultradesign）</title>
+<!--
+  AIDesigner ultradesign · canvas d88015ab-d0b4-4456-a4aa-7c70c8b19ce1 · 2026-09-03
+  （這一輪 MCP transport 中斷、run id 遺失，HTML 由 canvas 取回）
+  目標檔：write.html 主內容區
+  本機修正：移除注入的 Tailwind CDN、補上它倚賴 Tailwind 的 utility（見 COMPAT）、
+            白色改走 var(--bg)、寫死的 accent rgba 改用 color-mix 以便跟著主題走
+-->
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --accent: #2f81f7;
+    --accent-hover: #58a6ff;
+    --success: #3fb950;
+    --warn: #d29922;
+    --danger: #f85149;
+    --font-main: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  }
+
+  [data-theme="light"] {
+    --bg: #f5f4ed;
+    --surface: #faf9f5;
+    --fg: #141413;
+    --muted: #504e49;
+    --border: #e8e6dc;
+    --border-soft: #e5e3d8;
+    --accent: #1b365d;
+    --accent-hover: #2d5a8a;
+    --success: #4a6b3a;
+    --warn: #8a6b1f;
+    --danger: #8a3a30;
+    --font-main: "Source Han Serif TC", "Noto Serif CJK TC", "Songti TC", Georgia, serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-main);
+    -webkit-font-smoothing: antialiased;
+    padding: 32px;
+    min-height: 100vh;
+  }
+
+  .t-12 { font-size: 12px; line-height: 1.4; }
+  .t-14 { font-size: 14px; line-height: 1.5; }
+  .t-16 { font-size: 16px; line-height: 1.5; }
+  .t-20 { font-size: 20px; line-height: 1.4; }
+  .t-24 { font-size: 24px; line-height: 1.3; }
+  .t-28 { font-size: 28px; line-height: 1.2; }
+  .t-32 { font-size: 32px; line-height: 1.2; }
+
+  .mono { font-family: var(--font-mono); }
+  .bold { font-weight: 600; }
+
+  .c-fg { color: var(--fg); }
+  .c-muted { color: var(--muted); }
+  .c-accent { color: var(--accent); }
+  .c-success { color: var(--success); }
+  .c-warn { color: var(--warn); }
+  .c-danger { color: var(--danger); }
+
+  .bg-bg { background-color: var(--bg); }
+  .bg-surface { background-color: var(--surface); }
+  .bg-accent { background-color: var(--accent); }
+  .bg-success { background-color: var(--success); }
+  .bg-warn { background-color: var(--warn); }
+  .bg-danger { background-color: var(--danger); }
+
+  .container {
+    max-width: 1600px; margin: 0 auto; overflow-x: hidden;
+    display: flex; flex-direction: column; gap: 24px;
+  }
+
+  .flex { display: flex; }
+  .flex-col { display: flex; flex-direction: column; }
+  .items-center { align-items: center; }
+  .items-start { align-items: flex-start; }
+  .items-end { align-items: flex-end; }
+  .justify-between { justify-content: space-between; }
+  .justify-center { justify-content: center; }
+  .justify-end { justify-content: flex-end; }
+  .flex-1 { flex: 1; min-width: 0; }
+  .wrap { flex-wrap: wrap; }
+
+  .gap-4 { gap: 4px; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .gap-16 { gap: 16px; }
+  .gap-24 { gap: 24px; }
+  .gap-32 { gap: 32px; }
+
+  .p-0 { padding: 0; }
+  .p-4 { padding: 4px; }
+  .p-8 { padding: 8px; }
+  .p-12 { padding: 12px; }
+  .p-16 { padding: 16px; }
+  .p-24 { padding: 24px; }
+
+  .px-8 { padding-left: 8px; padding-right: 8px; }
+  .px-12 { padding-left: 12px; padding-right: 12px; }
+  .px-16 { padding-left: 16px; padding-right: 16px; }
+  .px-24 { padding-left: 24px; padding-right: 24px; }
+
+  .py-4 { padding-top: 4px; padding-bottom: 4px; }
+  .py-8 { padding-top: 8px; padding-bottom: 8px; }
+  .py-12 { padding-top: 12px; padding-bottom: 12px; }
+  .py-16 { padding-top: 16px; padding-bottom: 16px; }
+
+  .pr-24 { padding-right: 24px; }
+  .pt-24 { padding-top: 24px; }
+
+  .mt-8 { margin-top: 8px; }
+  .mt-16 { margin-top: 16px; }
+  .mb-8 { margin-bottom: 8px; }
+  .mb-12 { margin-bottom: 12px; }
+  .mb-24 { margin-bottom: 24px; }
+  .mx-4 { margin-left: 4px; margin-right: 4px; }
+
+  .w-full { width: 100%; }
+  .h-full { height: 100%; }
+  .w-fit { width: fit-content; }
+  .overflow-hidden { overflow: hidden; }
+  .text-center { text-align: center; }
+  .text-right { text-align: right; }
+  .cursor-pointer { cursor: pointer; }
+
+  .r-6 { border-radius: 6px; }
+  .r-12 { border-radius: 12px; }
+  .r-full { border-radius: 9999px; }
+
+  .border { border: 1px solid var(--border); }
+  .border-soft { border: 1px solid var(--border-soft); }
+  .border-t { border-top: 1px solid var(--border); }
+  .border-b { border-bottom: 1px solid var(--border); }
+  .border-l { border-left: 1px solid var(--border); }
+  .border-r { border-right: 1px solid var(--border); }
+
+  .card {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border-radius: 6px; cursor: pointer; border: none;
+    text-decoration: none; color: inherit; font-family: inherit;
+  }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--fg); }
+  .btn-outline:hover { background: var(--border-soft); }
+  .btn-primary { background-color: var(--accent); color: var(--bg); }
+  .btn-primary:hover { background-color: var(--accent-hover); }
+
+  .badge-outline {
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 6px; background: transparent;
+  }
+  .badge-filled {
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 6px; color: var(--bg);
+  }
+
+  svg { fill: currentColor; display: block; flex-shrink: 0; }
+  .icon-12 { width: 12px; height: 12px; }
+  .icon-16 { width: 16px; height: 16px; }
+  .icon-20 { width: 20px; height: 20px; }
+  .icon-24 { width: 24px; height: 24px; }
+
+  .switch { position: relative; display: inline-block; width: 36px; height: 20px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background-color: var(--border);
+  }
+  .slider:before {
+    position: absolute; content: ""; height: 14px; width: 14px;
+    left: 3px; bottom: 3px; background-color: var(--fg); border-radius: 9999px;
+  }
+  input:checked + .slider { background-color: var(--accent); }
+  input:checked + .slider:before { transform: translateX(16px); background-color: var(--bg); }
+
+  .main-grid { display: grid; grid-template-columns: 1fr 340px; gap: 24px; }
+
+  .prd-row { display: flex; align-items: center; padding: 24px; border-bottom: 1px solid var(--border-soft); }
+  .prd-row:last-child { border-bottom: none; }
+
+  .col-title { width: 220px; flex-shrink: 0; padding-right: 16px; }
+  .col-submitter { width: 140px; flex-shrink: 0; padding-right: 16px; }
+  .col-progress { flex: 1; padding-right: 24px; min-width: 400px; }
+  .col-turn { width: 100px; flex-shrink: 0; text-align: center; }
+  .col-time { width: 120px; flex-shrink: 0; text-align: center; }
+  .col-status { width: 100px; flex-shrink: 0; display: flex; justify-content: flex-end; }
+
+  /* 關卡序列：順序閘門要看得出來 */
+  .timeline { display: flex; align-items: flex-start; position: relative; width: 100%; }
+  .timeline-step { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; }
+  .timeline-step:not(:last-child)::after {
+    content: ''; position: absolute; top: 12px; left: 50%;
+    width: 100%; height: 2px; background-color: var(--border); z-index: 1;
+  }
+  .timeline-step.active:not(:last-child)::after { background-color: var(--accent); }
+  .timeline-node {
+    width: 24px; height: 24px; border-radius: 9999px;
+    background-color: var(--bg); border: 2px solid var(--border);
+    z-index: 2; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--muted); flex-shrink: 0;
+  }
+  .timeline-node.success { border-color: var(--success); color: var(--success); }
+  .timeline-node.current { border-color: var(--accent); color: var(--accent); }
+  .timeline-node.warn { border-color: var(--warn); color: var(--warn); }
+  .node-inner-dot { width: 8px; height: 8px; border-radius: 9999px; background-color: var(--accent); }
+
+  .timeline-text { margin-top: 8px; text-align: center; display: flex; flex-direction: column; gap: 4px; }
+
+  .chain-box {
+    padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px; background: transparent;
+  }
+  .chain-arrow { color: var(--muted); margin: 0 16px; }
+
+  .anchor-code {
+    background-color: var(--bg); border: 1px solid var(--border-soft);
+    padding: 12px 16px; border-radius: 6px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+
+  .status-dot { width: 8px; height: 8px; border-radius: 9999px; flex-shrink: 0; }
+  .legend-dot { width: 6px; height: 6px; border-radius: 9999px; background-color: var(--accent); }
+
+  .hero-card { background: linear-gradient(145deg, var(--surface) 0%, var(--bg) 100%); }
+  .row-highlight { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 6%, transparent) 0%, transparent 100%); }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header class="flex justify-between items-center">
+    <div class="flex-col gap-8">
+      <h1 class="t-28 bold">PRD 審閱監控台</h1>
+      <p class="t-14 c-muted">看見每一份規格卡在哪一關，今天該動哪一件</p>
+    </div>
+    <div class="flex items-center gap-24">
+      <div class="flex items-center gap-8 t-12 c-muted">
+        <span>深色 / 淺色</span>
+        <label class="switch">
+          <input type="checkbox" onchange="document.documentElement.dataset.theme = this.checked ? 'light' : ''">
+          <span class="slider r-full"></span>
+        </label>
+      </div>
+      <button class="btn btn-outline px-16 py-8 t-14">
+        <svg class="icon-16" viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+        報表匯出
+      </button>
+    </div>
+  </header>
+
+  <section class="card hero-card flex flex-col gap-24 border-soft">
+    <div class="flex justify-between items-start gap-24">
+      <div class="flex-col gap-12">
+        <div class="flex items-center gap-8">
+          <div class="badge-outline border-soft c-accent px-8 py-4 t-12 bg-surface">今日最該動</div>
+          <div class="badge-filled bg-danger px-8 py-4 t-12">9 天</div>
+        </div>
+        <div class="flex items-center gap-16 mt-8">
+          <h2 class="t-24 bold">客服工單分流</h2>
+          <div class="badge-outline border-soft c-muted px-12 py-4 t-12">功能建構 / 迭代優化</div>
+        </div>
+
+        <div class="flex items-center gap-32 mt-8 t-14 c-muted">
+          <div class="flex items-center gap-8">
+            <svg class="icon-20" viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
+            <div class="flex-col">
+              <span class="c-danger t-12">送審後 9 天未處理</span>
+              <span>2026-08-23 提交</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-8">
+            <svg class="icon-20" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+            <div class="flex-col">
+              <span class="t-12">狀態</span>
+              <span class="c-accent bold">待 GPT 家族審閱</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center">
+        <div class="flex-col gap-4">
+          <span class="t-12 c-muted px-8">治理鏈摘要</span>
+          <div class="flex items-center r-12 border-soft p-12 bg-bg">
+            <div class="chain-box" style="border-color: var(--success);">
+              <span class="t-14 c-success">Claude 家族</span>
+              <span class="t-12 c-muted">撰寫</span>
+            </div>
+            <span class="chain-arrow t-16">→</span>
+            <div class="chain-box" style="border-color: var(--accent);">
+              <span class="t-14 c-accent">GPT 家族</span>
+              <span class="t-12 c-muted">審閱</span>
+            </div>
+            <span class="chain-arrow t-16">→</span>
+            <div class="chain-box border">
+              <span class="t-14 c-muted">尚未核准</span>
+              <span class="t-12 c-muted">等待後續關卡</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex justify-end border-t pt-24 mt-8">
+      <div class="flex items-center gap-24">
+        <span class="t-12 c-muted">輪到 <span class="badge-outline border c-accent px-8 py-4 r-6 mx-4">GPT</span> GPT 家族</span>
+        <button class="btn btn-primary px-24 py-12 t-16 r-6">
+          開始審閱
+          <svg class="icon-16" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="flex gap-24">
+    <div class="card flex-1 flex items-center gap-16 border-soft p-24">
+      <div class="r-full border p-12"><svg class="icon-24 c-accent" viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg></div>
+      <div class="flex-col gap-4">
+        <span class="t-14 c-muted">審閱中</span>
+        <span class="t-32 bold">2</span>
+        <span class="t-12 c-muted">2 份 PRD 正在各關卡審閱中</span>
+      </div>
+    </div>
+    <div class="card flex-1 flex items-center gap-16 border-soft p-24">
+      <div class="r-full border p-12" style="border-color: var(--warn);"><svg class="icon-24 c-warn" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
+      <div class="flex-col gap-4">
+        <span class="t-14 c-muted">待我處理</span>
+        <span class="t-32 bold c-warn">1</span>
+        <span class="t-12 c-muted">1 份輪到你處理</span>
+      </div>
+    </div>
+    <div class="card flex-1 flex items-center gap-16 border-soft p-24">
+      <div class="r-full border p-12" style="border-color: var(--warn);"><svg class="icon-24 c-warn" viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg></div>
+      <div class="flex-col gap-4">
+        <span class="t-14 c-muted">順序閘門擋住</span>
+        <span class="t-32 bold c-warn">1</span>
+        <span class="t-12 c-muted">1 關被前一關擋住</span>
+      </div>
+    </div>
+    <div class="card flex-1 flex items-center gap-16 border-soft p-24">
+      <div class="r-full border p-12" style="border-color: var(--success);"><svg class="icon-24 c-success" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg></div>
+      <div class="flex-col gap-4">
+        <span class="t-14 c-muted">AI 撰寫待補件</span>
+        <span class="t-32 bold c-success">1</span>
+        <span class="t-12 c-muted">1 節需要人工補件</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card py-16 px-24 border-soft flex items-center gap-24 t-12 c-muted">
+    <div class="flex items-center gap-8 border-r pr-24">
+      治理強度說明
+      <svg class="icon-16" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+    </div>
+    <div class="flex items-center gap-16 wrap">
+      <div class="flex items-center gap-8"><div class="legend-dot" style="background:var(--accent)"></div> 新產品 / 新專案 <span class="c-fg">15 節 · 正式多方簽核</span></div>
+      <div class="flex items-center gap-8"><div class="legend-dot" style="background:var(--warn)"></div> 功能建構 / 迭代優化 <span class="c-fg">8 節</span></div>
+      <div class="flex items-center gap-8"><div class="legend-dot" style="background:var(--success)"></div> 試作 / 探索 <span class="c-fg">3 節 · 一鍵自簽</span></div>
+      <div class="flex items-center gap-8"><div class="legend-dot" style="background:var(--muted)"></div> Debug / 維運 <span class="c-fg">OpenSpec</span></div>
+    </div>
+  </section>
+
+  <section class="main-grid">
+
+    <div class="card p-0 flex-col overflow-hidden border-soft h-full">
+      <div class="p-24 border-b flex items-center justify-between">
+        <h2 class="t-20 bold">所有 PRD</h2>
+      </div>
+
+      <div class="flex items-center px-24 py-16 border-b t-12 c-muted">
+        <div class="col-title">PRD 名稱 / 強度</div>
+        <div class="col-submitter">提交者 / 代筆</div>
+        <div class="col-progress">治理進度（四關逐關簽核）</div>
+        <div class="col-turn">輪到哪一族</div>
+        <div class="col-time">停留時間</div>
+        <div class="col-status">狀態</div>
+      </div>
+
+      <div class="flex-col">
+
+        <div class="prd-row">
+          <div class="col-title flex-col gap-12">
+            <div class="t-16 bold flex items-center gap-8"><span class="c-muted t-14">1</span> 行動支付對帳中心</div>
+            <div class="badge-outline border-soft c-accent px-8 py-4 t-12 w-fit">新產品 / 新專案</div>
+          </div>
+          <div class="col-submitter flex-col gap-8 t-14">
+            <div class="flex items-center gap-8"><span class="c-muted t-12">提交者</span> 鄭雅筑</div>
+            <div class="flex items-center gap-8"><span class="c-muted t-12">代筆</span> <span class="c-success">Claude 家族</span></div>
+          </div>
+          <div class="col-progress">
+            <div class="timeline">
+              <div class="timeline-step active">
+                <div class="timeline-node success"><svg class="icon-16" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+                <div class="timeline-text">
+                  <span class="t-12 bold">1 結構完整度</span>
+                  <span class="t-12 c-muted">GPT 家族 核准<br>2026-09-01 16:20:41</span>
+                </div>
+              </div>
+              <div class="timeline-step active">
+                <div class="timeline-node current"><div class="node-inner-dot"></div></div>
+                <div class="timeline-text">
+                  <span class="t-12 bold">2 風險與相依</span>
+                  <span class="t-12 c-muted">Grok 家族<br>審閱中</span>
+                </div>
+              </div>
+              <div class="timeline-step">
+                <div class="timeline-node warn"><svg class="icon-12" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></div>
+                <div class="timeline-text">
+                  <span class="t-12 bold">3 技術可行性</span>
+                  <span class="t-12 c-warn">順序閘門擋住</span>
+                  <span class="t-12 c-muted">等待 Gemini 家族</span>
+                </div>
+              </div>
+              <div class="timeline-step">
+                <div class="timeline-node">4</div>
+                <div class="timeline-text">
+                  <span class="t-12 bold">我核准</span>
+                  <span class="t-12 c-muted">尚未開始<br>核准人 Scott</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-turn flex-col items-center gap-8">
+            <div class="badge-outline border c-accent px-8 py-4 r-6 t-12">Grok</div>
+            <div class="t-12 c-muted">Grok 家族</div>
+          </div>
+          <div class="col-time flex-col items-center gap-4 t-14">
+            <div>2 天</div>
+            <div class="t-12 c-muted text-center">自 2026-09-01<br>11:07:12 起</div>
+          </div>
+          <div class="col-status flex items-center gap-8 t-14 c-accent">
+            <div class="status-dot bg-accent"></div>
+            審閱中
+          </div>
+        </div>
+
+        <div class="prd-row bg-surface">
+          <div class="col-title flex-col gap-12">
+            <div class="t-16 bold flex items-center gap-8"><span class="c-muted t-14">2</span> 批次同步驗證回報</div>
+            <div class="badge-outline border-soft c-warn px-8 py-4 t-12 w-fit">試作 / 探索</div>
+          </div>
+          <div class="col-submitter flex-col gap-8 t-14">
+            <div class="flex items-center gap-8"><span class="c-muted t-12">提交者</span> 鄭雅筑</div>
+            <div class="flex items-center gap-8"><span class="c-muted t-12">代筆</span> <span class="c-success">Claude 家族</span></div>
+          </div>
+          <div class="col-progress flex items-center gap-24">
+            <div class="flex-col gap-4 items-center">
+              <div class="timeline-node success" style="width:32px;height:32px;"><svg class="icon-20" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></div>
+              <span class="t-14 bold">已自簽</span>
+              <span class="t-12 c-muted">2026-08-28 10:16:20</span>
+            </div>
+            <div class="anchor-code flex-1 mono t-12">
+              <div class="flex-col gap-4">
+                <span class="c-muted">anc:t=3f9a2c14</span>
+                <span>src/sync/engine.ts:45-67</span>
+              </div>
+              <svg class="icon-16 c-muted" viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+            </div>
+          </div>
+          <div class="col-turn flex-col items-center gap-8">
+            <div class="badge-outline border-soft c-muted px-8 py-4 r-6 t-12">本人</div>
+            <div class="t-12 c-muted">Scott</div>
+          </div>
+          <div class="col-time flex justify-center t-14 c-muted">—</div>
+          <div class="col-status flex-col items-end gap-4 t-14 c-success">
+            <div class="flex items-center gap-8">
+              <div class="status-dot bg-success"></div>
+              已自簽
+            </div>
+            <span class="t-12 c-muted text-right">自簽不推進專案狀態</span>
+          </div>
+        </div>
+
+        <div class="prd-row row-highlight">
+          <div class="col-title flex-col gap-12">
+            <div class="t-16 bold flex items-center gap-8"><span class="c-muted t-14">3</span> 客服工單分流</div>
+            <div class="badge-outline border-soft c-warn px-8 py-4 t-12 w-fit">功能建構 / 迭代優化</div>
+          </div>
+          <div class="col-submitter flex-col gap-8 t-14">
+            <div class="flex items-center gap-8"><span class="c-muted t-12">提交者</span> 鄭雅筑</div>
+            <div class="flex items-center gap-8"><span class="c-muted t-12">代筆</span> <span class="c-success">Claude 家族</span></div>
+          </div>
+          <div class="col-progress">
+            <div class="timeline">
+              <div class="timeline-step">
+                <div class="timeline-node">1</div>
+                <div class="timeline-text">
+                  <span class="t-12 bold">結構完整度</span>
+                  <span class="t-12 c-muted">尚未開始</span>
+                </div>
+              </div>
+              <div class="timeline-step">
+                <div class="timeline-node">2</div>
+                <div class="timeline-text">
+                  <span class="t-12 bold">風險與相依</span>
+                  <span class="t-12 c-accent">GPT 家族<br>待審閱</span>
+                </div>
+              </div>
+              <div class="timeline-step">
+                <div class="timeline-node">3</div>
+                <div class="timeline-text">
+                  <span class="t-12 bold">技術可行性</span>
+                  <span class="t-12 c-muted">尚未開始</span>
+                </div>
+              </div>
+              <div class="timeline-step">
+                <div class="timeline-node">4</div>
+                <div class="timeline-text">
+                  <span class="t-12 bold">我核准</span>
+                  <span class="t-12 c-muted">尚未開始<br>核准人 Scott</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-turn flex-col items-center gap-8">
+            <div class="badge-outline border c-accent px-8 py-4 r-6 t-12">GPT</div>
+            <div class="t-12 c-muted">GPT 家族</div>
+          </div>
+          <div class="col-time flex-col items-center gap-4 t-14">
+            <div class="c-danger bold">9 天</div>
+            <div class="t-12 c-muted text-center">自 2026-08-23<br>09:13:44 起</div>
+          </div>
+          <div class="col-status flex-col items-end gap-12">
+            <div class="flex items-center gap-8 t-12 c-danger">
+              <div class="status-dot bg-danger"></div>
+              9 天沒人動
+            </div>
+            <button class="btn btn-primary px-16 py-8 t-12 w-full r-6 justify-center">
+              開始審閱 <svg class="icon-12" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="card p-24 border-soft h-full flex-col gap-24">
+      <div class="flex-col gap-8">
+        <h2 class="t-20 bold">AI 撰寫</h2>
+        <p class="t-14 c-muted">選要寫的章節，讓 agent 批次產出草稿</p>
+      </div>
+
+      <button class="btn btn-primary w-full py-12 t-16 justify-between px-24">
+        <span>開始 AI 撰寫</span>
+        <svg class="icon-20" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+      </button>
+
+      <div class="border-t pt-24 flex-col gap-16">
+        <div class="flex-col gap-4">
+          <span class="t-14">上一批 2026-09-01 產出 4 節</span>
+          <div class="flex items-center gap-8 t-12 c-warn">
+            <svg class="icon-16" viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+            其中 1 節需要人工補件
+          </div>
+        </div>
+
+        <div class="timeline mt-16 mb-24">
+          <div class="timeline-step active">
+            <div class="timeline-node current"><div class="node-inner-dot"></div></div>
+            <div class="timeline-text t-12">選擇章節</div>
+          </div>
+          <div class="timeline-step">
+            <div class="timeline-node">2</div>
+            <div class="timeline-text t-12 c-muted">提供專案簡介</div>
+          </div>
+          <div class="timeline-step">
+            <div class="timeline-node">3</div>
+            <div class="timeline-text t-12 c-muted">產出草稿</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t pt-24 flex-col gap-16">
+        <h3 class="t-12 c-muted mb-8">最近批次紀錄</h3>
+
+        <div class="flex items-center justify-between p-12 r-6 border-soft bg-bg cursor-pointer">
+          <div class="flex items-center gap-12">
+            <span class="t-12 mono c-muted">2026-09-01</span>
+            <div class="badge-outline border-soft c-accent px-8 py-4 t-12">產出 4 節</div>
+            <div class="badge-outline border c-warn px-8 py-4 t-12">需補件 1 節</div>
+          </div>
+          <svg class="icon-16 c-muted" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+        </div>
+
+        <div class="flex items-center justify-between p-12 r-6 border-soft bg-bg cursor-pointer">
+          <div class="flex items-center gap-12">
+            <span class="t-12 mono c-muted">2026-08-28</span>
+            <div class="badge-outline border-soft c-accent px-8 py-4 t-12">產出 3 節</div>
+          </div>
+          <svg class="icon-16 c-muted" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</div>
+
+</body>
+</html>
