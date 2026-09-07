@@ -44,8 +44,10 @@ export function hasPlanSteps(text: string): boolean {
 /**
  * 從掃到的檔案清單算出「哪些專案根目錄底下有帶勾選框的計劃檔」。
  *
- * 只認 plans 檔（掃描給的 `kind` 是 `"plan"`）——openspec 的 `tasks.md` 是另一種
- * 方言，進這個清單會把沒有計劃的專案誤點亮。
+ * 過濾採**排除 openspec**，不是白名單 `kind === "plan"`：`ScannedPlan.kind` 是
+ * optional，舊資料／缺欄位時沒有 `kind`。白名單會把那些檔整批丟掉；排除法才
+ * 涵蓋得到「沒帶 kind 的計劃檔」。openspec 的 `tasks.md` 是另一種方言，進這個
+ * 清單會把沒有計劃的專案誤點亮，所以唯獨它要擋。
  *
  * 輸出為**專案根目錄**（去掉檔名與 `/plans/` 段），並去重、排序，
  * 讓結果與輸入順序無關。
